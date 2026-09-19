@@ -142,8 +142,8 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </div>
 </main>
 <script>
-const injectedToken="__HSR_API_TOKEN__";
-const token=injectedToken.startsWith("__HSR_")?"":injectedToken;
+const injectedToken=__HSR_API_TOKEN_JSON__;
+const token=typeof injectedToken==="string"?injectedToken:"";
 if(location.search){history.replaceState(null,'',location.pathname)}
 const headers=()=>token?{'X-HSR-Token':token}:{};
 const log=document.getElementById('log');
