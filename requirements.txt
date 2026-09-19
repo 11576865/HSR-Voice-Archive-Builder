@@ -3,3 +3,4 @@ uvicorn
 python-multipart
 py7zr
 openai
+openpyxl
