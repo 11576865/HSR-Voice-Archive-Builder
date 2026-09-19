@@ -1,52 +1,125 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
+import re
 import secrets
 import socket
 import threading
 import webbrowser
 
 
-def local_ip() -> str:
+def _route_local_ip() -> str:
     sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
     try:
+        # UDP connect selects a route without sending application data.
         sock.connect(("8.8.8.8", 80))
         return sock.getsockname()[0]
     except OSError:
-        return "127.0.0.1"
+        return ""
     finally:
         sock.close()
+
+
+def local_ipv4_candidates() -> list[str]:
+    values: list[str] = []
+    routed = _route_local_ip()
+    if routed and not routed.startswith("127."):
+        values.append(routed)
+    try:
+        infos = socket.getaddrinfo(socket.gethostname(), None, socket.AF_INET, socket.SOCK_STREAM)
+    except OSError:
+        infos = []
+    for info in infos:
+        ip = info[4][0]
+        if ip and not ip.startswith("127.") and ip not in values:
+            values.append(ip)
+    return values
+
+
+def _is_loopback_host(host: str) -> bool:
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
+def _check_port_available(host: str, port: int) -> None:
+    family = socket.AF_INET6 if ":" in host and host != "0.0.0.0" else socket.AF_INET
+    probe = socket.socket(family, socket.SOCK_STREAM)
+    try:
+        probe.bind((host, port))
+    except OSError as exc:
+        raise SystemExit(
+            f"Port {port} is not available on {host}: {exc}. "
+            "Close the other program or launch with --port <another-port>."
+        ) from exc
+    finally:
+        probe.close()
 
 
 def main() -> None:
     p = argparse.ArgumentParser(description="Launch HSR Voice Archive Builder")
     p.add_argument("--lan", action="store_true", help="Allow control from another device on the same LAN")
     p.add_argument("--host")
+    p.add_argument("--display-host", help="LAN address printed for phones/tablets; useful on multi-NIC/offline hosts")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true")
-    p.add_argument("--token", help="Explicit LAN API token; generated automatically when omitted")
+    p.add_argument("--token", help="Explicit control token; generated automatically when omitted")
     args = p.parse_args()
+
+    if args.token:
+        if len(args.token) < 16 or not re.fullmatch(r"[A-Za-z0-9_-]+", args.token):
+            raise SystemExit(
+                "--token must be at least 16 characters and contain only A-Z, a-z, 0-9, _ or -"
+            )
+        token = args.token
+    else:
+        token = secrets.token_urlsafe(24)
+    os.environ["HSR_VOICE_TOKEN"] = token
 
     if args.lan:
         host = args.host or "0.0.0.0"
-        token = args.token or secrets.token_urlsafe(18)
-        os.environ["HSR_VOICE_TOKEN"] = token
-        display_host = local_ip()
+        candidates = local_ipv4_candidates()
+        display_host = args.display_host or (candidates[0] if candidates else "")
+        if not display_host:
+            raise SystemExit(
+                "Could not determine a LAN IPv4 address. "
+                "Re-run with --display-host <this-device-LAN-IP>."
+            )
+        os.environ["HSR_VOICE_LAN_MODE"] = "1"
+        os.environ["HSR_VOICE_ALLOWED_HOSTS"] = ",".join(
+            {"127.0.0.1", "localhost", "::1", display_host, *candidates}
+        )
         url = f"http://{display_host}:{args.port}/?token={token}"
         print("LAN control mode enabled.")
         print("Processing still runs on this machine.")
+        print("The token gates both the dashboard and all control APIs.")
+        if len(candidates) > 1:
+            print("Detected LAN IPv4 addresses: " + ", ".join(candidates))
+            print("If the printed URL uses the wrong adapter, restart with --display-host <IP>.")
         print(f"Open this URL from a device on the same LAN:\n{url}")
     else:
         host = args.host or "127.0.0.1"
-        os.environ.pop("HSR_VOICE_TOKEN", None)
+        if not _is_loopback_host(host):
+            raise SystemExit("Non-loopback hosts require --lan so token-gated LAN mode is enabled.")
+        os.environ["HSR_VOICE_LAN_MODE"] = "0"
+        os.environ["HSR_VOICE_ALLOWED_HOSTS"] = ",".join(
+            {"127.0.0.1", "localhost", "::1", host}
+        )
         url = f"http://127.0.0.1:{args.port}/"
         print(f"Local control URL: {url}")
+
+    _check_port_available(host, args.port)
 
     if not args.no_browser and not args.lan:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
 
     import uvicorn
+
     uvicorn.run("app.server:app", host=host, port=args.port, log_level="info")
 
 

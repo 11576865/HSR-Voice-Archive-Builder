@@ -15,6 +15,7 @@ from .builder import atomic_write_text
 from .diff import classify
 from .jobs import create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
+from .preflight import dependency_status
 from .project import (
     ProjectConfig,
     create_project,
@@ -25,9 +26,10 @@ from .project import (
     update_project,
 )
 from .remote_index import fetch_ai_hobbyist_index, remote_update_plan
+from .security import api_token, host_allowed, lan_mode, token_matches
 
 BASE = Path(__file__).resolve().parent
-app = FastAPI(title="HSR Voice Archive Builder")
+app = FastAPI(title="HSR Voice Archive Builder", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
 _active_root: Path | None = None
@@ -49,19 +51,59 @@ _restore_last_project()
 
 
 @app.middleware("http")
-async def api_token_guard(request: Request, call_next):
-    token = os.environ.get("HSR_VOICE_TOKEN", "")
+async def control_surface_guard(request: Request, call_next):
+    # A localhost service is still reachable by a browser visiting an unrelated
+    # website. Reject unexpected Host values to reduce DNS-rebinding exposure,
+    # and require a per-process secret for every control/data API.
+    if not host_allowed(request.url.hostname):
+        return JSONResponse({"ok": False, "error": "Invalid Host header"}, status_code=400)
+
     protected = request.url.path.startswith("/api/") or request.url.path == "/build"
-    if token and protected:
-        supplied = request.headers.get("X-HSR-Token", "")
-        if supplied != token:
-            return JSONResponse({"ok": False, "error": "Invalid or missing LAN control token"}, status_code=401)
-    return await call_next(request)
+    if protected and not token_matches(request.headers.get("X-HSR-Token")):
+        return JSONResponse({"ok": False, "error": "Invalid or missing control token"}, status_code=401)
+
+    response = await call_next(request)
+    if request.url.path == "/" or protected:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    if request.url.path == "/":
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self'; "
+            "img-src 'self' data:; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        )
+    return response
 
 
 @app.get("/", response_class=HTMLResponse)
-def home() -> str:
-    return (BASE / "static" / "index.html").read_text(encoding="utf-8")
+def home(request: Request):
+    token = api_token()
+    if lan_mode():
+        gate = request.query_params.get("token") or request.cookies.get("hsr_voice_gate")
+        if not token_matches(gate):
+            return HTMLResponse(
+                "<h1>HSR Voice Archive Builder</h1><p>LAN control token required.</p>",
+                status_code=401,
+            )
+
+    template = (BASE / "static" / "index.html").read_text(encoding="utf-8")
+    page = template.replace("__HSR_API_TOKEN_JSON__", json.dumps(token))
+    response = HTMLResponse(page)
+    if lan_mode():
+        # This cookie is only an entry gate so a page refresh still works after
+        # the URL token is removed. API mutations still require X-HSR-Token.
+        response.set_cookie(
+            "hsr_voice_gate",
+            token,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
+    return response
 
 
 def optional_path(value: str) -> Path | None:
@@ -101,11 +143,12 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.4",
+        "version": "0.5",
         "processing_mode": "local-first",
-        "lan_control": bool(os.environ.get("HSR_VOICE_TOKEN")),
+        "lan_control": lan_mode(),
         "project": project,
         "jobs": recent_jobs(8),
+        "runtime": dependency_status(),
     }
 
 
@@ -197,6 +240,12 @@ def api_project_build():
         paths = _project_paths(config)
         if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
             raise ValueError("Project index, WAV source, and output directory are required")
+        if config.make_flac and not shutil.which("ffmpeg"):
+            raise RuntimeError("FFmpeg is not installed or is not available on PATH")
+        if config.translate_missing and not os.environ.get("OPENAI_API_KEY"):
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set; disable GPT fallback or configure the key in the local environment"
+            )
 
         def run():
             return build_project_v02(

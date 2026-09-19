@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.4**.
+Current development version: **v0.5**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -50,9 +50,9 @@ Two control modes are supported:
 
 No internet processing server is required.
 
-## v0.4 reliability hardening
+## Reliability hardening
 
-v0.4 adds failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.5 add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -63,7 +63,7 @@ v0.4 adds failure-driven hardening based on upstream documentation, issue report
 - extraction size and archive-member count are bounded;
 - background job metadata is journaled locally;
 - jobs left running when the process exits are reported as `interrupted` after restart rather than disappearing;
-- GitHub Pages stays a static launcher instead of depending on cross-origin localhost requests.
+- GitHub Pages stays a static launcher instead of depending on cross-origin localhost requests.\n- v0.5 protects local and LAN control APIs with a per-process token and Host allowlist.\n- v0.5 supports PCM `WAVE_FORMAT_EXTENSIBLE` consistently on Python 3.11 and 3.12.\n- remote XLSX downloads and decompressed workbook size are bounded, with `defusedxml` installed.\n- GPT translation batches are checkpointed and reused after later failures/restarts.\n- launchers run an offline dependency preflight and no longer reinstall packages on every start.\n- LAN startup checks port conflicts and supports `--display-host` for multi-NIC/offline networks.\n- Termux/Android interruption risk is surfaced rather than hidden.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -84,7 +84,7 @@ The dashboard can:
 - save the comparison as `update_plan.json` without modifying the current manifest;
 - open the output directory on the processing host.
 
-Remote index checking is currently **metadata/update discovery only**. v0.4 does not yet auto-download and splice new game audio into an existing archive.
+Remote index checking is currently **metadata/update discovery only**. v0.5 does not yet auto-download and splice new game audio into an existing archive.
 
 ## Requirements
 
@@ -144,7 +144,7 @@ The launcher prints a URL containing a temporary token, for example:
 http://192.168.1.20:8765/?token=...
 ```
 
-Open that URL on another device on the same LAN. The browser stores the token only for that session and sends it with API requests. Audio and generated files remain on the host device.
+Open that URL on another device on the same LAN. The LAN entry URL carries a temporary token once; the local server then injects the per-process API token into the dashboard. API requests require that token, and unexpected Host values are rejected. Audio and generated files remain on the host device.
 
 ## Build pipeline
 
@@ -260,7 +260,7 @@ The builder checks expected WAV presence, duplicate filename conflicts, optional
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the synthetic test suite on Python 3.11 and 3.12. No game data is required. v0.4 includes archive traversal/size-limit tests and a real FFmpeg streaming-FLAC regression test when FFmpeg is available.
+GitHub Actions runs the synthetic test suite on Python 3.11 and 3.12. No game data is required. The suite includes archive traversal/size-limit tests, a real FFmpeg streaming-FLAC regression test, localhost/LAN token and Host-header checks, `WAVE_FORMAT_EXTENSIBLE` input, remote-XLSX limits, runtime preflight, and translation-checkpoint recovery.
 
 ## Current regression validation
 

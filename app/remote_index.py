@@ -2,19 +2,48 @@ from __future__ import annotations
 
 import tempfile
 import urllib.request
-from urllib.parse import urlparse
+import zipfile
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 DEFAULT_EN_INDEX_URL = "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx"
+MAX_REMOTE_INDEX_BYTES = 128 * 1024**2
+MAX_XLSX_UNCOMPRESSED_BYTES = 512 * 1024**2
+MAX_XLSX_MEMBERS = 10_000
 
 
 def _cell(value: object) -> str:
     return "" if value is None else str(value).strip()
 
 
-def read_ai_hobbyist_xlsx(path: Path, character: str) -> list[dict[str, str]]:
+def _validate_xlsx_container(path: Path) -> None:
+    if path.stat().st_size > MAX_REMOTE_INDEX_BYTES:
+        raise ValueError(f"Remote XLSX exceeds download limit: {path.stat().st_size} bytes")
+
     try:
+        with zipfile.ZipFile(path) as z:
+            infos = z.infolist()
+            if len(infos) > MAX_XLSX_MEMBERS:
+                raise ValueError(f"XLSX has too many ZIP members: {len(infos)}")
+            total = sum(max(0, info.file_size) for info in infos)
+            if total > MAX_XLSX_UNCOMPRESSED_BYTES:
+                raise ValueError(
+                    "XLSX uncompressed content exceeds safety limit: "
+                    f"{total} > {MAX_XLSX_UNCOMPRESSED_BYTES} bytes"
+                )
+            names = {info.filename for info in infos}
+            if "[Content_Types].xml" not in names or "xl/workbook.xml" not in names:
+                raise ValueError("Downloaded file is not a normal XLSX workbook")
+    except zipfile.BadZipFile as exc:
+        raise ValueError("Downloaded remote index is not a valid XLSX/ZIP file") from exc
+
+
+def read_ai_hobbyist_xlsx(path: Path, character: str) -> list[dict[str, str]]:
+    _validate_xlsx_container(path)
+    try:
+        # openpyxl will use defusedxml when available; it is a project
+        # dependency because the remote XLSX URL is configurable.
         from openpyxl import load_workbook
     except ImportError as exc:
         raise RuntimeError("Remote XLSX update checks require openpyxl") from exc
@@ -70,15 +99,41 @@ def fetch_ai_hobbyist_index(
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("Remote index URL must be an HTTPS URL")
-    request = urllib.request.Request(url, headers={"User-Agent": "HSR-Voice-Archive-Builder/0.3"})
+
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "HSR-Voice-Archive-Builder/0.5"},
+    )
     with tempfile.TemporaryDirectory(prefix="hsr_remote_index_") as td:
         path = Path(td) / "EN.xlsx"
         with urllib.request.urlopen(request, timeout=timeout) as response, path.open("wb") as out:
+            final = urlparse(response.geturl())
+            if final.scheme != "https" or not final.netloc:
+                raise ValueError("Remote index redirect left HTTPS")
+
+            declared = response.headers.get("Content-Length")
+            if declared:
+                try:
+                    declared_size = int(declared)
+                except ValueError:
+                    declared_size = -1
+                if declared_size > MAX_REMOTE_INDEX_BYTES:
+                    raise ValueError(
+                        f"Remote index Content-Length exceeds safety limit: {declared_size} bytes"
+                    )
+
+            downloaded = 0
             while True:
                 chunk = response.read(1024 * 1024)
                 if not chunk:
                     break
+                downloaded += len(chunk)
+                if downloaded > MAX_REMOTE_INDEX_BYTES:
+                    raise ValueError(
+                        f"Remote index download exceeds safety limit: {downloaded} bytes"
+                    )
                 out.write(chunk)
+
         return read_ai_hobbyist_xlsx(path, character)
 
 

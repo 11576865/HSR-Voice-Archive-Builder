@@ -23,7 +23,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.4</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.5</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -142,8 +142,9 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </div>
 </main>
 <script>
-const qs=new URLSearchParams(location.search), token=qs.get('token')||sessionStorage.getItem('hsrToken')||'';
-if(token){sessionStorage.setItem('hsrToken',token);history.replaceState(null,'',location.pathname)}
+const injectedToken=__HSR_API_TOKEN_JSON__;
+const token=typeof injectedToken==="string"?injectedToken:"";
+if(location.search){history.replaceState(null,'',location.pathname)}
 const headers=()=>token?{'X-HSR-Token':token}:{};
 const log=document.getElementById('log');
 let currentProject=null,pollTimer=null;
@@ -200,7 +201,10 @@ function renderJobs(jobs){
 }
 async function refresh(){
   try{
-    const s=await api('/api/status');document.getElementById('mode').textContent=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
+    const s=await api('/api/status');
+    const rt=s.runtime||{}, base=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
+    document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失');
+    if(rt.warnings?.length && !currentProject){setLog(rt.warnings.join('\n'))}
     fillProject(s.project);renderJobs(s.jobs);
   }catch(e){setLog(String(e));document.getElementById('mode').textContent='后端连接失败'}
 }
