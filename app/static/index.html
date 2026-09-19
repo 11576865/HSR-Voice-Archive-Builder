@@ -1,30 +1,227 @@
 <!doctype html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HSR Voice Archive Builder</title>
 <style>
-body{font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;max-width:900px;margin:40px auto;padding:0 20px;background:#f7f7f8;color:#18181b}main{background:white;padding:24px;border:1px solid #ddd;border-radius:12px}label{display:block;margin:14px 0 6px;font-weight:600}input{box-sizing:border-box;width:100%;padding:10px;border:1px solid #bbb;border-radius:7px}button{margin-top:20px;padding:10px 18px;border:0;border-radius:8px;background:#222;color:white;cursor:pointer}.row{display:grid;grid-template-columns:1fr 1fr;gap:16px}.check{display:flex;align-items:center;gap:8px;margin-top:16px}.check input{width:auto}pre{white-space:pre-wrap;background:#111;color:#eee;padding:14px;border-radius:8px;min-height:80px}.hint{color:#666;font-size:.92rem}.optional{font-weight:400;color:#777}
-</style></head>
-<body><main>
-<h1>HSR Voice Archive Builder <small>v0.2</small></h1>
-<p class="hint">浏览器只是本地控制面板。音频、LAB、CSV、翻译回写和 FFmpeg 全部由本机后端处理。</p>
-<form id="f">
-<label>顺序索引 CSV</label><input name="index_csv" required placeholder="D:\HSR\index.csv">
-<label>双语索引 CSV <span class="optional">（可选）</span></label><input name="bilingual_csv" placeholder="D:\HSR\bilingual.csv">
-<label>中文 LAB 来源 <span class="optional">（目录 / ZIP / 7z，可选）</span></label><input name="chs_source" placeholder="D:\HSR\Chinese.7z">
-<label>英文 WAV 来源（目录 / ZIP / 7z）</label><input name="wav_source" required placeholder="D:\HSR\English-WAV.zip">
-<label>输出目录</label><input name="output_dir" required placeholder="D:\HSR\output">
-<div class="row"><div><label>同组间隔（秒）</label><input name="same_gap" type="number" step="0.01" value="0.40"></div><div><label>组间间隔（秒）</label><input name="group_gap" type="number" step="0.01" value="1.20"></div></div>
-<label class="check"><input name="make_flac" type="checkbox" value="true"> 生成并校验连续 FLAC</label>
-<label class="check"><input name="translate_missing" type="checkbox" value="true"> 用 GPT 翻译仍然缺失的中文</label>
-<div class="row"><div><label>翻译模型</label><input name="translation_model" value="gpt-5.6-luna"></div><div><label>翻译批大小</label><input name="translation_batch_size" type="number" min="1" value="80"></div></div>
-<p class="hint">启用翻译时，API Key 只从后端环境变量 <code>OPENAI_API_KEY</code> 读取，不会写入项目文件或网页。</p>
-<button type="submit">构建</button>
-</form>
-<h2>结果</h2><pre id="out">等待运行。</pre>
+:root{color-scheme:light;--bg:#f4f5f7;--card:#fff;--text:#17181a;--muted:#6f747c;--line:#dfe2e6;--accent:#202328;--ok:#176b3a;--warn:#8a5a00;--bad:#a52a2a}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+header{max-width:1180px;margin:0 auto;padding:28px 22px 10px;display:flex;align-items:end;justify-content:space-between;gap:20px}
+h1{font-size:26px;margin:0}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px;margin:0 0 10px}.sub{color:var(--muted);font-size:13px}.badge{display:inline-flex;padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:#fff}
+main{max-width:1180px;margin:0 auto;padding:14px 22px 50px}.grid{display:grid;grid-template-columns:1.25fr .75fr;gap:16px}.stack{display:grid;gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{padding:14px;border:1px solid var(--line);border-radius:10px;background:#fafafa}.stat b{display:block;font-size:24px;margin-bottom:3px}.stat span{font-size:12px;color:var(--muted)}
+label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}input{width:100%;padding:9px 10px;border:1px solid #c7cbd1;border-radius:7px;background:#fff;color:var(--text)}input:focus{outline:2px solid #b9c3d0;outline-offset:1px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button{padding:9px 14px;border:1px solid #b9bdc4;border-radius:8px;background:#fff;cursor:pointer;font-weight:650}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button:disabled{opacity:.45;cursor:not-allowed}
+.check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px}.check input{width:auto}.muted{color:var(--muted)}.hidden{display:none!important}
+table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px 7px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:650}
+pre{margin:0;background:#111318;color:#e9ebef;border-radius:9px;padding:13px;white-space:pre-wrap;max-height:330px;overflow:auto;font-size:12px}
+.status-ok{color:var(--ok)}.status-warn{color:var(--warn)}.status-bad{color:var(--bad)}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{height:1px;background:var(--line);margin:15px 0}
+@media(max-width:820px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.row,.row3{grid-template-columns:1fr}header{align-items:start;flex-direction:column}}
+</style>
+</head>
+<body>
+<header>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.3</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div id="mode" class="badge">正在连接本地后端…</div>
+</header>
+<main>
+<div class="grid">
+  <div class="stack">
+    <section class="card">
+      <div class="topline"><h2>项目</h2><span id="projectName" class="muted">未打开</span></div>
+      <div id="noProject">
+        <div class="row">
+          <form id="openForm">
+            <h3>打开项目</h3>
+            <label>项目目录或 .hsr-voice-project.json</label>
+            <input name="project_path" required placeholder="D:\HSR\Evanescia">
+            <div class="actions"><button class="primary">打开</button></div>
+          </form>
+          <form id="createForm">
+            <h3>新建项目</h3>
+            <label>项目名称</label><input name="name" required placeholder="绯英">
+            <label>项目目录</label><input name="root" required placeholder="D:\HSR\Evanescia">
+            <label>顺序索引 CSV</label><input name="index_csv" required placeholder="D:\HSR\index.csv">
+            <label>英文 WAV 来源</label><input name="wav_source" required placeholder="D:\HSR\English-WAV.zip">
+            <label>双语索引 CSV（可选）</label><input name="bilingual_csv">
+            <label>中文 LAB 来源（可选）</label><input name="chs_source">
+            <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
+            <div class="actions"><button class="primary">创建</button></div>
+          </form>
+        </div>
+      </div>
+
+      <form id="projectForm" class="hidden">
+        <div class="row">
+          <div><label>项目名称</label><input name="name" required></div>
+          <div><label>输出目录</label><input name="output_dir" value="output"></div>
+        </div>
+        <label>顺序索引 CSV</label><input name="index_csv" required>
+        <label>英文 WAV 来源</label><input name="wav_source" required>
+        <div class="row">
+          <div><label>双语索引 CSV（可选）</label><input name="bilingual_csv"></div>
+          <div><label>中文 LAB 来源（可选）</label><input name="chs_source"></div>
+        </div>
+        <div class="row3">
+          <div><label>同组间隔</label><input name="same_group_gap" type="number" step=".01"></div>
+          <div><label>组间间隔</label><input name="group_gap" type="number" step=".01"></div>
+          <div><label>翻译批大小</label><input name="translation_batch_size" type="number" min="1"></div>
+        </div>
+        <div class="row">
+          <div><label>翻译模型</label><input name="translation_model"></div>
+          <div><label>候选更新文件（可选）</label><input name="update_candidates" placeholder="pending.txt / new_index.csv"></div>
+        </div>
+        <div class="row">
+          <div><label>远程索引角色过滤词</label><input name="remote_character" placeholder="Evanescia"></div>
+          <div><label>远程 EN 索引 URL</label><input name="remote_index_url"></div>
+        </div>
+        <label class="check"><input name="make_flac" type="checkbox"> 构建连续 FLAC 并验证 PCM</label>
+        <label class="check"><input name="translate_missing" type="checkbox"> 仅对仍然缺失的中文调用 GPT 翻译</label>
+        <div class="actions">
+          <button type="submit">保存设置</button>
+          <button type="button" class="primary" id="buildBtn">开始构建</button>
+          <button type="button" id="openOutputBtn">打开输出目录</button>
+        </div>
+      </form>
+    </section>
+
+    <section class="card hidden" id="archiveCard">
+      <div class="topline"><h2>当前档案</h2><span id="manifestState" class="muted"></span></div>
+      <div class="stats">
+        <div class="stat"><b id="statTotal">—</b><span>已归档语音</span></div>
+        <div class="stat"><b id="statOfficial">—</b><span>官方中文 LAB</span></div>
+        <div class="stat"><b id="statTranslated">—</b><span>已有 / GPT 中文</span></div>
+        <div class="stat"><b id="statMissing">—</b><span>缺失中文</span></div>
+      </div>
+      <div class="divider"></div>
+      <table><tbody id="outputTable"></tbody></table>
+    </section>
+
+    <section class="card hidden" id="updateCard">
+      <h2>增量更新</h2>
+      <p class="small muted">先比较身份，不改已有 manifest。远程检查目前读取 AI-Hobbyist EN.xlsx；音频下载仍作为后续独立步骤处理。</p>
+      <div class="row">
+        <div>
+          <h3>本地候选</h3>
+          <label>TXT / JSON / CSV</label><input id="candidatePath">
+          <div class="actions"><button id="scanLocalBtn">扫描候选</button></div>
+        </div>
+        <div>
+          <h3>远程索引</h3>
+          <label>角色过滤词</label><input id="remoteCharacter">
+          <div class="actions"><button id="scanRemoteBtn">检查远程索引</button></div>
+        </div>
+      </div>
+      <div id="updateStats" class="stats" style="margin-top:14px">
+        <div class="stat"><b id="uExisting">—</b><span>已存在</span></div>
+        <div class="stat"><b id="uVariant">—</b><span>已有台词变量</span></div>
+        <div class="stat"><b id="uNew">—</b><span>真正新增</span></div>
+        <div class="stat"><b id="uRows">—</b><span>候选总数</span></div>
+      </div>
+    </section>
+  </div>
+
+  <div class="stack">
+    <section class="card">
+      <div class="topline"><h2>任务</h2><button id="refreshBtn">刷新</button></div>
+      <div id="jobs" class="muted small">暂无任务。</div>
+    </section>
+    <section class="card">
+      <h2>运行信息</h2>
+      <pre id="log">等待后端状态。</pre>
+    </section>
+    <section class="card">
+      <details>
+        <summary>本地优先与局域网控制</summary>
+        <p class="small muted">默认地址仅绑定 127.0.0.1。使用 <code>python -m app.launch --lan</code> 时，后端会绑定局域网并生成临时控制 token。手机或平板可以控制电脑处理，但原始音频仍留在电脑。</p>
+      </details>
+    </section>
+  </div>
+</div>
 </main>
 <script>
-const f=document.getElementById('f'),out=document.getElementById('out');
-f.addEventListener('submit',async e=>{e.preventDefault();out.textContent='处理中…';const fd=new FormData(f);for(const n of ['make_flac','translate_missing']){if(!f.elements[n].checked)fd.delete(n)}try{const r=await fetch('/build',{method:'POST',body:fd});const j=await r.json();out.textContent=JSON.stringify(j,null,2)}catch(err){out.textContent=String(err)}})
-</script></body></html>
+const qs=new URLSearchParams(location.search), token=qs.get('token')||sessionStorage.getItem('hsrToken')||'';
+if(token){sessionStorage.setItem('hsrToken',token);history.replaceState(null,'',location.pathname)}
+const headers=()=>token?{'X-HSR-Token':token}:{};
+const log=document.getElementById('log');
+let currentProject=null,pollTimer=null;
+
+async function api(url,opts={}){
+  opts.headers={...(opts.headers||{}),...headers()};
+  const r=await fetch(url,opts); let j={};
+  try{j=await r.json()}catch(e){j={ok:false,error:'Invalid JSON response'}}
+  if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));
+  return j;
+}
+function fd(form){return new FormData(form)}
+function setLog(x){log.textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
+function n(v){return v===undefined||v===null?'—':String(v)}
+function bytes(v){if(!v)return '—';const u=['B','KB','MB','GB'];let i=0,x=v;while(x>=1024&&i<u.length-1){x/=1024;i++}return x.toFixed(i?1:0)+' '+u[i]}
+function fillProject(p){
+  currentProject=p;
+  document.getElementById('noProject').classList.toggle('hidden',!!p);
+  document.getElementById('projectForm').classList.toggle('hidden',!p);
+  document.getElementById('archiveCard').classList.toggle('hidden',!p);
+  document.getElementById('updateCard').classList.toggle('hidden',!p);
+  document.getElementById('projectName').textContent=p?p.name:'未打开';
+  if(!p)return;
+  const c=p.config,f=document.getElementById('projectForm');
+  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size']){
+    if(f.elements[k])f.elements[k].value=c[k]??'';
+  }
+  f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
+  document.getElementById('candidatePath').value=c.update_candidates||'';
+  document.getElementById('remoteCharacter').value=c.remote_character||'';
+  const r=p.report||{};
+  document.getElementById('manifestState').textContent=p.has_manifest?'manifest 已生成':'尚未构建';
+  document.getElementById('statTotal').textContent=n(r.count_total);
+  document.getElementById('statOfficial').textContent=n(r.count_official_chs_lab);
+  document.getElementById('statTranslated').textContent=n((r.count_translated_existing||0)+(r.count_gpt_translated||0));
+  document.getElementById('statMissing').textContent=n(r.count_missing_chinese);
+  const tb=document.getElementById('outputTable');tb.innerHTML='';
+  for(const [name,o] of Object.entries(p.outputs||{})){
+    if(!o.exists)continue;
+    const tr=document.createElement('tr');tr.innerHTML='<td>'+name+'</td><td>'+bytes(o.size_bytes)+'</td>';tb.appendChild(tr);
+  }
+}
+function showPlan(plan){
+  const c=plan.counts||{};
+  document.getElementById('uExisting').textContent=n(c.exact_existing);
+  document.getElementById('uVariant').textContent=n(c.variant_of_existing);
+  document.getElementById('uNew').textContent=n(c.new_logical);
+  document.getElementById('uRows').textContent=n(plan.remote_rows??plan.candidate_unique_count);
+  setLog(plan);
+}
+function renderJobs(jobs){
+  const box=document.getElementById('jobs');if(!jobs?.length){box.textContent='暂无任务。';return}
+  box.innerHTML=jobs.map(j=>'<div style="padding:8px 0;border-bottom:1px solid #eee"><b>'+j.kind+'</b> · '+j.state+'<br><span class="muted">'+(j.message||'')+'</span></div>').join('');
+}
+async function refresh(){
+  try{
+    const s=await api('/api/status');document.getElementById('mode').textContent=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
+    fillProject(s.project);renderJobs(s.jobs);
+  }catch(e){setLog(String(e));document.getElementById('mode').textContent='后端连接失败'}
+}
+async function watchJob(id){
+  clearInterval(pollTimer);
+  pollTimer=setInterval(async()=>{
+    try{
+      const x=await api('/api/jobs/'+id);renderJobs([x.job]);
+      if(x.job.state==='succeeded'){clearInterval(pollTimer);setLog(x.job.result||x.job);if(x.job.kind==='remote-update-check')showPlan(x.job.result);await refresh()}
+      if(x.job.state==='failed'){clearInterval(pollTimer);setLog(x.job.error||x.job);await refresh()}
+    }catch(e){clearInterval(pollTimer);setLog(String(e))}
+  },1000);
+}
+document.getElementById('openForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/open',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j)}catch(x){setLog(String(x))}};
+document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/create',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j)}catch(x){setLog(String(x))}};
+document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();const data=fd(e.target);for(const k of ['make_flac','translate_missing'])if(!e.target.elements[k].checked)data.delete(k);try{const j=await api('/api/project/save',{method:'POST',body:data});fillProject(j.project);setLog('设置已保存。')}catch(x){setLog(String(x))}};
+document.getElementById('buildBtn').onclick=async()=>{try{await document.getElementById('projectForm').requestSubmit();setTimeout(async()=>{try{const j=await api('/api/project/build',{method:'POST'});setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}},150)}catch(x){setLog(String(x))}};
+document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
+document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();d.set('character',document.getElementById('remoteCharacter').value);const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
+document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
+document.getElementById('refreshBtn').onclick=refresh;
+refresh();
+</script>
+</body></html>
