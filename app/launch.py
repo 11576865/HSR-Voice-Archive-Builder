@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import ipaddress
 import os
+import re
 import secrets
 import socket
 import threading
@@ -70,7 +71,14 @@ def main() -> None:
     p.add_argument("--token", help="Explicit control token; generated automatically when omitted")
     args = p.parse_args()
 
-    token = args.token or secrets.token_urlsafe(24)
+    if args.token:
+        if len(args.token) < 16 or not re.fullmatch(r"[A-Za-z0-9_-]+", args.token):
+            raise SystemExit(
+                "--token must be at least 16 characters and contain only A-Z, a-z, 0-9, _ or -"
+            )
+        token = args.token
+    else:
+        token = secrets.token_urlsafe(24)
     os.environ["HSR_VOICE_TOKEN"] = token
 
     if args.lan:
