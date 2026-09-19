@@ -50,7 +50,8 @@ _restore_last_project()
 @app.middleware("http")
 async def api_token_guard(request: Request, call_next):
     token = os.environ.get("HSR_VOICE_TOKEN", "")
-    if token and request.url.path.startswith("/api/"):
+    protected = request.url.path.startswith("/api/") or request.url.path == "/build"
+    if token and protected:
         supplied = request.headers.get("X-HSR-Token", "")
         if supplied != token:
             return JSONResponse({"ok": False, "error": "Invalid or missing LAN control token"}, status_code=401)
