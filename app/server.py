@@ -15,6 +15,7 @@ from .builder import atomic_write_text
 from .diff import classify
 from .jobs import create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
+from .preflight import dependency_status
 from .project import (
     ProjectConfig,
     create_project,
@@ -147,6 +148,7 @@ def api_status():
         "lan_control": lan_mode(),
         "project": project,
         "jobs": recent_jobs(8),
+        "runtime": dependency_status(),
     }
 
 
