@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import json
+import os
+import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from pathlib import Path
@@ -34,6 +36,20 @@ class ProjectConfig:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def atomic_write_json(path: Path, payload: Any) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temp = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="") as f:
+            json.dump(payload, f, ensure_ascii=False, indent=2, default=str)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def normalize_root(root: Path) -> Path:
@@ -72,7 +88,7 @@ def save_project(config: ProjectConfig) -> Path:
     payload = asdict(config)
     payload["root"] = str(root)
     path = root / PROJECT_FILENAME
-    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_json(path, payload)
     remember_project(root)
     return path
 
@@ -141,10 +157,9 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
 
 
 def remember_project(root: Path) -> None:
-    STATE_DIR.mkdir(parents=True, exist_ok=True)
-    STATE_FILE.write_text(
-        json.dumps({"last_project": str(normalize_root(root)), "updated_at": utc_now()}, indent=2),
-        encoding="utf-8",
+    atomic_write_json(
+        STATE_FILE,
+        {"last_project": str(normalize_root(root)), "updated_at": utc_now()},
     )
 
 
@@ -171,7 +186,15 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         except (OSError, ValueError):
             report = {}
     outputs = {}
-    for name in ("manifest.json", "manifest.csv", "bilingual_index_corrected.csv", "bilingual.srt", "build_report.json", "continuous.flac", "update_plan.json"):
+    for name in (
+        "manifest.json",
+        "manifest.csv",
+        "bilingual_index_corrected.csv",
+        "bilingual.srt",
+        "build_report.json",
+        "continuous.flac",
+        "update_plan.json",
+    ):
         p = output / name
         outputs[name] = {
             "exists": p.is_file(),
