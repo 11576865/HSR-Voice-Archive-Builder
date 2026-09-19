@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import ipaddress
 import os
 import secrets
 import socket
@@ -19,27 +20,47 @@ def local_ip() -> str:
         sock.close()
 
 
+def _is_loopback_host(host: str) -> bool:
+    if host in {"localhost", "127.0.0.1", "::1"}:
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Launch HSR Voice Archive Builder")
     p.add_argument("--lan", action="store_true", help="Allow control from another device on the same LAN")
     p.add_argument("--host")
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true")
-    p.add_argument("--token", help="Explicit LAN API token; generated automatically when omitted")
+    p.add_argument("--token", help="Explicit control token; generated automatically when omitted")
     args = p.parse_args()
+
+    token = args.token or secrets.token_urlsafe(24)
+    os.environ["HSR_VOICE_TOKEN"] = token
 
     if args.lan:
         host = args.host or "0.0.0.0"
-        token = args.token or secrets.token_urlsafe(18)
-        os.environ["HSR_VOICE_TOKEN"] = token
         display_host = local_ip()
+        os.environ["HSR_VOICE_LAN_MODE"] = "1"
+        os.environ["HSR_VOICE_ALLOWED_HOSTS"] = ",".join(
+            {"127.0.0.1", "localhost", "::1", display_host}
+        )
         url = f"http://{display_host}:{args.port}/?token={token}"
         print("LAN control mode enabled.")
         print("Processing still runs on this machine.")
+        print("The token gates both the dashboard and all control APIs.")
         print(f"Open this URL from a device on the same LAN:\n{url}")
     else:
         host = args.host or "127.0.0.1"
-        os.environ.pop("HSR_VOICE_TOKEN", None)
+        if not _is_loopback_host(host):
+            raise SystemExit("Non-loopback hosts require --lan so token-gated LAN mode is enabled.")
+        os.environ["HSR_VOICE_LAN_MODE"] = "0"
+        os.environ["HSR_VOICE_ALLOWED_HOSTS"] = ",".join(
+            {"127.0.0.1", "localhost", "::1", host}
+        )
         url = f"http://127.0.0.1:{args.port}/"
         print(f"Local control URL: {url}")
 
@@ -47,6 +68,7 @@ def main() -> None:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
 
     import uvicorn
+
     uvicorn.run("app.server:app", host=host, port=args.port, log_level="info")
 
 
