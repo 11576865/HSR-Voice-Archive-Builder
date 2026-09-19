@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3
+
+- Reworked the browser page into a persistent project dashboard instead of a one-shot parameter form.
+- Added local project files (`.hsr-voice-project.json`) and last-project restore.
+- Added background jobs so long FLAC builds and remote update checks do not keep one browser request open.
+- Added local candidate update scanning from TXT, JSON, or CSV.
+- Added optional remote update checks against the AI-Hobbyist English XLSX index.
+- Kept update checking non-destructive: it writes an `update_plan.json` and does not alter the existing manifest.
+- Added local/LAN launch modes. LAN control uses a generated token while processing remains on the host device.
+- Added Windows and Termux LAN launchers.
+- Added an output-folder action for the host device.
+- Added GitHub Actions tests for Python 3.11 and 3.12.
+- Added project persistence, XLSX parsing, update classification, and background-job tests.
+
 ## v0.2
 
 - Made the existing bilingual CSV optional.

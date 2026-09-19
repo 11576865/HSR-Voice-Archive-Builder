@@ -31,6 +31,8 @@ dist/
 *_manifest*.json
 *_index*.csv
 *bilingual*.srt
+update_plan.json
+.hsr-voice-project.json
 
 # OS/editor
 .DS_Store
