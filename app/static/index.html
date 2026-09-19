@@ -216,8 +216,15 @@ async function watchJob(id){
 }
 document.getElementById('openForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/open',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j)}catch(x){setLog(String(x))}};
 document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/create',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j)}catch(x){setLog(String(x))}};
-document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();const data=fd(e.target);for(const k of ['make_flac','translate_missing'])if(!e.target.elements[k].checked)data.delete(k);try{const j=await api('/api/project/save',{method:'POST',body:data});fillProject(j.project);setLog('设置已保存。')}catch(x){setLog(String(x))}};
-document.getElementById('buildBtn').onclick=async()=>{try{await document.getElementById('projectForm').requestSubmit();setTimeout(async()=>{try{const j=await api('/api/project/build',{method:'POST'});setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}},150)}catch(x){setLog(String(x))}};
+async function saveProject(){
+  const form=document.getElementById('projectForm'),data=fd(form);
+  for(const k of ['make_flac','translate_missing'])if(!form.elements[k].checked)data.delete(k);
+  const j=await api('/api/project/save',{method:'POST',body:data});
+  fillProject(j.project);
+  return j.project;
+}
+document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
+document.getElementById('buildBtn').onclick=async()=>{try{await saveProject();const j=await api('/api/project/build',{method:'POST'});setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();d.set('character',document.getElementById('remoteCharacter').value);const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
 document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
