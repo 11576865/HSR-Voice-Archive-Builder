@@ -60,7 +60,22 @@ async def control_surface_guard(request: Request, call_next):
     protected = request.url.path.startswith("/api/") or request.url.path == "/build"
     if protected and not token_matches(request.headers.get("X-HSR-Token")):
         return JSONResponse({"ok": False, "error": "Invalid or missing control token"}, status_code=401)
-    return await call_next(request)
+
+    response = await call_next(request)
+    if request.url.path == "/" or protected:
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["Referrer-Policy"] = "no-referrer"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+    if request.url.path == "/":
+        response.headers["Content-Security-Policy"] = (
+            "default-src 'self'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "style-src 'self' 'unsafe-inline'; "
+            "connect-src 'self'; "
+            "img-src 'self' data:; "
+            "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        )
+    return response
 
 
 @app.get("/", response_class=HTMLResponse)
