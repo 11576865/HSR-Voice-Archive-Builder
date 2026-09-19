@@ -5,14 +5,20 @@ import shutil
 import struct
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
 from fastapi.testclient import TestClient
 
 from app.builder import Entry, build_continuous_flac
 from app.security import api_token
+from app.pipeline import _translate_missing
+from app.preflight import dependency_status
+from app.remote_index import read_ai_hobbyist_xlsx
 from app.server import app
 from app.wavpcm import PCM_SUBFORMAT_GUID_LE, parse_wav_pcm
+from openpyxl import Workbook
 
 
 def write_extensible_pcm16(path: Path, samples: list[int], sample_rate: int = 8000) -> None:
@@ -136,6 +142,62 @@ class V05SecurityAndWavTests(unittest.TestCase):
                 os.environ.pop("HSR_VOICE_ALLOWED_HOSTS", None)
             else:
                 os.environ["HSR_VOICE_ALLOWED_HOSTS"] = old_allowed
+
+
+    def test_translation_checkpoint_survives_later_batch_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            checkpoint = Path(td) / ".translation_checkpoint.json"
+            entries = [
+                SimpleNamespace(filename="a.wav", english="Alpha", chinese="", chinese_source="missing"),
+                SimpleNamespace(filename="b.wav", english="Beta", chinese="", chinese_source="missing"),
+            ]
+
+            def flaky(batch, model, client):
+                if batch[0]["id"] == "b.wav":
+                    raise RuntimeError("simulated 429")
+                return [{"id": "a.wav", "chinese": "阿尔法"}]
+
+            with patch("app.translator.make_client", return_value=object()), patch(
+                "app.translator.translate_records", side_effect=flaky
+            ):
+                with self.assertRaises(RuntimeError):
+                    _translate_missing(entries, "test-model", 1, checkpoint)
+
+            self.assertTrue(checkpoint.is_file())
+            saved = checkpoint.read_text(encoding="utf-8")
+            self.assertIn("a.wav", saved)
+            self.assertNotIn('"b.wav"', saved)
+
+            def stable(batch, model, client):
+                self.assertEqual(batch[0]["id"], "b.wav")
+                return [{"id": "b.wav", "chinese": "贝塔"}]
+
+            with patch("app.translator.make_client", return_value=object()), patch(
+                "app.translator.translate_records", side_effect=stable
+            ):
+                report = _translate_missing(entries, "test-model", 1, checkpoint)
+
+            self.assertEqual(report["count_gpt_checkpoint_reused"], 1)
+            self.assertEqual(report["count_gpt_api_translated"], 1)
+            self.assertEqual([e.chinese for e in entries], ["阿尔法", "贝塔"])
+
+    def test_xlsx_container_expansion_limit_is_checked_before_openpyxl(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "index.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.append(["语音哈希", "语音文件名", "角色", "语音文本"])
+            ws.append(["1", "a", "Evanescia", "Hello"])
+            wb.save(path)
+            wb.close()
+
+            with patch("app.remote_index.MAX_XLSX_UNCOMPRESSED_BYTES", 1):
+                with self.assertRaises(ValueError):
+                    read_ai_hobbyist_xlsx(path, "Evanescia")
+
+    def test_runtime_preflight_dependencies_are_importable(self) -> None:
+        status = dependency_status()
+        self.assertTrue(status["ok"], status["issues"])
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
     def test_extensible_pcm_wav_works_on_supported_python_versions(self) -> None:
