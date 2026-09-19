@@ -3,8 +3,11 @@ from __future__ import annotations
 import json
 import os
 from collections.abc import Iterable
+from typing import Any
 
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
+DEFAULT_MAX_RETRIES = 5
+DEFAULT_TIMEOUT_SECONDS = 120.0
 
 
 def _chunks(records: list[dict[str, str]], size: int) -> Iterable[list[dict[str, str]]]:
@@ -14,25 +17,37 @@ def _chunks(records: list[dict[str, str]], size: int) -> Iterable[list[dict[str,
         yield records[i:i + size]
 
 
+def make_client():
+    if not os.environ.get("OPENAI_API_KEY"):
+        raise RuntimeError("OPENAI_API_KEY is not set")
+    from openai import OpenAI
+
+    # The SDK retries transient connection/rate-limit/server failures. The
+    # higher-level pipeline also checkpoints completed batches so a later
+    # failure does not discard already-paid-for translations.
+    return OpenAI(
+        max_retries=DEFAULT_MAX_RETRIES,
+        timeout=DEFAULT_TIMEOUT_SECONDS,
+    )
+
+
 def translate_records(
     records: list[dict[str, str]],
     model: str = DEFAULT_MODEL,
     glossary: dict[str, str] | None = None,
+    *,
+    client: Any | None = None,
 ) -> list[dict[str, str]]:
     """Translate one batch using the OpenAI Responses API.
 
-    Each input must contain `id` and `english`. The API key is read only
-    from `OPENAI_API_KEY`. IDs must round-trip exactly; otherwise the batch is
+    Each input must contain id and english. The API key is read only
+    from OPENAI_API_KEY. IDs must round-trip exactly; otherwise the batch is
     rejected instead of being partially written back.
     """
     if not records:
         return []
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY is not set")
+    client = client or make_client()
 
-    from openai import OpenAI
-
-    client = OpenAI()
     schema = {
         "type": "object",
         "properties": {
@@ -91,10 +106,15 @@ def translate_records(
         raise RuntimeError("Translation response contains duplicate IDs")
     if set(wanted_list) != set(got_ids) or len(got) != len(records):
         raise RuntimeError(
-            f"Translation ID mismatch: missing={set(wanted_list)-set(got_ids)}, extra={set(got_ids)-set(wanted_list)}"
+            f"Translation ID mismatch: missing={set(wanted_list)-set(got_ids)}, "
+            f"extra={set(got_ids)-set(wanted_list)}"
         )
     by_id = {r["id"]: r for r in got}
-    return [by_id[i] for i in wanted_list]
+    ordered = [by_id[i] for i in wanted_list]
+    for row in ordered:
+        if not str(row.get("chinese", "")).strip():
+            raise RuntimeError(f"Translation response contains empty Chinese text: {row['id']}")
+    return ordered
 
 
 def translate_in_batches(
@@ -104,6 +124,14 @@ def translate_in_batches(
     glossary: dict[str, str] | None = None,
 ) -> list[dict[str, str]]:
     out: list[dict[str, str]] = []
+    client = make_client() if records else None
     for batch in _chunks(records, batch_size):
-        out.extend(translate_records(batch, model=model, glossary=glossary))
+        out.extend(
+            translate_records(
+                batch,
+                model=model,
+                glossary=glossary,
+                client=client,
+            )
+        )
     return out
