@@ -1,16 +1,60 @@
 from __future__ import annotations
 
+import json
+import os
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
-from fastapi import FastAPI, Form
+from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .diff import classify
+from .jobs import create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
+from .project import (
+    ProjectConfig,
+    create_project,
+    last_project_root,
+    load_project,
+    project_summary,
+    resolve_project_path,
+    update_project,
+)
+from .remote_index import fetch_ai_hobbyist_index, remote_update_plan
 
 BASE = Path(__file__).resolve().parent
 app = FastAPI(title="HSR Voice Archive Builder")
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
+
+_active_root: Path | None = None
+
+
+def _restore_last_project() -> None:
+    global _active_root
+    root = last_project_root()
+    if root is None:
+        return
+    try:
+        load_project(root)
+        _active_root = root.resolve()
+    except Exception:
+        _active_root = None
+
+
+_restore_last_project()
+
+
+@app.middleware("http")
+async def api_token_guard(request: Request, call_next):
+    token = os.environ.get("HSR_VOICE_TOKEN", "")
+    if token and request.url.path.startswith("/api/"):
+        supplied = request.headers.get("X-HSR-Token", "")
+        if supplied != token:
+            return JSONResponse({"ok": False, "error": "Invalid or missing LAN control token"}, status_code=401)
+    return await call_next(request)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -23,8 +67,257 @@ def optional_path(value: str) -> Path | None:
     return Path(value) if value else None
 
 
+def _active_config() -> ProjectConfig:
+    if _active_root is None:
+        raise RuntimeError("No active project")
+    return load_project(_active_root)
+
+
+def _set_active(config: ProjectConfig) -> None:
+    global _active_root
+    _active_root = Path(config.root).resolve()
+
+
+def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
+    return {
+        "index": resolve_project_path(config, config.index_csv),
+        "wavs": resolve_project_path(config, config.wav_source),
+        "bilingual": resolve_project_path(config, config.bilingual_csv),
+        "chs": resolve_project_path(config, config.chs_source),
+        "output": resolve_project_path(config, config.output_dir),
+        "candidates": resolve_project_path(config, config.update_candidates),
+    }
+
+
+@app.get("/api/status")
+def api_status():
+    project = None
+    if _active_root is not None:
+        try:
+            project = project_summary(_active_config())
+        except Exception:
+            project = None
+    return {
+        "ok": True,
+        "version": "0.3",
+        "processing_mode": "local-first",
+        "lan_control": bool(os.environ.get("HSR_VOICE_TOKEN")),
+        "project": project,
+        "jobs": recent_jobs(8),
+    }
+
+
+@app.post("/api/project/create")
+def api_project_create(
+    root: str = Form(...),
+    name: str = Form(...),
+    index_csv: str = Form(...),
+    wav_source: str = Form(...),
+    output_dir: str = Form("output"),
+    bilingual_csv: str = Form(""),
+    chs_source: str = Form(""),
+    remote_character: str = Form(""),
+):
+    try:
+        config = create_project(
+            Path(root),
+            name=name,
+            index_csv=index_csv,
+            wav_source=wav_source,
+            output_dir=output_dir,
+            bilingual_csv=bilingual_csv,
+            chs_source=chs_source,
+            remote_character=remote_character,
+        )
+        _set_active(config)
+        return {"ok": True, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/open")
+def api_project_open(project_path: str = Form(...)):
+    try:
+        config = load_project(Path(project_path))
+        _set_active(config)
+        return {"ok": True, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/save")
+def api_project_save(
+    name: str = Form(...),
+    index_csv: str = Form(...),
+    wav_source: str = Form(...),
+    output_dir: str = Form("output"),
+    bilingual_csv: str = Form(""),
+    chs_source: str = Form(""),
+    update_candidates: str = Form(""),
+    remote_character: str = Form(""),
+    remote_index_url: str = Form(""),
+    same_group_gap: float = Form(0.40),
+    group_gap: float = Form(1.20),
+    make_flac: bool = Form(False),
+    translate_missing: bool = Form(False),
+    translation_model: str = Form("gpt-5.6-luna"),
+    translation_batch_size: int = Form(80),
+):
+    try:
+        config = _active_config()
+        update_project(
+            config,
+            name=name.strip(),
+            index_csv=index_csv.strip(),
+            wav_source=wav_source.strip(),
+            output_dir=output_dir.strip() or "output",
+            bilingual_csv=bilingual_csv.strip(),
+            chs_source=chs_source.strip(),
+            update_candidates=update_candidates.strip(),
+            remote_character=remote_character.strip(),
+            remote_index_url=remote_index_url.strip() or config.remote_index_url,
+            same_group_gap=same_group_gap,
+            group_gap=group_gap,
+            make_flac=make_flac,
+            translate_missing=translate_missing,
+            translation_model=translation_model.strip() or "gpt-5.6-luna",
+            translation_batch_size=max(1, translation_batch_size),
+        )
+        return {"ok": True, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/build")
+def api_project_build():
+    try:
+        config = _active_config()
+        paths = _project_paths(config)
+        if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
+            raise ValueError("Project index, WAV source, and output directory are required")
+
+        def run():
+            return build_project_v02(
+                paths["index"],
+                paths["wavs"],
+                paths["output"],
+                bilingual_csv=paths["bilingual"],
+                chs_source=paths["chs"],
+                same_group_gap=config.same_group_gap,
+                group_gap=config.group_gap,
+                make_flac=config.make_flac,
+                translate_missing=config.translate_missing,
+                translation_model=config.translation_model,
+                translation_batch_size=config.translation_batch_size,
+            )
+
+        job = create_job("build", run)
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/scan")
+def api_update_scan(candidates_path: str = Form("")):
+    try:
+        config = _active_config()
+        if candidates_path.strip():
+            update_project(config, update_candidates=candidates_path.strip())
+        paths = _project_paths(config)
+        output = paths["output"]
+        candidates = paths["candidates"]
+        if output is None or candidates is None:
+            raise ValueError("Candidate update file is not configured")
+        manifest = output / "manifest.json"
+        if not manifest.is_file():
+            raise FileNotFoundError("Build the project once before checking updates")
+        if not candidates.is_file():
+            raise FileNotFoundError(candidates)
+        result = classify(manifest, candidates)
+        (output / "update_plan.json").write_text(
+            json.dumps(result, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+        return {"ok": True, "plan": result, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/check-remote")
+def api_update_check_remote(
+    character: str = Form(""),
+    remote_index_url: str = Form(""),
+):
+    try:
+        config = _active_config()
+        character = character.strip() or config.remote_character
+        remote_index_url = remote_index_url.strip() or config.remote_index_url
+        if not character:
+            raise ValueError("Set a remote character filter first")
+        update_project(config, remote_character=character, remote_index_url=remote_index_url)
+        paths = _project_paths(config)
+        output = paths["output"]
+        if output is None:
+            raise ValueError("Output directory is not configured")
+        manifest = output / "manifest.json"
+        if not manifest.is_file():
+            raise FileNotFoundError("Build the project once before checking remote updates")
+
+        def run():
+            rows = fetch_ai_hobbyist_index(character, remote_index_url)
+            plan = remote_update_plan(manifest, rows)
+            output.mkdir(parents=True, exist_ok=True)
+            (output / "update_plan.json").write_text(
+                json.dumps(plan, ensure_ascii=False, indent=2),
+                encoding="utf-8",
+            )
+            return plan
+
+        job = create_job("remote-update-check", run)
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/jobs")
+def api_jobs():
+    return {"ok": True, "jobs": recent_jobs(20)}
+
+
+@app.get("/api/jobs/{job_id}")
+def api_job(job_id: str):
+    job = get_job(job_id)
+    if job is None:
+        return JSONResponse({"ok": False, "error": "Job not found"}, status_code=404)
+    return {"ok": True, "job": job}
+
+
+@app.post("/api/output/open")
+def api_output_open():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Output directory is not configured")
+        output.mkdir(parents=True, exist_ok=True)
+        if sys.platform.startswith("win"):
+            os.startfile(str(output))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.Popen(["open", str(output)])
+        elif shutil.which("termux-open"):
+            subprocess.Popen(["termux-open", str(output)])
+        elif shutil.which("xdg-open"):
+            subprocess.Popen(["xdg-open", str(output)])
+        else:
+            raise RuntimeError("No supported file-manager opener found")
+        return {"ok": True, "path": str(output)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+# Compatibility endpoint retained for existing v0.2 callers.
 @app.post("/build")
-def build(
+def legacy_build(
     index_csv: str = Form(...),
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
