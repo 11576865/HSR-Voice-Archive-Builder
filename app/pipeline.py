@@ -178,8 +178,12 @@ def build_project_v02(
     translation_model: str = "gpt-5.6-luna",
     translation_batch_size: int = 80,
 ) -> dict[str, object]:
+    out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
-    with tempfile.TemporaryDirectory(prefix="hsr_v02_") as td:
+    # Keep extraction/work files on the output filesystem instead of the OS
+    # temp drive. On Windows/Android the system temp partition is often much
+    # smaller than the drive selected for an archive project.
+    with tempfile.TemporaryDirectory(prefix=".hsr-work-", dir=out_dir.parent) as td:
         work = Path(td)
         legacy_index, legacy_bilingual = write_legacy_inputs(index_csv, bilingual_csv, work / "schema")
         empty_chs = work / "empty_chs"
