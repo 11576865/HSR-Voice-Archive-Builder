@@ -79,3 +79,103 @@ Project state and job execution are local process state. Running this app behind
 **Project response**
 
 The supported launchers use one Uvicorn process. Multi-worker deployment is outside the supported architecture. The tool is a local application with a browser UI, not a public multi-tenant web service.
+
+
+## Localhost APIs are not automatically private
+
+Binding a service to `127.0.0.1` prevents direct network access from another machine, but a malicious website open in the user's browser can still attempt requests to localhost. Blind CSRF against state-changing local APIs and DNS rebinding are recurring failure modes in local web-control applications. Host-header validation is also a standard mitigation for rebinding/Host attacks.
+
+**Project response**
+
+- A random per-process control token is generated even in local-only mode.
+- Every `/api/*` request and the legacy `/build` endpoint requires the token in `X-HSR-Token`.
+- The dashboard receives the token from the local server; it is not stored in GitHub Pages or project files.
+- LAN mode additionally gates the dashboard entry itself with the generated token.
+- Unexpected `Host` values are rejected.
+- Non-loopback binds require explicit `--lan`.
+- The dashboard uses `Cache-Control: no-store`, a restrictive CSP, `Referrer-Policy: no-referrer`, and `X-Content-Type-Options: nosniff`.
+
+References:
+
+- https://fastapi.tiangolo.com/tutorial/cors/
+- https://fastapi.tiangolo.com/advanced/middleware/#trustedhostmiddleware
+- https://github.com/openclaw/openclaw/issues/12032
+- https://github.com/open-mercato/open-mercato/issues/253
+
+## WAVE_FORMAT_EXTENSIBLE and Python-version mismatch
+
+Python 3.11's standard `wave` module only supports `WAVE_FORMAT_PCM`; it explicitly does not include `WAVE_FORMAT_EXTENSIBLE` even when the subformat is PCM. Python 3.12 added support for PCM `WAVE_FORMAT_EXTENSIBLE`. This can produce the classic `unknown format: 65534` failure on one supported Python version while the same WAV works on another.
+
+**Project response**
+
+v0.5 uses a small project-owned RIFF/RF64 PCM reader instead of relying on the standard-library `wave` parser for input. It accepts ordinary PCM and PCM `WAVE_FORMAT_EXTENSIBLE`, validates alignment and format metadata, and streams only the declared PCM data chunk into the FLAC pipeline. Regression tests construct a real extensible PCM WAV and run it through FFmpeg on Python 3.11 and 3.12 CI.
+
+References:
+
+- https://docs.python.org/3.11/library/wave.html
+- https://docs.python.org/3.12/library/wave.html
+
+## Remote XLSX files are compressed XML containers
+
+A remote XLSX is both a download and a ZIP/XML input. Content-Length may be absent, and a small compressed workbook can expand substantially. openpyxl's documentation warns that XML entity-expansion attacks require additional protection such as `defusedxml`.
+
+**Project response**
+
+- Remote index URLs must remain HTTPS even after redirects.
+- The downloader enforces an actual streamed-byte limit rather than trusting `Content-Length`.
+- The XLSX ZIP container is checked for member count, total declared uncompressed size, and required workbook structure before openpyxl sees it.
+- `defusedxml` is an explicit dependency.
+- openpyxl continues to run in read-only/data-only mode.
+
+References:
+
+- https://docs.python.org/3/library/urllib.request.html
+- https://openpyxl.readthedocs.io/en/stable/
+
+## Translation failures and rate limits
+
+Network/API translation can fail after some batches have already completed, for example because of transient transport failures, server errors, rate limits, or the local process being interrupted. Re-running the whole character would waste time and paid requests.
+
+**Project response**
+
+- The OpenAI SDK client is configured with finite retries and a request timeout.
+- Translation IDs must round-trip exactly and returned Chinese text must be non-empty.
+- After every successful batch, a local `.translation_checkpoint.json` is atomically updated.
+- A checkpoint row is reused only when the model matches and the SHA-256 of the source English text still matches.
+- A later failed batch therefore does not discard earlier successful batches.
+- The checkpoint is ignored by Git and remains local.
+
+References:
+
+- https://platform.openai.com/docs/guides/error-codes
+- https://platform.openai.com/docs/guides/rate-limits
+
+## Android / Termux process killing
+
+Long CPU-heavy work on Android is not equivalent to a desktop background service. The Termux project warns that Android 12+ can terminate phantom processes or processes using excessive CPU, and 2026 reports show long-running Termux work can still be killed on some Android 15 devices even with common keep-alive measures.
+
+**Project response**
+
+- Android/Termux is treated as a supported but interruptible host.
+- The runtime preflight surfaces a Termux warning in the dashboard.
+- Job state is journaled; a killed process does not later appear as a successful build.
+- Metadata and translation batches are checkpointed/atomically written.
+- FLAC output is only promoted after complete PCM verification; an interrupted `.partial.flac` is never treated as final.
+- FLAC encoding itself is not resumable and restarts after interruption. The project does not claim otherwise.
+- Large extraction/work directories are placed beside the selected output location instead of relying on a potentially smaller system temp partition.
+
+References:
+
+- https://github.com/termux/termux-app/blob/master/README.md
+- https://github.com/termux/termux-app/issues/5150
+
+## Launcher and network-interface failures
+
+A fixed port may already be occupied, and a machine with VPNs, virtual adapters, Ethernet plus Wi-Fi, or no default internet route may not have a single obvious LAN address.
+
+**Project response**
+
+- The launcher checks the requested port before starting Uvicorn and reports a clear conflict.
+- LAN mode gathers multiple IPv4 candidates instead of assuming a single UDP-route answer.
+- `--display-host <IP>` lets the user override the printed phone/tablet URL on multi-interface or offline LAN hosts.
+- Non-loopback binding is refused unless LAN mode is explicitly enabled.
