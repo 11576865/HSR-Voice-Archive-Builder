@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import csv
+import hashlib
 import json
 import tempfile
 from pathlib import Path
@@ -50,23 +51,118 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
     write_csv_rows(corrected, updated_rows, fields)
 
 
-def _translate_missing(entries, model: str, batch_size: int) -> int:
+def _text_fingerprint(text: str) -> str:
+    return hashlib.sha256(text.encode("utf-8")).hexdigest()
+
+
+def _load_translation_checkpoint(path: Path, model: str) -> dict[str, dict[str, str]]:
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    if payload.get("schema_version") != 1 or payload.get("model") != model:
+        return {}
+    records = payload.get("records", {})
+    return records if isinstance(records, dict) else {}
+
+
+def _write_translation_checkpoint(
+    path: Path,
+    model: str,
+    records: dict[str, dict[str, str]],
+) -> None:
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "model": model,
+                "records": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+
+
+def _translate_missing(
+    entries,
+    model: str,
+    batch_size: int,
+    checkpoint_path: Path,
+) -> dict[str, int]:
     targets = [{"id": e.filename, "english": e.english} for e in entries if not e.chinese]
     if not targets:
-        return 0
-    from .translator import translate_in_batches
-    translated = translate_in_batches(targets, model=model, batch_size=batch_size)
-    by_id = {row["id"]: row["chinese"].strip() for row in translated}
-    if set(by_id) != {row["id"] for row in targets}:
-        raise RuntimeError("Translator returned a different ID set")
-    for e in entries:
-        if not e.chinese:
-            text = by_id.get(e.filename, "")
+        return {
+            "count_gpt_translated": 0,
+            "count_gpt_checkpoint_reused": 0,
+            "count_gpt_api_translated": 0,
+        }
+
+    from .translator import make_client, translate_records
+
+    checkpoint = _load_translation_checkpoint(checkpoint_path, model)
+    completed: dict[str, str] = {}
+    reused = 0
+    for row in targets:
+        saved = checkpoint.get(row["id"], {})
+        expected = _text_fingerprint(row["english"])
+        if (
+            isinstance(saved, dict)
+            and saved.get("english_sha256") == expected
+            and str(saved.get("chinese", "")).strip()
+        ):
+            completed[row["id"]] = str(saved["chinese"]).strip()
+            reused += 1
+
+    remaining = [row for row in targets if row["id"] not in completed]
+    api_translated = 0
+    client = make_client() if remaining else None
+
+    for start in range(0, len(remaining), batch_size):
+        batch = remaining[start:start + batch_size]
+        translated = translate_records(batch, model=model, client=client)
+        for source, result in zip(batch, translated, strict=True):
+            if result["id"] != source["id"]:
+                raise RuntimeError(
+                    f"Translation order mismatch: {result['id']} != {source['id']}"
+                )
+            chinese = str(result["chinese"]).strip()
+            if not chinese:
+                raise RuntimeError(f"Translator returned empty Chinese text: {source['id']}")
+            completed[source["id"]] = chinese
+            checkpoint[source["id"]] = {
+                "english_sha256": _text_fingerprint(source["english"]),
+                "chinese": chinese,
+            }
+            api_translated += 1
+
+        # Persist after every successful batch. If a later batch gets a 429,
+        # timeout, network failure, or the process exits, completed batches are
+        # reusable on the next build.
+        _write_translation_checkpoint(checkpoint_path, model, checkpoint)
+
+    wanted = {row["id"] for row in targets}
+    if set(completed) != wanted:
+        raise RuntimeError(
+            f"Translation checkpoint/result mismatch: missing={wanted-set(completed)}"
+        )
+
+    for entry in entries:
+        if not entry.chinese:
+            text = completed.get(entry.filename, "")
             if not text:
-                raise RuntimeError(f"Translator returned empty Chinese text: {e.filename}")
-            e.chinese = text
-            e.chinese_source = f"gpt:{model}"
-    return len(targets)
+                raise RuntimeError(f"Missing completed translation: {entry.filename}")
+            entry.chinese = text
+            entry.chinese_source = f"gpt:{model}"
+
+    return {
+        "count_gpt_translated": len(targets),
+        "count_gpt_checkpoint_reused": reused,
+        "count_gpt_api_translated": api_translated,
+    }
 
 
 def build_project_v02(
@@ -99,7 +195,14 @@ def build_project_v02(
             group_gap=group_gap,
         )
         if translate_missing:
-            report["count_gpt_translated"] = _translate_missing(entries, translation_model, translation_batch_size)
+            report.update(
+                _translate_missing(
+                    entries,
+                    translation_model,
+                    translation_batch_size,
+                    out_dir / ".translation_checkpoint.json",
+                )
+            )
             report["count_missing_chinese"] = sum(not e.chinese for e in entries)
         write_manifest(entries, report, out_dir)
         _augment_outputs(entries, report, out_dir)
