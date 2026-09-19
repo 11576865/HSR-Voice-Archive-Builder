@@ -93,6 +93,8 @@ def _translate_missing(
     batch_size: int,
     checkpoint_path: Path,
 ) -> dict[str, int]:
+    if batch_size < 1:
+        raise ValueError("translation_batch_size must be >= 1")
     targets = [{"id": e.filename, "english": e.english} for e in entries if not e.chinese]
     if not targets:
         return {
