@@ -4,10 +4,11 @@ import os
 import secrets
 
 LOOPBACK_HOSTS = {"127.0.0.1", "localhost", "::1"}
+_FALLBACK_TOKEN = secrets.token_urlsafe(24)
 
 
 def api_token() -> str:
-    return os.environ.get("HSR_VOICE_TOKEN", "")
+    return os.environ.get("HSR_VOICE_TOKEN", "") or _FALLBACK_TOKEN
 
 
 def lan_mode() -> bool:
