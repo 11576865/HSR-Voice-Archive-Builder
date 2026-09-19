@@ -201,7 +201,10 @@ function renderJobs(jobs){
 }
 async function refresh(){
   try{
-    const s=await api('/api/status');document.getElementById('mode').textContent=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
+    const s=await api('/api/status');
+    const rt=s.runtime||{}, base=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
+    document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失');
+    if(rt.warnings?.length && !currentProject){setLog(rt.warnings.join('\n'))}
     fillProject(s.project);renderJobs(s.jobs);
   }catch(e){setLog(String(e));document.getElementById('mode').textContent='后端连接失败'}
 }
