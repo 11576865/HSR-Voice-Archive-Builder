@@ -29,7 +29,7 @@ from .remote_index import fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
 
 BASE = Path(__file__).resolve().parent
-app = FastAPI(title="HSR Voice Archive Builder")
+app = FastAPI(title="HSR Voice Archive Builder", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
 _active_root: Path | None = None
@@ -91,7 +91,7 @@ def home(request: Request):
             )
 
     template = (BASE / "static" / "index.html").read_text(encoding="utf-8")
-    page = template.replace("__HSR_API_TOKEN__", token)
+    page = template.replace("__HSR_API_TOKEN_JSON__", json.dumps(token))
     response = HTMLResponse(page)
     if lan_mode():
         # This cookie is only an entry gate so a page refresh still works after
