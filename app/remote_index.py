@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import tempfile
 import urllib.request
+from urllib.parse import urlparse
 from pathlib import Path
 from typing import Any
 
@@ -66,6 +67,9 @@ def fetch_ai_hobbyist_index(
     url: str = DEFAULT_EN_INDEX_URL,
     timeout: int = 90,
 ) -> list[dict[str, str]]:
+    parsed = urlparse(url)
+    if parsed.scheme != "https" or not parsed.netloc:
+        raise ValueError("Remote index URL must be an HTTPS URL")
     request = urllib.request.Request(url, headers={"User-Agent": "HSR-Voice-Archive-Builder/0.3"})
     with tempfile.TemporaryDirectory(prefix="hsr_remote_index_") as td:
         path = Path(td) / "EN.xlsx"
