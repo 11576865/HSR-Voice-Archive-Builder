@@ -6,7 +6,14 @@ import json
 import tempfile
 from pathlib import Path
 
-from .builder import build_continuous_flac, build_entries, ensure_dir_or_extract, write_manifest
+from .builder import (
+    atomic_write_text,
+    build_continuous_flac,
+    build_entries,
+    ensure_dir_or_extract,
+    write_csv_rows,
+    write_manifest,
+)
 from .identity import parse_voice_identity
 from .schema import write_legacy_inputs
 
@@ -21,27 +28,26 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
         variants += bool(ident.variant)
     report["count_variants"] = variants
     payload["report"] = report
-    (out_dir / "manifest.json").write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+    atomic_write_text(
+        out_dir / "manifest.json",
+        json.dumps(payload, ensure_ascii=False, indent=2),
+    )
 
     rows = payload["entries"]
-    with (out_dir / "manifest.csv").open("w", encoding="utf-8-sig", newline="") as f:
-        fields = list(rows[0].keys()) if rows else []
-        w = csv.DictWriter(f, fieldnames=fields)
-        w.writeheader()
-        w.writerows(rows)
+    fields = list(rows[0].keys()) if rows else []
+    write_csv_rows(out_dir / "manifest.csv", rows, fields)
 
     corrected = out_dir / "bilingual_index_corrected.csv"
     with corrected.open("r", encoding="utf-8-sig", newline="") as f:
         old_rows = list(csv.DictReader(f))
-    with corrected.open("w", encoding="utf-8-sig", newline="") as f:
-        fields = ["index", "start", "audio_end", "display_end", "group", "filename", "logical_id", "variant", "chinese_source", "chinese", "english", "source_duration_seconds", "sha256"]
-        w = csv.DictWriter(f, fieldnames=fields)
-        w.writeheader()
-        for old, entry in zip(old_rows, entries, strict=True):
-            ident = parse_voice_identity(entry.filename, entry.group)
-            old["logical_id"] = ident.logical_id
-            old["variant"] = ident.variant
-            w.writerow(old)
+    fields = ["index", "start", "audio_end", "display_end", "group", "filename", "logical_id", "variant", "chinese_source", "chinese", "english", "source_duration_seconds", "sha256"]
+    updated_rows = []
+    for old, entry in zip(old_rows, entries, strict=True):
+        ident = parse_voice_identity(entry.filename, entry.group)
+        old["logical_id"] = ident.logical_id
+        old["variant"] = ident.variant
+        updated_rows.append(old)
+    write_csv_rows(corrected, updated_rows, fields)
 
 
 def _translate_missing(entries, model: str, batch_size: int) -> int:
@@ -101,7 +107,10 @@ def build_project_v02(
             report.update(build_continuous_flac(entries, wav_root, out_dir / "continuous.flac"))
             write_manifest(entries, report, out_dir)
             _augment_outputs(entries, report, out_dir)
-        (out_dir / "build_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        atomic_write_text(
+            out_dir / "build_report.json",
+            json.dumps(report, ensure_ascii=False, indent=2),
+        )
     return report
 
 
