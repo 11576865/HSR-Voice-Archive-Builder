@@ -25,6 +25,7 @@ from .project import (
     update_project,
 )
 from .remote_index import fetch_ai_hobbyist_index, remote_update_plan
+from .security import api_token, host_allowed, lan_mode, token_matches
 
 BASE = Path(__file__).resolve().parent
 app = FastAPI(title="HSR Voice Archive Builder")
@@ -49,19 +50,44 @@ _restore_last_project()
 
 
 @app.middleware("http")
-async def api_token_guard(request: Request, call_next):
-    token = os.environ.get("HSR_VOICE_TOKEN", "")
+async def control_surface_guard(request: Request, call_next):
+    # A localhost service is still reachable by a browser visiting an unrelated
+    # website. Reject unexpected Host values to reduce DNS-rebinding exposure,
+    # and require a per-process secret for every control/data API.
+    if not host_allowed(request.url.hostname):
+        return JSONResponse({"ok": False, "error": "Invalid Host header"}, status_code=400)
+
     protected = request.url.path.startswith("/api/") or request.url.path == "/build"
-    if token and protected:
-        supplied = request.headers.get("X-HSR-Token", "")
-        if supplied != token:
-            return JSONResponse({"ok": False, "error": "Invalid or missing LAN control token"}, status_code=401)
+    if protected and not token_matches(request.headers.get("X-HSR-Token")):
+        return JSONResponse({"ok": False, "error": "Invalid or missing control token"}, status_code=401)
     return await call_next(request)
 
 
 @app.get("/", response_class=HTMLResponse)
-def home() -> str:
-    return (BASE / "static" / "index.html").read_text(encoding="utf-8")
+def home(request: Request):
+    token = api_token()
+    if lan_mode():
+        gate = request.query_params.get("token") or request.cookies.get("hsr_voice_gate")
+        if not token_matches(gate):
+            return HTMLResponse(
+                "<h1>HSR Voice Archive Builder</h1><p>LAN control token required.</p>",
+                status_code=401,
+            )
+
+    template = (BASE / "static" / "index.html").read_text(encoding="utf-8")
+    page = template.replace("__HSR_API_TOKEN__", token)
+    response = HTMLResponse(page)
+    if lan_mode():
+        # This cookie is only an entry gate so a page refresh still works after
+        # the URL token is removed. API mutations still require X-HSR-Token.
+        response.set_cookie(
+            "hsr_voice_gate",
+            token,
+            httponly=True,
+            samesite="strict",
+            path="/",
+        )
+    return response
 
 
 def optional_path(value: str) -> Path | None:
@@ -101,9 +127,9 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.4",
+        "version": "0.5",
         "processing_mode": "local-first",
-        "lan_control": bool(os.environ.get("HSR_VOICE_TOKEN")),
+        "lan_control": lan_mode(),
         "project": project,
         "jobs": recent_jobs(8),
     }
