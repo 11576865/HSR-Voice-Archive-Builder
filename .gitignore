@@ -1,0 +1,39 @@
+# Python
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.venv/
+venv/
+
+# Local secrets
+.env
+.env.*
+!/.env.example
+
+# Build/output
+output/
+build/
+dist/
+*.log
+
+# Game/audio data — intentionally not tracked
+*.wav
+*.flac
+*.wem
+*.pck
+*.bnk
+*.7z
+*.zip
+*.rar
+
+# Local project datasets / generated manifests
+*.lab
+*_manifest*.json
+*_index*.csv
+*bilingual*.srt
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
