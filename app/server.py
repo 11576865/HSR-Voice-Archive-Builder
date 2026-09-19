@@ -240,6 +240,12 @@ def api_project_build():
         paths = _project_paths(config)
         if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
             raise ValueError("Project index, WAV source, and output directory are required")
+        if config.make_flac and not shutil.which("ffmpeg"):
+            raise RuntimeError("FFmpeg is not installed or is not available on PATH")
+        if config.translate_missing and not os.environ.get("OPENAI_API_KEY"):
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set; disable GPT fallback or configure the key in the local environment"
+            )
 
         def run():
             return build_project_v02(
