@@ -11,6 +11,7 @@ from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from .builder import atomic_write_text
 from .diff import classify
 from .jobs import create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
@@ -100,7 +101,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.3",
+        "version": "0.4",
         "processing_mode": "local-first",
         "lan_control": bool(os.environ.get("HSR_VOICE_TOKEN")),
         "project": project,
@@ -235,9 +236,9 @@ def api_update_scan(candidates_path: str = Form("")):
         if not candidates.is_file():
             raise FileNotFoundError(candidates)
         result = classify(manifest, candidates)
-        (output / "update_plan.json").write_text(
+        atomic_write_text(
+            output / "update_plan.json",
             json.dumps(result, ensure_ascii=False, indent=2),
-            encoding="utf-8",
         )
         return {"ok": True, "plan": result, "project": project_summary(config)}
     except Exception as exc:
@@ -268,9 +269,9 @@ def api_update_check_remote(
             rows = fetch_ai_hobbyist_index(character, remote_index_url)
             plan = remote_update_plan(manifest, rows)
             output.mkdir(parents=True, exist_ok=True)
-            (output / "update_plan.json").write_text(
+            atomic_write_text(
+                output / "update_plan.json",
                 json.dumps(plan, ensure_ascii=False, indent=2),
-                encoding="utf-8",
             )
             return plan
 

@@ -6,15 +6,17 @@ import json
 import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 import wave
 import zipfile
-from dataclasses import dataclass, asdict
+from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Iterable
 
 SRT_TS = re.compile(r"^(\d+):(\d+):(\d+),(\d+)$")
+DEFAULT_MAX_EXTRACT_BYTES = 32 * 1024**3
+MAX_ARCHIVE_MEMBERS = 100_000
 
 
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -22,12 +24,34 @@ def read_csv_rows(path: Path) -> list[dict[str, str]]:
         return list(csv.DictReader(f))
 
 
+def atomic_write_text(path: Path, content: str, *, encoding: str = "utf-8") -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temp = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding=encoding, newline="") as f:
+            f.write(content)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
+
+
 def write_csv_rows(path: Path, rows: list[dict[str, object]], fieldnames: list[str]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
-    with path.open("w", encoding="utf-8-sig", newline="") as f:
-        w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
-        w.writeheader()
-        w.writerows(rows)
+    fd, temp_name = tempfile.mkstemp(prefix=f".{path.name}.", suffix=".tmp", dir=path.parent)
+    temp = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8-sig", newline="") as f:
+            w = csv.DictWriter(f, fieldnames=fieldnames, extrasaction="ignore")
+            w.writeheader()
+            w.writerows(rows)
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(temp, path)
+    finally:
+        temp.unlink(missing_ok=True)
 
 
 def stem_of(name: str) -> str:
@@ -66,20 +90,81 @@ def collect_wavs(root: Path) -> dict[str, Path]:
     return result
 
 
+def _max_extract_bytes() -> int:
+    raw = os.environ.get("HSR_MAX_EXTRACT_BYTES", "").strip()
+    if not raw:
+        return DEFAULT_MAX_EXTRACT_BYTES
+    value = int(raw)
+    if value < 1:
+        raise ValueError("HSR_MAX_EXTRACT_BYTES must be positive")
+    return value
+
+
+def _validate_member_name(name: str, dest: Path) -> None:
+    normalized = name.replace("\\", "/")
+    if not normalized or normalized.startswith("/") or normalized.startswith("\\"):
+        raise ValueError(f"Unsafe archive member path: {name!r}")
+    first = normalized.split("/", 1)[0]
+    if ":" in first:
+        raise ValueError(f"Unsafe archive member drive path: {name!r}")
+    target = (dest / normalized).resolve()
+    try:
+        target.relative_to(dest.resolve())
+    except ValueError as exc:
+        raise ValueError(f"Archive member escapes extraction directory: {name!r}") from exc
+
+
+def _extract_zip(path: Path, dest: Path, max_bytes: int) -> None:
+    with zipfile.ZipFile(path) as z:
+        infos = z.infolist()
+        if len(infos) > MAX_ARCHIVE_MEMBERS:
+            raise ValueError(f"ZIP has too many members: {len(infos)}")
+        total = 0
+        for info in infos:
+            _validate_member_name(info.filename, dest)
+            mode = (info.external_attr >> 16) & 0o170000
+            if mode == stat.S_IFLNK:
+                raise ValueError(f"ZIP symbolic links are not accepted: {info.filename}")
+            total += max(0, info.file_size)
+            if total > max_bytes:
+                raise ValueError(
+                    f"ZIP uncompressed size exceeds safety limit: {total} > {max_bytes} bytes"
+                )
+        z.extractall(dest)
+
+
+def _extract_7z(path: Path, dest: Path, max_bytes: int) -> None:
+    try:
+        import py7zr  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError("Reading .7z requires py7zr>=1.1.3") from exc
+
+    with py7zr.SevenZipFile(path, mode="r", max_extract_size=max_bytes) as z:
+        infos = z.list()
+        if len(infos) > MAX_ARCHIVE_MEMBERS:
+            raise ValueError(f"7z has too many members: {len(infos)}")
+        total = 0
+        for info in infos:
+            _validate_member_name(info.filename, dest)
+            if getattr(info, "is_symlink", False):
+                raise ValueError(f"7z symbolic links are not accepted: {info.filename}")
+            total += max(0, int(getattr(info, "uncompressed", 0) or 0))
+            if total > max_bytes:
+                raise ValueError(
+                    f"7z uncompressed size exceeds safety limit: {total} > {max_bytes} bytes"
+                )
+        z.extractall(path=dest)
+
+
 def extract_archive(path: Path, dest: Path) -> Path:
     dest.mkdir(parents=True, exist_ok=True)
+    max_bytes = _max_extract_bytes()
     suffix = path.suffix.lower()
     if suffix == ".zip":
-        with zipfile.ZipFile(path) as z:
-            z.extractall(dest)
+        _extract_zip(path, dest, max_bytes)
         return dest
     if suffix == ".7z":
-        try:
-            import py7zr  # type: ignore
-        except ImportError as e:
-            raise RuntimeError("Reading .7z requires py7zr: pip install py7zr") from e
-        with py7zr.SevenZipFile(path, mode="r") as z:
-            z.extractall(path=dest)
+        _extract_7z(path, dest, max_bytes)
         return dest
     raise ValueError(f"Unsupported archive: {path}")
 
@@ -164,9 +249,8 @@ def build_entries(
     official_count = 0
     translated_count = 0
 
-    # First pass: source audio and start positions.
     raw: list[dict[str, object]] = []
-    for i, row in enumerate(full):
+    for row in full:
         filename = row["文件名"]
         b = bi_by_name.get(filename)
         if not b:
@@ -221,7 +305,6 @@ def build_entries(
                 "source_frames": frames,
                 "source_duration_seconds": frames / sr,
                 "sha256": got_hash,
-                "wav_path": wav,
             }
         )
 
@@ -229,7 +312,8 @@ def build_entries(
         raise FileNotFoundError(f"Missing {len(missing_wavs)} WAVs, first: {missing_wavs[0]}")
     if mismatched_hashes:
         raise ValueError(f"SHA-256 mismatch for {len(mismatched_hashes)} WAVs, first: {mismatched_hashes[0]}")
-    assert sample_rate is not None and channels is not None and sample_width is not None
+    if sample_rate is None or channels is None or sample_width is None:
+        raise ValueError("No usable WAV entries")
 
     same_gap_samples = round(same_group_gap * sample_rate)
     group_gap_samples = round(group_gap * sample_rate)
@@ -292,22 +376,27 @@ def build_entries(
 def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     js = [asdict(e) for e in entries]
-    (out_dir / "manifest.json").write_text(
-        json.dumps({"report": report, "entries": js}, ensure_ascii=False, indent=2), encoding="utf-8"
+    atomic_write_text(
+        out_dir / "manifest.json",
+        json.dumps({"report": report, "entries": js}, ensure_ascii=False, indent=2),
     )
     fields = list(asdict(entries[0]).keys()) if entries else []
     write_csv_rows(out_dir / "manifest.csv", js, fields)
 
-    with (out_dir / "bilingual.srt").open("w", encoding="utf-8-sig", newline="\n") as f:
-        for i, e in enumerate(entries, 1):
-            f.write(f"{i}\n")
-            f.write(f"{srt_time(e.start_seconds)} --> {srt_time(e.display_end_seconds)}\n")
-            f.write(e.english.strip() + "\n")
-            f.write(e.chinese.strip() + "\n\n")
+    srt: list[str] = []
+    for i, e in enumerate(entries, 1):
+        srt.extend([
+            str(i),
+            f"{srt_time(e.start_seconds)} --> {srt_time(e.display_end_seconds)}",
+            e.english.strip(),
+            e.chinese.strip(),
+            "",
+        ])
+    atomic_write_text(out_dir / "bilingual.srt", "\n".join(srt), encoding="utf-8-sig")
 
     timeline_fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
-        "chinese_source", "chinese", "english", "source_duration_seconds", "sha256"
+        "chinese_source", "chinese", "english", "source_duration_seconds", "sha256",
     ]
     timeline_rows: list[dict[str, object]] = []
     for e in entries:
@@ -325,28 +414,68 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
             "sha256": e.sha256,
         })
     write_csv_rows(out_dir / "bilingual_index_corrected.csv", timeline_rows, timeline_fields)
-    (out_dir / "build_report.json").write_text(
-        json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
+    atomic_write_text(
+        out_dir / "build_report.json",
+        json.dumps(report, ensure_ascii=False, indent=2),
     )
 
 
-def build_continuous_flac(entries: list[Entry], wav_root: Path, out_flac: Path, compression_level: int = 8) -> dict[str, object]:
+def _pcm_format(sample_width_bytes: int) -> tuple[str, str]:
+    formats = {
+        1: ("u8", "pcm_u8"),
+        2: ("s16le", "pcm_s16le"),
+        3: ("s24le", "pcm_s24le"),
+        4: ("s32le", "pcm_s32le"),
+    }
+    if sample_width_bytes not in formats:
+        raise RuntimeError(f"Unsupported PCM sample width: {sample_width_bytes} bytes")
+    return formats[sample_width_bytes]
+
+
+def build_continuous_flac(
+    entries: list[Entry],
+    wav_root: Path,
+    out_flac: Path,
+    compression_level: int = 8,
+) -> dict[str, object]:
+    """Stream raw PCM directly into FFmpeg.
+
+    This avoids a temporary RIFF/WAV intermediate, so the builder does not hit
+    the classic ~4 GiB RIFF size ceiling and does not need a second full-size
+    uncompressed copy on disk.
+    """
     wavs = collect_wavs(wav_root)
     if not entries:
         raise ValueError("No entries")
+
     sr = entries[0].sample_rate
     ch = entries[0].channels
     sw = entries[0].sample_width_bits // 8
+    pcm_format, pcm_codec = _pcm_format(sw)
     silence_frame = b"\x00" * (ch * sw)
 
     out_flac.parent.mkdir(parents=True, exist_ok=True)
+    partial = out_flac.with_name(out_flac.stem + ".partial.flac")
+    partial.unlink(missing_ok=True)
     pcm_hash = hashlib.sha256()
-    with tempfile.TemporaryDirectory(prefix="hsr_voice_") as td:
-        temp_wav = Path(td) / "continuous.wav"
-        with wave.open(str(temp_wav), "wb") as out:
-            out.setnchannels(ch)
-            out.setsampwidth(sw)
-            out.setframerate(sr)
+    written_frames = 0
+
+    with tempfile.TemporaryFile() as stderr_log:
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", pcm_format,
+            "-ar", str(sr),
+            "-ac", str(ch),
+            "-i", "pipe:0",
+            "-c:a", "flac",
+            "-compression_level", str(compression_level),
+            str(partial),
+        ]
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=stderr_log)
+        if proc.stdin is None:
+            raise RuntimeError("Unable to open FFmpeg stdin")
+
+        try:
             for i, e in enumerate(entries):
                 src = wavs[e.filename]
                 with wave.open(str(src), "rb") as wf:
@@ -354,8 +483,10 @@ def build_continuous_flac(entries: list[Entry], wav_root: Path, out_flac: Path, 
                         frames = wf.readframes(65536)
                         if not frames:
                             break
-                        out.writeframesraw(frames)
+                        proc.stdin.write(frames)
                         pcm_hash.update(frames)
+                        written_frames += len(frames) // (ch * sw)
+
                 if i + 1 < len(entries):
                     gap_frames = e.next_start_sample - e.audio_end_sample
                     remaining = gap_frames
@@ -364,35 +495,49 @@ def build_continuous_flac(entries: list[Entry], wav_root: Path, out_flac: Path, 
                     while remaining > 0:
                         n = min(block_frames, remaining)
                         data = block if n == block_frames else silence_frame * n
-                        out.writeframesraw(data)
+                        proc.stdin.write(data)
                         pcm_hash.update(data)
+                        written_frames += n
                         remaining -= n
 
-        cmd = [
-            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-            "-i", str(temp_wav), "-c:a", "flac", "-compression_level", str(compression_level), str(out_flac)
-        ]
-        subprocess.run(cmd, check=True)
+            proc.stdin.close()
+            rc = proc.wait()
+        except BaseException:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+            proc.kill()
+            proc.wait()
+            partial.unlink(missing_ok=True)
+            raise
 
-        # Decode once and hash the PCM to verify lossless identity.
-        pcm_formats = {
-            1: ("u8", "pcm_u8"),
-            2: ("s16le", "pcm_s16le"),
-            3: ("s24le", "pcm_s24le"),
-            4: ("s32le", "pcm_s32le"),
-        }
-        if sw not in pcm_formats:
-            raise RuntimeError(f"Unsupported PCM sample width for verification: {sw} bytes")
-        pcm_format, pcm_codec = pcm_formats[sw]
+        if rc != 0:
+            stderr_log.seek(0)
+            detail = stderr_log.read().decode("utf-8", "replace").strip()
+            partial.unlink(missing_ok=True)
+            raise RuntimeError(f"FFmpeg FLAC encode failed ({rc}): {detail}")
+
+    expected_frames = entries[-1].next_start_sample
+    if written_frames != expected_frames:
+        partial.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"PCM frame count mismatch before verification: {written_frames} != {expected_frames}"
+        )
+
+    decoded_hash = hashlib.sha256()
+    with tempfile.TemporaryFile() as decode_err:
         decoded = subprocess.Popen(
             [
-                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(out_flac),
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(partial),
                 "-f", pcm_format, "-acodec", pcm_codec, "-",
             ],
             stdout=subprocess.PIPE,
+            stderr=decode_err,
         )
-        decoded_hash = hashlib.sha256()
-        assert decoded.stdout is not None
+        if decoded.stdout is None:
+            partial.unlink(missing_ok=True)
+            raise RuntimeError("Unable to open FFmpeg verification stream")
         while True:
             chunk = decoded.stdout.read(1024 * 1024)
             if not chunk:
@@ -400,19 +545,26 @@ def build_continuous_flac(entries: list[Entry], wav_root: Path, out_flac: Path, 
             decoded_hash.update(chunk)
         rc = decoded.wait()
         if rc != 0:
-            raise RuntimeError(f"ffmpeg decode verification failed: {rc}")
+            decode_err.seek(0)
+            detail = decode_err.read().decode("utf-8", "replace").strip()
+            partial.unlink(missing_ok=True)
+            raise RuntimeError(f"FFmpeg decode verification failed ({rc}): {detail}")
 
     source_pcm_hash = pcm_hash.hexdigest()
     decoded_pcm_hash = decoded_hash.hexdigest()
     if source_pcm_hash != decoded_pcm_hash:
+        partial.unlink(missing_ok=True)
         raise RuntimeError("FLAC decoded PCM does not match assembled source PCM")
 
+    os.replace(partial, out_flac)
     return {
         "flac_path": str(out_flac),
         "flac_size_bytes": out_flac.stat().st_size,
         "assembled_pcm_sha256": source_pcm_hash,
         "decoded_flac_pcm_sha256": decoded_pcm_hash,
         "lossless_pcm_verified": True,
+        "pcm_streamed_directly": True,
+        "pcm_frames_written": written_frames,
     }
 
 
@@ -432,25 +584,23 @@ def build_project(
         chs_root = ensure_dir_or_extract(chs_source, work, "chs")
         wav_root = ensure_dir_or_extract(wav_source, work, "wavs")
         entries, report = build_entries(
-            full_index_csv, bilingual_csv, chs_root, wav_root,
-            same_group_gap=same_group_gap, group_gap=group_gap,
+            full_index_csv,
+            bilingual_csv,
+            chs_root,
+            wav_root,
+            same_group_gap=same_group_gap,
+            group_gap=group_gap,
         )
         write_manifest(entries, report, out_dir)
         if make_flac:
-            audio_report = build_continuous_flac(entries, wav_root, out_dir / "continuous.flac")
-            report.update(audio_report)
-            (out_dir / "build_report.json").write_text(
-                json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8"
-            )
-            manifest_path = out_dir / "manifest.json"
-            payload = json.loads(manifest_path.read_text(encoding="utf-8"))
-            payload["report"] = report
-            manifest_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+            report.update(build_continuous_flac(entries, wav_root, out_dir / "continuous.flac"))
+            write_manifest(entries, report, out_dir)
     return report
 
 
 if __name__ == "__main__":
     import argparse
+
     p = argparse.ArgumentParser(description="HSR character voice archive builder")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--bilingual", type=Path, required=True)
@@ -462,7 +612,12 @@ if __name__ == "__main__":
     p.add_argument("--no-flac", action="store_true")
     a = p.parse_args()
     print(json.dumps(build_project(
-        a.index, a.bilingual, a.chs, a.wavs, a.out,
-        same_group_gap=a.same_gap, group_gap=a.group_gap,
+        a.index,
+        a.bilingual,
+        a.chs,
+        a.wavs,
+        a.out,
+        same_group_gap=a.same_gap,
+        group_gap=a.group_gap,
         make_flac=not a.no_flac,
     ), ensure_ascii=False, indent=2))

@@ -1,5 +1,18 @@
 # Changelog
 
+## v0.4
+
+- Added a static GitHub Pages launcher in `docs/` with a stable public entry and direct navigation to the local console.
+- Deliberately avoided making hosted-HTTPS-to-localhost `fetch()` a runtime dependency after reviewing current Local Network Access / CORS failures.
+- Replaced the temporary continuous WAV with direct raw-PCM streaming into FFmpeg.
+- Added atomic `.partial.flac` promotion only after decoded PCM verification.
+- Added atomic writes for primary generated metadata and project state.
+- Added a persistent local job journal; queued/running jobs become `interrupted` after an application restart.
+- Pinned `py7zr>=1.1.3` after reviewing 2026 archive-extraction security advisories.
+- Added ZIP/7z traversal checks, symlink rejection, member-count limits, and an extraction-size ceiling.
+- Added regression tests for malicious ZIP paths, extraction-size limits, and streamed FLAC verification.
+- Added `docs/reliability.md` documenting failure cases and upstream references.
+
 ## v0.3
 
 - Reworked the browser page into a persistent project dashboard instead of a one-shot parameter form.
