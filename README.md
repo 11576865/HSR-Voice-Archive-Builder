@@ -1,61 +1,110 @@
 # HSR Voice Archive Builder
 
-Local tooling for turning fragmented **Honkai: Star Rail** character voice files into a reproducible continuous voice archive with bilingual metadata and subtitles.
+Local-first tooling for turning fragmented **Honkai: Star Rail** character voice files into a reproducible continuous voice archive with bilingual metadata, subtitles, integrity checks, and update planning.
 
 The repository contains the **builder**, not redistributed game assets. Audio packages, LAB files, extracted resources, and full dialogue datasets stay local and are ignored by Git.
 
 ## Status
 
-Current development version: **v0.2**.
+Current development version: **v0.3**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
-## What v0.2 does
+## Design rule
 
-- Reads a canonical CSV order using either English field names or the older Chinese field names.
-- Accepts an optional existing bilingual CSV instead of requiring one.
-- Matches English WAV files and verifies optional SHA-256 values.
-- Uses same-stem Chinese `.lab` text as the preferred Chinese source when available.
-- Detects `_f` / `_m` voice variants and records both `logical_id` and `variant` in the manifest.
-- Can classify a candidate update as an exact existing file, a variant of an existing logical line, or a genuinely new logical line.
-- Optionally translates only the Chinese text that is still missing after official LAB and existing bilingual data are applied.
-- Inserts configurable silence between lines and groups.
-- Generates `manifest.json`, `manifest.csv`, a corrected bilingual index, SRT subtitles, and a build report.
-- Optionally assembles a continuous FLAC and verifies the decoded PCM against the assembled source PCM.
-- Accepts local directories, ZIP archives, and 7z archives as input sources.
+**Browser UI, local-first processing.**
+
+The browser is a control plane. Archive extraction, hashing, WAV/FLAC work, FFmpeg, translation calls, manifests, subtitles, and final files are handled by the local Python backend.
+
+Two control modes are supported:
+
+- **Local control:** browser and processor are the same Windows/Linux/macOS/Android-Termux device.
+- **LAN control:** a phone or tablet can open the dashboard over the local network while the computer/Android host performs the actual work. LAN mode uses a generated control token.
+
+No internet processing server is required.
+
+## v0.3 dashboard
+
+v0.3 adds persistent projects. A project directory contains a local `.hsr-voice-project.json` file with source paths and build settings.
+
+The dashboard can:
+
+- create or reopen a project;
+- remember the most recent project;
+- edit build settings once instead of re-entering paths every run;
+- launch a build as a background job;
+- show current archive counts and generated outputs;
+- scan a local TXT/JSON/CSV candidate list;
+- check the current AI-Hobbyist English XLSX index for a configured character;
+- classify candidates as exact existing files, variants of existing logical lines, or genuinely new logical lines;
+- save the comparison as `update_plan.json` without modifying the current manifest;
+- open the output directory on the processing host.
+
+Remote index checking is currently **metadata/update discovery only**. v0.3 does not yet auto-download and splice new game audio into an existing archive.
 
 ## Requirements
 
 - Python 3.11+
-- FFmpeg available on `PATH` when building FLAC
-- Packages in `requirements.txt`
+- FFmpeg on `PATH` when building FLAC
+- packages in `requirements.txt`
 
 ```bash
 python -m pip install -r requirements.txt
 ```
 
-## Web UI
+## Start locally
 
 ### Windows
 
-Run `run_windows.bat`, then open:
-
 ```text
-http://127.0.0.1:8765/
+run_windows.bat
 ```
 
-### Termux
+### Termux / Android
 
 ```bash
 chmod +x run_termux.sh
 ./run_termux.sh
 ```
 
-The browser page is only a controller. Audio processing, archive extraction, hashing, LAB matching, translation write-back, and FFmpeg run locally.
+Default local URL:
 
-## CLI
+```text
+http://127.0.0.1:8765/
+```
 
-v0.2 uses the higher-level pipeline:
+## Control the host from a phone or tablet
+
+On Windows:
+
+```text
+run_windows_lan.bat
+```
+
+On Termux:
+
+```bash
+chmod +x run_termux_lan.sh
+./run_termux_lan.sh
+```
+
+Or directly:
+
+```bash
+python -m app.launch --lan --no-browser
+```
+
+The launcher prints a URL containing a temporary token, for example:
+
+```text
+http://192.168.1.20:8765/?token=...
+```
+
+Open that URL on another device on the same LAN. The browser stores the token only for that session and sends it with API requests. The audio and generated files remain on the host device.
+
+## Build pipeline
+
+The underlying v0.2 deterministic builder remains available through the v0.3 project dashboard and CLI:
 
 ```bash
 python -m app.pipeline \
@@ -99,9 +148,9 @@ export OPENAI_API_KEY="..."
 
 Do not put API keys in project files or the browser UI.
 
-## Voice identity and update diffing
+## Voice identity
 
-The physical filename remains the exact file identity. v0.2 additionally derives a logical identity for gender/variant suffixes:
+The physical filename remains the exact file identity. A logical identity is also derived for gender/variant suffixes:
 
 ```text
 chapter5_3_evanescia_125_f.wav
@@ -112,14 +161,25 @@ variant    = f
 
 This prevents a counterpart such as `chapter5_3_evanescia_125.wav` from being automatically counted as a completely new dialogue line.
 
-To classify an update list against an existing manifest:
+## Update checks
+
+Local candidate files can still be checked from the CLI:
 
 ```bash
 python -m app.diff \
   --manifest output/manifest.json \
   --candidates pending.txt \
-  --out update_diff.json
+  --out update_plan.json
 ```
+
+The dashboard additionally supports a remote metadata check against:
+
+```text
+AI-Hobbyist/StarRail_Voice_Sorting_Scripts
+Indexs/EN.xlsx
+```
+
+The remote URL is project-configurable and restricted to HTTPS.
 
 ## Output
 
@@ -130,21 +190,15 @@ output/
 ├── bilingual_index_corrected.csv
 ├── bilingual.srt
 ├── build_report.json
-└── continuous.flac
+├── update_plan.json          # after an update check
+└── continuous.flac           # when enabled
 ```
 
 The manifest is the durable machine-readable result. PDF/ASS/LRC and other presentation formats should be derived from it rather than used as primary data.
 
 ## Data integrity
 
-The builder checks:
-
-- expected WAV presence;
-- duplicate filename conflicts;
-- optional SHA-256 values from the canonical index;
-- common PCM format across source WAV files;
-- deterministic sample positions for the timeline;
-- decoded FLAC PCM identity after final encoding.
+The builder checks expected WAV presence, duplicate filename conflicts, optional SHA-256 values, a common PCM format, sample-accurate timeline positions, and decoded-FLAC PCM identity after encoding.
 
 ## Tests
 
@@ -152,22 +206,13 @@ The builder checks:
 python -m unittest discover -s tests -v
 ```
 
-The tests use synthetic audio only and do not require game data.
+GitHub Actions runs the synthetic test suite on Python 3.11 and 3.12. No game data is required.
 
-## Current validation
+## Current regression validation
 
-On the local 379-line Evanescia regression corpus, v0.2 reproduced:
+On the local 379-line Evanescia corpus, the deterministic archive pipeline reproduced 379/379 WAVs, 181 same-stem official Chinese LAB matches, 198 existing Chinese entries, 0 missing Chinese lines, 4 filename variants, and 141,442,893 output samples at 48 kHz mono 16-bit PCM. A full FLAC rebuild passed decoded PCM SHA-256 identity verification.
 
-- 379/379 WAVs;
-- 181 same-stem official Chinese LAB matches;
-- 198 existing translated Chinese lines;
-- 0 missing Chinese lines;
-- 4 filename variants;
-- 48 kHz mono 16-bit PCM;
-- 141,442,893 total output samples;
-- exact decoded-FLAC PCM SHA-256 equality after assembly.
-
-The 29-line pending list also separates into 4 variant counterparts and 25 genuinely new logical lines.
+The earlier 29-line pending list separates into 4 variant counterparts and 25 genuinely new logical lines.
 
 ## Legal / project scope
 
