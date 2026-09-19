@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import importlib
+import os
 import shutil
 import sys
 from importlib import metadata
@@ -36,6 +37,7 @@ def _version_tuple(value: str) -> tuple[int, ...]:
 
 def dependency_status() -> dict[str, Any]:
     issues: list[str] = []
+    warnings: list[str] = []
     versions: dict[str, str] = {}
     for distribution, module, minimum in DEPENDENCIES:
         try:
@@ -60,12 +62,25 @@ def dependency_status() -> dict[str, Any]:
             f"need {MIN_PYTHON[0]}.{MIN_PYTHON[1]}+"
         )
 
+    ffmpeg = shutil.which("ffmpeg") or ""
+    if not ffmpeg:
+        warnings.append("FFmpeg not found: FLAC building is unavailable until it is installed.")
+
+    termux = bool(os.environ.get("TERMUX_VERSION") or os.environ.get("PREFIX", "").startswith("/data/data/com.termux"))
+    if termux:
+        warnings.append(
+            "Termux/Android detected: Android may terminate long CPU-heavy/background jobs; "
+            "interrupted jobs are journaled but FLAC encoding restarts from the beginning."
+        )
+
     return {
         "ok": not issues,
         "python": sys.version.split()[0],
         "versions": versions,
         "issues": issues,
-        "ffmpeg": shutil.which("ffmpeg") or "",
+        "warnings": warnings,
+        "ffmpeg": ffmpeg,
+        "termux": termux,
     }
 
 
