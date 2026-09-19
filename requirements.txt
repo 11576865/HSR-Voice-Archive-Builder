@@ -4,3 +4,4 @@ python-multipart
 py7zr>=1.1.3
 openai
 openpyxl
+defusedxml>=0.7.1
