@@ -9,10 +9,11 @@ import shutil
 import stat
 import subprocess
 import tempfile
-import wave
 import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+
+from .wavpcm import iter_pcm_chunks, parse_wav_pcm
 
 SRT_TS = re.compile(r"^(\d+):(\d+):(\d+),(\d+)$")
 DEFAULT_MAX_EXTRACT_BYTES = 32 * 1024**3
@@ -248,6 +249,7 @@ def build_entries(
     missing_wavs: list[str] = []
     official_count = 0
     translated_count = 0
+    extensible_count = 0
 
     raw: list[dict[str, object]] = []
     for row in full:
@@ -260,11 +262,13 @@ def build_entries(
             missing_wavs.append(filename)
             continue
 
-        with wave.open(str(wav), "rb") as wf:
-            sr = wf.getframerate()
-            ch = wf.getnchannels()
-            sw = wf.getsampwidth()
-            frames = wf.getnframes()
+        wav_info = parse_wav_pcm(wav)
+        sr = wav_info.sample_rate
+        ch = wav_info.channels
+        sw = wav_info.sample_width_bytes
+        frames = wav_info.frames
+        if wav_info.extensible:
+            extensible_count += 1
 
         if sample_rate is None:
             sample_rate, channels, sample_width = sr, ch, sw
@@ -369,6 +373,7 @@ def build_entries(
         "total_samples": cursor,
         "duration_continuous_seconds": cursor / sample_rate,
         "all_source_hashes_match": not mismatched_hashes,
+        "count_wav_extensible": extensible_count,
     }
     return entries, report
 
@@ -478,14 +483,28 @@ def build_continuous_flac(
         try:
             for i, e in enumerate(entries):
                 src = wavs[e.filename]
-                with wave.open(str(src), "rb") as wf:
-                    while True:
-                        frames = wf.readframes(65536)
-                        if not frames:
-                            break
-                        proc.stdin.write(frames)
-                        pcm_hash.update(frames)
-                        written_frames += len(frames) // (ch * sw)
+                info = parse_wav_pcm(src)
+                actual = (
+                    info.sample_rate,
+                    info.channels,
+                    info.bits_per_sample,
+                    info.frames,
+                )
+                expected = (
+                    e.sample_rate,
+                    e.channels,
+                    e.sample_width_bits,
+                    e.source_frames,
+                )
+                if actual != expected:
+                    raise RuntimeError(
+                        f"WAV changed or no longer matches manifest at {e.filename}: "
+                        f"{actual} != {expected}"
+                    )
+                for frames in iter_pcm_chunks(src, info):
+                    proc.stdin.write(frames)
+                    pcm_hash.update(frames)
+                    written_frames += len(frames) // (ch * sw)
 
                 if i + 1 < len(entries):
                     gap_frames = e.next_start_sample - e.audio_end_sample
