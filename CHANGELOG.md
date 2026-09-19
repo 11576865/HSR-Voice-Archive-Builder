@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.5
+
+- Added a per-process control token for local mode as well as LAN mode; all control/data APIs require the custom token header.
+- Added Host allowlisting, explicit LAN-only non-loopback binds, no-store/referrer/CSP response hardening, and a LAN dashboard entry gate.
+- Added a project-owned RIFF/RF64 PCM parser so PCM `WAVE_FORMAT_EXTENSIBLE` works on Python 3.11 as well as 3.12+.
+- Added remote XLSX streamed-download limits, ZIP expansion/member limits, HTTPS redirect enforcement, structural checks, and `defusedxml`.
+- Added finite OpenAI retry/timeout settings plus per-batch local translation checkpoints keyed by model and English-text SHA-256.
+- Moved large build/extraction working directories to the output filesystem instead of the system temp partition.
+- Added a stdlib-only runtime dependency preflight; startup scripts only install missing/outdated dependencies instead of hitting package servers on every launch.
+- Added clear FFmpeg/API-key preflight failures before a build starts.
+- Added port-conflict detection, multi-interface LAN address discovery, and `--display-host`.
+- Added Termux/Android interruption warnings while retaining atomic outputs and interrupted-job journaling.
+- Expanded CI tests for localhost security, extensible WAV, XLSX expansion limits, translation checkpoint recovery, and runtime dependencies.
+- Expanded `docs/reliability.md` with the internet failure cases that motivated these changes.
+
 ## v0.4
 
 - Added a static GitHub Pages launcher in `docs/` with a stable public entry and direct navigation to the local console.
