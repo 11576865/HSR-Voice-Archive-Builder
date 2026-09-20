@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text
 from .diff import classify
-from .jobs import assert_no_active_build, create_job, get_job, recent_jobs
+from .jobs import assert_no_active_build, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import create_quick_project, discover_source_candidates, quick_scan
@@ -352,6 +352,7 @@ def api_project_delete(project_path: str = Form(...)):
         root = Path(project_path).expanduser().resolve()
         was_active = _active_root is not None and _active_root.resolve() == root
         result = delete_project(root)
+        result["deleted_job_records"] = delete_project_jobs(str(root))
         if was_active:
             _clear_active()
         return {
