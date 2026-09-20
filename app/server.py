@@ -13,7 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text
 from .diff import classify
-from .jobs import create_job, get_job, recent_jobs
+from .jobs import assert_no_active_build, create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import create_quick_project, discover_source_candidates, quick_scan
@@ -207,7 +207,7 @@ def api_quick_build(
         if config.make_flac and not runtime.get("ffmpeg"):
             raise RuntimeError("FFmpeg is not installed or is not available on PATH")
 
-        def run():
+        def run(report_progress):
             return build_project_v02(
                 paths["index"],
                 paths["wavs"],
@@ -223,9 +223,10 @@ def api_quick_build(
                 translation_token_budget=config.translation_token_budget,
                 translation_budget_usd=config.translation_budget_usd,
                 glossary_path=paths["glossary"],
+                progress_callback=report_progress,
             )
 
-        job = create_job("quick-build", run)
+        job = create_job("quick-build", run, with_progress=True)
         return {
             "ok": True,
             "job": job.id,
@@ -328,6 +329,7 @@ def api_project_save(
 @app.post("/api/project/build")
 def api_project_build():
     try:
+        assert_no_active_build()
         config = _active_config()
         paths = _project_paths(config)
         if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
@@ -341,7 +343,7 @@ def api_project_build():
                 "or disable AI fallback translation"
             )
 
-        def run():
+        def run(report_progress):
             return build_project_v02(
                 paths["index"],
                 paths["wavs"],
@@ -357,9 +359,10 @@ def api_project_build():
                 translation_token_budget=config.translation_token_budget,
                 translation_budget_usd=config.translation_budget_usd,
                 glossary_path=paths["glossary"],
+                progress_callback=report_progress,
             )
 
-        job = create_job("build", run)
+        job = create_job("build", run, with_progress=True)
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
