@@ -38,6 +38,29 @@ def write_index(path: Path) -> None:
         )
 
 
+class QuickBuildUiTests(unittest.TestCase):
+    def test_common_timing_settings_are_visible_before_first_build(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="quickSameGroupGap"', html)
+        self.assertIn('id="quickGroupGap"', html)
+        self.assertIn('id="quickAiBudget" class="hidden"', html)
+        self.assertIn("d.set('same_group_gap'", html)
+        self.assertIn("d.set('group_gap'", html)
+
+    def test_finished_files_have_user_facing_descriptions(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("const outputDescriptions=", html)
+        self.assertIn("'continuous.flac':'连续播放的无损语音音频'", html)
+        self.assertIn("'manifest.json':'完整的机器可读档案", html)
+        self.assertIn("'build_report.json':'本次构建的统计", html)
+
+
 class BuildProgressTests(unittest.TestCase):
     def test_build_jobs_report_progress_and_reject_concurrent_build(self) -> None:
         release = threading.Event()
