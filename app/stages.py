@@ -89,11 +89,13 @@ def save_stage(
     payload: dict[str, Any],
     *,
     artifacts: list[Path] | None = None,
+    artifact_root: Path | None = None,
 ) -> Path:
     artifact_rows: list[dict[str, Any]] = []
+    artifact_base = (artifact_root or out_dir).resolve()
     for artifact in artifacts or []:
         resolved = artifact.resolve()
-        relative = resolved.relative_to(out_dir.resolve()).as_posix()
+        relative = resolved.relative_to(artifact_base).as_posix()
         artifact_rows.append({
             "path": relative,
             "size_bytes": resolved.stat().st_size,
@@ -106,6 +108,7 @@ def save_stage(
         "stage": stage,
         "input_fingerprint": input_fingerprint,
         "completed_at": datetime.now(timezone.utc).isoformat(),
+        "artifact_root": "external" if artifact_root is not None else "stage",
         "artifacts": artifact_rows,
         "payload": payload,
     })
@@ -117,6 +120,8 @@ def load_stage(
     filename: str,
     stage: str,
     input_fingerprint: str,
+    *,
+    artifact_root: Path | None = None,
 ) -> dict[str, Any] | None:
     path = stage_path(out_dir, filename)
     if not path.is_file():
@@ -131,12 +136,17 @@ def load_stage(
             or not isinstance(document.get("payload"), dict)
         ):
             return None
+        artifact_base = (artifact_root or out_dir).resolve()
+        expected_root = "external" if artifact_root is not None else "stage"
+        recorded_root = str(document.get("artifact_root", "stage") or "stage")
+        if document.get("artifacts") and recorded_root != expected_root:
+            return None
         for row in document.get("artifacts", []):
             relative = Path(str(row["path"]))
             if relative.is_absolute() or ".." in relative.parts:
                 return None
-            artifact = (out_dir / relative).resolve()
-            artifact.relative_to(out_dir.resolve())
+            artifact = (artifact_base / relative).resolve()
+            artifact.relative_to(artifact_base)
             if (
                 not artifact.is_file()
                 or artifact.stat().st_size != int(row["size_bytes"])
