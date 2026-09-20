@@ -570,10 +570,43 @@ def _safe_project_name(plan: dict[str, Any], source: Path) -> str:
     return char or source.stem or "voice-archive"
 
 
+def _safe_project_dir_name(value: str) -> str:
+    # Keep readable Unicode project names while removing characters that are
+    # unsafe on common Android/Windows filesystems.
+    stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", str(value or "").strip())
+    stem = re.sub(r"\s+", " ", stem).strip(" .-")
+    stem = stem[:96].rstrip(" .-")
+    return stem or "voice-archive"
+
+
+def _default_project_base() -> Path:
+    override = os.environ.get("HSR_VOICE_PROJECTS_DIR", "").strip()
+    if override:
+        return Path(override).expanduser()
+
+    # Quick Mode on Termux should place the whole project in shared storage so
+    # the generated archive is visible to Android file managers. The output
+    # remains the project's "output" subdirectory, avoiding collisions between
+    # characters/projects.
+    if os.environ.get("TERMUX_VERSION"):
+        home = Path.home()
+        for downloads in (
+            home / "storage" / "downloads",
+            home / "storage" / "shared" / "Download",
+            Path("/storage/emulated/0/Download"),
+        ):
+            try:
+                if downloads.is_dir() and os.access(downloads, os.W_OK):
+                    return downloads / "HSR_Voice_Test"
+            except OSError:
+                continue
+
+    return Path.home() / "HSR-Voice-Projects"
+
+
 def _default_project_root(plan: dict[str, Any], source: Path) -> Path:
-    base = Path.home() / "HSR-Voice-Projects"
-    stem = re.sub(r"[^A-Za-z0-9._-]+", "-", _safe_project_name(plan, source)).strip("-")
-    stem = stem or "voice-archive"
+    base = _default_project_base()
+    stem = _safe_project_dir_name(_safe_project_name(plan, source))
     candidate = base / stem
     if not candidate.exists():
         return candidate

@@ -2,13 +2,23 @@ from __future__ import annotations
 
 import csv
 import json
+import os
 import tempfile
 import unittest
 import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
-from app.quick import _remote_candidate, create_quick_project, infer_character, quick_scan, source_inventory
+from app.quick import (
+    _default_project_base,
+    _default_project_root,
+    _remote_candidate,
+    _safe_project_dir_name,
+    create_quick_project,
+    infer_character,
+    quick_scan,
+    source_inventory,
+)
 from app.project import load_project
 
 
@@ -31,6 +41,38 @@ def make_voice_zip(path: Path, names: list[str], with_labs: bool = True) -> None
 
 
 class QuickModeTests(unittest.TestCase):
+    def test_termux_default_project_base_uses_shared_download_folder(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            home = Path(td) / "home"
+            downloads = home / "storage" / "downloads"
+            downloads.mkdir(parents=True)
+            with (
+                patch.dict(
+                    os.environ,
+                    {"TERMUX_VERSION": "0.119", "HSR_VOICE_PROJECTS_DIR": ""},
+                    clear=False,
+                ),
+                patch("app.quick.Path.home", return_value=home),
+            ):
+                base = _default_project_base()
+            self.assertEqual(base, downloads / "HSR_Voice_Test")
+
+    def test_default_project_root_preserves_project_name_and_avoids_collision(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td) / "HSR_Voice_Test"
+            base.mkdir()
+            plan = {"character": {"value": "绯英"}}
+            source = Path(td) / "English.zip"
+            with patch("app.quick._default_project_base", return_value=base):
+                first = _default_project_root(plan, source)
+                self.assertEqual(first, base / "绯英")
+                first.mkdir()
+                second = _default_project_root(plan, source)
+            self.assertEqual(second, base / "绯英-2")
+
+    def test_project_directory_name_keeps_unicode_but_removes_unsafe_characters(self) -> None:
+        self.assertEqual(_safe_project_dir_name("绯英 / Evanescia: test"), "绯英 - Evanescia- test")
+
     def test_remote_character_dominance_allows_story_aliases(self) -> None:
         names = {f"chapter1_evanescia_{i}.wav" for i in range(4)}
         records = [
