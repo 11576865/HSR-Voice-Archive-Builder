@@ -62,6 +62,11 @@ def _set_active(config: ProjectConfig) -> None:
     _active_root = Path(config.root).resolve()
 
 
+def _clear_active() -> None:
+    global _active_root
+    _active_root = None
+
+
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
     return {
         "index": resolve_project_path(config, config.index_csv),
@@ -401,6 +406,11 @@ class Handler(BaseHTTPRequestHandler):
             config = load_project(Path(data["project_path"]))
             _set_active(config)
             self._json({"ok": True, "project": project_summary(config)})
+            return
+
+        if path == "/api/project/close":
+            _clear_active()
+            self._json({"ok": True, "project": None})
             return
 
         if path == "/api/project/save":
