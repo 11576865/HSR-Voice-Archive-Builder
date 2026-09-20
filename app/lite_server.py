@@ -337,10 +337,9 @@ class Handler(BaseHTTPRequestHandler):
                 root=Path(root_value) if root_value else None,
                 name=data.get("project_name", ""),
                 audio_language=data.get("audio_language", "auto"),
-                source_text_language=data.get("source_text_language", "en"),
+                source_text_language=data.get("source_text_language", "en").strip() or "en",
                 target_language=data.get("target_language", "zh-CN"),
                 reference_language=data.get("reference_language", "auto"),
-                source_text_language=data.get("source_text_language", "en").strip() or "en",
             )
             update_project(
                 config,
