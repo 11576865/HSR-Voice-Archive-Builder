@@ -144,7 +144,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.8",
+        "version": "0.9-C",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -211,6 +211,8 @@ def api_quick_build(
                 translate_missing=config.translate_missing,
                 translation_model=config.translation_model,
                 translation_batch_size=config.translation_batch_size,
+                translation_token_budget=config.translation_token_budget,
+                translation_budget_usd=config.translation_budget_usd,
             )
 
         job = create_job("quick-build", run)
@@ -279,6 +281,8 @@ def api_project_save(
     translate_missing: bool = Form(False),
     translation_model: str = Form("gpt-5.6-sol"),
     translation_batch_size: int = Form(80),
+    translation_token_budget: int = Form(0),
+    translation_budget_usd: float = Form(0.0),
 ):
     try:
         config = _active_config()
@@ -299,6 +303,8 @@ def api_project_save(
             translate_missing=translate_missing,
             translation_model=translation_model.strip() or "gpt-5.6-sol",
             translation_batch_size=max(1, translation_batch_size),
+            translation_token_budget=max(0, translation_token_budget),
+            translation_budget_usd=max(0.0, translation_budget_usd),
         )
         return {"ok": True, "project": project_summary(config)}
     except Exception as exc:
@@ -334,6 +340,8 @@ def api_project_build():
                 translate_missing=config.translate_missing,
                 translation_model=config.translation_model,
                 translation_batch_size=config.translation_batch_size,
+                translation_token_budget=config.translation_token_budget,
+                translation_budget_usd=config.translation_budget_usd,
             )
 
         job = create_job("build", run)
@@ -454,6 +462,8 @@ def legacy_build(
     translate_missing: bool = Form(False),
     translation_model: str = Form("gpt-5.6-sol"),
     translation_batch_size: int = Form(80),
+    translation_token_budget: int = Form(0),
+    translation_budget_usd: float = Form(0.0),
 ):
     try:
         report = build_project_v02(
@@ -467,7 +477,9 @@ def legacy_build(
             make_flac=make_flac,
             translate_missing=translate_missing,
             translation_model=translation_model,
-            translation_batch_size=translation_batch_size,
+            translation_batch_size=max(1, translation_batch_size),
+            translation_token_budget=max(0, translation_token_budget),
+            translation_budget_usd=max(0.0, translation_budget_usd),
         )
         return JSONResponse({"ok": True, "report": report})
     except Exception as exc:
