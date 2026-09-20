@@ -490,6 +490,7 @@ def quick_scan(
     *,
     reference_source: Path | None = None,
     source_text_language: str = "en",
+    target_language: str = "zh-CN",
     reference_language: str = "auto",
     remote_index_url: str = "",
 ) -> dict[str, Any]:
@@ -613,10 +614,13 @@ def quick_scan(
     chs = None
     if chs_source is not None and str(chs_source).strip():
         if Path(chs_source).expanduser().resolve() == Path(english["source"]).resolve():
-            warnings.append("Primary audio and target-text source point to the same package")
+            warnings.append(
+                "Primary audio and official Chinese voice package are the same; "
+                "the second selection is unnecessary when the primary source text is Chinese"
+            )
         chs = source_inventory(chs_source)
         if chs["lab_count"] == 0:
-            warnings.append("Target-text source contains no LAB files")
+            warnings.append("Official Chinese voice package contains no LAB files")
 
     reference = None
     reference_index_attempt: dict[str, Any] | None = None
@@ -706,6 +710,8 @@ def quick_scan(
                 if Path(str(row.get("filename", ""))).name in wav_names
             ]
         chinese_stems = set(chs.get("lab_names", [])) if chs else set()
+        if source_text_language == target_language == "zh-CN":
+            chinese_stems.update(english.get("lab_names", []))
         official_chinese_matches = sum(
             Path(str(row.get("filename", ""))).stem in chinese_stems
             for row in index_rows
@@ -757,6 +763,7 @@ def quick_scan(
             "configured": api["configured"],
             "model": DEFAULT_MODEL,
             "source_text_language": source_text_language,
+            "target_language": target_language,
             "remote_index_url": remote_index_url,
             "official_chinese_matches": official_chinese_matches,
             "pending_translation_count": len(pending_records),
@@ -840,6 +847,7 @@ def create_quick_project(
         chs_source,
         reference_source=reference_source,
         source_text_language=source_text_language,
+        target_language=target_language,
         reference_language=reference_language,
     )
     if not plan["ready"]:
