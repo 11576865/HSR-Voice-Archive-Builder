@@ -233,7 +233,7 @@ def build_project_v02(
     group_gap: float = 1.20,
     make_flac: bool = True,
     translate_missing: bool = False,
-    translation_model: str = "gpt-5.6-luna",
+    translation_model: str = "gpt-5.6-sol",
     translation_batch_size: int = 80,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
@@ -290,7 +290,7 @@ if __name__ == "__main__":
     p.add_argument("--group-gap", type=float, default=1.20)
     p.add_argument("--no-flac", action="store_true")
     p.add_argument("--translate-missing", action="store_true")
-    p.add_argument("--translation-model", default="gpt-5.6-luna")
+    p.add_argument("--translation-model", default="gpt-5.6-sol")
     p.add_argument("--translation-batch-size", type=int, default=80)
     a = p.parse_args()
     result = build_project_v02(
