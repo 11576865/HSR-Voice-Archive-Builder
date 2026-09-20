@@ -16,7 +16,12 @@ from .builder import MAX_ARCHIVE_MEMBERS, atomic_write_text, sha256_file
 from .credentials import credentials_status
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
-from .remote_index import DEFAULT_EN_INDEX_URL, fetch_ai_hobbyist_index_for_filenames_cached
+from .remote_index import (
+    DEFAULT_EN_INDEX_URL,
+    ai_hobbyist_index_label,
+    ai_hobbyist_index_url,
+    fetch_ai_hobbyist_index_for_filenames_cached,
+)
 from .schema import normalize_index
 from .translation_runtime import estimate_workload_tokens
 from .translator import DEFAULT_MODEL
@@ -346,6 +351,7 @@ def _remote_candidate(
     *,
     url: str,
     cache: dict[str, Any],
+    source_text_language: str = "en",
 ) -> dict[str, Any]:
     by_name: dict[str, dict[str, str]] = {}
     duplicates: set[str] = set()
@@ -366,7 +372,8 @@ def _remote_candidate(
     primary_character, primary_count = character_counts.most_common(1)[0] if character_counts else ("", 0)
     return {
         "source": "remote",
-        "provider": "AI-Hobbyist EN.xlsx",
+        "provider": ai_hobbyist_index_label(url),
+        "source_text_language": source_text_language,
         "url": url,
         "row_count": len(records),
         "matched_wavs": len(matched),
@@ -398,7 +405,7 @@ def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[s
             "index": str(pos),
             "group": parse_voice_identity(filename).group,
             "filename": filename,
-            "source": "AI-Hobbyist EN.xlsx",
+            "source": "AI-Hobbyist",
             "source_detail": str(row.get("character", "")).strip(),
             "english": str(row.get("english", "")).strip(),
             "sha256": remote_hash if re.fullmatch(r"[0-9a-f]{64}", remote_hash) else "",
@@ -411,14 +418,16 @@ def quick_scan(
     chs_source: Path | None = None,
     *,
     reference_source: Path | None = None,
-    remote_index_url: str = DEFAULT_EN_INDEX_URL,
+    source_text_language: str = "en",
+    remote_index_url: str = "",
 ) -> dict[str, Any]:
+    remote_index_url = remote_index_url.strip() or ai_hobbyist_index_url(source_text_language)
     english = source_inventory(english_source)
     blockers: list[str] = []
     warnings: list[str] = []
 
     if english["wav_count"] == 0:
-        blockers.append("No WAV files were found in the English source")
+        blockers.append("No WAV files were found in the primary audio source")
     if english.get("duplicate_wav_names"):
         blockers.append(
             "Duplicate WAV basenames were found in the English source: "
@@ -445,7 +454,11 @@ def quick_scan(
                 wav_names, remote_index_url
             )
             remote_attempt = _remote_candidate(
-                remote_records, wav_names, url=remote_index_url, cache=cache
+                remote_records,
+                wav_names,
+                url=remote_index_url,
+                cache=cache,
+                source_text_language=source_text_language,
             )
             if cache.get("stale"):
                 warnings.append("Remote index refresh failed; a stale cached copy was used")
@@ -488,7 +501,7 @@ def quick_scan(
                 )
             if int(selected_index["english_matched"]) != int(english["wav_count"]):
                 blockers.append(
-                    f"Best index has English text for only {selected_index['english_matched']} / "
+                    f"Best index has source text for only {selected_index['english_matched']} / "
                     f"{english['wav_count']} WAV files"
                 )
 
@@ -514,7 +527,7 @@ def quick_scan(
 
     api = credentials_status()
     if not api["configured"]:
-        warnings.append("AI translation API is not configured; unmatched Chinese text will remain missing")
+        warnings.append("AI translation API is not configured; unmatched target text will remain missing")
 
     pending_records: list[dict[str, str]] = []
     official_chinese_matches = 0
@@ -574,6 +587,8 @@ def quick_scan(
             "base_url": api["base_url"],
             "configured": api["configured"],
             "model": DEFAULT_MODEL,
+            "source_text_language": source_text_language,
+            "remote_index_url": remote_index_url,
             "official_chinese_matches": official_chinese_matches,
             "pending_translation_count": len(pending_records),
             **translation_estimate,
@@ -644,6 +659,7 @@ def create_quick_project(
     root: Path | None = None,
     name: str = "",
     audio_language: str = "auto",
+    source_text_language: str = "en",
     target_language: str = "zh-CN",
     reference_language: str = "auto",
 ) -> tuple[ProjectConfig, dict[str, Any]]:
@@ -654,6 +670,7 @@ def create_quick_project(
         english_source,
         chs_source,
         reference_source=reference_source,
+        source_text_language=source_text_language,
     )
     if not plan["ready"]:
         raise RuntimeError("Quick scan has blockers: " + "; ".join(plan["blockers"]))
@@ -705,7 +722,7 @@ def create_quick_project(
         chs_source=str(chs_source) if chs_source else "",
         reference_source=str(reference_source) if reference_source else "",
         audio_language=audio_language,
-        source_text_language="en",
+        source_text_language=source_text_language,
         target_language=target_language,
         reference_language=reference_language,
         remote_character=str(plan.get("character", {}).get("value", "")),
@@ -715,7 +732,7 @@ def create_quick_project(
         make_flac=True,
         translate_missing=bool(plan["translation"]["configured"]),
         translation_model=DEFAULT_MODEL,
-        remote_index_url=str(selected_index.get("url", DEFAULT_EN_INDEX_URL)),
+        remote_index_url=str(selected_index.get("url", ai_hobbyist_index_url(source_text_language))),
     )
 
     atomic_write_text(
