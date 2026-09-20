@@ -88,7 +88,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <div>
             <label>参考语音 / 文本包（可选）</label>
             <select id="quickReference"><option value="">不提供参考包</option></select>
-            <p class="small muted">只读取其中同名 LAB 作为翻译参考，不参与 FLAC。若只有音频没有 LAB，目前不会自动 ASR 转写。</p>
+            <p class="small muted">只作为翻译参考，不参与 FLAC。优先读取同名 LAB；若只有 WAV，可按所选 EN / CHS / JP / KR 语言索引恢复文本，无需把参考音频送去 ASR。</p>
           </div>
           <div>
             <label>参考文本语言</label>
@@ -403,7 +403,12 @@ function renderQuickPlan(plan){
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '目标语言官方 LAB：'+(z?n(z.lab_count):'未提供'),
-    '参考 LAB：'+(plan.reference?n(ref.lab_count):'未提供'),
+    '参考文本：'+(
+      plan.reference
+        ? (n(plan.reference_text_match?.total)+' / '+n(e.wav_count)
+          +(plan.reference_index_attempt?' · '+(plan.reference_index_attempt.provider||'远程索引'):' · LAB'))
+        : '未提供'
+    ),
     'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置'),
     '待翻译：'+n(tr.pending_translation_count)+' · 预计 Token：'+n(tr.translation_estimated_total_tokens)+(tr.translation_estimate_excludes_repair_pass?'（不含可能的修复 pass）':'')
   ];
@@ -419,6 +424,7 @@ async function quickScan(){
   const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
   const reference=document.getElementById('quickReference').value;if(reference)d.set('reference_source',reference);
   d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
+  d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
   const j=await api('/api/quick/scan',{method:'POST',body:d});renderQuickPlan(j.plan);setLog(j.plan);return j.plan;
 }
 function setBuildButtonsDisabled(disabled){
