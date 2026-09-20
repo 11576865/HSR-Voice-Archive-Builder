@@ -140,6 +140,118 @@ def select_sample(
     return selected
 
 
+def _candidate_index_roots() -> list[Path]:
+    home = Path.home()
+    candidates = [
+        home / "storage" / "downloads",
+        home / "storage" / "shared" / "Download",
+        Path("/storage/emulated/0/Download"),
+        Path.cwd(),
+    ]
+    out: list[Path] = []
+    seen: set[str] = set()
+    for path in candidates:
+        try:
+            key = str(path.expanduser().resolve())
+        except OSError:
+            key = str(path.expanduser())
+        if key not in seen:
+            seen.add(key)
+            out.append(path)
+    return out
+
+
+def _index_name_score(path: Path) -> int:
+    name = path.name.lower()
+    score = 0
+    if path.name == "绯英_379条_完整索引.csv":
+        score += 100
+    if "完整索引" in path.name:
+        score += 40
+    if "379" in name:
+        score += 25
+    if "索引" in path.name or "index" in name:
+        score += 20
+    if "绯英" in path.name or "evanescia" in name:
+        score += 15
+    return score
+
+
+def discover_index(roots: list[Path] | None = None) -> tuple[Path, list[dict[str, Any]]]:
+    roots = roots or _candidate_index_roots()
+    inspected: list[dict[str, Any]] = []
+    seen: set[str] = set()
+
+    for root in roots:
+        try:
+            if not root.is_dir():
+                continue
+            files = list(root.glob("*.csv"))
+        except (OSError, PermissionError):
+            continue
+
+        for path in files:
+            try:
+                resolved = path.resolve()
+            except OSError:
+                resolved = path
+            key = str(resolved)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            # Avoid treating every unrelated CSV in Downloads as a candidate.
+            name_score = _index_name_score(path)
+            if name_score == 0:
+                continue
+
+            try:
+                rows = normalize_index(path)
+            except Exception as exc:
+                inspected.append(
+                    {
+                        "path": str(path),
+                        "valid": False,
+                        "reason": f"{type(exc).__name__}: {exc}",
+                        "score": name_score,
+                    }
+                )
+                continue
+
+            english_count = sum(bool(str(row.get("english", "")).strip()) for row in rows)
+            valid = len(rows) >= 1 and english_count == len(rows)
+            score = name_score + min(len(rows), 500)
+            inspected.append(
+                {
+                    "path": str(path),
+                    "valid": valid,
+                    "rows": len(rows),
+                    "english_rows": english_count,
+                    "score": score,
+                }
+            )
+
+    valid = [item for item in inspected if item.get("valid")]
+    valid.sort(key=lambda item: (-int(item["score"]), str(item["path"])))
+    if not valid:
+        searched = ", ".join(str(p) for p in roots)
+        raise RuntimeError(
+            "No usable voice index CSV was found automatically. "
+            f"Searched: {searched}. "
+            "On Termux, run 'termux-setup-storage' if ~/storage/downloads is missing, "
+            "or pass --index /path/to/index.csv."
+        )
+
+    best = valid[0]
+    if len(valid) > 1 and int(valid[0]["score"]) == int(valid[1]["score"]):
+        choices = "\n".join(f"- {item['path']}" for item in valid[:8])
+        raise RuntimeError(
+            "Multiple equally likely index CSV files were found; refusing to guess. "
+            "Pass --index explicitly.\n" + choices
+        )
+    return Path(str(best["path"])).expanduser().resolve(), inspected
+
+
 def _resolve_index(explicit: Path | None) -> tuple[Path, Path]:
     if explicit is not None:
         index = explicit.expanduser().resolve()
@@ -148,17 +260,20 @@ def _resolve_index(explicit: Path | None) -> tuple[Path, Path]:
         return index, index.parent
 
     root = last_project_root()
-    if root is None:
-        raise RuntimeError(
-            "No recent project is available. Pass --index /path/to/index.csv."
-        )
-    config = load_project(root)
-    index = resolve_project_path(config, config.index_csv)
-    if index is None or not index.is_file():
-        raise FileNotFoundError(
-            "The recent project's index CSV is unavailable; pass --index explicitly."
-        )
-    return index.resolve(), Path(config.root).resolve()
+    if root is not None:
+        try:
+            config = load_project(root)
+            index = resolve_project_path(config, config.index_csv)
+            if index is not None and index.is_file():
+                return index.resolve(), Path(config.root).resolve()
+        except Exception:
+            # A stale recent-project pointer should not block safe read-only
+            # discovery of a download-folder index.
+            pass
+
+    index, _ = discover_index()
+    print(f"Auto-detected index: {index}")
+    return index, index.parent
 
 
 def _write_csv(path: Path, rows: list[dict[str, Any]]) -> None:
@@ -346,7 +461,10 @@ def main() -> None:
     )
     args = p.parse_args()
 
-    index, project_root = _resolve_index(args.index)
+    try:
+        index, project_root = _resolve_index(args.index)
+    except (RuntimeError, FileNotFoundError, PermissionError) as exc:
+        p.error(str(exc))
     out = args.out or (project_root / "translation_benchmark")
     report = run_benchmark(
         index,
