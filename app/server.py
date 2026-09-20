@@ -333,7 +333,6 @@ def api_project_forget(project_path: str = Form(...)):
         assert_no_active_build()
         root = Path(project_path).expanduser().resolve()
         result = forget_project(root)
-        global _active_root
         if _active_root is not None and _active_root.resolve() == root:
             _clear_active()
         return {
@@ -351,7 +350,6 @@ def api_project_delete(project_path: str = Form(...)):
     try:
         assert_no_active_build()
         root = Path(project_path).expanduser().resolve()
-        global _active_root
         was_active = _active_root is not None and _active_root.resolve() == root
         result = delete_project(root)
         if was_active:
