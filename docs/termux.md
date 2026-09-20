@@ -16,7 +16,7 @@ The Termux launcher therefore uses:
 - native Termux 7-Zip instead of py7zr.
 - no OpenAI Python SDK in the Android base install.
 
-Desktop installs keep the richer Python dependency stack.
+Desktop installs keep the richer Python dependency stack. No Rust toolchain is required for the normal Termux startup path.
 
 ## Start
 
