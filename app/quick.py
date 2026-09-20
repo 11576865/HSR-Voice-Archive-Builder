@@ -130,6 +130,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
     labs = [Path(item["name"]).stem for item in files if str(item["name"]).lower().endswith(".lab")]
     wav_stems = {Path(name).stem for name in wavs}
     lab_stems = set(labs)
+    duplicate_wavs = sorted(name for name, count in Counter(wavs).items() if count > 1)
 
     return {
         "source": str(source),
@@ -138,6 +139,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
         "wav_count": len(wavs),
         "lab_count": len(labs),
         "wav_names": wavs,
+        "duplicate_wav_names": duplicate_wavs,
         "wav_lab_pairs": len(wav_stems & lab_stems),
         "wav_without_lab": len(wav_stems - lab_stems),
         "declared_bytes": sum(int(item.get("size", 0)) for item in files),
@@ -297,6 +299,11 @@ def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str
 
     if english["wav_count"] == 0:
         blockers.append("No WAV files were found in the English source")
+    if english.get("duplicate_wav_names"):
+        blockers.append(
+            "Duplicate WAV basenames were found in the English source: "
+            + ", ".join(english["duplicate_wav_names"][:5])
+        )
 
     wav_names = {Path(name).name for name in english["wav_names"]}
     indexes = _index_candidates(Path(english["source"]), wav_names)
@@ -320,6 +327,8 @@ def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str
 
     chs = None
     if chs_source is not None and str(chs_source).strip():
+        if Path(chs_source).expanduser().resolve() == Path(english["source"]).resolve():
+            warnings.append("English and Chinese source point to the same package")
         chs = source_inventory(chs_source)
         if chs["lab_count"] == 0:
             warnings.append("Chinese source contains no LAB files")
