@@ -5,9 +5,11 @@ import csv
 import hashlib
 import json
 import tempfile
+from dataclasses import asdict
 from pathlib import Path
 
 from .builder import (
+    Entry,
     atomic_write_text,
     build_continuous_flac,
     build_entries,
@@ -17,6 +19,45 @@ from .builder import (
 )
 from .identity import parse_voice_identity
 from .schema import write_legacy_inputs
+from .stages import build_fingerprint, load_stage, path_fingerprint, save_stage
+
+
+STAGE_FILES = {
+    "scan": "01_scan.json",
+    "metadata": "02_metadata.json",
+    "translation": "03_translation.json",
+    "translation_qa": "04_translation_qa.json",
+    "manifest": "05_manifest.json",
+    "audio": "06_audio_state.json",
+    "final": "final_report.json",
+}
+
+
+def _entries_payload(entries: list[Entry]) -> list[dict[str, object]]:
+    return [asdict(entry) for entry in entries]
+
+
+def _restore_entries(payload: object) -> list[Entry] | None:
+    if not isinstance(payload, list):
+        return None
+    try:
+        rows = [row for row in payload if isinstance(row, dict)]
+        if len(rows) != len(payload):
+            return None
+        return [Entry(**row) for row in rows]
+    except (TypeError, ValueError):
+        return None
+
+
+def _stage_entries(
+    payload: dict[str, object] | None,
+) -> tuple[list[Entry], dict[str, object]] | None:
+    if payload is None or not isinstance(payload.get("report"), dict):
+        return None
+    entries = _restore_entries(payload.get("entries"))
+    if entries is None:
+        return None
+    return entries, dict(payload["report"])
 
 
 def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
@@ -398,49 +439,242 @@ def build_project_v02(
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    index_csv = index_csv.expanduser().resolve()
+    wav_source = wav_source.expanduser().resolve()
+    bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
+    chs_source = chs_source.expanduser().resolve() if chs_source else None
+
+    translation_route: dict[str, str] | None = None
+    if translate_missing:
+        from .credentials import translation_identity
+
+        provider, base_url = translation_identity()
+        translation_route = {
+            "provider": provider,
+            "base_url": base_url,
+            "model": translation_model,
+        }
+    input_fingerprint, input_state = build_fingerprint({
+        "index": path_fingerprint(index_csv),
+        "wavs": path_fingerprint(wav_source),
+        "bilingual": path_fingerprint(bilingual_csv),
+        "chinese": path_fingerprint(chs_source),
+        "same_group_gap": same_group_gap,
+        "group_gap": group_gap,
+        "make_flac": make_flac,
+        "translate_missing": translate_missing,
+        "translation_route": translation_route,
+        "translation_qa_version": 1,
+    })
+    resumed_stages: list[str] = []
+    rebuilt_stages: list[str] = []
+    if load_stage(out_dir, STAGE_FILES["scan"], "scan", input_fingerprint) is not None:
+        resumed_stages.append("scan")
+    else:
+        save_stage(
+            out_dir,
+            STAGE_FILES["scan"],
+            "scan",
+            input_fingerprint,
+            {"inputs": input_state},
+        )
+        rebuilt_stages.append("scan")
+
     # Keep extraction/work files on the output filesystem instead of the OS
     # temp drive. On Windows/Android the system temp partition is often much
     # smaller than the drive selected for an archive project.
     with tempfile.TemporaryDirectory(prefix=".hsr-work-", dir=out_dir.parent) as td:
         work = Path(td)
-        legacy_index, legacy_bilingual = write_legacy_inputs(index_csv, bilingual_csv, work / "schema")
-        empty_chs = work / "empty_chs"
-        empty_chs.mkdir()
-        chs_root = ensure_dir_or_extract(chs_source, work, "chs") if chs_source else empty_chs
-        wav_root = ensure_dir_or_extract(wav_source, work, "wavs")
-        entries, report = build_entries(
-            legacy_index,
-            legacy_bilingual,
-            chs_root,
-            wav_root,
-            same_group_gap=same_group_gap,
-            group_gap=group_gap,
-        )
-        if translate_missing:
-            report.update(
-                _translate_missing(
-                    entries,
-                    translation_model,
-                    translation_batch_size,
-                    out_dir / ".translation_checkpoint.json",
-                )
+        wav_root: Path | None = None
+        metadata = _stage_entries(load_stage(
+            out_dir, STAGE_FILES["metadata"], "metadata", input_fingerprint
+        ))
+        if metadata is not None:
+            entries, report = metadata
+            resumed_stages.append("metadata")
+        else:
+            legacy_index, legacy_bilingual = write_legacy_inputs(
+                index_csv, bilingual_csv, work / "schema"
             )
-            report["count_missing_chinese"] = sum(not e.chinese for e in entries)
-        write_manifest(entries, report, out_dir)
-        _augment_outputs(entries, report, out_dir)
-        if make_flac:
-            report.update(build_continuous_flac(entries, wav_root, out_dir / "continuous.flac"))
+            empty_chs = work / "empty_chs"
+            empty_chs.mkdir()
+            chs_root = (
+                ensure_dir_or_extract(chs_source, work, "chs")
+                if chs_source
+                else empty_chs
+            )
+            wav_root = ensure_dir_or_extract(wav_source, work, "wavs")
+            entries, report = build_entries(
+                legacy_index,
+                legacy_bilingual,
+                chs_root,
+                wav_root,
+                same_group_gap=same_group_gap,
+                group_gap=group_gap,
+            )
+            save_stage(
+                out_dir,
+                STAGE_FILES["metadata"],
+                "metadata",
+                input_fingerprint,
+                {"entries": _entries_payload(entries), "report": report},
+            )
+            rebuilt_stages.append("metadata")
+
+        translated = _stage_entries(load_stage(
+            out_dir, STAGE_FILES["translation"], "translation", input_fingerprint
+        ))
+        qa_stage = load_stage(
+            out_dir,
+            STAGE_FILES["translation_qa"],
+            "translation_qa",
+            input_fingerprint,
+        )
+        if translate_missing and qa_stage is None:
+            # A translated entry set without its validated QA stage is not a
+            # complete translation result. Re-run from metadata; row-level
+            # translation checkpoints still prevent duplicate paid calls.
+            translated = None
+        if translated is not None:
+            entries, report = translated
+            resumed_stages.append("translation")
+            if qa_stage is not None:
+                resumed_stages.append("translation_qa")
+            else:
+                save_stage(
+                    out_dir,
+                    STAGE_FILES["translation_qa"],
+                    "translation_qa",
+                    input_fingerprint,
+                    {"skipped": True},
+                )
+                rebuilt_stages.append("translation_qa")
+        else:
+            if translate_missing:
+                report.update(
+                    _translate_missing(
+                        entries,
+                        translation_model,
+                        translation_batch_size,
+                        out_dir / ".translation_checkpoint.json",
+                    )
+                )
+                report["count_missing_chinese"] = sum(not e.chinese for e in entries)
+            save_stage(
+                out_dir,
+                STAGE_FILES["translation"],
+                "translation",
+                input_fingerprint,
+                {"entries": _entries_payload(entries), "report": report},
+            )
+            qa_path = out_dir / "translation_qa.json"
+            qa_payload: dict[str, object] = {"skipped": not translate_missing}
+            qa_artifacts: list[Path] = []
+            if qa_path.is_file():
+                qa_payload = json.loads(qa_path.read_text(encoding="utf-8"))
+                qa_artifacts = [qa_path]
+            save_stage(
+                out_dir,
+                STAGE_FILES["translation_qa"],
+                "translation_qa",
+                input_fingerprint,
+                qa_payload,
+                artifacts=qa_artifacts,
+            )
+            rebuilt_stages.extend(["translation", "translation_qa"])
+
+        manifest_artifacts = [
+            out_dir / "manifest.json",
+            out_dir / "manifest.csv",
+            out_dir / "bilingual_index_corrected.csv",
+            out_dir / "bilingual.srt",
+        ]
+        if load_stage(
+            out_dir, STAGE_FILES["manifest"], "manifest", input_fingerprint
+        ) is not None:
+            resumed_stages.append("manifest")
+        else:
             write_manifest(entries, report, out_dir)
             _augment_outputs(entries, report, out_dir)
+            save_stage(
+                out_dir,
+                STAGE_FILES["manifest"],
+                "manifest",
+                input_fingerprint,
+                {"entry_count": len(entries)},
+                artifacts=manifest_artifacts,
+            )
+            rebuilt_stages.append("manifest")
+
+        if make_flac:
+            audio = load_stage(
+                out_dir, STAGE_FILES["audio"], "audio", input_fingerprint
+            )
+            if audio is not None and isinstance(audio.get("report"), dict):
+                report.update(audio["report"])
+                resumed_stages.append("audio")
+            else:
+                if wav_root is None:
+                    wav_root = ensure_dir_or_extract(wav_source, work, "wavs")
+                audio_report = build_continuous_flac(
+                    entries, wav_root, out_dir / "continuous.flac"
+                )
+                report.update(audio_report)
+                save_stage(
+                    out_dir,
+                    STAGE_FILES["audio"],
+                    "audio",
+                    input_fingerprint,
+                    {"report": audio_report},
+                    artifacts=[out_dir / "continuous.flac"],
+                )
+                rebuilt_stages.append("audio")
+            write_manifest(entries, report, out_dir)
+            _augment_outputs(entries, report, out_dir)
+            save_stage(
+                out_dir,
+                STAGE_FILES["manifest"],
+                "manifest",
+                input_fingerprint,
+                {"entry_count": len(entries)},
+                artifacts=manifest_artifacts,
+            )
+        elif load_stage(
+            out_dir, STAGE_FILES["audio"], "audio", input_fingerprint
+        ) is not None:
+            resumed_stages.append("audio")
+        else:
+            save_stage(
+                out_dir,
+                STAGE_FILES["audio"],
+                "audio",
+                input_fingerprint,
+                {"skipped": True, "report": {}},
+            )
+            rebuilt_stages.append("audio")
+
+        report["stage_resume"] = {
+            "input_fingerprint": input_fingerprint,
+            "resumed": resumed_stages,
+            "rebuilt": rebuilt_stages,
+        }
         atomic_write_text(
             out_dir / "build_report.json",
             json.dumps(report, ensure_ascii=False, indent=2),
+        )
+        save_stage(
+            out_dir,
+            STAGE_FILES["final"],
+            "final_report",
+            input_fingerprint,
+            {"report": report},
+            artifacts=[out_dir / "build_report.json"],
         )
     return report
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-A pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-B pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)

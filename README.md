@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-A**.
+Current development version: **v0.9-B**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.7 add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-B add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -63,7 +63,15 @@ v0.4-v0.7 add failure-driven hardening based on upstream documentation, issue re
 - extraction size and archive-member count are bounded;
 - background job metadata is journaled locally;
 - jobs left running when the process exits are reported as `interrupted` after restart rather than disappearing;
-- GitHub Pages stays a static launcher instead of depending on cross-origin localhost requests.\n- v0.5 protects local and LAN control APIs with a per-process token and Host allowlist.\n- v0.5 supports PCM `WAVE_FORMAT_EXTENSIBLE` consistently on Python 3.11 and 3.12.\n- remote XLSX downloads and decompressed workbook size are bounded, with `defusedxml` installed.\n- GPT translation batches are checkpointed and reused after later failures/restarts.\n- launchers run an offline dependency preflight and no longer reinstall packages on every start.\n- LAN startup checks port conflicts and supports `--display-host` for multi-NIC/offline networks.\n- Termux/Android interruption risk is surfaced rather than hidden.
+- GitHub Pages stays a static launcher instead of depending on cross-origin localhost requests;
+- local and LAN control APIs use a per-process token and Host allowlist;
+- PCM `WAVE_FORMAT_EXTENSIBLE` works consistently on Python 3.11 and 3.12;
+- remote XLSX downloads and decompressed workbook size are bounded, with `defusedxml` installed;
+- AI translation batches are checkpointed and reused after later failures/restarts;
+- launchers run an offline dependency preflight and no longer reinstall packages on every start;
+- LAN startup checks port conflicts and supports `--display-host` for multi-NIC/offline networks;
+- Termux/Android interruption risk is surfaced rather than hidden;
+- v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -255,6 +263,24 @@ output/translation_qa.json
 ```
 
 If a major formatting/terminology failure remains after the repair pass, the build stops before accepting the bad translation. Earlier paid batches remain checkpointed, so the failure does not force the whole character to be translated again.
+
+## Stage recovery
+
+Each output directory contains a `stages/` chain:
+
+```text
+01_scan.json
+02_metadata.json
+03_translation.json
+04_translation_qa.json
+05_manifest.json
+06_audio_state.json
+final_report.json
+```
+
+Every state file is atomically written and bound to the content fingerprints of the selected inputs, relevant build settings, translation provider/Base URL/model, and the stage schema version. Recorded output artifacts are checked by size and SHA-256 before reuse. If an input or artifact changes, the affected work is rebuilt instead of silently accepting stale state.
+
+`build_report.json` records `stage_resume.resumed` and `stage_resume.rebuilt`. Metadata and paid translation work can survive a Termux/process interruption. FLAC encoding remains all-or-nothing: only a completed, verified file is reusable; an interrupted encode starts again.
 
 ## Chinese text precedence
 

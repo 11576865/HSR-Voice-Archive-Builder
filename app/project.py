@@ -195,6 +195,13 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "translation_qa.json",
         "continuous.flac",
         "update_plan.json",
+        "stages/01_scan.json",
+        "stages/02_metadata.json",
+        "stages/03_translation.json",
+        "stages/04_translation_qa.json",
+        "stages/05_manifest.json",
+        "stages/06_audio_state.json",
+        "stages/final_report.json",
     ):
         p = output / name
         outputs[name] = {

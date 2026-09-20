@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9-B
+
+- Added input-bound stage recovery for scans, metadata, translation, translation QA, manifests, verified audio, and final reports.
+- Completed stages are reused only when the source content, build settings, translation route/model, stage schema, and recorded artifacts still validate.
+- Restarting after a Termux/process interruption no longer repeats completed metadata or translation work; archive extraction is also skipped when no unfinished stage needs it.
+- A completed FLAC is reused only after its size and SHA-256 match the recorded audio state. Interrupted or modified audio is rebuilt from the beginning; mid-stream FFmpeg resume is not claimed.
+- Every run reports which stages were resumed or rebuilt in `build_report.json`.
+
 ## v0.9-A
 
 - Quick Mode now falls back to the configured AI-Hobbyist English index when no complete local CSV is available.

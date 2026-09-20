@@ -34,6 +34,7 @@ dist/
 *bilingual*.srt
 update_plan.json
 .translation_checkpoint.json
+stages/
 .hsr-voice-project.json
 
 # OS/editor

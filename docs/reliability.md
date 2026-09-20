@@ -66,7 +66,9 @@ This application remains intentionally single-host and single-process; adding Re
 - an interrupted build is not reported as successful;
 - final FLAC and primary metadata files use atomic replacement where practical.
 
-The journal does **not** imply resumable FFmpeg encoding. Interrupted jobs are detected, not magically resumed.
+v0.9-B also writes a seven-file stage chain under `output/stages/`. Each stage is bound to source-content fingerprints, relevant configuration, translation route/model and the stage implementation version. Artifact-producing stages record output size and SHA-256. A restart can therefore skip validated metadata and translation stages without trusting a stale file merely because it exists.
+
+The journal and stage chain do **not** imply mid-stream FFmpeg resume. A fully encoded FLAC may be reused only when its recorded size and SHA-256 still match; an interrupted or modified encode restarts from the beginning.
 
 Reference:
 
