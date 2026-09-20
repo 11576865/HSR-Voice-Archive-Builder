@@ -850,6 +850,7 @@ def create_quick_project(
     current_inventory = source_inventory(english_source)
     if current_inventory["fingerprint"] != plan["english"]["fingerprint"]:
         raise RuntimeError("Primary audio source changed after Quick Scan; scan again before building")
+    current_chs = None
     if chs_source is not None:
         current_chs = source_inventory(chs_source)
         if current_chs["fingerprint"] != plan["chinese"]["fingerprint"]:
