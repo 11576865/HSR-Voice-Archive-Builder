@@ -194,7 +194,7 @@ def _status() -> None:
 
 
 def _test(args: argparse.Namespace) -> None:
-    from .translator import translate_records
+    from .translator import ensure_translation_capability
 
     status = credentials_status()
     if not status["configured"]:
@@ -202,9 +202,9 @@ def _test(args: argparse.Namespace) -> None:
             "Translation API key is not configured. "
             "Run: python -m app.credentials configure --provider vapi"
         )
-    rows = translate_records(
-        [{"id": "smoke-1", "english": "The story's not finished."}],
+    result = ensure_translation_capability(
         model=args.model,
+        force=args.force,
     )
     print(json.dumps(
         {
@@ -212,7 +212,7 @@ def _test(args: argparse.Namespace) -> None:
             "provider": status["provider"],
             "base_url": status["base_url"],
             "model": args.model,
-            "result": rows,
+            "capability": result,
         },
         ensure_ascii=False,
         indent=2,
@@ -231,8 +231,9 @@ def main() -> None:
     s = sub.add_parser("status", help="Show provider/Base URL without revealing the key")
     s.set_defaults(func=lambda args: _status())
 
-    t = sub.add_parser("test", help="Send one tiny structured translation smoke test")
+    t = sub.add_parser("test", help="Verify structured translation capability; reuse a fresh cached success")
     t.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.6-sol"))
+    t.add_argument("--force", action="store_true", help="Ignore the capability cache and send a fresh smoke request")
     t.set_defaults(func=_test)
 
     x = sub.add_parser("clear", help="Delete the locally saved translation credentials")

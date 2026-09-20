@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9-C
+
+- Added per-build translation token and USD budget controls. A projected over-budget request is stopped before the request is sent; completed batches and checkpoints remain reusable.
+- Parse and persist Responses API usage after every paid capability/translation/repair call in `translation_usage.json`, including input/output/total tokens plus cached-input and reasoning-token detail when supplied.
+- Quick Scan now estimates pending translation count and token workload before a build. Estimates are explicitly heuristic; actual provider usage remains authoritative.
+- Added cost estimation for the official OpenAI route using a versioned local price table. Relays/custom providers do not inherit OpenAI prices; explicit per-MTok environment overrides are required for USD-budget enforcement when provider pricing is unknown.
+- Structured-output capability smoke tests are cached for seven days by provider + Base URL + model + schema fingerprint. Unchanged routes no longer repeat the paid probe; `python -m app.credentials test --force` bypasses the cache.
+- Added Quick Mode and Advanced UI controls for translation budgets plus estimated/actual token and API-call reporting.
+- Kept 401/403 and other non-retryable HTTP failures fail-fast while retaining bounded retry behavior for 408/409/429/5xx and network failures.
+
 ## v0.9-B
 
 - Added input-bound stage recovery for scans, metadata, translation, translation QA, manifests, verified audio, and final reports.

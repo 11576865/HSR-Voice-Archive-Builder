@@ -23,7 +23,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-B</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-C</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -49,6 +49,11 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
         </div>
         <pre id="quickPlan" style="margin-top:12px;background:#fafafa;color:var(--text);border:1px solid var(--line);max-height:none">尚未扫描。</pre>
+        <div class="row">
+          <div><label>Token 预算（0 = 不限）</label><input id="quickTokenBudget" type="number" min="0" step="1" value="0"></div>
+          <div><label>美元预算（0 = 不限）</label><input id="quickUsdBudget" type="number" min="0" step="0.001" value="0"></div>
+        </div>
+        <p class="small muted">美元预算只有在当前 Provider / 模型价格可确定时才会执行；未知价格不会伪造金额。</p>
         <div class="actions">
           <button type="button" class="primary" id="quickBuildBtn" disabled>开始构建</button>
         </div>
@@ -98,6 +103,10 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <div><label>候选更新文件（可选）</label><input name="update_candidates" placeholder="pending.txt / new_index.csv"></div>
         </div>
         <div class="row">
+          <div><label>Token 预算（0 = 不限）</label><input name="translation_token_budget" type="number" min="0" step="1"></div>
+          <div><label>美元预算（0 = 不限）</label><input name="translation_budget_usd" type="number" min="0" step="0.001"></div>
+        </div>
+        <div class="row">
           <div><label>远程索引角色过滤词</label><input name="remote_character" placeholder="Evanescia"></div>
           <div><label>远程 EN 索引 URL</label><input name="remote_index_url"></div>
         </div>
@@ -119,6 +128,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="stat"><b id="statTranslated">—</b><span>已有 / API 中文</span></div>
         <div class="stat"><b id="statMissing">—</b><span>缺失中文</span></div>
       </div>
+      <div id="translationUsage" class="small muted" style="margin-top:10px"></div>
       <div class="divider"></div>
       <table><tbody id="outputTable"></tbody></table>
     </section>
@@ -194,7 +204,7 @@ function fillProject(p){
   document.getElementById('projectName').textContent=p?p.name:'未打开';
   if(!p)return;
   const c=p.config,f=document.getElementById('projectForm');
-  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size']){
+  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
   f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
@@ -206,6 +216,13 @@ function fillProject(p){
   document.getElementById('statOfficial').textContent=n(r.count_official_chs_lab);
   document.getElementById('statTranslated').textContent=n((r.count_translated_existing||0)+(r.count_api_translated??r.count_gpt_translated??0));
   document.getElementById('statMissing').textContent=n(r.count_missing_chinese);
+  const usage=[];
+  if(r.translation_estimated_total_tokens!==undefined)usage.push('预计 Token '+n(r.translation_estimated_total_tokens));
+  if(r.translation_actual_total_tokens!==undefined)usage.push('实际 Token '+n(r.translation_actual_total_tokens));
+  if(r.translation_api_call_count!==undefined)usage.push('API 请求 '+n(r.translation_api_call_count));
+  if(r.translation_estimated_cost_usd!==undefined&&r.translation_estimated_cost_usd!==null)usage.push('按已知单价估算 USD '+Number(r.translation_estimated_cost_usd).toFixed(6));
+  if(r.translation_usage_missing)usage.push('Provider 未返回完整 usage');
+  document.getElementById('translationUsage').textContent=usage.join(' · ');
   const tb=document.getElementById('outputTable');tb.innerHTML='';
   for(const [name,o] of Object.entries(p.outputs||{})){
     if(!o.exists)continue;
@@ -249,7 +266,8 @@ function renderQuickPlan(plan){
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '顺序索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '中文 LAB：'+(z?n(z.lab_count):'未提供'),
-    'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置')
+    'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置'),
+    '待翻译：'+n(tr.pending_translation_count)+' · 预计 Token：'+n(tr.translation_estimated_total_tokens)+(tr.translation_estimate_excludes_repair_pass?'（不含可能的修复 pass）':'')
   ];
   if(plan.blockers?.length)lines.push('阻塞：'+plan.blockers.join('；'));
   if(plan.warnings?.length)lines.push('提示：'+plan.warnings.join('；'));
@@ -292,6 +310,8 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   if(!quickPlanState?.ready)await quickScan();
   const d=new FormData();d.set('english_source',document.getElementById('quickEnglish').value);
   const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
+  d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
+  d.set('translation_budget_usd',document.getElementById('quickUsdBudget').value||'0');
   const j=await api('/api/quick/build',{method:'POST',body:d});
   fillProject(j.project);setLog('快速构建任务已启动：'+j.job);watchJob(j.job);
 }catch(x){setLog(String(x))}};

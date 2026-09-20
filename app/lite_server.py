@@ -91,7 +91,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.8"
+    server_version = "HSRVoiceLite/0.9-C"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -255,7 +255,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.8-termux-lite",
+                "version": "0.9-C-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -321,6 +321,11 @@ class Handler(BaseHTTPRequestHandler):
                 root=Path(root_value) if root_value else None,
                 name=data.get("project_name", ""),
             )
+            update_project(
+                config,
+                translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
+                translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),
+            )
             _set_active(config)
             paths = _project_paths(config)
             if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
@@ -342,6 +347,8 @@ class Handler(BaseHTTPRequestHandler):
                     translate_missing=config.translate_missing,
                     translation_model=config.translation_model,
                     translation_batch_size=config.translation_batch_size,
+                    translation_token_budget=config.translation_token_budget,
+                    translation_budget_usd=config.translation_budget_usd,
                 )
 
             job = create_job("quick-build", run)
@@ -393,6 +400,8 @@ class Handler(BaseHTTPRequestHandler):
                 translate_missing=_bool(data.get("translate_missing")),
                 translation_model=data.get("translation_model", "gpt-5.6-sol").strip() or "gpt-5.6-sol",
                 translation_batch_size=max(1, _int(data.get("translation_batch_size"), 80)),
+                translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
+                translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),
             )
             self._json({"ok": True, "project": project_summary(config)})
             return
@@ -424,6 +433,8 @@ class Handler(BaseHTTPRequestHandler):
                     translate_missing=config.translate_missing,
                     translation_model=config.translation_model,
                     translation_batch_size=config.translation_batch_size,
+                    translation_token_budget=config.translation_token_budget,
+                    translation_budget_usd=config.translation_budget_usd,
                 )
 
             job = create_job("build", run)
