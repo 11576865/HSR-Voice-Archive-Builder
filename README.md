@@ -179,7 +179,7 @@ Read-only scan / preflight
         ↓
 Resolve source text from local data or AI-Hobbyist EN / CHS / JP / KR index
         ↓
-Optional target-language LAB package
+Optional official Chinese voice package (same-stem LAB text only; its audio is not used)
         ↓
 Optional second voice/text package used only as semantic reference
         ↓
@@ -194,7 +194,7 @@ On Termux, the dashboard discovers top-level `.7z` / `.zip` packages in the norm
 
 Quick Mode places new Termux projects in shared storage by default at `/storage/emulated/0/Download/HSR_Voice_Test/<project-name>/output`. Existing projects keep their saved paths. Set `HSR_VOICE_PROJECTS_DIR` to override the default project base.
 
-The source-text language is independent from the translation target. Built-in remote discovery currently maps `en` → `EN.xlsx`, `zh-CN` → `CHS.xlsx`, `ja` → `JP.xlsx`, and `ko` → `KR.xlsx`. A same-stem LAB in the primary package is preferred for non-English source text when available; otherwise the selected language index can supply the text.
+The source-text language is independent from the primary audio language. Quick Mode always produces Simplified Chinese subtitles and built-in remote discovery maps `en` → `EN.xlsx`, `zh-CN` → `CHS.xlsx`, `ja` → `JP.xlsx`, and `ko` → `KR.xlsx`. A same-stem LAB in the primary package is preferred for non-English source text when available; otherwise the selected language index can supply the text. If the source text is already Chinese, the primary package's same-stem LAB is also used directly as the Chinese subtitle, with no Chinese-to-Chinese API call and no need to select a second package.
 
 A second reference package never contributes PCM to `continuous.flac`. If it contains same-stem LAB files, those texts are supplied to the translator as semantic reference. For audio-only EN/CHS/JP/KR reference packages, Quick Mode can recover text from the corresponding AI-Hobbyist index and align it to primary lines by exact filename or a conservative structural identity. This avoids requiring ASR for indexed game resources; unmatched reference lines are reported rather than guessed.
 
@@ -319,7 +319,7 @@ By default the clone is created as a uniquely named sibling directory. If the de
 A project may outlive the original filesystem location of its voice packages. The dashboard therefore reports source health separately from build completion:
 
 - **primary**: the package whose WAV files feed the continuous FLAC;
-- **target**: the optional official target-language LAB package;
+- **target**: the optional official Chinese voice package, used only for its same-stem LAB subtitle text;
 - **reference**: the optional second-language reference package;
 - **index / bilingual / glossary**: supporting text/configuration inputs.
 
@@ -411,10 +411,10 @@ python -m app.credentials test --model gpt-5.6-sol
 
 reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
 
-## Target-text precedence
+## Chinese-subtitle precedence
 
 ```text
-same-stem official target-language LAB
+same-stem LAB from the optional official Chinese voice package, or from a Chinese primary package
         ↓
 existing target text in the bilingual index
         ↓
