@@ -4,6 +4,7 @@ import argparse
 import csv
 import hashlib
 import json
+import shutil
 import tempfile
 from collections.abc import Callable
 from dataclasses import asdict
@@ -32,6 +33,38 @@ STAGE_FILES = {
     "audio": "06_audio_state.json",
     "final": "final_report.json",
 }
+
+LEGACY_STATE_ITEMS = (
+    ".translation_checkpoint.json",
+    "translation_qa.json",
+    "semantic_qa.json",
+    "translation_usage.json",
+    "stages",
+)
+
+
+def _migrate_legacy_state(out_dir: Path, state_dir: Path) -> list[str]:
+    """Move legacy internal state out of the user-facing output directory.
+
+    Existing state at the new destination always wins. Conflicting legacy
+    files are left untouched rather than overwritten.
+    """
+    out_dir = out_dir.resolve()
+    state_dir = state_dir.resolve()
+    if out_dir == state_dir:
+        return []
+    state_dir.mkdir(parents=True, exist_ok=True)
+    migrated: list[str] = []
+    for name in LEGACY_STATE_ITEMS:
+        source = out_dir / name
+        destination = state_dir / name
+        if not source.exists() or destination.exists():
+            continue
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), str(destination))
+        migrated.append(name)
+    return migrated
+
 
 
 def _entries_payload(entries: list[Entry]) -> list[dict[str, object]]:
@@ -1006,9 +1039,13 @@ def build_project_v02(
     target_language: str = "zh-CN",
     reference_language: str = "auto",
     reference_text_embedded: bool = False,
+    state_dir: Path | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
+    state_dir = state_dir.expanduser().resolve() if state_dir else out_dir
+    state_dir.mkdir(parents=True, exist_ok=True)
+    migrated_legacy_state = _migrate_legacy_state(out_dir, state_dir)
     index_csv = index_csv.expanduser().resolve()
     wav_source = wav_source.expanduser().resolve()
     bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
@@ -1066,11 +1103,11 @@ def build_project_v02(
     })
     resumed_stages: list[str] = []
     rebuilt_stages: list[str] = []
-    if load_stage(out_dir, STAGE_FILES["scan"], "scan", input_fingerprint) is not None:
+    if load_stage(state_dir, STAGE_FILES["scan"], "scan", input_fingerprint) is not None:
         resumed_stages.append("scan")
     else:
         save_stage(
-            out_dir,
+            state_dir,
             STAGE_FILES["scan"],
             "scan",
             input_fingerprint,
@@ -1087,7 +1124,7 @@ def build_project_v02(
         work = Path(td)
         wav_root: Path | None = None
         metadata = _stage_entries(load_stage(
-            out_dir, STAGE_FILES["metadata"], "metadata", input_fingerprint
+            state_dir, STAGE_FILES["metadata"], "metadata", input_fingerprint
         ))
         if metadata is not None:
             entries, report = metadata
@@ -1121,7 +1158,7 @@ def build_project_v02(
                 source_text_language=source_text_language,
             )
             save_stage(
-                out_dir,
+                state_dir,
                 STAGE_FILES["metadata"],
                 "metadata",
                 input_fingerprint,
@@ -1136,10 +1173,10 @@ def build_project_v02(
             3,
         )
         translated = _stage_entries(load_stage(
-            out_dir, STAGE_FILES["translation"], "translation", input_fingerprint
+            state_dir, STAGE_FILES["translation"], "translation", input_fingerprint
         ))
         qa_stage = load_stage(
-            out_dir,
+            state_dir,
             STAGE_FILES["translation_qa"],
             "translation_qa",
             input_fingerprint,
@@ -1156,7 +1193,7 @@ def build_project_v02(
                 resumed_stages.append("translation_qa")
             else:
                 save_stage(
-                    out_dir,
+                    state_dir,
                     STAGE_FILES["translation_qa"],
                     "translation_qa",
                     input_fingerprint,
@@ -1170,7 +1207,7 @@ def build_project_v02(
                         entries,
                         translation_model,
                         translation_batch_size,
-                        out_dir / ".translation_checkpoint.json",
+                        state_dir / ".translation_checkpoint.json",
                         translation_token_budget,
                         translation_budget_usd,
                         active_glossary,
@@ -1182,14 +1219,14 @@ def build_project_v02(
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
                 report["count_missing_target_text"] = report["count_missing_chinese"]
             save_stage(
-                out_dir,
+                state_dir,
                 STAGE_FILES["translation"],
                 "translation",
                 input_fingerprint,
                 {"entries": _entries_payload(entries), "report": report},
             )
-            qa_path = out_dir / "translation_qa.json"
-            semantic_qa_path = out_dir / "semantic_qa.json"
+            qa_path = state_dir / "translation_qa.json"
+            semantic_qa_path = state_dir / "semantic_qa.json"
             qa_payload: dict[str, object] = {"skipped": not translate_missing}
             qa_artifacts: list[Path] = []
             if qa_path.is_file():
@@ -1201,7 +1238,7 @@ def build_project_v02(
                 )
                 qa_artifacts.append(semantic_qa_path)
             save_stage(
-                out_dir,
+                state_dir,
                 STAGE_FILES["translation_qa"],
                 "translation_qa",
                 input_fingerprint,
@@ -1225,19 +1262,24 @@ def build_project_v02(
             out_dir / "bilingual.srt",
         ]
         if load_stage(
-            out_dir, STAGE_FILES["manifest"], "manifest", input_fingerprint
+            state_dir,
+            STAGE_FILES["manifest"],
+            "manifest",
+            input_fingerprint,
+            artifact_root=out_dir,
         ) is not None:
             resumed_stages.append("manifest")
         else:
             write_manifest(entries, report, out_dir)
             _augment_outputs(entries, report, out_dir)
             save_stage(
-                out_dir,
+                state_dir,
                 STAGE_FILES["manifest"],
                 "manifest",
                 input_fingerprint,
                 {"entry_count": len(entries)},
                 artifacts=manifest_artifacts,
+                artifact_root=out_dir,
             )
             rebuilt_stages.append("manifest")
 
@@ -1249,7 +1291,11 @@ def build_project_v02(
         )
         if make_flac:
             audio = load_stage(
-                out_dir, STAGE_FILES["audio"], "audio", input_fingerprint
+                state_dir,
+                STAGE_FILES["audio"],
+                "audio",
+                input_fingerprint,
+                artifact_root=out_dir,
             )
             if audio is not None and isinstance(audio.get("report"), dict):
                 report.update(audio["report"])
@@ -1262,31 +1308,37 @@ def build_project_v02(
                 )
                 report.update(audio_report)
                 save_stage(
-                    out_dir,
+                    state_dir,
                     STAGE_FILES["audio"],
                     "audio",
                     input_fingerprint,
                     {"report": audio_report},
                     artifacts=[out_dir / "continuous.flac"],
+                    artifact_root=out_dir,
                 )
                 rebuilt_stages.append("audio")
             write_manifest(entries, report, out_dir)
             _augment_outputs(entries, report, out_dir)
             save_stage(
-                out_dir,
+                state_dir,
                 STAGE_FILES["manifest"],
                 "manifest",
                 input_fingerprint,
                 {"entry_count": len(entries)},
                 artifacts=manifest_artifacts,
+                artifact_root=out_dir,
             )
         elif load_stage(
-            out_dir, STAGE_FILES["audio"], "audio", input_fingerprint
+            state_dir,
+            STAGE_FILES["audio"],
+            "audio",
+            input_fingerprint,
+            artifact_root=out_dir,
         ) is not None:
             resumed_stages.append("audio")
         else:
             save_stage(
-                out_dir,
+                state_dir,
                 STAGE_FILES["audio"],
                 "audio",
                 input_fingerprint,
@@ -1301,26 +1353,32 @@ def build_project_v02(
             "resumed": resumed_stages,
             "rebuilt": rebuilt_stages,
         }
+        report["state_layout"] = {
+            "separate_from_output": state_dir != out_dir,
+            "migrated_legacy_items": migrated_legacy_state,
+        }
         atomic_write_text(
             out_dir / "build_report.json",
             json.dumps(report, ensure_ascii=False, indent=2),
         )
         save_stage(
-            out_dir,
+            state_dir,
             STAGE_FILES["final"],
             "final_report",
             input_fingerprint,
             {"report": report},
             artifacts=[out_dir / "build_report.json"],
+            artifact_root=out_dir,
         )
     return report
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-E pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-F pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
+    p.add_argument("--state-dir", type=Path)
     p.add_argument("--bilingual", type=Path)
     p.add_argument("--chs", type=Path)
     p.add_argument("--same-gap", type=float, default=0.40)
@@ -1348,5 +1406,6 @@ if __name__ == "__main__":
         source_text_language=a.source_language,
         target_language=a.target_language,
         reference_language=a.reference_language,
+        state_dir=a.state_dir,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))

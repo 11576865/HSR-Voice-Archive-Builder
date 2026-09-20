@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9-F
+
+- Added a project-local `.state` directory for internal recovery/diagnostic data. Translation checkpoints, translation/semantic QA reports, usage ledgers, and stage files no longer need to live beside finished user-facing output artifacts.
+- Project dashboard builds now keep `output/` focused on finished archive files while `.state/` holds resumable/internal state.
+- Existing v0.9-E and earlier project state is migrated from `output/` into `.state/` on the next build when the destination does not already contain newer state; conflicting legacy files are preserved rather than overwritten.
+- Stage validation now supports state files stored separately from the output artifacts they authenticate, without weakening path traversal checks.
+- Project summaries expose user outputs and internal state separately, and project deletion cleanup removes an in-project `.state` directory as app-owned data.
+- Direct pipeline/CLI use remains backward compatible unless a separate `--state-dir` is supplied.
+
 ## v0.9-E
 
 - Added explicit recent-project selection with separate Open, New/Import, Remove-from-list, and Delete actions. Removing only hides a project from the switcher; reopening restores it. Deleting a Quick Mode managed project removes its dedicated project root, while manual-project deletion removes only app-owned config/generated/output data and preserves unrelated user files. Deleted-project task history is purged.

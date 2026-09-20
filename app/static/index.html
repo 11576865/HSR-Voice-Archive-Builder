@@ -24,7 +24,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-E</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-F</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -229,8 +229,8 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <table><tbody id="outputTable"></tbody></table>
       </div>
       <details id="diagnosticOutputs" style="margin-top:14px">
-        <summary>阶段缓存与诊断文件（高级）</summary>
-        <p class="small muted">这些 JSON / stages 文件用于断点恢复和排错。它们出现不代表整个构建已经成功。</p>
+        <summary>项目状态文件（高级）</summary>
+        <p class="small muted">断点、QA、usage 与 stages 已放在项目 .state 目录，不再混入 output 成品目录。它们用于恢复和排错，不代表构建已经成功。</p>
         <table><tbody id="diagnosticOutputTable"></tbody></table>
       </details>
     </section>
@@ -400,11 +400,15 @@ function fillProject(p){
   document.getElementById('translationUsage').textContent=usage.join(' · ');
   const main=document.getElementById('outputTable'),diag=document.getElementById('diagnosticOutputTable');
   main.innerHTML='';diag.innerHTML='';
-  const userFiles=new Set(['continuous.flac','bilingual.srt','manifest.csv','bilingual_index_corrected.csv','build_report.json']);
   for(const [name,o] of Object.entries(p.outputs||{})){
     if(!o.exists)continue;
     const tr=document.createElement('tr');tr.innerHTML='<td>'+name+'</td><td>'+bytes(o.size_bytes)+'</td>';
-    (userFiles.has(name)&&has?main:diag).appendChild(tr);
+    (has?main:diag).appendChild(tr);
+  }
+  for(const [name,o] of Object.entries(p.state_outputs||{})){
+    if(!o.exists)continue;
+    const tr=document.createElement('tr');tr.innerHTML='<td>.state/'+name+'</td><td>'+bytes(o.size_bytes)+'</td>';
+    diag.appendChild(tr);
   }
 }
 function showPlan(plan){

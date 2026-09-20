@@ -22,6 +22,7 @@ class ProjectConfig:
     index_csv: str
     wav_source: str
     output_dir: str = "output"
+    state_dir: str = ".state"
     bilingual_csv: str = ""
     chs_source: str = ""
     glossary_path: str = ""
@@ -111,6 +112,7 @@ def create_project(
     index_csv: str,
     wav_source: str,
     output_dir: str = "output",
+    state_dir: str = ".state",
     bilingual_csv: str = "",
     chs_source: str = "",
     glossary_path: str = "",
@@ -137,6 +139,7 @@ def create_project(
         index_csv=_portable_path(root, index_csv),
         wav_source=_portable_path(root, wav_source),
         output_dir=_portable_path(root, output_dir) or "output",
+        state_dir=_portable_path(root, state_dir) or ".state",
         bilingual_csv=_portable_path(root, bilingual_csv),
         chs_source=_portable_path(root, chs_source),
         glossary_path=_portable_path(root, glossary_path),
@@ -183,7 +186,7 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
             continue
         setattr(config, key, value)
     root = normalize_root(Path(config.root))
-    for key in ("index_csv", "wav_source", "output_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
+    for key in ("index_csv", "wav_source", "output_dir", "state_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
     new_reference_identity = (
         str(resolve_project_path(config, config.reference_source) or ""),
@@ -312,6 +315,7 @@ def delete_project(root: Path) -> dict[str, Any]:
         }
 
     output = resolve_project_path(config, config.output_dir)
+    state_path = resolve_project_path(config, config.state_dir)
     generated = root / ".generated"
     if output is not None and output != root and _is_within(output, root) and output.exists():
         if output.is_dir():
@@ -319,6 +323,12 @@ def delete_project(root: Path) -> dict[str, Any]:
         else:
             output.unlink()
         removed.append(str(output))
+    if state_path is not None and state_path != root and _is_within(state_path, root) and state_path.exists():
+        if state_path.is_dir():
+            shutil.rmtree(state_path)
+        else:
+            state_path.unlink()
+        removed.append(str(state_path))
     if generated.is_dir() and _is_within(generated, root):
         shutil.rmtree(generated)
         removed.append(str(generated))
@@ -416,10 +426,13 @@ def last_project_root() -> Path | None:
 
 def project_summary(config: ProjectConfig) -> dict[str, Any]:
     output = resolve_project_path(config, config.output_dir)
+    state = resolve_project_path(config, config.state_dir)
     assert output is not None
+    assert state is not None
     manifest = output / "manifest.json"
     report_file = output / "build_report.json"
-    final_stage_file = output / "stages" / "final_report.json"
+    final_stage_file = state / "stages" / "final_report.json"
+    legacy_final_stage_file = output / "stages" / "final_report.json"
     report: dict[str, Any] = {}
     if report_file.is_file():
         try:
@@ -433,11 +446,22 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "bilingual_index_corrected.csv",
         "bilingual.srt",
         "build_report.json",
+        "continuous.flac",
+        "update_plan.json",
+    ):
+        p = output / name
+        outputs[name] = {
+            "exists": p.is_file(),
+            "size_bytes": p.stat().st_size if p.is_file() else 0,
+            "path": str(p),
+        }
+
+    state_outputs = {}
+    for name in (
+        ".translation_checkpoint.json",
         "translation_qa.json",
         "semantic_qa.json",
         "translation_usage.json",
-        "continuous.flac",
-        "update_plan.json",
         "stages/01_scan.json",
         "stages/02_metadata.json",
         "stages/03_translation.json",
@@ -446,8 +470,8 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "stages/06_audio_state.json",
         "stages/final_report.json",
     ):
-        p = output / name
-        outputs[name] = {
+        p = state / name
+        state_outputs[name] = {
             "exists": p.is_file(),
             "size_bytes": p.stat().st_size if p.is_file() else 0,
             "path": str(p),
@@ -457,7 +481,10 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "root": config.root,
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
-        "build_complete": report_file.is_file() and final_stage_file.is_file(),
+        "build_complete": report_file.is_file() and (
+            final_stage_file.is_file() or legacy_final_stage_file.is_file()
+        ),
         "report": report,
         "outputs": outputs,
+        "state_outputs": state_outputs,
     }

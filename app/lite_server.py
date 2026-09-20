@@ -78,6 +78,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "glossary": resolve_project_path(config, config.glossary_path),
         "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
+        "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
 
@@ -101,7 +102,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.9-E"
+    server_version = "HSRVoiceLite/0.9-F"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -265,7 +266,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.9-E-termux-lite",
+                "version": "0.9-F-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -381,6 +382,7 @@ class Handler(BaseHTTPRequestHandler):
                     target_language=config.target_language,
                     reference_language=config.reference_language,
                     reference_text_embedded=config.reference_text_embedded,
+                    state_dir=paths["state"],
                 )
 
             job = create_job(
@@ -533,6 +535,7 @@ class Handler(BaseHTTPRequestHandler):
                     target_language=config.target_language,
                     reference_language=config.reference_language,
                     reference_text_embedded=config.reference_text_embedded,
+                    state_dir=paths["state"],
                 )
 
             job = create_job(

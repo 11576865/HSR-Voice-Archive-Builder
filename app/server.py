@@ -140,6 +140,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "glossary": resolve_project_path(config, config.glossary_path),
         "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
+        "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
 
@@ -154,7 +155,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-E",
+        "version": "0.9-F",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -256,6 +257,7 @@ def api_quick_build(
                 target_language=config.target_language,
                 reference_language=config.reference_language,
                 reference_text_embedded=config.reference_text_embedded,
+                state_dir=paths["state"],
             )
 
         job = create_job(
@@ -465,6 +467,7 @@ def api_project_build():
                 target_language=config.target_language,
                 reference_language=config.reference_language,
                 reference_text_embedded=config.reference_text_embedded,
+                state_dir=paths["state"],
             )
 
         job = create_job(
