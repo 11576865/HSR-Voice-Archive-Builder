@@ -573,8 +573,8 @@ def _safe_project_name(plan: dict[str, Any], source: Path) -> str:
 def _safe_project_dir_name(value: str) -> str:
     # Keep readable Unicode project names while removing characters that are
     # unsafe on common Android/Windows filesystems.
-    stem = re.sub(r'[<>:"/\\|?*\\x00-\\x1f]+', "-", str(value or "").strip())
-    stem = re.sub(r"\\s+", " ", stem).strip(" .-")
+    stem = re.sub(r'[<>:"/\\|?*\x00-\x1f]+', "-", str(value or "").strip())
+    stem = re.sub(r"\s+", " ", stem).strip(" .-")
     stem = stem[:96].rstrip(" .-")
     return stem or "voice-archive"
 
