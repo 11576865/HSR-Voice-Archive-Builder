@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9-H
+
+- Added project cloning from the project selector. A clone copies project settings and app-generated `.generated` metadata/indexes but intentionally does not copy finished `output/` artifacts, `.state/` recovery data, task history, or original voice packages.
+- Clones reuse the same external source packages and recorded fingerprints, making it practical to branch one archive into another language/translation configuration without duplicating large audio archives.
+- Relative manual-project inputs outside `.generated` are rebound to the original project's absolute paths instead of being silently duplicated; app-generated inputs remain relative because they are copied into the clone.
+- Clone destinations are unique sibling directories by default. Explicit non-empty destinations are rejected to avoid overwriting user files.
+- Cloned project roots are marked app-managed because the clone operation creates and owns the dedicated destination directory.
+
 ## v0.9-G
 
 - Added project source-health reporting for the primary voice package, optional target/reference packages, generated index, bilingual data and glossary paths.
