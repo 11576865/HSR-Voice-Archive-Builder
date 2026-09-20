@@ -582,7 +582,7 @@ def _translate_missing(
                 )
             chinese = str(result["chinese"]).strip()
             if not chinese:
-                raise RuntimeError(f"Translator returned empty Chinese text: {source['id']}")
+                raise RuntimeError(f"Translator returned empty target text: {source['id']}")
             row_glossary = relevant_glossary(active_glossary, [source["english"]])
             issues = translation_qa(source["english"], chinese, row_glossary, target_language)
             first_results[source["id"]] = (chinese, issues)
@@ -796,6 +796,9 @@ def _translate_missing(
                     completed[source["id"]] = chinese
                     checkpoint[source["id"]] = {
                         "english_sha256": _text_fingerprint(source["english"]),
+                        "input_sha256": _translation_input_fingerprint(
+                            source, source_language, target_language
+                        ),
                         "chinese": chinese,
                         "qa_version": 1,
                         "qa_issues": issues,
