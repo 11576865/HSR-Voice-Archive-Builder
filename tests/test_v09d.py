@@ -4,6 +4,7 @@ import csv
 import json
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import patch
@@ -14,13 +15,39 @@ from app.glossary import (
     load_glossary_overlay,
     merge_glossary,
 )
-from app.pipeline import _target_records, _translate_missing
+from app.pipeline import _target_records, _translate_missing, build_project_v02
 from app.semantic_quality import semantic_risk_tags
 from app.translator import (
     HTTPResponse,
     OpenAIResponsesHTTPClient,
     verify_semantic_records,
 )
+
+
+def write_wav(path: Path, frames: int = 80) -> None:
+    with wave.open(str(path), "wb") as output:
+        output.setnchannels(1)
+        output.setsampwidth(2)
+        output.setframerate(8000)
+        output.writeframes(b"\x00\x00" * frames)
+
+
+def write_index(path: Path, english: str) -> None:
+    with path.open("w", encoding="utf-8-sig", newline="") as stream:
+        writer = csv.DictWriter(
+            stream,
+            fieldnames=["index", "group", "filename", "english", "sha256"],
+        )
+        writer.writeheader()
+        writer.writerow(
+            {
+                "index": "1",
+                "group": "scene",
+                "filename": "a.wav",
+                "english": english,
+                "sha256": "",
+            }
+        )
 
 
 class ScriptedSemanticClient(OpenAIResponsesHTTPClient):
@@ -214,6 +241,76 @@ class V09DGlossaryAndSemanticQATests(unittest.TestCase):
                 ],
                 model="test-model",
                 client=client,
+            )
+
+    def test_semantic_qa_artifact_tamper_rebuilds_stage_without_paid_calls(self) -> None:
+        client = ScriptedSemanticClient()
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            wavs.mkdir()
+            write_wav(wavs / "a.wav")
+            index = root / "index.csv"
+            write_index(index, "I will not go if you leave.")
+            output = root / "output"
+
+            with (
+                patch(
+                    "app.credentials.translation_identity",
+                    return_value=("custom", "https://example.invalid/v1"),
+                ),
+                patch("app.translator.make_client", return_value=client),
+                patch(
+                    "app.translation_runtime.CAPABILITY_CACHE_FILE",
+                    root / "capabilities.json",
+                ),
+            ):
+                first = build_project_v02(
+                    index,
+                    wavs,
+                    output,
+                    make_flac=False,
+                    translate_missing=True,
+                    translation_model="test-model",
+                )
+
+            self.assertTrue((output / "semantic_qa.json").is_file())
+            self.assertIn("translation_qa", first["stage_resume"]["rebuilt"])
+
+            (output / "semantic_qa.json").write_text(
+                "{\"tampered\": true}",
+                encoding="utf-8",
+            )
+
+            with (
+                patch(
+                    "app.credentials.translation_identity",
+                    return_value=("custom", "https://example.invalid/v1"),
+                ),
+                patch(
+                    "app.translator.make_client",
+                    side_effect=AssertionError(
+                        "validated checkpoint reuse must avoid API client creation"
+                    ),
+                ),
+            ):
+                second = build_project_v02(
+                    index,
+                    wavs,
+                    output,
+                    make_flac=False,
+                    translate_missing=True,
+                    translation_model="test-model",
+                )
+
+            self.assertIn("translation", second["stage_resume"]["rebuilt"])
+            self.assertIn("translation_qa", second["stage_resume"]["rebuilt"])
+            restored = json.loads(
+                (output / "semantic_qa.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(
+                restored["summary"]["count_semantic_qa_checkpoint_reused"],
+                1,
             )
 
     def test_semantic_failure_gets_one_targeted_repair_and_checkpoint_reuse(self) -> None:
