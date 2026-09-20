@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-G**.
+Current development version: **v0.9-H**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-G add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-H add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -76,7 +76,8 @@ v0.4-v0.9-G add failure-driven hardening based on upstream documentation, issue 
 - v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts;
 - v0.9-E adds recent-project switching, project-scoped task history, explicit language roles, multilingual EN/CHS/JP/KR Quick indexes, and optional second-package reference text;
 - v0.9-F separates internal resumable state from user-facing output files through a project-local `.state` directory;
-- v0.9-G reports project-source health and can safely relink moved voice packages after content-fingerprint verification.
+- v0.9-G reports project-source health and can safely relink moved voice packages after content-fingerprint verification;
+- v0.9-H adds safe project cloning for branching one source archive into another language/parameter configuration without duplicating finished outputs or source audio.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -291,6 +292,27 @@ output/semantic_qa.json
 ```
 
 If deterministic or semantic QA still has a hard failure after its one repair pass, the build stops before accepting the bad translation. Earlier paid batches and successfully verified semantic rows remain checkpointed, so a later restart does not force the whole character through the API again.
+
+## Cloning a project
+
+The project selector includes **Copy project** for creating a derived configuration from an existing archive. This is intended for cases such as keeping the same voice package while trying another target language, translation provider/model, subtitle arrangement, or build option.
+
+A clone copies:
+
+- the project configuration;
+- stored source-package fingerprints;
+- app-generated `.generated` data such as the filtered Quick Mode index and scan metadata.
+
+A clone does **not** copy:
+
+- `output/` finished artifacts;
+- `.state/` checkpoints, QA reports, usage ledgers, or stage state;
+- task history;
+- large original voice packages.
+
+The clone therefore starts with a clean build state but can reference the same source material. App-generated relative inputs remain project-local because `.generated` is copied. Other manual relative inputs are converted to absolute references back to the original location instead of being duplicated without permission.
+
+By default the clone is created as a uniquely named sibling directory. If the desired name already exists, a numeric suffix is used. An explicitly supplied destination must be empty.
 
 ## Moving source packages without rebuilding the project
 
