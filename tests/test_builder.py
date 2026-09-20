@@ -98,13 +98,18 @@ class BuilderTests(unittest.TestCase):
             self.assertEqual(entries[0].chinese_source, "official_chs_lab")
             self.assertEqual(entries[1].chinese, "译文 B")
             self.assertEqual(entries[1].chinese_source, "translated_existing")
-            self.assertEqual(entries[0].start_sample, 0)
-            self.assertEqual(entries[1].start_sample, 8000 + round(1.2 * 8000))
+            self.assertEqual(entries[0].start_sample, round(5.0 * 8000))
+            self.assertEqual(
+                entries[1].start_sample,
+                round(5.0 * 8000) + 8000 + round(1.2 * 8000),
+            )
             self.assertEqual(report["count_missing_chinese"], 0)
 
             write_manifest(entries, report, out)
             self.assertTrue((out / "manifest.json").is_file())
-            self.assertTrue((out / "bilingual.srt").is_file())
+            self.assertTrue((out / "timeline_resolved.json").is_file())
+            self.assertTrue((out / "HSR_Voice_Archive.ass").is_file())
+            self.assertFalse((out / "bilingual.srt").exists())
 
 
 if __name__ == "__main__":
