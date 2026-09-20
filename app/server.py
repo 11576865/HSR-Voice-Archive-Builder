@@ -23,6 +23,7 @@ from .project import (
     last_project_root,
     load_project,
     project_summary,
+    recent_projects,
     resolve_project_path,
     update_project,
 )
@@ -130,6 +131,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "bilingual": resolve_project_path(config, config.bilingual_csv),
         "chs": resolve_project_path(config, config.chs_source),
         "glossary": resolve_project_path(config, config.glossary_path),
+        "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
@@ -149,7 +151,8 @@ def api_status():
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
-        "jobs": recent_jobs(8),
+        "recent_projects": recent_projects(12),
+        "jobs": recent_jobs(20),
         "runtime": dependency_status(),
     }
 
@@ -166,11 +169,13 @@ def api_quick_candidates():
 def api_quick_scan(
     english_source: str = Form(...),
     chs_source: str = Form(""),
+    reference_source: str = Form(""),
 ):
     try:
         plan = quick_scan(
             Path(english_source),
             Path(chs_source) if chs_source.strip() else None,
+            reference_source=Path(reference_source) if reference_source.strip() else None,
         )
         return {"ok": True, "plan": plan}
     except Exception as exc:
@@ -185,14 +190,22 @@ def api_quick_build(
     project_name: str = Form(""),
     translation_token_budget: int = Form(0),
     translation_budget_usd: float = Form(0.0),
+    reference_source: str = Form(""),
+    audio_language: str = Form("auto"),
+    target_language: str = Form("zh-CN"),
+    reference_language: str = Form("auto"),
 ):
     try:
         assert_no_active_build()
         config, plan = create_quick_project(
             Path(english_source),
             chs_source=Path(chs_source) if chs_source.strip() else None,
+            reference_source=Path(reference_source) if reference_source.strip() else None,
             root=Path(project_root) if project_root.strip() else None,
             name=project_name,
+            audio_language=audio_language,
+            target_language=target_language,
+            reference_language=reference_language,
         )
         update_project(
             config,
@@ -224,9 +237,17 @@ def api_quick_build(
                 translation_budget_usd=config.translation_budget_usd,
                 glossary_path=paths["glossary"],
                 progress_callback=report_progress,
+                reference_source=paths["reference"],
+                audio_language=config.audio_language,
+                source_text_language=config.source_text_language,
+                target_language=config.target_language,
+                reference_language=config.reference_language,
             )
 
-        job = create_job("quick-build", run, with_progress=True)
+        job = create_job(
+            "quick-build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
         return {
             "ok": True,
             "job": job.id,
@@ -247,6 +268,11 @@ def api_project_create(
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
     glossary_path: str = Form(""),
+    reference_source: str = Form(""),
+    audio_language: str = Form("auto"),
+    source_text_language: str = Form("en"),
+    target_language: str = Form("zh-CN"),
+    reference_language: str = Form("auto"),
     remote_character: str = Form(""),
 ):
     try:
@@ -259,6 +285,11 @@ def api_project_create(
             bilingual_csv=bilingual_csv,
             chs_source=chs_source,
             glossary_path=glossary_path,
+            reference_source=reference_source,
+            audio_language=audio_language,
+            source_text_language=source_text_language,
+            target_language=target_language,
+            reference_language=reference_language,
             remote_character=remote_character,
         )
         _set_active(config)
@@ -286,6 +317,11 @@ def api_project_save(
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
     glossary_path: str = Form(""),
+    reference_source: str = Form(""),
+    audio_language: str = Form("auto"),
+    source_text_language: str = Form("en"),
+    target_language: str = Form("zh-CN"),
+    reference_language: str = Form("auto"),
     update_candidates: str = Form(""),
     remote_character: str = Form(""),
     remote_index_url: str = Form(""),
@@ -309,6 +345,11 @@ def api_project_save(
             bilingual_csv=bilingual_csv.strip(),
             chs_source=chs_source.strip(),
             glossary_path=glossary_path.strip(),
+            reference_source=reference_source.strip(),
+            audio_language=audio_language.strip() or "auto",
+            source_text_language=source_text_language.strip() or "en",
+            target_language=target_language.strip() or "zh-CN",
+            reference_language=reference_language.strip() or "auto",
             update_candidates=update_candidates.strip(),
             remote_character=remote_character.strip(),
             remote_index_url=remote_index_url.strip() or config.remote_index_url,
@@ -360,9 +401,17 @@ def api_project_build():
                 translation_budget_usd=config.translation_budget_usd,
                 glossary_path=paths["glossary"],
                 progress_callback=report_progress,
+                reference_source=paths["reference"],
+                audio_language=config.audio_language,
+                source_text_language=config.source_text_language,
+                target_language=config.target_language,
+                reference_language=config.reference_language,
             )
 
-        job = create_job("build", run, with_progress=True)
+        job = create_job(
+            "build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
