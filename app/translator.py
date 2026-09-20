@@ -2,12 +2,20 @@ from __future__ import annotations
 
 import json
 import os
+import random
+import time
+import urllib.error
+import urllib.request
 from collections.abc import Iterable
+from dataclasses import dataclass
+from email.utils import parsedate_to_datetime
 from typing import Any
 
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_TIMEOUT_SECONDS = 120.0
+RESPONSES_URL = "https://api.openai.com/v1/responses"
+RETRYABLE_HTTP = {408, 409, 429}
 
 
 def _chunks(records: list[dict[str, str]], size: int) -> Iterable[list[dict[str, str]]]:
@@ -17,23 +25,162 @@ def _chunks(records: list[dict[str, str]], size: int) -> Iterable[list[dict[str,
         yield records[i:i + size]
 
 
-def make_client():
-    if not os.environ.get("OPENAI_API_KEY"):
-        raise RuntimeError("OPENAI_API_KEY is not set")
+def _retry_after_seconds(headers: Any) -> float | None:
+    raw = headers.get("Retry-After") if headers else None
+    if not raw:
+        return None
     try:
-        from openai import OpenAI
-    except ImportError as exc:
-        raise RuntimeError(
-            "The OpenAI Python SDK is unavailable on this runtime. "
-            "On Termux/Android the current SDK dependency chain requires jiter/Rust, "
-            "which is not reliably installable. Disable GPT fallback or run translation "
-            "from a desktop host."
-        ) from exc
+        return max(0.0, float(raw))
+    except (TypeError, ValueError):
+        pass
+    try:
+        dt = parsedate_to_datetime(str(raw))
+        return max(0.0, dt.timestamp() - time.time())
+    except Exception:
+        return None
 
-    # The SDK retries transient connection/rate-limit/server failures. The
-    # higher-level pipeline also checkpoints completed batches so a later
-    # failure does not discard already-paid-for translations.
-    return OpenAI(
+
+def _extract_api_error(body: bytes) -> str:
+    try:
+        payload = json.loads(body.decode("utf-8", "replace"))
+        err = payload.get("error", {})
+        if isinstance(err, dict):
+            message = str(err.get("message", "")).strip()
+            code = str(err.get("code", "")).strip()
+            if message and code:
+                return f"{message} ({code})"
+            if message:
+                return message
+    except Exception:
+        pass
+    text = body.decode("utf-8", "replace").strip()
+    return text[:1000] if text else "no response body"
+
+
+def _extract_output_text(payload: dict[str, Any]) -> str:
+    direct = payload.get("output_text")
+    if isinstance(direct, str) and direct.strip():
+        return direct
+
+    pieces: list[str] = []
+    for item in payload.get("output", []) or []:
+        if not isinstance(item, dict):
+            continue
+        for part in item.get("content", []) or []:
+            if not isinstance(part, dict):
+                continue
+            kind = part.get("type")
+            if kind == "output_text" and isinstance(part.get("text"), str):
+                pieces.append(part["text"])
+            elif kind == "refusal":
+                refusal = str(part.get("refusal", "")).strip()
+                raise RuntimeError(
+                    "OpenAI response was refused"
+                    + (f": {refusal}" if refusal else "")
+                )
+    text = "".join(pieces)
+    if not text.strip():
+        status = payload.get("status")
+        error = payload.get("error")
+        raise RuntimeError(
+            f"OpenAI response contained no output text (status={status!r}, error={error!r})"
+        )
+    return text
+
+
+@dataclass
+class HTTPResponse:
+    output_text: str
+    raw: dict[str, Any]
+
+
+class OpenAIResponsesHTTPClient:
+    """Dependency-free OpenAI Responses API client.
+
+    Uses only Python standard library modules so the same translation path works
+    on desktop and Termux/Android without jiter, pydantic-core, maturin, or Rust.
+    """
+
+    def __init__(
+        self,
+        api_key: str,
+        *,
+        timeout: float = DEFAULT_TIMEOUT_SECONDS,
+        max_retries: int = DEFAULT_MAX_RETRIES,
+        opener: Any | None = None,
+        sleeper: Any = time.sleep,
+        random_fn: Any = random.random,
+    ) -> None:
+        if not api_key.strip():
+            raise RuntimeError("OPENAI_API_KEY is not set")
+        self.api_key = api_key.strip()
+        self.timeout = float(timeout)
+        self.max_retries = max(0, int(max_retries))
+        self.opener = opener or urllib.request.build_opener()
+        self.sleeper = sleeper
+        self.random_fn = random_fn
+        self.responses = self
+
+    def _delay(self, attempt: int, headers: Any = None) -> float:
+        explicit = _retry_after_seconds(headers)
+        if explicit is not None:
+            return min(explicit, 60.0)
+        base = min(0.5 * (2 ** attempt), 8.0)
+        return base + (self.random_fn() * min(0.25, base * 0.25))
+
+    def create(self, **payload: Any) -> HTTPResponse:
+        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        request = urllib.request.Request(
+            RESPONSES_URL,
+            data=body,
+            method="POST",
+            headers={
+                "Authorization": f"Bearer {self.api_key}",
+                "Content-Type": "application/json",
+                "User-Agent": "HSR-Voice-Archive-Builder/0.6",
+            },
+        )
+
+        last_error: Exception | None = None
+        for attempt in range(self.max_retries + 1):
+            try:
+                with self.opener.open(request, timeout=self.timeout) as response:
+                    raw = response.read()
+                data = json.loads(raw.decode("utf-8"))
+                if not isinstance(data, dict):
+                    raise RuntimeError("OpenAI API returned a non-object JSON response")
+                status = data.get("status")
+                if status not in (None, "completed"):
+                    raise RuntimeError(
+                        f"OpenAI response did not complete (status={status!r}, "
+                        f"error={data.get('error')!r}, incomplete={data.get('incomplete_details')!r})"
+                    )
+                return HTTPResponse(output_text=_extract_output_text(data), raw=data)
+
+            except urllib.error.HTTPError as exc:
+                error_body = exc.read()
+                retryable = exc.code in RETRYABLE_HTTP or 500 <= exc.code <= 599
+                message = _extract_api_error(error_body)
+                last_error = RuntimeError(f"OpenAI HTTP {exc.code}: {message}")
+                if not retryable or attempt >= self.max_retries:
+                    raise last_error from exc
+                self.sleeper(self._delay(attempt, exc.headers))
+
+            except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
+                last_error = RuntimeError(f"OpenAI network error: {exc}")
+                if attempt >= self.max_retries:
+                    raise last_error from exc
+                self.sleeper(self._delay(attempt))
+
+            except json.JSONDecodeError as exc:
+                raise RuntimeError("OpenAI API returned invalid JSON") from exc
+
+        raise last_error or RuntimeError("OpenAI request failed")
+
+
+def make_client() -> OpenAIResponsesHTTPClient:
+    return OpenAIResponsesHTTPClient(
+        os.environ.get("OPENAI_API_KEY", ""),
         max_retries=DEFAULT_MAX_RETRIES,
         timeout=DEFAULT_TIMEOUT_SECONDS,
     )
@@ -46,11 +193,11 @@ def translate_records(
     *,
     client: Any | None = None,
 ) -> list[dict[str, str]]:
-    """Translate one batch using the OpenAI Responses API.
+    """Translate one batch through the OpenAI Responses REST API.
 
-    Each input must contain id and english. The API key is read only
-    from OPENAI_API_KEY. IDs must round-trip exactly; otherwise the batch is
-    rejected instead of being partially written back.
+    Each input must contain id and english. The API key is read only from
+    OPENAI_API_KEY. Structured Outputs are requested with JSON Schema and IDs
+    must round-trip exactly before any translation is accepted.
     """
     if not records:
         return []
