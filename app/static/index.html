@@ -254,9 +254,9 @@ function fillProject(p){
   document.getElementById('statTranslated').textContent=n((r.count_translated_existing||0)+(r.count_api_translated??r.count_gpt_translated??0));
   document.getElementById('statMissing').textContent=n(r.count_missing_chinese);
   const usage=[];
-  if(r.translation_estimated_total_tokens!==undefined)usage.push('预计 Token '+n(r.translation_estimated_total_tokens));
-  if(r.translation_actual_total_tokens!==undefined)usage.push('实际 Token '+n(r.translation_actual_total_tokens));
-  if(r.translation_api_call_count!==undefined)usage.push('API 请求 '+n(r.translation_api_call_count));
+  if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
+  if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
+  if(r.translation_api_call_count!==undefined)usage.push('累计 API 请求 '+n(r.translation_api_call_count));
   if(r.translation_estimated_cost_usd!==undefined&&r.translation_estimated_cost_usd!==null)usage.push('按已知单价估算 USD '+Number(r.translation_estimated_cost_usd).toFixed(6));
   if(r.translation_usage_missing)usage.push('Provider 未返回完整 usage');
   document.getElementById('translationUsage').textContent=usage.join(' · ');
