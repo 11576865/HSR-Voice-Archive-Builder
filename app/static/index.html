@@ -64,6 +64,16 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
             </select>
           </div>
           <div>
+            <label>翻译源文本</label>
+            <select id="quickSourceTextLanguage">
+              <option value="en">English（自动 EN 索引）</option>
+              <option value="zh-CN">简体中文（读取主包 LAB）</option><option value="ja">日本語（读取主包 LAB）</option>
+              <option value="ko">한국어（读取主包 LAB）</option><option value="ru">Русский（读取主包 LAB）</option>
+            </select>
+          </div>
+        </div>
+        <div class="row">
+          <div>
             <label>翻译目标语言</label>
             <select id="quickTargetLanguage">
               <option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option>
@@ -71,6 +81,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
               <option value="ko">한국어</option><option value="ru">Русский</option>
             </select>
           </div>
+          <div><p class="small muted" style="margin-top:30px">若源文本不是 English，主音频包必须含与 WAV 同名的 LAB；否则预检会阻止构建。</p></div>
         </div>
         <div class="row">
           <div>
@@ -87,7 +98,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
             </select>
           </div>
         </div>
-        <p class="small muted">Quick Mode 的顺序/源文本索引目前仍来自 EN 索引，因此默认翻译源文本语言为 English；第二语言包可作为逐条语义参考。</p>
+        <p class="small muted">Quick Mode 默认用 EN 索引作为源文本；也可以改为从主音频包的同名 LAB 读取中/日/韩/俄源文本。第二语言包只作为额外逐条语义参考。</p>
         <div class="actions">
           <button type="button" id="quickRefreshBtn">刷新本机文件</button>
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
@@ -406,6 +417,7 @@ async function quickScan(){
   const d=new FormData();d.set('english_source',english);
   const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
   const reference=document.getElementById('quickReference').value;if(reference)d.set('reference_source',reference);
+  d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
   const j=await api('/api/quick/scan',{method:'POST',body:d});renderQuickPlan(j.plan);setLog(j.plan);return j.plan;
 }
 function setBuildButtonsDisabled(disabled){
@@ -516,6 +528,7 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
   const reference=document.getElementById('quickReference').value;if(reference)d.set('reference_source',reference);
   d.set('audio_language',document.getElementById('quickAudioLanguage').value||'auto');
+  d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
   d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
   d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
   d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
