@@ -236,6 +236,7 @@ def _translate_missing(
     checkpoint_path: Path,
     token_budget: int = 0,
     usd_budget: float = 0.0,
+    translation_glossary: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
@@ -264,7 +265,7 @@ def _translate_missing(
         }
 
     from .credentials import translation_identity
-    from .glossary import CORE_GLOSSARY, relevant_glossary
+    from .glossary import CORE_GLOSSARY, glossary_fingerprint, relevant_glossary
     from .translation_quality import (
         has_hard_issue,
         qa_messages,
@@ -283,6 +284,11 @@ def _translate_missing(
         make_client,
         translate_records,
     )
+
+    active_glossary = dict(
+        CORE_GLOSSARY if translation_glossary is None else translation_glossary
+    )
+    active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
     provider, base_url = translation_identity()
     checkpoint = _load_translation_checkpoint(
@@ -306,8 +312,15 @@ def _translate_missing(
         ):
             continue
         chinese = str(saved["chinese"]).strip()
-        glossary = relevant_glossary(CORE_GLOSSARY, [row["english"]])
-        issues = translation_qa(row["english"], chinese, glossary)
+        row_glossary = relevant_glossary(active_glossary, [row["english"]])
+        row_glossary_fingerprint = glossary_fingerprint(row_glossary)
+        saved_glossary_fingerprint = str(saved.get("glossary_fingerprint", "")).strip()
+        if (
+            saved_glossary_fingerprint
+            and saved_glossary_fingerprint != row_glossary_fingerprint
+        ):
+            continue
+        issues = translation_qa(row["english"], chinese, row_glossary)
         if has_hard_issue(issues):
             # A new glossary/QA rule can invalidate an old cached translation.
             # Re-run only this item instead of trusting stale paid output.
@@ -337,6 +350,7 @@ def _translate_missing(
             "base_url": base_url,
             "model": model,
             "target_fingerprint": records_fingerprint(targets),
+            "glossary_fingerprint": active_glossary_fingerprint,
         },
         estimate=usage_estimate,
         token_budget=token_budget,
@@ -368,7 +382,7 @@ def _translate_missing(
     for start in range(0, len(remaining), batch_size):
         batch = remaining[start:start + batch_size]
         batch_glossary = relevant_glossary(
-            CORE_GLOSSARY,
+            active_glossary,
             [row["english"] for row in batch],
         )
         request_estimate = estimate_request_tokens(batch, batch_glossary)
@@ -402,8 +416,8 @@ def _translate_missing(
             chinese = str(result["chinese"]).strip()
             if not chinese:
                 raise RuntimeError(f"Translator returned empty Chinese text: {source['id']}")
-            glossary = relevant_glossary(CORE_GLOSSARY, [source["english"]])
-            issues = translation_qa(source["english"], chinese, glossary)
+            row_glossary = relevant_glossary(active_glossary, [source["english"]])
+            issues = translation_qa(source["english"], chinese, row_glossary)
             first_results[source["id"]] = (chinese, issues)
             api_translated += 1
             if issues:
@@ -415,7 +429,7 @@ def _translate_missing(
         repaired: dict[str, str] = {}
         if retry_records:
             retry_glossary = relevant_glossary(
-                CORE_GLOSSARY,
+                active_glossary,
                 [row["english"] for row in retry_records],
             )
             repair_phase = f"repair-batch-{start // batch_size + 1}"
@@ -445,8 +459,8 @@ def _translate_missing(
         for source in batch:
             first_chinese, first_issues = first_results[source["id"]]
             chinese = repaired.get(source["id"], first_chinese)
-            glossary = relevant_glossary(CORE_GLOSSARY, [source["english"]])
-            final_issues = translation_qa(source["english"], chinese, glossary)
+            row_glossary = relevant_glossary(active_glossary, [source["english"]])
+            final_issues = translation_qa(source["english"], chinese, row_glossary)
             hard_failed = has_hard_issue(final_issues)
             record = {
                 "id": source["id"],
@@ -465,6 +479,7 @@ def _translate_missing(
                 "chinese": chinese,
                 "qa_version": 1,
                 "qa_issues": final_issues,
+                "glossary_fingerprint": glossary_fingerprint(row_glossary),
             }
             if hard_failed:
                 hard_failures.append(record)
@@ -529,8 +544,9 @@ def _translate_missing(
         "translation_provider": provider,
         "translation_base_url": base_url,
         "translation_model": model,
-        "translation_glossary_terms": len(CORE_GLOSSARY),
-        "translation_context_neighbors": True,
+        "translation_glossary_terms": len(active_glossary),
+        "translation_glossary_fingerprint": active_glossary_fingerprint,
+        "translation_context_neighbors": "group-aware",
     }
 
 
