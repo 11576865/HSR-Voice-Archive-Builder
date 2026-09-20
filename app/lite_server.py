@@ -340,6 +340,7 @@ class Handler(BaseHTTPRequestHandler):
                 source_text_language=data.get("source_text_language", "en"),
                 target_language=data.get("target_language", "zh-CN"),
                 reference_language=data.get("reference_language", "auto"),
+                source_text_language=data.get("source_text_language", "en").strip() or "en",
             )
             update_project(
                 config,
