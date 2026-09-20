@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.8
+
+- Added package-first Quick Mode as the default dashboard workflow.
+- Auto-discovers local `.7z` / `.zip` voice packages in common Termux Download paths without browser re-upload.
+- Added read-only package inventory for WAV/LAB counts, duplicate-basename detection and character hints.
+- Auto-selects a local CSV index by actual WAV coverage and English-text completeness, then generates a filtered internal index.
+- Quick build creates the local project automatically and enables configured AI translation without exposing index/project internals.
+- Quick scan blocks rather than guessing when playback order cannot be established reliably.
+- Retained the v0.7 manual project form under an advanced section.
+
 ## v0.7
 
 - Added a deterministic 50-line direct translation-quality benchmark with dry-run mode, integrity checks and review-ready CSV/JSON output; official Chinese localization is not treated as a gold answer.
