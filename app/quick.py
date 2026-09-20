@@ -15,7 +15,13 @@ from typing import Any
 from .builder import MAX_ARCHIVE_MEMBERS, atomic_write_text, sha256_file
 from .credentials import credentials_status
 from .identity import parse_voice_identity
-from .project import ProjectConfig, create_project, update_project
+from .project import (
+    ProjectConfig,
+    create_project,
+    resolve_project_path,
+    update_project,
+    utc_now,
+)
 from .remote_index import (
     DEFAULT_EN_INDEX_URL,
     ai_hobbyist_index_label,
@@ -1050,4 +1056,254 @@ def relink_project_source(
         "replacement_path": str(replacement),
         "verified": True,
         "fingerprint": actual,
+    }
+
+
+def refresh_quick_project_source(
+    config: ProjectConfig,
+    replacement_source: Path | None = None,
+) -> dict[str, Any]:
+    """Refresh a managed Quick Mode index from the current/new primary package.
+
+    This does not download audio. A replacement package must contain every voice
+    already present in the current manifest; new voices may be added. The
+    generated index is rewritten only after full metadata coverage succeeds.
+    """
+    if not config.managed_project_root:
+        raise ValueError("Incremental source refresh is only available for managed Quick Mode projects")
+
+    project_root = Path(config.root).expanduser().resolve()
+    generated_root = project_root / ".generated"
+    index_path = resolve_project_path(config, config.index_csv)
+    if index_path is None:
+        raise ValueError("Project index is not configured")
+    try:
+        index_path.resolve().relative_to(generated_root.resolve())
+    except ValueError as exc:
+        raise ValueError(
+            "Managed Quick Mode refresh requires the project index to live under .generated"
+        ) from exc
+
+    current_primary = resolve_project_path(config, config.wav_source)
+    primary = (
+        replacement_source.expanduser().resolve()
+        if replacement_source is not None
+        else current_primary
+    )
+    if primary is None:
+        raise ValueError("Primary voice package is not configured")
+
+    chs_source = resolve_project_path(config, config.chs_source)
+    reference_source = resolve_project_path(config, config.reference_source)
+    plan = quick_scan(
+        primary,
+        chs_source,
+        reference_source=reference_source,
+        source_text_language=config.source_text_language,
+        reference_language=config.reference_language,
+        remote_index_url=config.remote_index_url,
+    )
+    if not plan.get("ready"):
+        raise RuntimeError(
+            "Updated package preflight failed: " + "; ".join(plan.get("blockers", []))
+        )
+
+    selected_index = plan.get("index")
+    if not isinstance(selected_index, dict):
+        raise RuntimeError("Updated package has no usable ordering/text index")
+
+    current_inventory = source_inventory(primary)
+    if current_inventory["fingerprint"] != plan["english"]["fingerprint"]:
+        raise RuntimeError("Primary audio source changed during refresh; scan again")
+
+    current_chs = None
+    if chs_source is not None:
+        current_chs = source_inventory(chs_source)
+        if current_chs["fingerprint"] != plan["chinese"]["fingerprint"]:
+            raise RuntimeError("Target-text source changed during refresh; scan again")
+
+    current_reference = None
+    if reference_source is not None:
+        current_reference = source_inventory(reference_source)
+        if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
+            raise RuntimeError("Reference source changed during refresh; scan again")
+
+    wanted = {Path(name).name for name in current_inventory["wav_names"]}
+    if not wanted:
+        raise RuntimeError("Updated primary package contains no WAV files")
+
+    if selected_index.get("source") == "remote":
+        remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+            wanted,
+            str(selected_index["url"]),
+        )
+        if _index_fingerprint(remote_records) != selected_index.get("records_fingerprint"):
+            raise RuntimeError("Remote index changed during refresh; scan again")
+        filtered = _remote_rows(
+            remote_records,
+            wanted,
+            str(
+                selected_index.get("provider")
+                or ai_hobbyist_index_label(str(selected_index["url"]))
+            ),
+        )
+    else:
+        local_index = Path(str(selected_index["path"]))
+        if sha256_file(local_index) != selected_index.get("file_sha256"):
+            raise RuntimeError("Local index changed during refresh; scan again")
+        original_rows = normalize_index(local_index)
+        filtered = [
+            row for row in original_rows
+            if Path(str(row.get("filename", ""))).name in wanted
+        ]
+
+    if len(filtered) != len(wanted):
+        raise RuntimeError("Updated package index does not cover every WAV file")
+
+    reference_text_embedded = False
+    reference_attempt = plan.get("reference_index_attempt")
+    if (
+        reference_source is not None
+        and current_reference is not None
+        and int(current_reference.get("lab_count", 0)) == 0
+        and isinstance(reference_attempt, dict)
+        and reference_attempt.get("url")
+    ):
+        reference_wavs = {
+            Path(name).name for name in current_reference.get("wav_names", [])
+        }
+        reference_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+            reference_wavs,
+            str(reference_attempt["url"]),
+        )
+        if _index_fingerprint(reference_records) != reference_attempt.get(
+            "records_fingerprint"
+        ):
+            raise RuntimeError("Reference remote index changed during refresh; scan again")
+        mapped_reference, _ = _map_reference_records(wanted, reference_records)
+        for row in filtered:
+            filename = Path(str(row.get("filename", ""))).name
+            text = mapped_reference.get(filename, "")
+            if text:
+                row["reference_text"] = text
+                row["reference_language"] = config.reference_language
+        reference_text_embedded = bool(mapped_reference)
+
+    output = resolve_project_path(config, config.output_dir)
+    state = resolve_project_path(config, config.state_dir)
+    if output is None or state is None:
+        raise ValueError("Project output/state paths are not configured")
+    manifest = output / "manifest.json"
+
+    update_plan: dict[str, Any]
+    if manifest.is_file():
+        payload = json.loads(manifest.read_text(encoding="utf-8-sig"))
+        entries = payload.get("entries", []) if isinstance(payload, dict) else payload
+        old_names = {
+            Path(str(row.get("filename", ""))).name
+            for row in entries
+            if isinstance(row, dict) and str(row.get("filename", "")).strip()
+        }
+        missing_old = sorted(old_names - wanted)
+        if missing_old:
+            sample = ", ".join(missing_old[:5])
+            raise RuntimeError(
+                "Replacement package is missing "
+                f"{len(missing_old)} voice(s) already in the archive"
+                + (f": {sample}" if sample else "")
+            )
+        from .diff import classify_names
+
+        update_plan = classify_names(manifest, sorted(wanted))
+        update_plan["old_manifest_count"] = len(old_names)
+    else:
+        update_plan = {
+            "exact_existing": [],
+            "variant_of_existing": [],
+            "new_logical": sorted(wanted),
+            "counts": {
+                "exact_existing": 0,
+                "variant_of_existing": 0,
+                "new_logical": len(wanted),
+            },
+            "candidate_unique_count": len(wanted),
+            "old_manifest_count": 0,
+        }
+
+    update_plan["new_source_count"] = len(wanted)
+    update_plan["primary_source"] = str(primary)
+    update_plan["source_fingerprint"] = str(
+        current_inventory.get("fingerprint", {}).get("digest", "") or ""
+    )
+
+    fields = [
+        "index", "group", "filename", "source", "source_detail", "english",
+        "reference_text", "reference_language", "sha256",
+    ]
+    generated_root.mkdir(parents=True, exist_ok=True)
+    temp_index = index_path.with_name(f".{index_path.name}.refresh.tmp")
+    try:
+        with temp_index.open("w", encoding="utf-8-sig", newline="") as stream:
+            writer = csv.DictWriter(stream, fieldnames=fields)
+            writer.writeheader()
+            writer.writerows(filtered)
+        os.replace(temp_index, index_path)
+    finally:
+        temp_index.unlink(missing_ok=True)
+
+    update_project(
+        config,
+        wav_source=str(primary),
+        wav_source_fingerprint=update_plan["source_fingerprint"],
+        chs_source_fingerprint=str(
+            (current_chs or {}).get("fingerprint", {}).get("digest", "") or ""
+        ),
+        reference_source_fingerprint=str(
+            (current_reference or {}).get("fingerprint", {}).get("digest", "") or ""
+        ),
+        reference_text_embedded=reference_text_embedded,
+        remote_character=str(plan.get("character", {}).get("value", "") or config.remote_character),
+        remote_index_url=str(
+            selected_index.get("url")
+            or plan.get("translation", {}).get("remote_index_url")
+            or config.remote_index_url
+        ),
+    )
+    if reference_text_embedded:
+        # update_project invalidates embedded mapping when the primary path
+        # changes; this refresh has just rebuilt the mapping against the new
+        # package, so restore the verified state explicitly.
+        update_project(config, reference_text_embedded=True)
+
+    atomic_write_text(
+        generated_root / "quick_scan.json",
+        json.dumps(plan, ensure_ascii=False, indent=2),
+    )
+    output.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(
+        output / "update_plan.json",
+        json.dumps(update_plan, ensure_ascii=False, indent=2),
+    )
+    state.mkdir(parents=True, exist_ok=True)
+    pending = {
+        "schema_version": 1,
+        "reason": "primary_source_refresh",
+        "created_at": utc_now(),
+        "old_manifest_count": int(update_plan.get("old_manifest_count", 0)),
+        "new_source_count": len(wanted),
+        "counts": update_plan.get("counts", {}),
+        "primary_source": str(primary),
+        "source_fingerprint": update_plan["source_fingerprint"],
+    }
+    atomic_write_text(
+        state / "update_pending.json",
+        json.dumps(pending, ensure_ascii=False, indent=2),
+    )
+
+    return {
+        "ok": True,
+        "project_root": config.root,
+        "index_path": str(index_path),
+        "update_plan": update_plan,
+        "pending_rebuild": pending,
     }
