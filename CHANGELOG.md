@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added a single sample-based Timeline shared by continuous FLAC generation, manifests, corrected indexes and ASS subtitles.
+- Added a configurable `intro_gap` (5.00 seconds by default) alongside the existing same-group and cross-group gaps; the FLAC now contains the corresponding initial silence.
+- Replaced legacy `bilingual.srt` output with `HSR_Voice_Archive.ass` and `timeline_resolved.json`. Chinese-primary archives render one Chinese line; non-Chinese primary archives render source text plus Chinese, using Noto Sans and 汉仪旗黑 respectively.
 - Renamed the optional target-text input in the Chinese-subtitle workflow to “official Chinese voice package” and clarified that only same-stem LAB text is read; its audio never enters the continuous FLAC.
 - Quick Mode now fixes the subtitle target to Simplified Chinese. When the primary source text is already Chinese, same-stem LAB files in the primary package are used directly as official Chinese subtitles, so users do not need to select the same package twice and no Chinese-to-Chinese API translation is attempted.
 

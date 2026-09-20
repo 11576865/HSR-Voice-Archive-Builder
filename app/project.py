@@ -39,6 +39,7 @@ class ProjectConfig:
     update_candidates: str = ""
     remote_character: str = ""
     remote_index_url: str = "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx"
+    intro_gap: float = 5.0
     same_group_gap: float = 0.40
     group_gap: float = 1.20
     make_flac: bool = True
@@ -576,7 +577,8 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "manifest.json",
         "manifest.csv",
         "bilingual_index_corrected.csv",
-        "bilingual.srt",
+        "timeline_resolved.json",
+        "HSR_Voice_Archive.ass",
         "build_report.json",
         "continuous.flac",
         "update_plan.json",

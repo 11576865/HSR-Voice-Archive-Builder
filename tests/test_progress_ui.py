@@ -44,9 +44,11 @@ class QuickBuildUiTests(unittest.TestCase):
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
         ).read_text(encoding="utf-8")
 
+        self.assertIn('id="quickIntroGap"', html)
         self.assertIn('id="quickSameGroupGap"', html)
         self.assertIn('id="quickGroupGap"', html)
         self.assertIn('id="quickAiBudget" class="hidden"', html)
+        self.assertIn("d.set('intro_gap'", html)
         self.assertIn("d.set('same_group_gap'", html)
         self.assertIn("d.set('group_gap'", html)
 

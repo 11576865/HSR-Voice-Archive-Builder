@@ -105,11 +105,12 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
         </div>
         <pre id="quickPlan" style="margin-top:12px;background:#fafafa;color:var(--text);border:1px solid var(--line);max-height:none">尚未扫描。</pre>
-        <div class="row">
+        <div class="row3">
+          <div><label>开头留白（秒）</label><input id="quickIntroGap" type="number" min="0" step="0.01" value="5.00"></div>
           <div><label>同组语音间隔（秒）</label><input id="quickSameGroupGap" type="number" min="0" step="0.01" value="0.40"></div>
           <div><label>不同分组间隔（秒）</label><input id="quickGroupGap" type="number" min="0" step="0.01" value="1.20"></div>
         </div>
-        <p class="small muted">这两个值会直接影响连续 FLAC 和字幕时间，不再藏在首次构建后的高级设置里。</p>
+        <p class="small muted">三个值由同一 Timeline 同时驱动连续 FLAC 与 ASS 字幕；开头默认留出 5 秒。</p>
         <div id="quickAiBudget" class="hidden">
           <div class="row">
             <div><label>AI 翻译 Token 上限（0 = 不限）</label><input id="quickTokenBudget" type="number" min="0" step="1" value="0"></div>
@@ -223,14 +224,15 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <input name="glossary_path" placeholder="glossary.csv / glossary.json">
           <p class="small muted">这是用户自行提供的术语表，不会凭空生成。没有自定义术语时留空即可。</p>
           <div class="row3">
-            <div><label>同组间隔</label><input name="same_group_gap" type="number" step=".01"></div>
-            <div><label>组间间隔</label><input name="group_gap" type="number" step=".01"></div>
-            <div><label>翻译批大小</label><input name="translation_batch_size" type="number" min="1"></div>
+            <div><label>开头留白</label><input name="intro_gap" type="number" min="0" step=".01"></div>
+            <div><label>同组间隔</label><input name="same_group_gap" type="number" min="0" step=".01"></div>
+            <div><label>组间间隔</label><input name="group_gap" type="number" min="0" step=".01"></div>
           </div>
           <div class="row">
             <div><label>翻译模型</label><input name="translation_model"></div>
-            <div><label>候选更新文件（可选）</label><input name="update_candidates" placeholder="pending.txt / new_index.csv"></div>
+            <div><label>翻译批大小</label><input name="translation_batch_size" type="number" min="1"></div>
           </div>
+          <label>候选更新文件（可选）</label><input name="update_candidates" placeholder="pending.txt / new_index.csv">
           <div class="row">
             <div><label>Token 预算（0 = 不限）</label><input name="translation_token_budget" type="number" min="0" step="1"></div>
             <div><label>美元预算（0 = 不限）</label><input name="translation_budget_usd" type="number" min="0" step="0.001"></div>
@@ -467,7 +469,8 @@ async function relinkSelectedSource(){
 
 const outputDescriptions={
   'continuous.flac':'连续播放的无损语音音频',
-  'bilingual.srt':'当前版本的兼容字幕；Timeline / ASS 完成后将被替代',
+  'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
+  'timeline_resolved.json':'按 PCM 采样位置解析后的统一时间轴',
   'manifest.json':'完整的机器可读档案，保存语音、文本、来源与时间',
   'manifest.csv':'便于在表格软件中查看和整理的档案清单',
   'bilingual_index_corrected.csv':'带实际时间位置的双语对照表',
@@ -487,7 +490,7 @@ function fillProject(p){
   renderSourceHealth(p);
   if(!p)return;
   const c=p.config,f=document.getElementById('projectForm');
-  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
+  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','intro_gap','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
   f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
@@ -726,6 +729,7 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
   d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
   d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
+  d.set('intro_gap',document.getElementById('quickIntroGap').value||'5.00');
   d.set('same_group_gap',document.getElementById('quickSameGroupGap').value||'0.40');
   d.set('group_gap',document.getElementById('quickGroupGap').value||'1.20');
   d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
