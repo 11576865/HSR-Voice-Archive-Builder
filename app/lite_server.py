@@ -434,7 +434,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Project path is required")
             root = Path(raw).expanduser().resolve()
             result = forget_project(root)
-                if _active_root is not None and _active_root.resolve() == root:
+            if _active_root is not None and _active_root.resolve() == root:
                 _clear_active()
             self._json({
                 "ok": True,
@@ -450,7 +450,7 @@ class Handler(BaseHTTPRequestHandler):
             if not raw:
                 raise ValueError("Project path is required")
             root = Path(raw).expanduser().resolve()
-                was_active = _active_root is not None and _active_root.resolve() == root
+            was_active = _active_root is not None and _active_root.resolve() == root
             result = delete_project(root)
             if was_active:
                 _clear_active()
