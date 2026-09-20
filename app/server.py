@@ -5,14 +5,18 @@ import os
 import shutil
 import subprocess
 import sys
+import tempfile
+import csv
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
-from .builder import atomic_write_text
+from .builder import atomic_write_text, ensure_dir_or_extract
 from .diff import classify
+from .huggingface_audio import download_resolved_audio, download_result_json, resolve_targets
+from .identity import infer_group
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
@@ -634,6 +638,123 @@ def api_update_check_remote(
 
         job = create_job(
             "remote-update-check", run,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/apply-remote")
+def api_update_apply_remote():
+    """Download reliably resolved additions, adopt a combined source, and leave rebuild explicit."""
+    try:
+        config = _active_config()
+        paths = _project_paths(config)
+        output, source, index = paths["output"], paths["wavs"], paths["index"]
+        if output is None or source is None or index is None:
+            raise ValueError("Project source, index, or output is not configured")
+        update_plan_path = output / "update_plan.json"
+        if not update_plan_path.is_file():
+            raise FileNotFoundError("Check the remote index before downloading additions")
+        remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
+        targets = []
+        for item in remote_plan.get("new_logical", []):
+            if isinstance(item, dict):
+                metadata = dict(item.get("metadata") or {})
+                metadata.setdefault("filename", item.get("filename", ""))
+                if metadata.get("filename"):
+                    targets.append(metadata)
+        if not targets:
+            raise ValueError("The latest check contains no new voice records")
+        project_root = Path(config.root).resolve()
+
+        def run(report_progress):
+            state = project_root / ".state" / "huggingface"
+            generated = project_root / ".generated"
+            result_json = state / "result.json"
+            report_progress("metadata", "正在取得 Hugging Face 定位索引", 0, 1)
+            download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1))
+            report_progress("resolve", "正在将新增条目定位到精确数据集行", 0, len(targets))
+            resolved = resolve_targets(result_json, targets)
+            atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
+            if not resolved["targets"]:
+                raise RuntimeError("新增条目均无法可靠映射到 Hugging Face 音频；未修改项目")
+            incoming = generated / "incremental_audio"
+            downloaded = download_resolved_audio(
+                resolved,
+                incoming,
+                lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
+            )
+            if downloaded["failed"]:
+                atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
+            successful = {Path(row["filename"]).name for row in downloaded["completed"]}
+            if not successful:
+                raise RuntimeError("没有新增音频下载成功；未修改项目")
+
+            generated.mkdir(parents=True, exist_ok=True)
+            temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
+            combined = generated / "combined_audio"
+            try:
+                extracted = ensure_dir_or_extract(source, temporary_root, "existing")
+                for wav in extracted.rglob("*.wav"):
+                    target = temporary_root / wav.name
+                    if wav.resolve() != target.resolve():
+                        shutil.copy2(wav, target)
+                if extracted.parent == temporary_root and extracted != temporary_root:
+                    shutil.rmtree(extracted)
+                for audio in incoming.iterdir():
+                    if audio.is_file() and not audio.name.endswith(".part"):
+                        shutil.copy2(audio, temporary_root / audio.name)
+                if combined.exists():
+                    shutil.rmtree(combined)
+                temporary_root.replace(combined)
+            except Exception:
+                shutil.rmtree(temporary_root, ignore_errors=True)
+                raise
+
+            with index.open("r", encoding="utf-8-sig", newline="") as handle:
+                existing_rows = list(csv.DictReader(handle))
+                fields = list(existing_rows[0].keys()) if existing_rows else [
+                    "index", "group", "filename", "source", "source_detail", "english",
+                    "reference_text", "reference_language", "sha256",
+                ]
+            known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
+            details = {Path(str(row.get("filename", ""))).name: row for row in targets}
+            for filename in sorted(successful):
+                if filename in known:
+                    continue
+                metadata = details.get(filename, {})
+                existing_rows.append({
+                    "index": str(len(existing_rows) + 1),
+                    "group": infer_group(Path(filename).stem),
+                    "filename": filename,
+                    "source": "huggingface",
+                    "source_detail": "simon3000/starrail-voice",
+                    "english": str(metadata.get("english", "")),
+                    "reference_text": "",
+                    "reference_language": "",
+                    "sha256": "",
+                })
+            updated_index = generated / "quick_index_incremental.csv"
+            with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
+                writer.writeheader()
+                writer.writerows(existing_rows)
+            update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
+            report = {
+                "resolved": len(resolved["targets"]),
+                "unresolved": resolved["unresolved"],
+                "downloaded_or_existing": len(downloaded["completed"]),
+                "failed": downloaded["failed"],
+                "project_updated": True,
+                "rebuild_required": True,
+            }
+            atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
+            return report
+
+        job = create_job(
+            "remote-update-apply", run, with_progress=True,
             project_root=config.root, project_name=config.name,
         )
         return {"ok": True, "job": job.id}
