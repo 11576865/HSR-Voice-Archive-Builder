@@ -169,16 +169,21 @@ def _translation_counts(total: int, reused: int, api_translated: int) -> dict[st
 
 def _context_related(current: Entry, neighbor: Entry) -> bool:
     # Context must have explicit structural evidence. Empty labels never make
-    # two rows related merely because they are physically adjacent.
+    # two rows related merely because they are physically adjacent. getattr()
+    # keeps the helper compatible with older/injected lightweight row objects.
+    current_group = str(getattr(current, "group", "") or "")
+    neighbor_group = str(getattr(neighbor, "group", "") or "")
+    current_detail = str(getattr(current, "source_detail", "") or "")
+    neighbor_detail = str(getattr(neighbor, "source_detail", "") or "")
     same_group = bool(
-        current.group
-        and neighbor.group
-        and current.group == neighbor.group
+        current_group
+        and neighbor_group
+        and current_group == neighbor_group
     )
     same_detail = bool(
-        current.source_detail
-        and neighbor.source_detail
-        and current.source_detail == neighbor.source_detail
+        current_detail
+        and neighbor_detail
+        and current_detail == neighbor_detail
     )
     return same_group or same_detail
 
@@ -737,6 +742,7 @@ def _translate_missing(
                     "english": candidate["english"],
                     "chinese": completed[row_id],
                     "risk_tags": candidate["risk_tags"],
+                    "initial_ok": bool(initial.get("ok")),
                     "ok": not hard_failed,
                     "issues": initial.get("issues", []),
                     "note": initial.get("note", ""),
