@@ -374,7 +374,9 @@ def _translate_missing(
     )
 
     active_glossary = dict(
-        CORE_GLOSSARY if translation_glossary is None else translation_glossary
+        (CORE_GLOSSARY if target_language == "zh-CN" else {})
+        if translation_glossary is None
+        else translation_glossary
     )
     active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
@@ -974,7 +976,8 @@ def build_project_v02(
     )
 
     glossary_overlay = load_glossary_overlay(glossary_path)
-    active_glossary = merge_glossary(CORE_GLOSSARY, glossary_overlay)
+    built_in_glossary = CORE_GLOSSARY if target_language == "zh-CN" else {}
+    active_glossary = merge_glossary(built_in_glossary, glossary_overlay)
     active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
     translation_route: dict[str, str] | None = None
