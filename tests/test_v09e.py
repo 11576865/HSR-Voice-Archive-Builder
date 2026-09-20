@@ -11,7 +11,14 @@ from unittest.mock import patch
 from app.builder import build_entries
 from app.jobs import create_job, get_job
 from app.pipeline import _load_translation_checkpoint, _write_translation_checkpoint
-from app.project import create_project, recent_projects, update_project
+from app.project import (
+    create_project,
+    delete_project,
+    forget_project,
+    load_project,
+    recent_projects,
+    update_project,
+)
 from app.quick import _map_reference_records, create_quick_project, quick_scan
 from app.remote_index import ai_hobbyist_index_url
 from app.semantic_quality import semantic_risk_tags
@@ -48,6 +55,78 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
             self.assertEqual([row["name"] for row in rows[:2]], ["B", "A"])
             self.assertEqual(Path(rows[0]["root"]), Path(b.root))
             self.assertEqual(Path(rows[1]["root"]), Path(a.root))
+
+    def test_project_can_be_hidden_selected_and_reopened(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state = root / "state.json"
+            project_root = root / "projects" / "A"
+            with patch("app.project.STATE_FILE", state):
+                create_project(
+                    project_root,
+                    name="A",
+                    index_csv="index.csv",
+                    wav_source="voice.zip",
+                )
+                self.assertEqual([p["name"] for p in recent_projects(10)], ["A"])
+                forget_project(project_root)
+                self.assertEqual(recent_projects(10), [])
+                reopened = load_project(project_root)
+                self.assertEqual(reopened.name, "A")
+                self.assertEqual([p["name"] for p in recent_projects(10)], ["A"])
+
+    def test_delete_managed_project_removes_dedicated_root(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            state = base / "state.json"
+            project_root = base / "quick-project"
+            with patch("app.project.STATE_FILE", state):
+                create_project(
+                    project_root,
+                    name="Quick",
+                    index_csv=".generated/index.csv",
+                    wav_source=str(base / "voice.zip"),
+                    managed_project_root=True,
+                )
+                (project_root / "output").mkdir()
+                (project_root / "output" / "manifest.json").write_text("{}", encoding="utf-8")
+                result = delete_project(project_root)
+                self.assertTrue(result["managed_root"])
+                self.assertFalse(project_root.exists())
+                self.assertEqual(recent_projects(10), [])
+
+    def test_delete_manual_project_preserves_unowned_files(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            state = base / "state.json"
+            project_root = base / "manual"
+            external_voice = base / "voice.zip"
+            external_voice.write_bytes(b"voice")
+            with patch("app.project.STATE_FILE", state):
+                create_project(
+                    project_root,
+                    name="Manual",
+                    index_csv="index.csv",
+                    wav_source=str(external_voice),
+                    output_dir="output",
+                )
+                (project_root / "output").mkdir()
+                (project_root / "output" / "manifest.json").write_text("{}", encoding="utf-8")
+                (project_root / ".generated").mkdir()
+                (project_root / ".generated" / "quick_index.csv").write_text("x", encoding="utf-8")
+                keep = project_root / "notes.txt"
+                keep.write_text("keep me", encoding="utf-8")
+
+                result = delete_project(project_root)
+
+                self.assertFalse(result["managed_root"])
+                self.assertTrue(project_root.exists())
+                self.assertTrue(keep.is_file())
+                self.assertTrue(external_voice.is_file())
+                self.assertFalse((project_root / "output").exists())
+                self.assertFalse((project_root / ".generated").exists())
+                self.assertFalse((project_root / ".hsr-voice-project.json").exists())
+                self.assertEqual(recent_projects(10), [])
 
     def test_job_records_project_identity(self) -> None:
         job = create_job(
