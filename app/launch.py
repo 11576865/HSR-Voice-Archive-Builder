@@ -69,6 +69,7 @@ def main() -> None:
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--no-browser", action="store_true")
     p.add_argument("--token", help="Explicit control token; generated automatically when omitted")
+    p.add_argument("--lite", action="store_true", help="Use dependency-light stdlib server (Termux)")
     args = p.parse_args()
 
     if args.token:
@@ -118,9 +119,12 @@ def main() -> None:
     if not args.no_browser and not args.lan:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
 
-    import uvicorn
-
-    uvicorn.run("app.server:app", host=host, port=args.port, log_level="info")
+    if args.lite:
+        from .lite_server import serve
+        serve(host, args.port)
+    else:
+        import uvicorn
+        uvicorn.run("app.server:app", host=host, port=args.port, log_level="info")
 
 
 if __name__ == "__main__":
