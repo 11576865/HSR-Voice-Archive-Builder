@@ -24,6 +24,11 @@ class ProjectConfig:
     bilingual_csv: str = ""
     chs_source: str = ""
     glossary_path: str = ""
+    reference_source: str = ""
+    audio_language: str = "auto"
+    source_text_language: str = "en"
+    target_language: str = "zh-CN"
+    reference_language: str = "auto"
     update_candidates: str = ""
     remote_character: str = ""
     remote_index_url: str = "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx"
@@ -106,6 +111,11 @@ def create_project(
     bilingual_csv: str = "",
     chs_source: str = "",
     glossary_path: str = "",
+    reference_source: str = "",
+    audio_language: str = "auto",
+    source_text_language: str = "en",
+    target_language: str = "zh-CN",
+    reference_language: str = "auto",
     remote_character: str = "",
 ) -> ProjectConfig:
     root = normalize_root(root)
@@ -125,6 +135,11 @@ def create_project(
         bilingual_csv=_portable_path(root, bilingual_csv),
         chs_source=_portable_path(root, chs_source),
         glossary_path=_portable_path(root, glossary_path),
+        reference_source=_portable_path(root, reference_source),
+        audio_language=str(audio_language or "auto").strip() or "auto",
+        source_text_language=str(source_text_language or "en").strip() or "en",
+        target_language=str(target_language or "zh-CN").strip() or "zh-CN",
+        reference_language=str(reference_language or "auto").strip() or "auto",
         remote_character=remote_character.strip(),
     )
     save_project(config)
@@ -155,17 +170,70 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
             continue
         setattr(config, key, value)
     root = normalize_root(Path(config.root))
-    for key in ("index_csv", "wav_source", "output_dir", "bilingual_csv", "chs_source", "glossary_path", "update_candidates"):
+    for key in ("index_csv", "wav_source", "output_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
     save_project(config)
     return config
 
 
+def _read_state() -> dict[str, Any]:
+    if not STATE_FILE.is_file():
+        return {}
+    try:
+        data = _read_state()
+        return data if isinstance(data, dict) else {}
+    except (OSError, ValueError, TypeError):
+        return {}
+
+
 def remember_project(root: Path) -> None:
+    root = normalize_root(root)
+    state = _read_state()
+    recent = [
+        str(Path(item).expanduser())
+        for item in state.get("recent_projects", [])
+        if isinstance(item, str) and item.strip()
+    ]
+    value = str(root)
+    recent = [item for item in recent if item != value]
+    recent.insert(0, value)
     atomic_write_json(
         STATE_FILE,
-        {"last_project": str(normalize_root(root)), "updated_at": utc_now()},
+        {
+            "last_project": value,
+            "recent_projects": recent[:20],
+            "updated_at": utc_now(),
+        },
     )
+
+
+def recent_projects(limit: int = 12) -> list[dict[str, str]]:
+    state = _read_state()
+    roots: list[str] = []
+    last = str(state.get("last_project", "") or "").strip()
+    if last:
+        roots.append(last)
+    for item in state.get("recent_projects", []):
+        if isinstance(item, str) and item.strip() and item not in roots:
+            roots.append(item)
+
+    result: list[dict[str, str]] = []
+    for raw in roots[: max(1, int(limit)) * 2]:
+        root = Path(raw).expanduser()
+        path = root / PROJECT_FILENAME
+        if not path.is_file():
+            continue
+        try:
+            payload = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, ValueError, TypeError):
+            continue
+        result.append({
+            "name": str(payload.get("name", "") or root.name),
+            "root": str(root.resolve()),
+        })
+        if len(result) >= max(1, int(limit)):
+            break
+    return result
 
 
 def last_project_root() -> Path | None:
