@@ -267,7 +267,8 @@ class Handler(BaseHTTPRequestHandler):
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
-                "jobs": recent_jobs(8),
+                "recent_projects": recent_projects(12),
+                "jobs": recent_jobs(20),
                 "runtime": dependency_status(),
             })
             return
