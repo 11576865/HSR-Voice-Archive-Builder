@@ -27,6 +27,9 @@ class ProjectConfig:
     chs_source: str = ""
     glossary_path: str = ""
     reference_source: str = ""
+    wav_source_fingerprint: str = ""
+    chs_source_fingerprint: str = ""
+    reference_source_fingerprint: str = ""
     reference_text_embedded: bool = False
     managed_project_root: bool = False
     audio_language: str = "auto"
@@ -117,6 +120,9 @@ def create_project(
     chs_source: str = "",
     glossary_path: str = "",
     reference_source: str = "",
+    wav_source_fingerprint: str = "",
+    chs_source_fingerprint: str = "",
+    reference_source_fingerprint: str = "",
     reference_text_embedded: bool = False,
     managed_project_root: bool = False,
     audio_language: str = "auto",
@@ -144,6 +150,9 @@ def create_project(
         chs_source=_portable_path(root, chs_source),
         glossary_path=_portable_path(root, glossary_path),
         reference_source=_portable_path(root, reference_source),
+        wav_source_fingerprint=str(wav_source_fingerprint or "").strip(),
+        chs_source_fingerprint=str(chs_source_fingerprint or "").strip(),
+        reference_source_fingerprint=str(reference_source_fingerprint or "").strip(),
         reference_text_embedded=bool(reference_text_embedded),
         managed_project_root=bool(managed_project_root),
         audio_language=str(audio_language or "auto").strip() or "auto",
@@ -424,6 +433,22 @@ def last_project_root() -> Path | None:
         return None
 
 
+def _path_status(config: ProjectConfig, value: str, *, required: bool = False) -> dict[str, Any]:
+    path = resolve_project_path(config, value)
+    configured = path is not None
+    exists = bool(path and path.exists())
+    return {
+        "configured": configured,
+        "required": bool(required),
+        "exists": exists,
+        "path": str(path) if path is not None else "",
+        "kind": (
+            "directory" if exists and path is not None and path.is_dir()
+            else ("file" if exists and path is not None and path.is_file() else "")
+        ),
+    }
+
+
 def project_summary(config: ProjectConfig) -> dict[str, Any]:
     output = resolve_project_path(config, config.output_dir)
     state = resolve_project_path(config, config.state_dir)
@@ -476,6 +501,14 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "size_bytes": p.stat().st_size if p.is_file() else 0,
             "path": str(p),
         }
+    source_status = {
+        "index": _path_status(config, config.index_csv, required=True),
+        "primary": _path_status(config, config.wav_source, required=True),
+        "target": _path_status(config, config.chs_source),
+        "reference": _path_status(config, config.reference_source),
+        "bilingual": _path_status(config, config.bilingual_csv),
+        "glossary": _path_status(config, config.glossary_path),
+    }
     return {
         "name": config.name,
         "root": config.root,
@@ -487,4 +520,5 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "report": report,
         "outputs": outputs,
         "state_outputs": state_outputs,
+        "source_status": source_status,
     }
