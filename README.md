@@ -111,6 +111,8 @@ chmod +x run_termux.sh
 ./run_termux.sh
 ```
 
+Termux uses native 7-Zip and a reduced Python dependency set. The current OpenAI Python SDK is intentionally omitted on Android because its required `jiter`/Rust dependency chain is not reliably buildable in Termux. Core archive functions work normally; GPT fallback translation should be run from a desktop host for now.
+
 Default local URL:
 
 ```text
