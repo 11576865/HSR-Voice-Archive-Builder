@@ -85,7 +85,8 @@ A project directory contains a local `.hsr-voice-project.json` file with source 
 The dashboard can:
 
 - create or reopen a project;
-- switch directly among recent projects;
+- select a recent project explicitly and open it without implicitly replacing the current project just by changing the selector;
+- remove a project from the switcher without deleting files, or delete the selected project with ownership-aware cleanup;
 - remember recent projects and keep task history associated with the project that created each job;
 - edit build settings once instead of re-entering paths every run;
 - launch a build as a background job;
@@ -96,7 +97,9 @@ The dashboard can:
 - save the comparison as `update_plan.json` without modifying the current manifest;
 - open the output directory on the processing host.
 
-Remote index data can now resolve playback order and English text for Quick Mode, and it remains available for update discovery. The project still does not auto-download or splice new game audio into an existing archive.
+Quick Mode project roots are marked as app-managed. Deleting one may remove that dedicated project directory, but original voice packages outside the project root are not touched. Manual project roots are treated conservatively: deletion removes the project marker, `.generated`, and an in-root output directory while retaining unrelated user files. “Remove from list” is non-destructive and can be reversed by reopening the project.
+
+Remote index data can now resolve playback order and source text for Quick Mode, and it remains available for update discovery. The project still does not auto-download or splice new game audio into an existing archive.
 
 ## Requirements
 
