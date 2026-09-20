@@ -430,8 +430,13 @@ def quick_scan(
         blockers.append("No WAV files were found in the primary audio source")
     if english.get("duplicate_wav_names"):
         blockers.append(
-            "Duplicate WAV basenames were found in the English source: "
+            "Duplicate WAV basenames were found in the primary source: "
             + ", ".join(english["duplicate_wav_names"][:5])
+        )
+    if source_text_language != "en" and int(english.get("wav_lab_pairs", 0)) < int(english.get("wav_count", 0)):
+        blockers.append(
+            f"Source text language is {source_text_language}, but the primary package has "
+            f"LAB text for only {english.get('wav_lab_pairs', 0)} / {english.get('wav_count', 0)} WAV files"
         )
 
     wav_names = {Path(name).name for name in english["wav_names"]}
@@ -557,6 +562,7 @@ def quick_scan(
     return {
         "schema_version": 2,
         "kind": "quick_scan",
+        "source_text_language": source_text_language,
         "english": {
             key: value for key, value in english.items() if key not in {"wav_names", "lab_names"}
         },
@@ -662,6 +668,7 @@ def create_quick_project(
     source_text_language: str = "en",
     target_language: str = "zh-CN",
     reference_language: str = "auto",
+    source_text_language: str = "en",
 ) -> tuple[ProjectConfig, dict[str, Any]]:
     english_source = english_source.expanduser().resolve()
     chs_source = chs_source.expanduser().resolve() if chs_source else None
