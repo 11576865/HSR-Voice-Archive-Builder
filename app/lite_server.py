@@ -254,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.5-termux-lite",
+                "version": "0.6-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -345,14 +345,8 @@ class Handler(BaseHTTPRequestHandler):
             runtime = dependency_status()
             if config.make_flac and not runtime.get("ffmpeg"):
                 raise RuntimeError("FFmpeg is not installed or is not available on PATH")
-            if config.translate_missing:
-                if not runtime.get("openai_sdk"):
-                    raise RuntimeError(
-                        "GPT translation is unavailable in the Termux lightweight runtime. "
-                        "Disable GPT fallback or run translation from a desktop host."
-                    )
-                if not os.environ.get("OPENAI_API_KEY"):
-                    raise RuntimeError("OPENAI_API_KEY is not set")
+            if config.translate_missing and not os.environ.get("OPENAI_API_KEY"):
+                raise RuntimeError("OPENAI_API_KEY is not set")
 
             def run():
                 return build_project_v02(

@@ -214,25 +214,19 @@ Attributes = A_ -rw-r--r--
                 with self.assertRaises(ValueError):
                     read_ai_hobbyist_xlsx(path, "Evanescia")
 
-    def test_termux_preflight_does_not_require_openai_sdk(self) -> None:
+    def test_termux_preflight_exposes_sdk_free_rest_translation(self) -> None:
         import app.preflight as preflight
 
-        real_import = preflight.importlib.import_module
         real_which = shutil.which
-
-        def fake_import(name, *args, **kwargs):
-            if name == "openai":
-                raise ImportError("simulated Android jiter incompatibility")
-            return real_import(name, *args, **kwargs)
-
         with patch.dict(
             os.environ,
-            {"TERMUX_VERSION": "0.119", "PREFIX": "/data/data/com.termux/files/usr"},
+            {
+                "TERMUX_VERSION": "0.119",
+                "PREFIX": "/data/data/com.termux/files/usr",
+                "OPENAI_API_KEY": "test-key",
+            },
             clear=False,
-        ), patch("app.preflight.shutil.which") as which, patch(
-            "app.preflight.importlib.import_module",
-            side_effect=fake_import,
-        ):
+        ), patch("app.preflight.shutil.which") as which:
             which.side_effect = lambda name: (
                 "/data/data/com.termux/files/usr/bin/7zz"
                 if name in {"7zz", "7z"}
@@ -243,8 +237,9 @@ Attributes = A_ -rw-r--r--
             status = dependency_status()
 
         self.assertTrue(status["ok"], status["issues"])
-        self.assertFalse(status["openai_sdk"])
-        self.assertTrue(any("OpenAI Python SDK" in x for x in status["warnings"]))
+        self.assertTrue(status["openai_rest"])
+        self.assertTrue(status["openai_api_key_configured"])
+        self.assertTrue(any("direct HTTPS REST" in x for x in status["warnings"]))
 
     def test_lite_server_imports_without_fastapi_uvicorn_or_pydantic(self) -> None:
         code = r'''

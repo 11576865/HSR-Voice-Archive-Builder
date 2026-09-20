@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.5**.
+Current development version: **v0.6**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.5 add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.6 add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -84,7 +84,7 @@ The dashboard can:
 - save the comparison as `update_plan.json` without modifying the current manifest;
 - open the output directory on the processing host.
 
-Remote index checking is currently **metadata/update discovery only**. v0.5 does not yet auto-download and splice new game audio into an existing archive.
+Remote index checking is currently **metadata/update discovery only**. v0.6 does not yet auto-download and splice new game audio into an existing archive.
 
 ## Requirements
 
@@ -111,7 +111,7 @@ chmod +x run_termux.sh
 ./run_termux.sh
 ```
 
-Termux uses a dependency-light stdlib HTTP server plus native 7-Zip. It intentionally avoids the FastAPI/Pydantic stack because current Pydantic v2 pulls `pydantic-core`, which frequently falls back to a Rust/maturin source build on Android and fails on `aarch64-unknown-linux-android`. The OpenAI Python SDK is also omitted because it pulls `jiter`/Rust. Core archive, update, subtitle and FLAC functions remain available; GPT fallback translation should be run from a desktop host for now.
+Termux uses a dependency-light stdlib HTTP server plus native 7-Zip. It intentionally avoids the FastAPI/Pydantic stack because current Pydantic v2 pulls `pydantic-core`, which can fall back to a Rust/maturin source build on Android. The OpenAI Python SDK is also omitted because it pulls `jiter`/Rust; GPT translation instead calls the official Responses API directly over HTTPS using Python's standard library.
 
 Default local URL:
 
@@ -192,7 +192,7 @@ The API key is read only from the local environment:
 export OPENAI_API_KEY="..."
 ```
 
-Do not put API keys in project files or the browser UI.
+Do not put API keys in project files or the browser UI. The translator uses the Responses REST API directly; the OpenAI Python SDK is not required on either desktop or Termux.
 
 ## Voice identity
 
@@ -262,7 +262,7 @@ The builder checks expected WAV presence, duplicate filename conflicts, optional
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the synthetic test suite on Python 3.11 and 3.12. No game data is required. The suite includes archive traversal/size-limit tests, a real FFmpeg streaming-FLAC regression test, localhost/LAN token and Host-header checks, `WAVE_FORMAT_EXTENSIBLE` input, remote-XLSX limits, runtime preflight, and translation-checkpoint recovery.
+GitHub Actions runs the synthetic test suite on Python 3.11, 3.12 and 3.13. No game data is required. The suite includes archive traversal/size-limit tests, a real FFmpeg streaming-FLAC regression test, localhost/LAN token and Host-header checks, `WAVE_FORMAT_EXTENSIBLE` input, remote-XLSX limits, runtime preflight, and translation-checkpoint recovery.
 
 ## Current regression validation
 

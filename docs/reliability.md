@@ -183,22 +183,29 @@ A fixed port may already be occupied, and a machine with VPNs, virtual adapters,
 
 ## OpenAI Python SDK on Termux / Android
 
-The current OpenAI Python SDK depends on `jiter`, a Rust-backed package. On Termux/Python 3.13 there are public reports of pip falling back to source builds, invoking `maturin`, and failing because the Android Rust target is not supported by the bootstrap path. The official SDK still lists `jiter` as a required dependency.
+The current OpenAI Python SDK depends on `jiter`, a Rust-backed package. On Termux/Python 3.13 there are public reports of pip falling back to source builds, invoking `maturin`, and failing on the Android Rust target.
+
+The API itself does not require that SDK. The Responses API is an HTTPS endpoint and Structured Outputs are supported directly through REST.
 
 **Project response**
 
-- The Termux base requirements do not install the OpenAI Python SDK.
-- Core archive, update-check, subtitle and FLAC functions therefore start without pulling the Android-incompatible Rust dependency chain.
-- Desktop installs keep the official SDK.
-- If GPT fallback translation is enabled on a Termux runtime without the SDK, the UI/build fails early with a clear capability message instead of failing during package installation.
-- This is a compatibility fallback, not a claim that the OpenAI API itself is unsupported on Android.
+- v0.6 removes the OpenAI Python SDK from the normal dependency set.
+- Desktop and Termux now share one dependency-free Responses REST client implemented with Python's standard library.
+- The client posts only to `https://api.openai.com/v1/responses` and reads the API key from `OPENAI_API_KEY`.
+- Structured Outputs use `text.format.type = json_schema`.
+- Temporary 408/409/429/5xx and network errors are retried with bounded exponential backoff and `Retry-After` support.
+- 401/403 and other non-transient HTTP failures are not blindly retried.
+- Translation batches remain checkpointed; successful earlier batches are reused after a later failure.
+- Returned translation IDs must exactly match the requested IDs and Chinese text must be non-empty before it is accepted.
+- API keys are not stored in project JSON or browser UI.
 
 References:
 
+- https://developers.openai.com/api/reference/resources/responses/methods/create
+- https://developers.openai.com/api/docs/guides/structured-outputs
+- https://developers.openai.com/api/docs/models/gpt-5.6-luna
 - https://github.com/openai/openai-python/blob/main/pyproject.toml
-- https://github.com/NousResearch/hermes-agent/issues/26891
 - https://github.com/openai/openai-python/issues/2102
-
 
 ## FastAPI / Pydantic v2 on Termux
 

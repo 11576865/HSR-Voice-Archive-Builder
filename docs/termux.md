@@ -14,7 +14,7 @@ The Termux launcher therefore uses:
 
 - Python stdlib HTTP server instead of FastAPI/Uvicorn/Pydantic.
 - native Termux 7-Zip instead of py7zr.
-- no OpenAI Python SDK in the Android base install.
+- no OpenAI Python SDK in the Android base install; translation calls the official Responses HTTPS API directly with Python's standard library.
 
 Desktop installs keep the richer Python dependency stack. No Rust toolchain is required for the normal Termux startup path.
 
@@ -38,8 +38,15 @@ Termux lightweight control server: http://127.0.0.1:8765/
 
 Keep Termux running and open `http://127.0.0.1:8765/` in the browser.
 
-## Capability boundary
+## Translation
 
 Core archive functions, local project management, update scanning, subtitles and FLAC remain available on Termux.
 
-GPT fallback translation is disabled when the official OpenAI Python SDK is unavailable. Run translation from a desktop host rather than forcing Rust-backed Python packages to compile on-device.
+GPT fallback translation also works without the OpenAI Python SDK. The project sends HTTPS requests directly to the official Responses API with Python's standard library. Configure the API key in the Termux environment before starting the local engine:
+
+```bash
+export OPENAI_API_KEY="..."
+bash run_termux.sh
+```
+
+The key is not stored in the browser UI or project JSON. Translation keeps the existing batch checkpoint, ID validation and retry behavior.
