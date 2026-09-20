@@ -20,6 +20,7 @@ from .quick import (
     create_quick_project,
     discover_source_candidates,
     quick_scan,
+    refresh_quick_project_source,
     relink_project_source,
 )
 from .project import (
@@ -161,7 +162,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-H",
+        "version": "0.9-I",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -528,6 +529,31 @@ def api_project_build():
         job = create_job(
             "build", run, with_progress=True,
             project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/refresh-source")
+def api_update_refresh_source(replacement_source: str = Form("")):
+    try:
+        assert_no_active_build()
+        config = _active_config()
+        replacement = replacement_source.strip()
+
+        def run():
+            current = load_project(Path(config.root))
+            return refresh_quick_project_source(
+                current,
+                Path(replacement) if replacement else None,
+            )
+
+        job = create_job(
+            "source-refresh",
+            run,
+            project_root=config.root,
+            project_name=config.name,
         )
         return {"ok": True, "job": job.id}
     except Exception as exc:
