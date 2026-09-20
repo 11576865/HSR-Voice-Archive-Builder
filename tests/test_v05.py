@@ -3,6 +3,8 @@ from __future__ import annotations
 import os
 import shutil
 import struct
+import subprocess
+import sys
 import tempfile
 import unittest
 from types import SimpleNamespace
@@ -243,6 +245,32 @@ Attributes = A_ -rw-r--r--
         self.assertTrue(status["ok"], status["issues"])
         self.assertFalse(status["openai_sdk"])
         self.assertTrue(any("OpenAI Python SDK" in x for x in status["warnings"]))
+
+    def test_lite_server_imports_without_fastapi_uvicorn_or_pydantic(self) -> None:
+        code = r'''
+import builtins
+real_import = builtins.__import__
+blocked = ("fastapi", "uvicorn", "pydantic", "pydantic_core")
+
+def guard(name, globals=None, locals=None, fromlist=(), level=0):
+    if name == blocked or name.startswith(blocked):
+        raise RuntimeError("blocked dependency imported: " + name)
+    return real_import(name, globals, locals, fromlist, level)
+
+builtins.__import__ = guard
+import app.lite_server
+print("ok")
+'''
+        proc = subprocess.run(
+            [sys.executable, "-c", code],
+            cwd=Path(__file__).resolve().parents[1],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertIn("ok", proc.stdout)
 
     def test_runtime_preflight_dependencies_are_importable(self) -> None:
         status = dependency_status()
