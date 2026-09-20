@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.6**.
+Current development version: **v0.7**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.6 add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.7 add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -84,7 +84,7 @@ The dashboard can:
 - save the comparison as `update_plan.json` without modifying the current manifest;
 - open the output directory on the processing host.
 
-Remote index checking is currently **metadata/update discovery only**. v0.6 does not yet auto-download and splice new game audio into an existing archive.
+Remote index checking is currently **metadata/update discovery only**. v0.7 does not yet auto-download and splice new game audio into an existing archive.
 
 ## Requirements
 
@@ -111,7 +111,7 @@ chmod +x run_termux.sh
 ./run_termux.sh
 ```
 
-Termux uses a dependency-light stdlib HTTP server plus native 7-Zip. It intentionally avoids the FastAPI/Pydantic stack because current Pydantic v2 pulls `pydantic-core`, which can fall back to a Rust/maturin source build on Android. The OpenAI Python SDK is also omitted because it pulls `jiter`/Rust; GPT translation instead calls the official Responses API directly over HTTPS using Python's standard library.
+Termux uses a dependency-light stdlib HTTP server plus native 7-Zip. It intentionally avoids the FastAPI/Pydantic stack because current Pydantic v2 pulls `pydantic-core`, which can fall back to a Rust/maturin source build on Android. Vendor Python SDKs are not required: AI translation calls an OpenAI-compatible Responses endpoint directly over HTTPS using Python's standard library.
 
 Default local URL:
 
@@ -186,13 +186,43 @@ GPT fallback, only when explicitly enabled
 missing
 ```
 
-The API key is read only from the local environment:
+Translation providers are configured locally and are not stored in project files or the browser UI.
+
+For V-API:
 
 ```bash
-export OPENAI_API_KEY="..."
+python -m app.credentials configure --provider vapi
 ```
 
-Do not put API keys in project files or the browser UI. The translator uses the Responses REST API directly; the OpenAI Python SDK is not required on either desktop or Termux.
+The command asks for the key with hidden input, stores it under `~/.hsr-voice-archive-builder/`, and reuses it on later starts. The configured Base URL is `https://api.gpt.ge/v1`.
+
+For the official OpenAI API:
+
+```bash
+python -m app.credentials configure --provider openai
+```
+
+A custom OpenAI-compatible HTTPS endpoint is also supported:
+
+```bash
+python -m app.credentials configure --provider custom --base-url https://example.com/v1
+```
+
+Check the local configuration without revealing the key:
+
+```bash
+python -m app.credentials status
+```
+
+Run a tiny paid/usage-bearing structured-output smoke test before a real batch:
+
+```bash
+python -m app.credentials test --model gpt-5.6-luna
+```
+
+Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.
+
+Translation checkpoints are bound to provider + Base URL + model. Switching from the official API to a relay cannot silently reuse another provider's cached translations.
 
 ## Voice identity
 
