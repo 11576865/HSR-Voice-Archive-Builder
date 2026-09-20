@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.7**.
+Current development version: **v0.8**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -147,6 +147,32 @@ http://192.168.1.20:8765/?token=...
 ```
 
 Open that URL on another device on the same LAN. The LAN entry URL carries a temporary token once; the local server then injects the per-process API token into the dashboard. API requests require that token, and unexpected Host values are rejected. Audio and generated files remain on the host device.
+
+## Quick mode
+
+The default dashboard workflow is now package-first:
+
+```text
+Choose English voice package
+        ↓
+Read-only scan / preflight
+        ↓
+Auto-detect character + covering local index
+        ↓
+Optional Chinese LAB package
+        ↓
+Auto-create internal filtered index/project
+        ↓
+Build FLAC + subtitles + manifest
+        ↓
+AI translation is enabled automatically when a provider is configured
+```
+
+On Termux, the dashboard discovers top-level `.7z` / `.zip` packages in the normal Download locations and passes filesystem paths to the local Python backend. It does not re-upload large archives through the browser. This avoids the browser file-input fake-path limitation and unnecessary localhost copies.
+
+Quick scan is read-only. It blocks build when no WAVs are present, duplicate WAV basenames exist, or no local CSV index fully covers the package with English text. It refuses to invent a playback order when no reliable order source exists.
+
+The old manual project form remains under **Advanced / Manual project**.
 
 ## Build pipeline
 

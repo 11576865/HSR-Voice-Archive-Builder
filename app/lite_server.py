@@ -17,6 +17,7 @@ from .diff import classify
 from .jobs import create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
+from .quick import create_quick_project, discover_source_candidates, quick_scan
 from .project import (
     ProjectConfig,
     create_project,
@@ -90,7 +91,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.7"
+    server_version = "HSRVoiceLite/0.8"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -254,13 +255,16 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.7-termux-lite",
+                "version": "0.8-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
                 "jobs": recent_jobs(8),
                 "runtime": dependency_status(),
             })
+            return
+        if path == "/api/quick/candidates":
+            self._json({"ok": True, "candidates": discover_source_candidates()})
             return
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
@@ -293,6 +297,62 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/quick/scan":
+            english_source = data.get("english_source", "").strip()
+            if not english_source:
+                raise ValueError("English voice package is required")
+            chs_value = data.get("chs_source", "").strip()
+            plan = quick_scan(
+                Path(english_source),
+                Path(chs_value) if chs_value else None,
+            )
+            self._json({"ok": True, "plan": plan})
+            return
+
+        if path == "/api/quick/build":
+            english_source = data.get("english_source", "").strip()
+            if not english_source:
+                raise ValueError("English voice package is required")
+            chs_value = data.get("chs_source", "").strip()
+            root_value = data.get("project_root", "").strip()
+            config, plan = create_quick_project(
+                Path(english_source),
+                chs_source=Path(chs_value) if chs_value else None,
+                root=Path(root_value) if root_value else None,
+                name=data.get("project_name", ""),
+            )
+            _set_active(config)
+            paths = _project_paths(config)
+            if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
+                raise ValueError("Quick project paths are incomplete")
+            runtime = dependency_status()
+            if config.make_flac and not runtime.get("ffmpeg"):
+                raise RuntimeError("FFmpeg is not installed or is not available on PATH")
+
+            def run():
+                return build_project_v02(
+                    paths["index"],
+                    paths["wavs"],
+                    paths["output"],
+                    bilingual_csv=paths["bilingual"],
+                    chs_source=paths["chs"],
+                    same_group_gap=config.same_group_gap,
+                    group_gap=config.group_gap,
+                    make_flac=config.make_flac,
+                    translate_missing=config.translate_missing,
+                    translation_model=config.translation_model,
+                    translation_batch_size=config.translation_batch_size,
+                )
+
+            job = create_job("quick-build", run)
+            self._json({
+                "ok": True,
+                "job": job.id,
+                "plan": plan,
+                "project": project_summary(config),
+            })
+            return
+
         if path == "/api/project/create":
             config = create_project(
                 Path(data["root"]),

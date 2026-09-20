@@ -16,6 +16,7 @@ from .diff import classify
 from .jobs import create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
+from .quick import create_quick_project, discover_source_candidates, quick_scan
 from .project import (
     ProjectConfig,
     create_project,
@@ -143,13 +144,84 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.7",
+        "version": "0.8",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
         "jobs": recent_jobs(8),
         "runtime": dependency_status(),
     }
+
+
+@app.get("/api/quick/candidates")
+def api_quick_candidates():
+    try:
+        return {"ok": True, "candidates": discover_source_candidates()}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/quick/scan")
+def api_quick_scan(
+    english_source: str = Form(...),
+    chs_source: str = Form(""),
+):
+    try:
+        plan = quick_scan(
+            Path(english_source),
+            Path(chs_source) if chs_source.strip() else None,
+        )
+        return {"ok": True, "plan": plan}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/quick/build")
+def api_quick_build(
+    english_source: str = Form(...),
+    chs_source: str = Form(""),
+    project_root: str = Form(""),
+    project_name: str = Form(""),
+):
+    try:
+        config, plan = create_quick_project(
+            Path(english_source),
+            chs_source=Path(chs_source) if chs_source.strip() else None,
+            root=Path(project_root) if project_root.strip() else None,
+            name=project_name,
+        )
+        _set_active(config)
+        paths = _project_paths(config)
+        if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
+            raise ValueError("Quick project paths are incomplete")
+        runtime = dependency_status()
+        if config.make_flac and not runtime.get("ffmpeg"):
+            raise RuntimeError("FFmpeg is not installed or is not available on PATH")
+
+        def run():
+            return build_project_v02(
+                paths["index"],
+                paths["wavs"],
+                paths["output"],
+                bilingual_csv=paths["bilingual"],
+                chs_source=paths["chs"],
+                same_group_gap=config.same_group_gap,
+                group_gap=config.group_gap,
+                make_flac=config.make_flac,
+                translate_missing=config.translate_missing,
+                translation_model=config.translation_model,
+                translation_batch_size=config.translation_batch_size,
+            )
+
+        job = create_job("quick-build", run)
+        return {
+            "ok": True,
+            "job": job.id,
+            "plan": plan,
+            "project": project_summary(config),
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.post("/api/project/create")
