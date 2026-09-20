@@ -30,7 +30,7 @@ class ProjectConfig:
     group_gap: float = 1.20
     make_flac: bool = True
     translate_missing: bool = False
-    translation_model: str = "gpt-5.6-luna"
+    translation_model: str = "gpt-5.6-sol"
     translation_batch_size: int = 80
 
 
