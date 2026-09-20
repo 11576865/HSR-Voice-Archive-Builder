@@ -217,6 +217,28 @@ def recent_projects(limit: int = 12) -> list[dict[str, str]]:
         if isinstance(item, str) and item.strip() and item not in roots:
             roots.append(item)
 
+    # Discover sibling Quick Mode projects so the switcher is useful even on
+    # first launch after upgrading from an older version that remembered only
+    # one last_project value.
+    bases: list[Path] = []
+    if last:
+        bases.append(Path(last).expanduser().parent)
+    home = Path.home()
+    bases.extend([
+        home / "storage" / "downloads" / "HSR_Voice_Test",
+        home / "storage" / "shared" / "Download" / "HSR_Voice_Test",
+        Path("/storage/emulated/0/Download/HSR_Voice_Test"),
+        home / "HSR-Voice-Projects",
+    ])
+    for base in bases:
+        try:
+            for marker in base.glob(f"*/{PROJECT_FILENAME}"):
+                value = str(marker.parent.resolve())
+                if value not in roots:
+                    roots.append(value)
+        except (OSError, PermissionError):
+            continue
+
     result: list[dict[str, str]] = []
     for raw in roots[: max(1, int(limit)) * 2]:
         root = Path(raw).expanduser()
