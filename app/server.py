@@ -129,6 +129,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "wavs": resolve_project_path(config, config.wav_source),
         "bilingual": resolve_project_path(config, config.bilingual_csv),
         "chs": resolve_project_path(config, config.chs_source),
+        "glossary": resolve_project_path(config, config.glossary_path),
         "output": resolve_project_path(config, config.output_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
@@ -196,6 +197,7 @@ def api_quick_build(
             config,
             translation_token_budget=max(0, translation_token_budget),
             translation_budget_usd=max(0.0, translation_budget_usd),
+            glossary_path=optional_path(glossary_path),
         )
         _set_active(config)
         paths = _project_paths(config)
@@ -220,6 +222,7 @@ def api_quick_build(
                 translation_batch_size=config.translation_batch_size,
                 translation_token_budget=config.translation_token_budget,
                 translation_budget_usd=config.translation_budget_usd,
+                glossary_path=paths["glossary"],
             )
 
         job = create_job("quick-build", run)
@@ -242,6 +245,7 @@ def api_project_create(
     output_dir: str = Form("output"),
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
+    glossary_path: str = Form(""),
     remote_character: str = Form(""),
 ):
     try:
@@ -253,6 +257,7 @@ def api_project_create(
             output_dir=output_dir,
             bilingual_csv=bilingual_csv,
             chs_source=chs_source,
+            glossary_path=glossary_path,
             remote_character=remote_character,
         )
         _set_active(config)
@@ -279,6 +284,7 @@ def api_project_save(
     output_dir: str = Form("output"),
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
+    glossary_path: str = Form(""),
     update_candidates: str = Form(""),
     remote_character: str = Form(""),
     remote_index_url: str = Form(""),
@@ -301,6 +307,7 @@ def api_project_save(
             output_dir=output_dir.strip() or "output",
             bilingual_csv=bilingual_csv.strip(),
             chs_source=chs_source.strip(),
+            glossary_path=glossary_path.strip(),
             update_candidates=update_candidates.strip(),
             remote_character=remote_character.strip(),
             remote_index_url=remote_index_url.strip() or config.remote_index_url,
@@ -349,6 +356,7 @@ def api_project_build():
                 translation_batch_size=config.translation_batch_size,
                 translation_token_budget=config.translation_token_budget,
                 translation_budget_usd=config.translation_budget_usd,
+                glossary_path=paths["glossary"],
             )
 
         job = create_job("build", run)
@@ -471,6 +479,7 @@ def legacy_build(
     translation_batch_size: int = Form(80),
     translation_token_budget: int = Form(0),
     translation_budget_usd: float = Form(0.0),
+    glossary_path: str = Form(""),
 ):
     try:
         report = build_project_v02(
