@@ -321,6 +321,11 @@ class Handler(BaseHTTPRequestHandler):
                 root=Path(root_value) if root_value else None,
                 name=data.get("project_name", ""),
             )
+            update_project(
+                config,
+                translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
+                translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),
+            )
             _set_active(config)
             paths = _project_paths(config)
             if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
