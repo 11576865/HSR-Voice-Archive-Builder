@@ -102,6 +102,8 @@ def _load_translation_checkpoint(
     model: str,
     provider: str,
     base_url: str,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
 ) -> dict[str, dict[str, str]]:
     if not path.is_file():
         return {}
@@ -119,10 +121,22 @@ def _load_translation_checkpoint(
         if payload.get("model") != model:
             return {}
     elif schema == 2:
+        # v0.9-D checkpoints implicitly meant English -> Simplified Chinese.
+        if (
+            source_language != "en"
+            or target_language != "zh-CN"
+            or payload.get("model") != model
+            or payload.get("provider") != provider
+            or payload.get("base_url") != base_url
+        ):
+            return {}
+    elif schema == 3:
         if (
             payload.get("model") != model
             or payload.get("provider") != provider
             or payload.get("base_url") != base_url
+            or payload.get("source_language") != source_language
+            or payload.get("target_language") != target_language
         ):
             return {}
     else:
@@ -138,15 +152,19 @@ def _write_translation_checkpoint(
     provider: str,
     base_url: str,
     records: dict[str, dict[str, str]],
+    source_language: str = "en",
+    target_language: str = "zh-CN",
 ) -> None:
     atomic_write_text(
         path,
         json.dumps(
             {
-                "schema_version": 2,
+                "schema_version": 3,
                 "provider": provider,
                 "base_url": base_url,
                 "model": model,
+                "source_language": source_language,
+                "target_language": target_language,
                 "records": records,
             },
             ensure_ascii=False,
@@ -198,6 +216,12 @@ def _target_records(entries) -> list[dict[str, str]]:
             "id": entry.filename,
             "english": entry.english,
         }
+        reference_text = str(getattr(entry, "reference_text", "") or "").strip()
+        if reference_text:
+            row["reference_text"] = reference_text
+            row["reference_language"] = str(
+                getattr(entry, "reference_language", "auto") or "auto"
+            )
         if i > 0 and _context_related(entry, entries[i - 1]):
             row["context_before"] = entries[i - 1].english
         if i + 1 < len(entries) and _context_related(entry, entries[i + 1]):
@@ -275,6 +299,8 @@ def _translate_missing(
     usd_budget: float = 0.0,
     translation_glossary: dict[str, str] | None = None,
     progress_callback: Callable[[str, str, int, int], None] | None = None,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
@@ -351,6 +377,8 @@ def _translate_missing(
         model,
         provider,
         base_url,
+        source_language,
+        target_language,
     )
     completed: dict[str, str] = {}
     qa_rows: list[dict[str, object]] = []
@@ -376,7 +404,7 @@ def _translate_missing(
             and saved_glossary_fingerprint != row_glossary_fingerprint
         ):
             continue
-        issues = translation_qa(row["english"], chinese, row_glossary)
+        issues = translation_qa(row["english"], chinese, row_glossary, target_language)
         if has_hard_issue(issues):
             # A new glossary/QA rule can invalidate an old cached translation.
             # Re-run only this item instead of trusting stale paid output.
@@ -397,7 +425,7 @@ def _translate_missing(
 
     remaining = [row for row in targets if row["id"] not in completed]
     semantic_risky_ids = {
-        row["id"] for row in targets if semantic_risk_tags(row["english"])
+        row["id"] for row in targets if semantic_risk_tags(row["english"], source_language)
     }
     semantic_pending_ids = semantic_risky_ids - semantic_verified_ids
     api_translated = 0
@@ -411,7 +439,7 @@ def _translate_missing(
             "id": row["id"],
             "english": row["english"],
             "chinese": row["english"],
-            "risk_tags": semantic_risk_tags(row["english"]),
+            "risk_tags": semantic_risk_tags(row["english"], source_language),
         }
         for row in targets
         if row["id"] in semantic_pending_ids
@@ -441,6 +469,8 @@ def _translate_missing(
             "model": model,
             "target_fingerprint": records_fingerprint(targets),
             "glossary_fingerprint": active_glossary_fingerprint,
+            "source_language": source_language,
+            "target_language": target_language,
         },
         estimate=usage_estimate,
         token_budget=token_budget,
@@ -490,6 +520,8 @@ def _translate_missing(
             translated = translate_records(
                 batch,
                 model=model,
+                source_language=source_language,
+                target_language=target_language,
                 glossary=batch_glossary,
                 client=client,
                 usage_callback=lambda usage, phase=phase: ledger.record(phase, usage),
@@ -500,6 +532,8 @@ def _translate_missing(
             translated = translate_records(
                 batch,
                 model=model,
+                source_language=source_language,
+                target_language=target_language,
                 glossary=batch_glossary,
                 client=client,
             )
@@ -515,7 +549,7 @@ def _translate_missing(
             if not chinese:
                 raise RuntimeError(f"Translator returned empty Chinese text: {source['id']}")
             row_glossary = relevant_glossary(active_glossary, [source["english"]])
-            issues = translation_qa(source["english"], chinese, row_glossary)
+            issues = translation_qa(source["english"], chinese, row_glossary, target_language)
             first_results[source["id"]] = (chinese, issues)
             api_translated += 1
             if issues:
@@ -542,6 +576,8 @@ def _translate_missing(
                 retried_rows = translate_records(
                     retry_records,
                     model=model,
+                    source_language=source_language,
+                    target_language=target_language,
                     glossary=retry_glossary,
                     client=client,
                     usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
@@ -550,6 +586,8 @@ def _translate_missing(
                 retried_rows = translate_records(
                     retry_records,
                     model=model,
+                    source_language=source_language,
+                    target_language=target_language,
                     glossary=retry_glossary,
                     client=client,
                 )
@@ -561,7 +599,7 @@ def _translate_missing(
             first_chinese, first_issues = first_results[source["id"]]
             chinese = repaired.get(source["id"], first_chinese)
             row_glossary = relevant_glossary(active_glossary, [source["english"]])
-            final_issues = translation_qa(source["english"], chinese, row_glossary)
+            final_issues = translation_qa(source["english"], chinese, row_glossary, target_language)
             hard_failed = has_hard_issue(final_issues)
             record = {
                 "id": source["id"],
@@ -698,6 +736,8 @@ def _translate_missing(
                 repaired_rows = translate_records(
                     repair_records,
                     model=model,
+                    source_language=source_language,
+                    target_language=target_language,
                     glossary=semantic_repair_glossary,
                     client=client,
                     usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
@@ -708,7 +748,7 @@ def _translate_missing(
                         active_glossary,
                         [source["english"]],
                     )
-                    issues = translation_qa(source["english"], chinese, row_glossary)
+                    issues = translation_qa(source["english"], chinese, row_glossary, target_language)
                     if has_hard_issue(issues):
                         deterministic_failures.add(source["id"])
                     repaired_chinese[source["id"]] = chinese
@@ -751,6 +791,8 @@ def _translate_missing(
                 reverified = verify_semantic_records(
                     repair_candidates,
                     model=model,
+                    source_language=source_language,
+                    target_language=target_language,
                     client=client,
                     usage_callback=lambda usage, phase=reverify_phase: ledger.record(phase, usage),
                 )
@@ -797,6 +839,8 @@ def _translate_missing(
                 provider,
                 base_url,
                 checkpoint,
+                source_language,
+                target_language,
             )
             _write_semantic_qa_report(
                 checkpoint_path.with_name("semantic_qa.json"),
@@ -888,6 +932,11 @@ def build_project_v02(
     translation_budget_usd: float = 0.0,
     glossary_path: Path | None = None,
     progress_callback: Callable[[str, str, int, int], None] | None = None,
+    reference_source: Path | None = None,
+    audio_language: str = "auto",
+    source_text_language: str = "en",
+    target_language: str = "zh-CN",
+    reference_language: str = "auto",
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -896,6 +945,7 @@ def build_project_v02(
     bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
     chs_source = chs_source.expanduser().resolve() if chs_source else None
     glossary_path = glossary_path.expanduser().resolve() if glossary_path else None
+    reference_source = reference_source.expanduser().resolve() if reference_source else None
 
     def progress(phase: str, message: str, current: int, total: int = 6) -> None:
         if progress_callback is not None:
@@ -931,6 +981,11 @@ def build_project_v02(
         "chinese": path_fingerprint(chs_source),
         "glossary": path_fingerprint(glossary_path),
         "glossary_fingerprint": active_glossary_fingerprint,
+        "reference_source": path_fingerprint(reference_source),
+        "audio_language": audio_language,
+        "source_text_language": source_text_language,
+        "target_language": target_language,
+        "reference_language": reference_language,
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
@@ -977,6 +1032,11 @@ def build_project_v02(
                 if chs_source
                 else empty_chs
             )
+            reference_root = (
+                ensure_dir_or_extract(reference_source, work, "reference")
+                if reference_source
+                else None
+            )
             wav_root = ensure_dir_or_extract(wav_source, work, "wavs")
             entries, report = build_entries(
                 legacy_index,
@@ -985,6 +1045,8 @@ def build_project_v02(
                 wav_root,
                 same_group_gap=same_group_gap,
                 group_gap=group_gap,
+                reference_lab_root=reference_root,
+                reference_language=reference_language,
             )
             save_stage(
                 out_dir,
@@ -1041,6 +1103,8 @@ def build_project_v02(
                         translation_budget_usd,
                         active_glossary,
                         progress_callback,
+                        source_text_language,
+                        target_language,
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
@@ -1153,6 +1217,10 @@ def build_project_v02(
 
         progress("final", "6/6 正在写入最终报告", 6)
 
+        report["audio_language"] = audio_language
+        report["source_text_language"] = source_text_language
+        report["target_language"] = target_language
+        report["reference_language"] = reference_language
         report["stage_resume"] = {
             "input_fingerprint": input_fingerprint,
             "resumed": resumed_stages,
