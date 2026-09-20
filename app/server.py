@@ -17,6 +17,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import (
+    apply_quick_source_update,
     create_quick_project,
     discover_source_candidates,
     quick_scan,
@@ -639,6 +640,36 @@ def api_update_check_remote(
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/apply-local-package")
+def api_update_apply_local_package(replacement_path: str = Form(...)):
+    try:
+        config = _active_config()
+        assert_project_idle(config.root)
+
+        def run():
+            current = _active_config()
+            updated, result = apply_quick_source_update(
+                current, Path(replacement_path).expanduser()
+            )
+            return {
+                **result,
+                "project": project_summary(updated),
+            }
+
+        job = create_job(
+            "update-apply",
+            run,
+            project_root=config.root,
+            project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
 
 
 @app.get("/api/jobs")
