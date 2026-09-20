@@ -204,7 +204,7 @@ class OpenAIResponsesHTTPClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "HSR-Voice-Archive-Builder/0.9-G",
+                "User-Agent": "HSR-Voice-Archive-Builder/0.9-H",
             },
         )
 
