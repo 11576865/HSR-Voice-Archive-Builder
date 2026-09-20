@@ -1293,7 +1293,7 @@ def build_project_v02(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-C pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-E pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
@@ -1308,11 +1308,21 @@ if __name__ == "__main__":
     p.add_argument("--translation-token-budget", type=int, default=0)
     p.add_argument("--translation-budget-usd", type=float, default=0.0)
     p.add_argument("--glossary", type=Path)
+    p.add_argument("--reference", type=Path)
+    p.add_argument("--audio-language", default="auto")
+    p.add_argument("--source-language", default="en")
+    p.add_argument("--target-language", default="zh-CN")
+    p.add_argument("--reference-language", default="auto")
     a = p.parse_args()
     result = build_project_v02(
         a.index, a.wavs, a.out, a.bilingual, a.chs,
         a.same_gap, a.group_gap, not a.no_flac,
         a.translate_missing, a.translation_model, a.translation_batch_size,
         a.translation_token_budget, a.translation_budget_usd, a.glossary,
+        reference_source=a.reference,
+        audio_language=a.audio_language,
+        source_text_language=a.source_language,
+        target_language=a.target_language,
+        reference_language=a.reference_language,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
