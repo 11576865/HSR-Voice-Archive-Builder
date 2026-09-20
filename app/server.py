@@ -143,7 +143,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.5",
+        "version": "0.6",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -242,18 +242,10 @@ def api_project_build():
             raise ValueError("Project index, WAV source, and output directory are required")
         if config.make_flac and not shutil.which("ffmpeg"):
             raise RuntimeError("FFmpeg is not installed or is not available on PATH")
-        if config.translate_missing:
-            runtime = dependency_status()
-            if not runtime.get("openai_sdk"):
-                raise RuntimeError(
-                    "GPT translation is unavailable on this runtime because the OpenAI Python SDK "
-                    "is not installed. On Termux/Android, keep GPT fallback disabled or run "
-                    "translation from a desktop host."
-                )
-            if not os.environ.get("OPENAI_API_KEY"):
-                raise RuntimeError(
-                    "OPENAI_API_KEY is not set; disable GPT fallback or configure the key in the local environment"
-                )
+        if config.translate_missing and not os.environ.get("OPENAI_API_KEY"):
+            raise RuntimeError(
+                "OPENAI_API_KEY is not set; disable GPT fallback or configure the key in the local environment"
+            )
 
         def run():
             return build_project_v02(
