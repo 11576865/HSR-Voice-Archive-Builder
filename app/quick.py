@@ -425,10 +425,36 @@ def quick_scan(
     source_text_language: str = "en",
     remote_index_url: str = "",
 ) -> dict[str, Any]:
-    remote_index_url = remote_index_url.strip() or ai_hobbyist_index_url(source_text_language)
     english = source_inventory(english_source)
     blockers: list[str] = []
     warnings: list[str] = []
+
+    remote_index_url = remote_index_url.strip()
+    if not remote_index_url:
+        try:
+            remote_index_url = ai_hobbyist_index_url(source_text_language)
+        except ValueError:
+            # AI-Hobbyist currently publishes EN/CHS/JP/KR indexes. Other
+            # source languages can still use EN only for ordering when the
+            # primary audio package supplies complete same-stem LAB text.
+            complete_primary_lab = (
+                int(english.get("wav_count", 0)) > 0
+                and int(english.get("wav_lab_pairs", 0))
+                == int(english.get("wav_count", 0))
+            )
+            if source_text_language != "en" and complete_primary_lab:
+                remote_index_url = DEFAULT_EN_INDEX_URL
+                warnings.append(
+                    f"No built-in remote {source_text_language} index; using EN.xlsx "
+                    "only for ordering while source text comes from primary-package LAB files"
+                )
+            else:
+                remote_index_url = DEFAULT_EN_INDEX_URL
+                blockers.append(
+                    f"No built-in remote index for source language {source_text_language}; "
+                    "provide same-stem LAB text for every WAV or choose a supported source "
+                    "language (en, zh-CN, ja, ko)"
+                )
 
     if english["wav_count"] == 0:
         blockers.append("No WAV files were found in the primary audio source")
@@ -752,7 +778,11 @@ def create_quick_project(
         make_flac=True,
         translate_missing=bool(plan["translation"]["configured"]),
         translation_model=DEFAULT_MODEL,
-        remote_index_url=str(selected_index.get("url", ai_hobbyist_index_url(source_text_language))),
+        remote_index_url=str(
+            selected_index.get("url")
+            or plan.get("translation", {}).get("remote_index_url")
+            or DEFAULT_EN_INDEX_URL
+        ),
     )
 
     atomic_write_text(
