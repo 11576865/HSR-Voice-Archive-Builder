@@ -40,7 +40,7 @@ _PERSON_GROUPS = {
 }
 
 
-def semantic_risk_tags(english: str) -> list[str]:
+def semantic_risk_tags(english: str, source_language: str = "en") -> list[str]:
     """Return sparse semantic-risk tags for lines worth a verifier call.
 
     Person-reference checking is activated only when at least two grammatical
@@ -48,21 +48,49 @@ def semantic_risk_tags(english: str) -> list[str]:
     dialogue from turning the verifier into a second full translation pass.
     """
     text = str(english or "")
+    lang = str(source_language or "en").lower()
     tags: list[str] = []
-    if _NEGATION_RE.search(text):
-        tags.append("negation")
-    if _QUANTITY_RE.search(text):
+
+    if lang.startswith("en"):
+        if _NEGATION_RE.search(text):
+            tags.append("negation")
+        if _QUANTITY_RE.search(text):
+            tags.append("quantity")
+        if _CONDITION_RE.search(text):
+            tags.append("condition")
+        person_groups = [
+            name for name, pattern in _PERSON_GROUPS.items()
+            if pattern.search(text)
+        ]
+        if len(person_groups) >= 2:
+            tags.append("person")
+        return tags
+
+    # Conservative multilingual heuristics. These intentionally select only
+    # obvious risk-bearing lines; the semantic verifier itself remains model-based.
+    if re.search(r"\d", text):
         tags.append("quantity")
-    if _CONDITION_RE.search(text):
-        tags.append("condition")
-
-    person_groups = [
-        name for name, pattern in _PERSON_GROUPS.items()
-        if pattern.search(text)
-    ]
-    if len(person_groups) >= 2:
-        tags.append("person")
-
+    patterns = {
+        "zh": (
+            r"(?:不|没|無|无|未|别|不能|不会|從不|从不|绝不)",
+            r"(?:如果|若|除非|只要|否则|否則|是否|直到)",
+        ),
+        "ja": (
+            r"(?:ない|ません|ぬ|ず|なく|できない)",
+            r"(?:もし|なら|れば|たら|ない限り)",
+        ),
+        "ko": (
+            r"(?:않|없|못|아니|말고)",
+            r"(?:만약|라면|으면|경우|아니면)",
+        ),
+    }
+    key = next((k for k in patterns if lang.startswith(k)), "")
+    if key:
+        negation, condition = patterns[key]
+        if re.search(negation, text):
+            tags.append("negation")
+        if re.search(condition, text):
+            tags.append("condition")
     return tags
 
 
@@ -71,8 +99,9 @@ def semantic_candidate(
     row_id: str,
     english: str,
     chinese: str,
+    source_language: str = "en",
 ) -> dict[str, Any] | None:
-    tags = semantic_risk_tags(english)
+    tags = semantic_risk_tags(english, source_language)
     if not tags:
         return None
     return {
