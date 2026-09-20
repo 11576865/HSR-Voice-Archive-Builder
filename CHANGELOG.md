@@ -2,6 +2,7 @@
 
 ## v0.7
 
+- Set `gpt-5.6-sol` as the default translation model after validating the configured V-API route; existing project files retain their saved model until changed.
 - Generalized translation from OpenAI-only to OpenAI-compatible Responses API providers.
 - Added built-in provider presets for official OpenAI and V-API (`https://api.gpt.ge/v1`), plus custom HTTPS/loopback endpoints.
 - Added local credential management with hidden terminal input and best-effort `0600` key storage under `~/.hsr-voice-archive-builder/`; API keys are not written to project files or served to the browser.

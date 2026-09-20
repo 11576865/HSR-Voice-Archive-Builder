@@ -13,10 +13,21 @@ from app.pipeline import (
     _write_translation_checkpoint,
 )
 from app.preflight import dependency_status
+from app.project import ProjectConfig
 from app.translator import OpenAIResponsesHTTPClient
 
 
 class V07ProviderTests(unittest.TestCase):
+    def test_new_projects_default_to_sol(self) -> None:
+        config = ProjectConfig(
+            schema_version=1,
+            name="test",
+            root="/tmp/test",
+            index_csv="index.csv",
+            wav_source="wavs",
+        )
+        self.assertEqual(config.translation_model, "gpt-5.6-sol")
+
     def test_vapi_base_url_targets_responses_endpoint(self) -> None:
         client = OpenAIResponsesHTTPClient(
             "test-key",

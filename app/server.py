@@ -205,7 +205,7 @@ def api_project_save(
     group_gap: float = Form(1.20),
     make_flac: bool = Form(False),
     translate_missing: bool = Form(False),
-    translation_model: str = Form("gpt-5.6-luna"),
+    translation_model: str = Form("gpt-5.6-sol"),
     translation_batch_size: int = Form(80),
 ):
     try:
@@ -225,7 +225,7 @@ def api_project_save(
             group_gap=group_gap,
             make_flac=make_flac,
             translate_missing=translate_missing,
-            translation_model=translation_model.strip() or "gpt-5.6-luna",
+            translation_model=translation_model.strip() or "gpt-5.6-sol",
             translation_batch_size=max(1, translation_batch_size),
         )
         return {"ok": True, "project": project_summary(config)}
@@ -380,7 +380,7 @@ def legacy_build(
     group_gap: float = Form(1.20),
     make_flac: bool = Form(False),
     translate_missing: bool = Form(False),
-    translation_model: str = Form("gpt-5.6-luna"),
+    translation_model: str = Form("gpt-5.6-sol"),
     translation_batch_size: int = Form(80),
 ):
     try:

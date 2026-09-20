@@ -331,7 +331,7 @@ class Handler(BaseHTTPRequestHandler):
                 group_gap=_float(data.get("group_gap"), 1.20),
                 make_flac=_bool(data.get("make_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
-                translation_model=data.get("translation_model", "gpt-5.6-luna").strip() or "gpt-5.6-luna",
+                translation_model=data.get("translation_model", "gpt-5.6-sol").strip() or "gpt-5.6-sol",
                 translation_batch_size=max(1, _int(data.get("translation_batch_size"), 80)),
             )
             self._json({"ok": True, "project": project_summary(config)})
