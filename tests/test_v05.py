@@ -216,6 +216,7 @@ Attributes = A_ -rw-r--r--
         import app.preflight as preflight
 
         real_import = preflight.importlib.import_module
+        real_which = shutil.which
 
         def fake_import(name, *args, **kwargs):
             if name == "openai":
@@ -235,7 +236,7 @@ Attributes = A_ -rw-r--r--
                 if name in {"7zz", "7z"}
                 else "/data/data/com.termux/files/usr/bin/ffmpeg"
                 if name == "ffmpeg"
-                else shutil.which(name)
+                else real_which(name)
             )
             status = dependency_status()
 
