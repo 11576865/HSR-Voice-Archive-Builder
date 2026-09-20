@@ -232,7 +232,7 @@ def main() -> None:
     s.set_defaults(func=lambda args: _status())
 
     t = sub.add_parser("test", help="Send one tiny structured translation smoke test")
-    t.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.6-luna"))
+    t.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.6-sol"))
     t.set_defaults(func=_test)
 
     x = sub.add_parser("clear", help="Delete the locally saved translation credentials")
