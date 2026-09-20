@@ -229,6 +229,37 @@ def _write_qa_report(
     return summary
 
 
+def _write_semantic_qa_report(
+    path: Path,
+    *,
+    provider: str,
+    base_url: str,
+    model: str,
+    records: list[dict[str, object]],
+    reused: int = 0,
+) -> dict[str, int]:
+    from .semantic_quality import summarize_semantic_qa
+
+    summary = summarize_semantic_qa(records)
+    summary["count_semantic_qa_checkpoint_reused"] = int(reused)
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "provider": provider,
+                "base_url": base_url,
+                "model": model,
+                "summary": summary,
+                "records": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    return summary
+
+
 def _translate_missing(
     entries,
     model: str,
