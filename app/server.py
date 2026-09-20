@@ -13,16 +13,19 @@ from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text
 from .diff import classify
-from .jobs import assert_no_active_build, create_job, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import create_quick_project, discover_source_candidates, quick_scan
 from .project import (
     ProjectConfig,
     create_project,
+    delete_project,
+    forget_project,
     last_project_root,
     load_project,
     project_summary,
+    recent_projects,
     resolve_project_path,
     update_project,
 )
@@ -123,6 +126,11 @@ def _set_active(config: ProjectConfig) -> None:
     _active_root = Path(config.root).resolve()
 
 
+def _clear_active() -> None:
+    global _active_root
+    _active_root = None
+
+
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
     return {
         "index": resolve_project_path(config, config.index_csv),
@@ -130,6 +138,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "bilingual": resolve_project_path(config, config.bilingual_csv),
         "chs": resolve_project_path(config, config.chs_source),
         "glossary": resolve_project_path(config, config.glossary_path),
+        "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
@@ -145,11 +154,12 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-C",
+        "version": "0.9-E",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
-        "jobs": recent_jobs(8),
+        "recent_projects": recent_projects(12),
+        "jobs": recent_jobs(20),
         "runtime": dependency_status(),
     }
 
@@ -166,11 +176,17 @@ def api_quick_candidates():
 def api_quick_scan(
     english_source: str = Form(...),
     chs_source: str = Form(""),
+    reference_source: str = Form(""),
+    source_text_language: str = Form("en"),
+    reference_language: str = Form("auto"),
 ):
     try:
         plan = quick_scan(
             Path(english_source),
             Path(chs_source) if chs_source.strip() else None,
+            reference_source=Path(reference_source) if reference_source.strip() else None,
+            source_text_language=source_text_language,
+            reference_language=reference_language,
         )
         return {"ok": True, "plan": plan}
     except Exception as exc:
@@ -185,14 +201,24 @@ def api_quick_build(
     project_name: str = Form(""),
     translation_token_budget: int = Form(0),
     translation_budget_usd: float = Form(0.0),
+    reference_source: str = Form(""),
+    audio_language: str = Form("auto"),
+    source_text_language: str = Form("en"),
+    target_language: str = Form("zh-CN"),
+    reference_language: str = Form("auto"),
 ):
     try:
         assert_no_active_build()
         config, plan = create_quick_project(
             Path(english_source),
             chs_source=Path(chs_source) if chs_source.strip() else None,
+            reference_source=Path(reference_source) if reference_source.strip() else None,
             root=Path(project_root) if project_root.strip() else None,
             name=project_name,
+            audio_language=audio_language,
+            source_text_language=source_text_language.strip() or "en",
+            target_language=target_language,
+            reference_language=reference_language,
         )
         update_project(
             config,
@@ -224,9 +250,18 @@ def api_quick_build(
                 translation_budget_usd=config.translation_budget_usd,
                 glossary_path=paths["glossary"],
                 progress_callback=report_progress,
+                reference_source=paths["reference"],
+                audio_language=config.audio_language,
+                source_text_language=config.source_text_language,
+                target_language=config.target_language,
+                reference_language=config.reference_language,
+                reference_text_embedded=config.reference_text_embedded,
             )
 
-        job = create_job("quick-build", run, with_progress=True)
+        job = create_job(
+            "quick-build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
         return {
             "ok": True,
             "job": job.id,
@@ -247,6 +282,11 @@ def api_project_create(
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
     glossary_path: str = Form(""),
+    reference_source: str = Form(""),
+    audio_language: str = Form("auto"),
+    source_text_language: str = Form("en"),
+    target_language: str = Form("zh-CN"),
+    reference_language: str = Form("auto"),
     remote_character: str = Form(""),
 ):
     try:
@@ -259,6 +299,11 @@ def api_project_create(
             bilingual_csv=bilingual_csv,
             chs_source=chs_source,
             glossary_path=glossary_path,
+            reference_source=reference_source,
+            audio_language=audio_language,
+            source_text_language=source_text_language,
+            target_language=target_language,
+            reference_language=reference_language,
             remote_character=remote_character,
         )
         _set_active(config)
@@ -276,6 +321,50 @@ def api_project_open(project_path: str = Form(...)):
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
+@app.post("/api/project/close")
+def api_project_close():
+    _clear_active()
+    return {"ok": True, "project": None}
+
+
+@app.post("/api/project/forget")
+def api_project_forget(project_path: str = Form(...)):
+    try:
+        assert_no_active_build()
+        root = Path(project_path).expanduser().resolve()
+        result = forget_project(root)
+        if _active_root is not None and _active_root.resolve() == root:
+            _clear_active()
+        return {
+            "ok": True,
+            "result": result,
+            "project": None if _active_root is None else project_summary(_active_config()),
+            "recent_projects": recent_projects(12),
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/delete")
+def api_project_delete(project_path: str = Form(...)):
+    try:
+        assert_no_active_build()
+        root = Path(project_path).expanduser().resolve()
+        was_active = _active_root is not None and _active_root.resolve() == root
+        assert_project_idle(str(root))
+        result = delete_project(root)
+        result["deleted_job_records"] = delete_project_jobs(str(root))
+        if was_active:
+            _clear_active()
+        return {
+            "ok": True,
+            "result": result,
+            "project": None if _active_root is None else project_summary(_active_config()),
+            "recent_projects": recent_projects(12),
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
 
 @app.post("/api/project/save")
 def api_project_save(
@@ -286,6 +375,11 @@ def api_project_save(
     bilingual_csv: str = Form(""),
     chs_source: str = Form(""),
     glossary_path: str = Form(""),
+    reference_source: str = Form(""),
+    audio_language: str = Form("auto"),
+    source_text_language: str = Form("en"),
+    target_language: str = Form("zh-CN"),
+    reference_language: str = Form("auto"),
     update_candidates: str = Form(""),
     remote_character: str = Form(""),
     remote_index_url: str = Form(""),
@@ -309,6 +403,11 @@ def api_project_save(
             bilingual_csv=bilingual_csv.strip(),
             chs_source=chs_source.strip(),
             glossary_path=glossary_path.strip(),
+            reference_source=reference_source.strip(),
+            audio_language=audio_language.strip() or "auto",
+            source_text_language=source_text_language.strip() or "en",
+            target_language=target_language.strip() or "zh-CN",
+            reference_language=reference_language.strip() or "auto",
             update_candidates=update_candidates.strip(),
             remote_character=remote_character.strip(),
             remote_index_url=remote_index_url.strip() or config.remote_index_url,
@@ -360,9 +459,18 @@ def api_project_build():
                 translation_budget_usd=config.translation_budget_usd,
                 glossary_path=paths["glossary"],
                 progress_callback=report_progress,
+                reference_source=paths["reference"],
+                audio_language=config.audio_language,
+                source_text_language=config.source_text_language,
+                target_language=config.target_language,
+                reference_language=config.reference_language,
+                reference_text_embedded=config.reference_text_embedded,
             )
 
-        job = create_job("build", run, with_progress=True)
+        job = create_job(
+            "build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
@@ -424,7 +532,10 @@ def api_update_check_remote(
             )
             return plan
 
-        job = create_job("remote-update-check", run)
+        job = create_job(
+            "remote-update-check", run,
+            project_root=config.root, project_name=config.name,
+        )
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)

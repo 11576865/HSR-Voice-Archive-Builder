@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.9-E
+
+- Added explicit recent-project selection with separate Open, New/Import, Remove-from-list, and Delete actions. Removing only hides a project from the switcher; reopening restores it. Deleting a Quick Mode managed project removes its dedicated project root, while manual-project deletion removes only app-owned config/generated/output data and preserves unrelated user files. Deleted-project task history is purged.
+- Added explicit language roles for primary audio, source text, translation target and optional reference text. Translation prompts, semantic verification, stage fingerprints and translation checkpoints now include the selected source/target languages.
+- Quick Mode can resolve source text from AI-Hobbyist EN, CHS, JP or KR indexes according to the selected source language instead of assuming English.
+- Added an optional second voice/text package used only as translation reference. Same-stem LAB is preferred; for audio-only EN/CHS/JP/KR packages, Quick Mode can recover indexed text and align it to the primary package by exact filename or a conservative group + numeric-tail identity. Reference audio is never mixed into the output FLAC.
+- Non-English source text may also come from same-stem LAB in the primary package when available; otherwise the selected language index remains usable.
+- Translation QA and sparse semantic-risk detection are now language-aware enough to avoid applying English-only residue heuristics to non-Chinese targets and to cover common negation/condition patterns in Chinese, Japanese and Korean.
+- Build controls provide immediate launch feedback, stale diagnostic errors are cleared after successful jobs, and failed task history shows concise failure reasons.
+
 ## v0.9-D
 
 - Added validated local glossary overlays in CSV or JSON. Project glossaries override the conservative built-in terminology map, are fingerprinted deterministically, and participate in stage/checkpoint validation.

@@ -13,6 +13,8 @@ INDEX_ALIASES = {
     "source_detail": ("source_detail", "来源细分"),
     "english": ("english", "ENGLISH", "英文", "英文文本", "lab_text_escaped", "语音文本"),
     "sha256": ("sha256", "SHA-256", "sha-256"),
+    "reference_text": ("reference_text", "REFERENCE_TEXT", "参考文本"),
+    "reference_language": ("reference_language", "REFERENCE_LANGUAGE", "参考语言"),
 }
 BILINGUAL_ALIASES = {
     "filename": INDEX_ALIASES["filename"],
@@ -55,6 +57,8 @@ def normalize_index(path: Path) -> list[dict[str, str]]:
             "source_detail": pick(row, INDEX_ALIASES["source_detail"]),
             "english": pick(row, INDEX_ALIASES["english"]),
             "sha256": pick(row, INDEX_ALIASES["sha256"]).lower(),
+            "reference_text": pick(row, INDEX_ALIASES["reference_text"]),
+            "reference_language": pick(row, INDEX_ALIASES["reference_language"]),
         })
     return out
 
@@ -84,7 +88,10 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
     legacy_bilingual = dest / "bilingual.csv"
 
     with legacy_index.open("w", encoding="utf-8-sig", newline="") as f:
-        fields = ["序号", "分组", "文件名", "来源", "来源细分", "英文文本", "SHA-256"]
+        fields = [
+            "序号", "分组", "文件名", "来源", "来源细分",
+            "英文文本", "参考文本", "参考语言", "SHA-256",
+        ]
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for row in index:
@@ -95,6 +102,8 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
             w.writerow({
                 "序号": row["index"], "分组": row["group"], "文件名": row["filename"],
                 "来源": row["source"], "来源细分": row["source_detail"], "英文文本": english,
+                "参考文本": row.get("reference_text", ""),
+                "参考语言": row.get("reference_language", ""),
                 "SHA-256": row["sha256"],
             })
 

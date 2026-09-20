@@ -14,16 +14,19 @@ from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text
 from .diff import classify
-from .jobs import assert_no_active_build, create_job, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import create_quick_project, discover_source_candidates, quick_scan
 from .project import (
     ProjectConfig,
     create_project,
+    delete_project,
+    forget_project,
     last_project_root,
     load_project,
     project_summary,
+    recent_projects,
     resolve_project_path,
     update_project,
 )
@@ -61,6 +64,11 @@ def _set_active(config: ProjectConfig) -> None:
     _active_root = Path(config.root).resolve()
 
 
+def _clear_active() -> None:
+    global _active_root
+    _active_root = None
+
+
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
     return {
         "index": resolve_project_path(config, config.index_csv),
@@ -68,6 +76,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "bilingual": resolve_project_path(config, config.bilingual_csv),
         "chs": resolve_project_path(config, config.chs_source),
         "glossary": resolve_project_path(config, config.glossary_path),
+        "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
@@ -92,7 +101,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.9-D"
+    server_version = "HSRVoiceLite/0.9-E"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -256,11 +265,12 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.9-D-termux-lite",
+                "version": "0.9-E-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
-                "jobs": recent_jobs(8),
+                "recent_projects": recent_projects(12),
+                "jobs": recent_jobs(20),
                 "runtime": dependency_status(),
             })
             return
@@ -301,11 +311,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/quick/scan":
             english_source = data.get("english_source", "").strip()
             if not english_source:
-                raise ValueError("English voice package is required")
+                raise ValueError("Primary voice package is required")
             chs_value = data.get("chs_source", "").strip()
+            reference_value = data.get("reference_source", "").strip()
+            source_text_language = data.get("source_text_language", "en").strip() or "en"
+            reference_language = data.get("reference_language", "auto").strip() or "auto"
             plan = quick_scan(
                 Path(english_source),
                 Path(chs_value) if chs_value else None,
+                reference_source=Path(reference_value) if reference_value else None,
+                source_text_language=source_text_language,
+                reference_language=reference_language,
             )
             self._json({"ok": True, "plan": plan})
             return
@@ -314,14 +330,20 @@ class Handler(BaseHTTPRequestHandler):
             assert_no_active_build()
             english_source = data.get("english_source", "").strip()
             if not english_source:
-                raise ValueError("English voice package is required")
+                raise ValueError("Primary voice package is required")
             chs_value = data.get("chs_source", "").strip()
+            reference_value = data.get("reference_source", "").strip()
             root_value = data.get("project_root", "").strip()
             config, plan = create_quick_project(
                 Path(english_source),
                 chs_source=Path(chs_value) if chs_value else None,
+                reference_source=Path(reference_value) if reference_value else None,
                 root=Path(root_value) if root_value else None,
                 name=data.get("project_name", ""),
+                audio_language=data.get("audio_language", "auto"),
+                source_text_language=data.get("source_text_language", "en").strip() or "en",
+                target_language=data.get("target_language", "zh-CN"),
+                reference_language=data.get("reference_language", "auto"),
             )
             update_project(
                 config,
@@ -353,9 +375,18 @@ class Handler(BaseHTTPRequestHandler):
                     translation_budget_usd=config.translation_budget_usd,
                     glossary_path=paths["glossary"],
                     progress_callback=report_progress,
+                    reference_source=paths["reference"],
+                    audio_language=config.audio_language,
+                    source_text_language=config.source_text_language,
+                    target_language=config.target_language,
+                    reference_language=config.reference_language,
+                    reference_text_embedded=config.reference_text_embedded,
                 )
 
-            job = create_job("quick-build", run, with_progress=True)
+            job = create_job(
+            "quick-build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
             self._json({
                 "ok": True,
                 "job": job.id,
@@ -374,6 +405,11 @@ class Handler(BaseHTTPRequestHandler):
                 bilingual_csv=data.get("bilingual_csv", ""),
                 chs_source=data.get("chs_source", ""),
                 glossary_path=data.get("glossary_path", ""),
+                reference_source=data.get("reference_source", ""),
+                audio_language=data.get("audio_language", "auto"),
+                source_text_language=data.get("source_text_language", "en"),
+                target_language=data.get("target_language", "zh-CN"),
+                reference_language=data.get("reference_language", "auto"),
                 remote_character=data.get("remote_character", ""),
             )
             _set_active(config)
@@ -384,6 +420,48 @@ class Handler(BaseHTTPRequestHandler):
             config = load_project(Path(data["project_path"]))
             _set_active(config)
             self._json({"ok": True, "project": project_summary(config)})
+            return
+
+        if path == "/api/project/close":
+            _clear_active()
+            self._json({"ok": True, "project": None})
+            return
+
+        if path == "/api/project/forget":
+            assert_no_active_build()
+            raw = data.get("project_path", "").strip()
+            if not raw:
+                raise ValueError("Project path is required")
+            root = Path(raw).expanduser().resolve()
+            result = forget_project(root)
+            if _active_root is not None and _active_root.resolve() == root:
+                _clear_active()
+            self._json({
+                "ok": True,
+                "result": result,
+                "project": None if _active_root is None else project_summary(_active_config()),
+                "recent_projects": recent_projects(12),
+            })
+            return
+
+        if path == "/api/project/delete":
+            assert_no_active_build()
+            raw = data.get("project_path", "").strip()
+            if not raw:
+                raise ValueError("Project path is required")
+            root = Path(raw).expanduser().resolve()
+            was_active = _active_root is not None and _active_root.resolve() == root
+            assert_project_idle(str(root))
+            result = delete_project(root)
+            result["deleted_job_records"] = delete_project_jobs(str(root))
+            if was_active:
+                _clear_active()
+            self._json({
+                "ok": True,
+                "result": result,
+                "project": None if _active_root is None else project_summary(_active_config()),
+                "recent_projects": recent_projects(12),
+            })
             return
 
         if path == "/api/project/save":
@@ -397,6 +475,11 @@ class Handler(BaseHTTPRequestHandler):
                 bilingual_csv=data.get("bilingual_csv", "").strip(),
                 chs_source=data.get("chs_source", "").strip(),
                 glossary_path=data.get("glossary_path", "").strip(),
+                reference_source=data.get("reference_source", "").strip(),
+                audio_language=data.get("audio_language", "auto").strip() or "auto",
+                source_text_language=data.get("source_text_language", "en").strip() or "en",
+                target_language=data.get("target_language", "zh-CN").strip() or "zh-CN",
+                reference_language=data.get("reference_language", "auto").strip() or "auto",
                 update_candidates=data.get("update_candidates", "").strip(),
                 remote_character=data.get("remote_character", "").strip(),
                 remote_index_url=data.get("remote_index_url", "").strip() or config.remote_index_url,
@@ -444,9 +527,18 @@ class Handler(BaseHTTPRequestHandler):
                     translation_budget_usd=config.translation_budget_usd,
                     glossary_path=paths["glossary"],
                     progress_callback=report_progress,
+                    reference_source=paths["reference"],
+                    audio_language=config.audio_language,
+                    source_text_language=config.source_text_language,
+                    target_language=config.target_language,
+                    reference_language=config.reference_language,
+                    reference_text_embedded=config.reference_text_embedded,
                 )
 
-            job = create_job("build", run, with_progress=True)
+            job = create_job(
+            "build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
             self._json({"ok": True, "job": job.id})
             return
 
@@ -488,7 +580,10 @@ class Handler(BaseHTTPRequestHandler):
                 atomic_write_text(output / "update_plan.json", json.dumps(plan, ensure_ascii=False, indent=2))
                 return plan
 
-            job = create_job("remote-update-check", run)
+            job = create_job(
+            "remote-update-check", run,
+            project_root=config.root, project_name=config.name,
+        )
             self._json({"ok": True, "job": job.id})
             return
 

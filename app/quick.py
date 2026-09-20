@@ -16,7 +16,12 @@ from .builder import MAX_ARCHIVE_MEMBERS, atomic_write_text, sha256_file
 from .credentials import credentials_status
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
-from .remote_index import DEFAULT_EN_INDEX_URL, fetch_ai_hobbyist_index_for_filenames_cached
+from .remote_index import (
+    DEFAULT_EN_INDEX_URL,
+    ai_hobbyist_index_label,
+    ai_hobbyist_index_url,
+    fetch_ai_hobbyist_index_for_filenames_cached,
+)
 from .schema import normalize_index
 from .translation_runtime import estimate_workload_tokens
 from .translator import DEFAULT_MODEL
@@ -346,6 +351,7 @@ def _remote_candidate(
     *,
     url: str,
     cache: dict[str, Any],
+    source_text_language: str = "en",
 ) -> dict[str, Any]:
     by_name: dict[str, dict[str, str]] = {}
     duplicates: set[str] = set()
@@ -366,7 +372,8 @@ def _remote_candidate(
     primary_character, primary_count = character_counts.most_common(1)[0] if character_counts else ("", 0)
     return {
         "source": "remote",
-        "provider": "AI-Hobbyist EN.xlsx",
+        "provider": ai_hobbyist_index_label(url),
+        "source_text_language": source_text_language,
         "url": url,
         "row_count": len(records),
         "matched_wavs": len(matched),
@@ -383,7 +390,11 @@ def _remote_candidate(
     }
 
 
-def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[str, str]]:
+def _remote_rows(
+    records: list[dict[str, str]],
+    wanted: set[str],
+    provider_label: str = "AI-Hobbyist EN.xlsx",
+) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     seen: set[str] = set()
     for pos, row in enumerate(records, 1):
@@ -398,7 +409,7 @@ def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[s
             "index": str(pos),
             "group": parse_voice_identity(filename).group,
             "filename": filename,
-            "source": "AI-Hobbyist EN.xlsx",
+            "source": provider_label,
             "source_detail": str(row.get("character", "")).strip(),
             "english": str(row.get("english", "")).strip(),
             "sha256": remote_hash if re.fullmatch(r"[0-9a-f]{64}", remote_hash) else "",
@@ -406,26 +417,130 @@ def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[s
     return result
 
 
+_CROSS_LANGUAGE_KEY_RE = re.compile(
+    r"^(?P<group>(?:archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?))_.+?_(?P<tail>\d+(?:_[fm])?)$",
+    re.IGNORECASE,
+)
+
+
+def _cross_language_voice_key(filename: str) -> str:
+    stem = Path(filename).stem.casefold()
+    match = _CROSS_LANGUAGE_KEY_RE.match(stem)
+    if match:
+        return f"{match.group('group').casefold()}::{match.group('tail').casefold()}"
+    return stem
+
+
+def _map_reference_records(
+    primary_names: set[str],
+    records: list[dict[str, str]],
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Map a second localization's indexed text onto primary voice filenames.
+
+    Exact filenames win. For character-localized filenames, a conservative
+    group+numeric-tail key can bridge names such as
+    chapter5_13_evanescia_103.wav and chapter5_13_<localized-name>_103.wav.
+    Structural fallback is used only when the key is unique on both sides.
+    """
+    by_exact = {
+        Path(str(row.get("filename", ""))).name: str(row.get("english", "")).strip()
+        for row in records
+        if str(row.get("filename", "")).strip() and str(row.get("english", "")).strip()
+    }
+    mapped: dict[str, str] = {}
+    exact = 0
+    for name in primary_names:
+        text = by_exact.get(Path(name).name, "")
+        if text:
+            mapped[name] = text
+            exact += 1
+
+    remaining_primary = [name for name in primary_names if name not in mapped]
+    primary_by_key: dict[str, list[str]] = {}
+    for name in remaining_primary:
+        primary_by_key.setdefault(_cross_language_voice_key(name), []).append(name)
+
+    reference_by_key: dict[str, list[tuple[str, str]]] = {}
+    for row in records:
+        filename = Path(str(row.get("filename", ""))).name
+        text = str(row.get("english", "")).strip()
+        if not filename or not text:
+            continue
+        reference_by_key.setdefault(
+            _cross_language_voice_key(filename), []
+        ).append((filename, text))
+
+    structural = 0
+    for key, names in primary_by_key.items():
+        refs = reference_by_key.get(key, [])
+        if len(names) == 1 and len(refs) == 1:
+            mapped[names[0]] = refs[0][1]
+            structural += 1
+
+    return mapped, {
+        "exact": exact,
+        "structural": structural,
+        "total": len(mapped),
+    }
+
+
 def quick_scan(
     english_source: Path,
     chs_source: Path | None = None,
     *,
-    remote_index_url: str = DEFAULT_EN_INDEX_URL,
+    reference_source: Path | None = None,
+    source_text_language: str = "en",
+    reference_language: str = "auto",
+    remote_index_url: str = "",
 ) -> dict[str, Any]:
     english = source_inventory(english_source)
     blockers: list[str] = []
     warnings: list[str] = []
 
+    remote_index_url = remote_index_url.strip()
+    if not remote_index_url:
+        try:
+            remote_index_url = ai_hobbyist_index_url(source_text_language)
+        except ValueError:
+            # AI-Hobbyist currently publishes EN/CHS/JP/KR indexes. Other
+            # source languages can still use EN only for ordering when the
+            # primary audio package supplies complete same-stem LAB text.
+            complete_primary_lab = (
+                int(english.get("wav_count", 0)) > 0
+                and int(english.get("wav_lab_pairs", 0))
+                == int(english.get("wav_count", 0))
+            )
+            if source_text_language != "en" and complete_primary_lab:
+                remote_index_url = DEFAULT_EN_INDEX_URL
+                warnings.append(
+                    f"No built-in remote {source_text_language} index; using EN.xlsx "
+                    "only for ordering while source text comes from primary-package LAB files"
+                )
+            else:
+                remote_index_url = DEFAULT_EN_INDEX_URL
+                blockers.append(
+                    f"No built-in remote index for source language {source_text_language}; "
+                    "provide same-stem LAB text for every WAV or choose a supported source "
+                    "language (en, zh-CN, ja, ko)"
+                )
+
     if english["wav_count"] == 0:
-        blockers.append("No WAV files were found in the English source")
+        blockers.append("No WAV files were found in the primary audio source")
     if english.get("duplicate_wav_names"):
         blockers.append(
-            "Duplicate WAV basenames were found in the English source: "
+            "Duplicate WAV basenames were found in the primary source: "
             + ", ".join(english["duplicate_wav_names"][:5])
         )
-
     wav_names = {Path(name).name for name in english["wav_names"]}
-    indexes = _index_candidates(Path(english["source"]), wav_names)
+    # Existing local CSV discovery predates explicit language roles and its
+    # schema does not declare the text language. Keep that legacy shortcut only
+    # for English; non-English Quick Mode uses the selected CHS/JP/KR index
+    # instead of silently treating an arbitrary local CSV as the requested language.
+    indexes = (
+        _index_candidates(Path(english["source"]), wav_names)
+        if source_text_language == "en"
+        else []
+    )
     selected_index = indexes[0] if indexes else None
     if selected_index is not None:
         selected_index = {**selected_index, "source": "local"}
@@ -444,7 +559,11 @@ def quick_scan(
                 wav_names, remote_index_url
             )
             remote_attempt = _remote_candidate(
-                remote_records, wav_names, url=remote_index_url, cache=cache
+                remote_records,
+                wav_names,
+                url=remote_index_url,
+                cache=cache,
+                source_text_language=source_text_language,
             )
             if cache.get("stale"):
                 warnings.append("Remote index refresh failed; a stale cached copy was used")
@@ -487,30 +606,100 @@ def quick_scan(
                 )
             if int(selected_index["english_matched"]) != int(english["wav_count"]):
                 blockers.append(
-                    f"Best index has English text for only {selected_index['english_matched']} / "
+                    f"Best index has source text for only {selected_index['english_matched']} / "
                     f"{english['wav_count']} WAV files"
                 )
 
     chs = None
     if chs_source is not None and str(chs_source).strip():
         if Path(chs_source).expanduser().resolve() == Path(english["source"]).resolve():
-            warnings.append("English and Chinese source point to the same package")
+            warnings.append("Primary audio and target-text source point to the same package")
         chs = source_inventory(chs_source)
         if chs["lab_count"] == 0:
-            warnings.append("Chinese source contains no LAB files")
+            warnings.append("Target-text source contains no LAB files")
+
+    reference = None
+    reference_index_attempt: dict[str, Any] | None = None
+    reference_text_match = {"exact": 0, "structural": 0, "total": 0}
+    if reference_source is not None and str(reference_source).strip():
+        reference = source_inventory(reference_source)
+        primary_stems = {Path(name).stem for name in wav_names}
+        reference_lab_stems = set(reference.get("lab_names", []))
+        lab_matches = len(primary_stems & reference_lab_stems)
+        if reference["lab_count"] > 0:
+            reference_text_match = {
+                "exact": lab_matches,
+                "structural": 0,
+                "total": lab_matches,
+            }
+            if lab_matches < len(wav_names):
+                warnings.append(
+                    f"Reference LAB matches only {lab_matches} / {len(wav_names)} primary voices"
+                )
+        elif reference_language == "auto":
+            warnings.append(
+                "Reference package has no LAB text. Choose its language (EN/CHS/JP/KR) "
+                "so Quick Mode can recover reference text from the matching remote index."
+            )
+        else:
+            try:
+                reference_index_url = ai_hobbyist_index_url(reference_language)
+                reference_wavs = {Path(name).name for name in reference["wav_names"]}
+                reference_records, reference_cache = (
+                    fetch_ai_hobbyist_index_for_filenames_cached(
+                        reference_wavs, reference_index_url
+                    )
+                )
+                reference_index_attempt = _remote_candidate(
+                    reference_records,
+                    reference_wavs,
+                    url=reference_index_url,
+                    cache=reference_cache,
+                    source_text_language=reference_language,
+                )
+                mapped_reference, reference_text_match = _map_reference_records(
+                    wav_names, reference_records
+                )
+                reference_index_attempt["primary_text_matches"] = len(mapped_reference)
+                reference_index_attempt["match_detail"] = reference_text_match
+                reference_index_attempt["records_fingerprint"] = _index_fingerprint(
+                    reference_records
+                )
+                if reference_cache.get("stale"):
+                    warnings.append(
+                        "Reference index refresh failed; a stale cached copy was used"
+                    )
+                if not mapped_reference:
+                    warnings.append(
+                        "Reference package index was found, but no voice lines could be "
+                        "aligned with the primary package"
+                    )
+                elif len(mapped_reference) < len(wav_names):
+                    warnings.append(
+                        f"Reference text aligns with {len(mapped_reference)} / "
+                        f"{len(wav_names)} primary voices"
+                    )
+            except Exception as exc:
+                warnings.append(
+                    f"Reference text index fallback failed: {type(exc).__name__}: {exc}"
+                )
 
     if character["confidence"] == "low":
         warnings.append("Character inference confidence is low; review before building")
 
     api = credentials_status()
     if not api["configured"]:
-        warnings.append("AI translation API is not configured; unmatched Chinese text will remain missing")
+        warnings.append("AI translation API is not configured; unmatched target text will remain missing")
 
     pending_records: list[dict[str, str]] = []
     official_chinese_matches = 0
     if selected_complete and selected_index is not None:
         if selected_index.get("source") == "remote":
-            index_rows = _remote_rows(remote_records, wav_names)
+            index_rows = _remote_rows(
+                remote_records,
+                wav_names,
+                str(selected_index.get("provider") or ai_hobbyist_index_label(remote_index_url)),
+            )
         else:
             index_rows = [
                 row for row in normalize_index(Path(selected_index["path"]))
@@ -534,6 +723,7 @@ def quick_scan(
     return {
         "schema_version": 2,
         "kind": "quick_scan",
+        "source_text_language": source_text_language,
         "english": {
             key: value for key, value in english.items() if key not in {"wav_names", "lab_names"}
         },
@@ -546,6 +736,17 @@ def quick_scan(
             if chs
             else None
         ),
+        "reference_index_attempt": reference_index_attempt,
+        "reference_text_match": reference_text_match,
+        "reference": (
+            {
+                key: value
+                for key, value in reference.items()
+                if key not in {"wav_names", "lab_names"}
+            }
+            if reference
+            else None
+        ),
         "character": character,
         "index": selected_index,
         "index_candidates": indexes[:8],
@@ -555,6 +756,8 @@ def quick_scan(
             "base_url": api["base_url"],
             "configured": api["configured"],
             "model": DEFAULT_MODEL,
+            "source_text_language": source_text_language,
+            "remote_index_url": remote_index_url,
             "official_chinese_matches": official_chinese_matches,
             "pending_translation_count": len(pending_records),
             **translation_estimate,
@@ -621,12 +824,24 @@ def create_quick_project(
     english_source: Path,
     *,
     chs_source: Path | None = None,
+    reference_source: Path | None = None,
     root: Path | None = None,
     name: str = "",
+    audio_language: str = "auto",
+    source_text_language: str = "en",
+    target_language: str = "zh-CN",
+    reference_language: str = "auto",
 ) -> tuple[ProjectConfig, dict[str, Any]]:
     english_source = english_source.expanduser().resolve()
     chs_source = chs_source.expanduser().resolve() if chs_source else None
-    plan = quick_scan(english_source, chs_source)
+    reference_source = reference_source.expanduser().resolve() if reference_source else None
+    plan = quick_scan(
+        english_source,
+        chs_source,
+        reference_source=reference_source,
+        source_text_language=source_text_language,
+        reference_language=reference_language,
+    )
     if not plan["ready"]:
         raise RuntimeError("Quick scan has blockers: " + "; ".join(plan["blockers"]))
 
@@ -634,11 +849,16 @@ def create_quick_project(
     assert selected_index is not None
     current_inventory = source_inventory(english_source)
     if current_inventory["fingerprint"] != plan["english"]["fingerprint"]:
-        raise RuntimeError("English source changed after Quick Scan; scan again before building")
+        raise RuntimeError("Primary audio source changed after Quick Scan; scan again before building")
     if chs_source is not None:
         current_chs = source_inventory(chs_source)
         if current_chs["fingerprint"] != plan["chinese"]["fingerprint"]:
-            raise RuntimeError("Chinese source changed after Quick Scan; scan again before building")
+            raise RuntimeError("Target-text source changed after Quick Scan; scan again before building")
+    current_reference = None
+    if reference_source is not None:
+        current_reference = source_inventory(reference_source)
+        if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
+            raise RuntimeError("Reference source changed after Quick Scan; scan again before building")
     wanted = set(current_inventory["wav_names"])
     if selected_index.get("source") == "remote":
         remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
@@ -647,7 +867,11 @@ def create_quick_project(
         )
         if _index_fingerprint(remote_records) != selected_index["records_fingerprint"]:
             raise RuntimeError("Remote index changed after Quick Scan; scan again before building")
-        filtered = _remote_rows(remote_records, wanted)
+        filtered = _remote_rows(
+            remote_records,
+            wanted,
+            str(selected_index.get("provider") or ai_hobbyist_index_label(str(selected_index["url"]))),
+        )
     else:
         local_index = Path(selected_index["path"])
         if sha256_file(local_index) != selected_index["file_sha256"]:
@@ -657,12 +881,46 @@ def create_quick_project(
     if len(filtered) != len(wanted):
         raise RuntimeError("Index coverage changed between scan and project creation")
 
+    reference_text_embedded = False
+    reference_attempt = plan.get("reference_index_attempt")
+    if (
+        reference_source is not None
+        and current_reference is not None
+        and int(current_reference.get("lab_count", 0)) == 0
+        and isinstance(reference_attempt, dict)
+        and reference_attempt.get("url")
+    ):
+        reference_wavs = {
+            Path(name).name for name in current_reference.get("wav_names", [])
+        }
+        reference_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+            reference_wavs,
+            str(reference_attempt["url"]),
+        )
+        if _index_fingerprint(reference_records) != reference_attempt.get(
+            "records_fingerprint"
+        ):
+            raise RuntimeError(
+                "Reference remote index changed after Quick Scan; scan again before building"
+            )
+        mapped_reference, _ = _map_reference_records(wanted, reference_records)
+        for row in filtered:
+            filename = Path(str(row.get("filename", ""))).name
+            text = mapped_reference.get(filename, "")
+            if text:
+                row["reference_text"] = text
+                row["reference_language"] = reference_language
+        reference_text_embedded = bool(mapped_reference)
+
     project_root = (root or _default_project_root(plan, english_source)).expanduser().resolve()
     generated_dir = project_root / ".generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
     generated_index = generated_dir / "quick_index.csv"
 
-    fields = ["index", "group", "filename", "source", "source_detail", "english", "sha256"]
+    fields = [
+        "index", "group", "filename", "source", "source_detail", "english",
+        "reference_text", "reference_language", "sha256",
+    ]
     with generated_index.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
@@ -675,6 +933,13 @@ def create_quick_project(
         wav_source=str(english_source),
         output_dir="output",
         chs_source=str(chs_source) if chs_source else "",
+        reference_source=str(reference_source) if reference_source else "",
+        reference_text_embedded=reference_text_embedded,
+        managed_project_root=True,
+        audio_language=audio_language,
+        source_text_language=source_text_language,
+        target_language=target_language,
+        reference_language=reference_language,
         remote_character=str(plan.get("character", {}).get("value", "")),
     )
     update_project(
@@ -682,7 +947,11 @@ def create_quick_project(
         make_flac=True,
         translate_missing=bool(plan["translation"]["configured"]),
         translation_model=DEFAULT_MODEL,
-        remote_index_url=str(selected_index.get("url", DEFAULT_EN_INDEX_URL)),
+        remote_index_url=str(
+            selected_index.get("url")
+            or plan.get("translation", {}).get("remote_index_url")
+            or DEFAULT_EN_INDEX_URL
+        ),
     )
 
     atomic_write_text(

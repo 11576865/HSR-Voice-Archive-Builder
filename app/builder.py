@@ -316,6 +316,8 @@ class Entry:
     audio_end_seconds: float
     display_end_seconds: float
     sha256: str
+    reference_text: str = ""
+    reference_language: str = "auto"
 
 
 def build_entries(
@@ -325,6 +327,9 @@ def build_entries(
     wav_root: Path,
     same_group_gap: float = 0.40,
     group_gap: float = 1.20,
+    reference_lab_root: Path | None = None,
+    reference_language: str = "auto",
+    source_text_language: str = "en",
 ) -> tuple[list[Entry], dict[str, object]]:
     full = read_csv_rows(full_index_csv)
     bi = read_csv_rows(bilingual_csv)
@@ -336,6 +341,8 @@ def build_entries(
         raise ValueError("Duplicate 文件名 in bilingual CSV")
 
     labs = collect_labs(chs_lab_root)
+    reference_labs = collect_labs(reference_lab_root) if reference_lab_root else {}
+    primary_labs = collect_labs(wav_root) if source_text_language != "en" else {}
     wavs = collect_wavs(wav_root)
 
     sample_rate: int | None = None
@@ -391,6 +398,20 @@ def build_entries(
             if chinese:
                 translated_count += 1
 
+        source_text = str(row.get("英文文本", b.get("ENGLISH", "")) or "").strip()
+        if source_text_language != "en":
+            # A same-stem LAB in the primary package is the closest text to the
+            # actual selected voice and therefore wins when present. Otherwise
+            # use the selected CHS/JP/KR index text instead of requiring LAB.
+            primary_lab_text = str(primary_labs.get(stem, "") or "").strip()
+            if primary_lab_text:
+                source_text = primary_lab_text
+            if not source_text:
+                raise ValueError(
+                    f"Missing {source_text_language} source text for {filename}; "
+                    "the selected index has no text and the primary package has no matching LAB"
+                )
+
         raw.append(
             {
                 "index": int(row["序号"]),
@@ -398,7 +419,7 @@ def build_entries(
                 "filename": filename,
                 "source": row.get("来源", ""),
                 "source_detail": row.get("来源细分", ""),
-                "english": row.get("英文文本", b.get("ENGLISH", "")),
+                "english": source_text,
                 "chinese": chinese,
                 "chinese_source": chinese_source,
                 "sample_rate": sr,
@@ -407,6 +428,15 @@ def build_entries(
                 "source_frames": frames,
                 "source_duration_seconds": frames / sr,
                 "sha256": got_hash,
+                "reference_text": (
+                    reference_labs.get(stem, "")
+                    or str(row.get("参考文本", "") or "").strip()
+                ),
+                "reference_language": (
+                    reference_language
+                    if reference_labs.get(stem, "")
+                    else str(row.get("参考语言", "") or reference_language or "auto")
+                ),
             }
         )
 
@@ -453,6 +483,8 @@ def build_entries(
                 audio_end_seconds=audio_end / sample_rate,
                 display_end_seconds=display_end / sample_rate,
                 sha256=str(r["sha256"]),
+                reference_text=str(r.get("reference_text", "")),
+                reference_language=str(r.get("reference_language", "auto") or "auto"),
             )
         )
         cursor = next_start
@@ -462,6 +494,13 @@ def build_entries(
         "count_official_chs_lab": official_count,
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
+        "count_official_target_lab": official_count,
+        "count_existing_target_text": translated_count,
+        "count_missing_target_text": sum(not e.chinese for e in entries),
+        "count_reference_lab": sum(bool(e.reference_text) for e in entries),
+        "count_source_lab": sum(
+            bool(primary_labs.get(stem_of(e.filename))) for e in entries
+        ) if source_text_language != "en" else 0,
         "sample_rate": sample_rate,
         "channels": channels,
         "sample_width_bits": sample_width * 8,
@@ -479,6 +518,15 @@ def build_entries(
 def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     js = [asdict(e) for e in entries]
+    for row in js:
+        row["source_text"] = row.get("english", "")
+        row["target_text"] = row.get("chinese", "")
+        legacy_source = str(row.get("chinese_source", "") or "")
+        row["target_text_source"] = (
+            "official_target_lab"
+            if legacy_source == "official_chs_lab"
+            else legacy_source
+        )
     atomic_write_text(
         out_dir / "manifest.json",
         json.dumps({"report": report, "entries": js}, ensure_ascii=False, indent=2),
@@ -499,7 +547,10 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
 
     timeline_fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
-        "chinese_source", "chinese", "english", "source_duration_seconds", "sha256",
+        "target_text_source", "target_text", "source_text",
+        "chinese_source", "chinese", "english",
+        "reference_language", "reference_text",
+        "source_duration_seconds", "sha256",
     ]
     timeline_rows: list[dict[str, object]] = []
     for e in entries:
@@ -510,9 +561,18 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
             "display_end": clock_time(e.display_end_seconds),
             "group": e.group,
             "filename": e.filename,
+            "target_text_source": (
+                "official_target_lab"
+                if e.chinese_source == "official_chs_lab"
+                else e.chinese_source
+            ),
+            "target_text": e.chinese,
+            "source_text": e.english,
             "chinese_source": e.chinese_source,
             "chinese": e.chinese,
             "english": e.english,
+            "reference_language": e.reference_language,
+            "reference_text": e.reference_text,
             "source_duration_seconds": f"{e.source_duration_seconds:.6f}",
             "sha256": e.sha256,
         })

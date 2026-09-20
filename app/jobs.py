@@ -33,6 +33,8 @@ class Job:
     phase: str = ""
     progress_current: int = 0
     progress_total: int = 0
+    project_root: str = ""
+    project_name: str = ""
 
 
 _LOCK = threading.Lock()
@@ -93,11 +95,25 @@ def assert_no_active_build() -> None:
             )
 
 
+def assert_project_idle(project_root: str) -> None:
+    target = str(project_root or "").strip()
+    if not target:
+        return
+    with _LOCK:
+        for job in _JOBS.values():
+            if job.project_root == target and job.state in {"queued", "running"}:
+                raise RuntimeError(
+                    f"项目「{job.project_name or target}」仍有任务正在运行，请等待任务结束后再删除"
+                )
+
+
 def create_job(
     kind: str,
     fn: Callable[..., Any],
     *,
     with_progress: bool = False,
+    project_root: str = "",
+    project_name: str = "",
 ) -> Job:
     job = Job(
         id=uuid.uuid4().hex,
@@ -105,6 +121,8 @@ def create_job(
         state="queued",
         message="等待执行",
         created_at=now(),
+        project_root=str(project_root or ""),
+        project_name=str(project_name or ""),
     )
     with _LOCK:
         if kind in BUILD_KINDS:
@@ -174,3 +192,20 @@ def recent_jobs(limit: int = 20) -> list[dict[str, Any]]:
     with _LOCK:
         values = list(_JOBS.values())[-limit:]
         return [asdict(job) for job in reversed(values)]
+
+
+def delete_project_jobs(project_root: str) -> int:
+    """Remove completed/history records owned by a deleted project."""
+    target = str(project_root or "").strip()
+    if not target:
+        return 0
+    with _LOCK:
+        doomed = [
+            job_id for job_id, job in _JOBS.items()
+            if job.project_root == target and job.state not in {"queued", "running"}
+        ]
+        for job_id in doomed:
+            _JOBS.pop(job_id, None)
+        if doomed:
+            _persist_locked()
+        return len(doomed)

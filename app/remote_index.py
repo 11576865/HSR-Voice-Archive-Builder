@@ -11,7 +11,36 @@ from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
 
-DEFAULT_EN_INDEX_URL = "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx"
+AI_HOBBYIST_INDEX_URLS = {
+    "en": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx",
+    "zh-CN": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/CHS.xlsx",
+    "ja": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/JP.xlsx",
+    "ko": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/KR.xlsx",
+}
+DEFAULT_EN_INDEX_URL = AI_HOBBYIST_INDEX_URLS["en"]
+
+
+def ai_hobbyist_index_url(language: str) -> str:
+    normalized = str(language or "en").strip()
+    aliases = {
+        "zh": "zh-CN",
+        "zh-cn": "zh-CN",
+        "chs": "zh-CN",
+        "jp": "ja",
+        "kr": "ko",
+    }
+    key = aliases.get(normalized.casefold(), normalized)
+    if key not in AI_HOBBYIST_INDEX_URLS:
+        raise ValueError(
+            "No built-in AI-Hobbyist text index is configured for language "
+            f"{language!r}; supported source languages are en, zh-CN, ja, ko"
+        )
+    return AI_HOBBYIST_INDEX_URLS[key]
+
+
+def ai_hobbyist_index_label(url: str) -> str:
+    name = Path(urlparse(url).path).name or "index.xlsx"
+    return f"AI-Hobbyist {name}"
 MAX_REMOTE_INDEX_BYTES = 128 * 1024**2
 MAX_XLSX_UNCOMPRESSED_BYTES = 512 * 1024**2
 MAX_XLSX_MEMBERS = 10_000
@@ -193,7 +222,7 @@ def fetch_ai_hobbyist_index(
     timeout: int = 90,
 ) -> list[dict[str, str]]:
     with tempfile.TemporaryDirectory(prefix="hsr_remote_index_") as td:
-        path = Path(td) / "EN.xlsx"
+        path = Path(td) / "index.xlsx"
         _download_remote_xlsx(url, timeout, path)
         return read_ai_hobbyist_xlsx(path, character)
 
@@ -204,7 +233,7 @@ def fetch_ai_hobbyist_index_for_filenames(
     timeout: int = 90,
 ) -> list[dict[str, str]]:
     with tempfile.TemporaryDirectory(prefix="hsr_remote_index_") as td:
-        path = Path(td) / "EN.xlsx"
+        path = Path(td) / "index.xlsx"
         _download_remote_xlsx(url, timeout, path)
         return read_ai_hobbyist_xlsx_for_filenames(path, filenames)
 
@@ -359,7 +388,7 @@ def remote_update_plan(manifest_path: Path, records: list[dict[str, str]]) -> di
         ]
     for item in result["variant_of_existing"]:
         item["metadata"] = details.get(item["candidate"], {})
-    result["provider"] = "AI-Hobbyist EN.xlsx"
+    result["provider"] = ai_hobbyist_index_label(DEFAULT_EN_INDEX_URL)
     result["character"] = records[0]["character"] if records else ""
     result["remote_rows"] = len(records)
     return result

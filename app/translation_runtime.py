@@ -91,7 +91,12 @@ def parse_usage(payload: dict[str, Any] | None) -> dict[str, int] | None:
 
 def records_fingerprint(records: list[dict[str, str]]) -> str:
     canonical = [
-        {"id": str(row.get("id", "")), "english": str(row.get("english", ""))}
+        {
+            "id": str(row.get("id", "")),
+            "english": str(row.get("english", "")),
+            "reference_text": str(row.get("reference_text", "")),
+            "reference_language": str(row.get("reference_language", "")),
+        }
         for row in records
     ]
     encoded = json.dumps(
