@@ -309,15 +309,17 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/quick/scan":
             english_source = data.get("english_source", "").strip()
             if not english_source:
-                raise ValueError("English voice package is required")
+                raise ValueError("Primary voice package is required")
             chs_value = data.get("chs_source", "").strip()
             reference_value = data.get("reference_source", "").strip()
             source_text_language = data.get("source_text_language", "en").strip() or "en"
+            reference_language = data.get("reference_language", "auto").strip() or "auto"
             plan = quick_scan(
                 Path(english_source),
                 Path(chs_value) if chs_value else None,
                 reference_source=Path(reference_value) if reference_value else None,
                 source_text_language=source_text_language,
+                reference_language=reference_language,
             )
             self._json({"ok": True, "plan": plan})
             return
@@ -326,7 +328,7 @@ class Handler(BaseHTTPRequestHandler):
             assert_no_active_build()
             english_source = data.get("english_source", "").strip()
             if not english_source:
-                raise ValueError("English voice package is required")
+                raise ValueError("Primary voice package is required")
             chs_value = data.get("chs_source", "").strip()
             reference_value = data.get("reference_source", "").strip()
             root_value = data.get("project_root", "").strip()
@@ -376,6 +378,7 @@ class Handler(BaseHTTPRequestHandler):
                     source_text_language=config.source_text_language,
                     target_language=config.target_language,
                     reference_language=config.reference_language,
+                    reference_text_embedded=config.reference_text_embedded,
                 )
 
             job = create_job(
@@ -490,6 +493,7 @@ class Handler(BaseHTTPRequestHandler):
                     source_text_language=config.source_text_language,
                     target_language=config.target_language,
                     reference_language=config.reference_language,
+                    reference_text_embedded=config.reference_text_embedded,
                 )
 
             job = create_job(
