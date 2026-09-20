@@ -396,6 +396,7 @@ def recent_projects(limit: int = 12) -> list[dict[str, str]]:
         result.append({
             "name": str(payload.get("name", "") or root.name),
             "root": str(root.resolve()),
+            "managed_project_root": bool(payload.get("managed_project_root", False)),
         })
         if len(result) >= max(1, int(limit)):
             break
