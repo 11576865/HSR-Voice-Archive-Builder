@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9-G
+
+- Added project source-health reporting for the primary voice package, optional target/reference packages, generated index, bilingual data and glossary paths.
+- Added verified source relinking for moved primary, target and reference packages. The relink path computes the candidate content fingerprint and only updates the project when it matches the recorded source identity.
+- New Quick Mode projects persist primary/target/reference source fingerprints. Existing Quick Mode projects can fall back to the fingerprint already recorded in `.generated/quick_scan.json`.
+- A verified path-only relocation preserves an already embedded reference-text mapping because the package bytes are unchanged.
+- Intentional manual source changes clear stale stored fingerprints; they are treated as content replacement rather than relocation.
+- The dashboard now shows which project sources are available or missing and can rescan local Download archives before a verified relink.
+
 ## v0.9-F
 
 - Added a project-local `.state` directory for internal recovery/diagnostic data. Translation checkpoints, translation/semantic QA reports, usage ledgers, and stage files no longer need to live beside finished user-facing output artifacts.
