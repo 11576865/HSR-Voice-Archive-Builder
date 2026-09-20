@@ -999,11 +999,17 @@ def build_project_v02(
                 {"entries": _entries_payload(entries), "report": report},
             )
             qa_path = out_dir / "translation_qa.json"
+            semantic_qa_path = out_dir / "semantic_qa.json"
             qa_payload: dict[str, object] = {"skipped": not translate_missing}
             qa_artifacts: list[Path] = []
             if qa_path.is_file():
                 qa_payload = json.loads(qa_path.read_text(encoding="utf-8"))
-                qa_artifacts = [qa_path]
+                qa_artifacts.append(qa_path)
+            if semantic_qa_path.is_file():
+                qa_payload["semantic_qa"] = json.loads(
+                    semantic_qa_path.read_text(encoding="utf-8")
+                )
+                qa_artifacts.append(semantic_qa_path)
             save_stage(
                 out_dir,
                 STAGE_FILES["translation_qa"],
