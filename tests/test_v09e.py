@@ -4,6 +4,7 @@ import csv
 import tempfile
 import unittest
 import wave
+import zipfile
 from pathlib import Path
 from unittest.mock import patch
 
@@ -11,7 +12,7 @@ from app.builder import build_entries
 from app.jobs import create_job, get_job
 from app.pipeline import _load_translation_checkpoint, _write_translation_checkpoint
 from app.project import create_project, recent_projects
-from app.quick import quick_scan
+from app.quick import _map_reference_records, create_quick_project, quick_scan
 from app.remote_index import ai_hobbyist_index_url
 from app.semantic_quality import semantic_risk_tags
 from app.translator import _translation_prompt
@@ -140,6 +141,118 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
         self.assertEqual(plan["index"]["english_matched"], 1)
         called_url = fetched.call_args.args[1]
         self.assertTrue(called_url.endswith("/JP.xlsx"))
+
+    def test_reference_mapping_can_bridge_localized_character_token(self) -> None:
+        mapped, detail = _map_reference_records(
+            {
+                "chapter5_13_evanescia_103.wav",
+                "archive_evanescia_1.wav",
+            },
+            [
+                {
+                    "filename": "chapter5_13_绯英_103.wav",
+                    "english": "参考剧情台词",
+                },
+                {
+                    "filename": "archive_绯英_1.wav",
+                    "english": "参考档案台词",
+                },
+            ],
+        )
+        self.assertEqual(mapped["chapter5_13_evanescia_103.wav"], "参考剧情台词")
+        self.assertEqual(mapped["archive_evanescia_1.wav"], "参考档案台词")
+        self.assertEqual(detail["structural"], 2)
+
+    def test_audio_only_reference_package_is_materialized_into_quick_index(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            primary = root / "English.zip"
+            reference = root / "Japanese.zip"
+            primary_names = [
+                "chapter5_13_evanescia_103.wav",
+                "archive_evanescia_1.wav",
+            ]
+            reference_names = [
+                "chapter5_13_绯英_103.wav",
+                "archive_绯英_1.wav",
+            ]
+            with zipfile.ZipFile(primary, "w") as z:
+                for name in primary_names:
+                    z.writestr(name, b"RIFF")
+            with zipfile.ZipFile(reference, "w") as z:
+                for name in reference_names:
+                    z.writestr(name, b"RIFF")
+
+            source_records = [
+                {
+                    "filename": primary_names[0],
+                    "english": "Story source.",
+                    "hash": "",
+                    "character": "Evanescia",
+                },
+                {
+                    "filename": primary_names[1],
+                    "english": "Archive source.",
+                    "hash": "",
+                    "character": "Evanescia",
+                },
+            ]
+            reference_records = [
+                {
+                    "filename": reference_names[0],
+                    "english": "物語の参考。",
+                    "hash": "",
+                    "character": "Evanescia",
+                },
+                {
+                    "filename": reference_names[1],
+                    "english": "アーカイブの参考。",
+                    "hash": "",
+                    "character": "Evanescia",
+                },
+            ]
+
+            def fake_fetch(names, url):
+                if url.endswith("/JP.xlsx"):
+                    return reference_records, {"cache_hit": True, "stale": False}
+                return source_records, {"cache_hit": True, "stale": False}
+
+            with (
+                patch(
+                    "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                    side_effect=fake_fetch,
+                ),
+                patch(
+                    "app.quick.credentials_status",
+                    return_value={
+                        "provider": "custom",
+                        "base_url": "https://example.invalid/v1",
+                        "configured": False,
+                    },
+                ),
+            ):
+                config, plan = create_quick_project(
+                    primary,
+                    reference_source=reference,
+                    reference_language="ja",
+                    root=root / "project",
+                )
+
+            self.assertTrue(config.reference_text_embedded)
+            self.assertEqual(plan["reference_text_match"]["total"], 2)
+            generated = Path(config.root) / ".generated" / "quick_index.csv"
+            with generated.open("r", encoding="utf-8-sig", newline="") as stream:
+                rows = list(csv.DictReader(stream))
+            by_name = {row["filename"]: row for row in rows}
+            self.assertEqual(
+                by_name[primary_names[0]]["reference_text"],
+                "物語の参考。",
+            )
+            self.assertEqual(by_name[primary_names[0]]["reference_language"], "ja")
+            self.assertEqual(
+                by_name[primary_names[1]]["reference_text"],
+                "アーカイブの参考。",
+            )
 
     def test_multilingual_semantic_risk_heuristics(self) -> None:
         self.assertIn("negation", semantic_risk_tags("私は行かない。", "ja"))
