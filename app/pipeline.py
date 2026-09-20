@@ -1156,6 +1156,7 @@ def build_project_v02(
                 reference_lab_root=reference_root,
                 reference_language=reference_language,
                 source_text_language=source_text_language,
+                target_language=target_language,
             )
             save_stage(
                 state_dir,

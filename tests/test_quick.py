@@ -160,6 +160,34 @@ class QuickModeTests(unittest.TestCase):
             self.assertEqual(plan["character"]["value"], "evanescia")
             self.assertTrue(plan["translation"]["configured"])
 
+    def test_chinese_primary_labs_need_no_second_package_or_translation(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "Chinese.zip"
+            names = ["archive_evanescia_1.wav", "archive_evanescia_2.wav"]
+            make_voice_zip(archive, names)
+            records = [
+                {"filename": name, "english": f"中文台词 {i}", "hash": "", "character": "绯英"}
+                for i, name in enumerate(names, 1)
+            ]
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": False, "stale": False}),
+            ), patch(
+                "app.quick.credentials_status",
+                return_value={"provider": "vapi", "base_url": "https://api.gpt.ge/v1", "configured": True},
+            ):
+                plan = quick_scan(
+                    archive,
+                    source_text_language="zh-CN",
+                    target_language="zh-CN",
+                )
+
+            self.assertTrue(plan["ready"])
+            self.assertEqual(plan["translation"]["official_chinese_matches"], 2)
+            self.assertEqual(plan["translation"]["pending_translation_count"], 0)
+            self.assertEqual(plan["translation"]["target_language"], "zh-CN")
+
     def test_quick_scan_blocks_partial_index_coverage(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

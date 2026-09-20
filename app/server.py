@@ -185,6 +185,7 @@ def api_quick_scan(
     chs_source: str = Form(""),
     reference_source: str = Form(""),
     source_text_language: str = Form("en"),
+    target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
 ):
     try:
@@ -193,6 +194,7 @@ def api_quick_scan(
             Path(chs_source) if chs_source.strip() else None,
             reference_source=Path(reference_source) if reference_source.strip() else None,
             source_text_language=source_text_language,
+            target_language=target_language,
             reference_language=reference_language,
         )
         return {"ok": True, "plan": plan}
