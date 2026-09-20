@@ -79,19 +79,10 @@ def dependency_status() -> dict[str, Any]:
         for distribution, module, minimum in DESKTOP_DEPENDENCIES:
             _check_python_dependency(issues, versions, distribution, module, minimum)
 
-    openai_sdk = False
-    try:
-        importlib.import_module("openai")
-        versions["openai"] = metadata.version("openai")
-        openai_sdk = True
-    except Exception:
-        if not termux:
-            issues.append("openai: import failed")
-        else:
-            warnings.append(
-                "OpenAI Python SDK is not installed on Termux because its jiter/Rust "
-                "dependency is not reliably buildable on Android. Core archive functions remain available."
-            )
+    # Translation uses the HTTPS Responses API directly through Python's
+    # standard library. No OpenAI SDK / jiter / Rust dependency is required.
+    openai_rest = True
+    openai_api_key_configured = bool(os.environ.get("OPENAI_API_KEY", "").strip())
 
     seven_zip = shutil.which("7zz") or shutil.which("7z") or ""
     py7zr_ok = False
@@ -116,7 +107,7 @@ def dependency_status() -> dict[str, Any]:
         warnings.append(
             "Termux/Android detected: the lightweight stdlib HTTP server and native 7-Zip "
             "are used instead of FastAPI/Pydantic/py7zr because those dependency chains "
-            "are not reliably installable on Android."
+            "are not reliably installable on Android. GPT translation uses direct HTTPS REST."
         )
         warnings.append(
             "Android may terminate long CPU-heavy/background jobs; interrupted jobs are "
@@ -143,7 +134,8 @@ def dependency_status() -> dict[str, Any]:
         "warnings": warnings,
         "ffmpeg": ffmpeg,
         "seven_zip": seven_zip,
-        "openai_sdk": openai_sdk,
+        "openai_rest": openai_rest,
+        "openai_api_key_configured": openai_api_key_configured,
         "termux": termux,
     }
 
