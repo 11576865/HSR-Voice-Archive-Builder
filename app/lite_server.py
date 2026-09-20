@@ -22,6 +22,7 @@ from .quick import (
     discover_source_candidates,
     quick_scan,
     relink_project_source,
+    remote_character_candidates,
 )
 from .project import (
     ProjectConfig,
@@ -612,11 +613,15 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/update/check-remote":
             config = _active_config()
-            character = data.get("character", "").strip() or config.remote_character
+            requested_character = data.get("character", "").strip()
             remote_url = data.get("remote_index_url", "").strip() or config.remote_index_url
-            if not character:
-                raise ValueError("Set a remote character filter first")
-            update_project(config, remote_character=character, remote_index_url=remote_url)
+            characters = remote_character_candidates(config, requested_character)
+            if not characters:
+                raise ValueError(
+                    "Could not identify the remote-index character from this project; "
+                    "run Quick Scan again or set it in Advanced settings"
+                )
+            update_project(config, remote_index_url=remote_url)
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Output directory is not configured")
@@ -625,8 +630,33 @@ class Handler(BaseHTTPRequestHandler):
                 raise FileNotFoundError("Build the project once before checking remote updates")
 
             def run():
-                rows = fetch_ai_hobbyist_index(character, remote_url)
-                plan = remote_update_plan(manifest, rows)
+                rows = []
+                matched_character = ""
+                attempted: list[str] = []
+                for candidate in characters:
+                    attempted.append(candidate)
+                    rows = fetch_ai_hobbyist_index(candidate, remote_url)
+                    if rows:
+                        matched_character = candidate
+                        break
+                if not rows:
+                    raise RuntimeError(
+                        "Remote index returned no rows for the detected role labels: "
+                        + ", ".join(attempted)
+                    )
+                plan = remote_update_plan(
+                    manifest,
+                    rows,
+                    url=remote_url,
+                    queried_character=matched_character,
+                )
+                resolved_character = str(plan.get("character") or matched_character)
+                plan["attempted_characters"] = attempted
+                update_project(
+                    config,
+                    remote_character=resolved_character,
+                    remote_index_url=remote_url,
+                )
                 output.mkdir(parents=True, exist_ok=True)
                 atomic_write_text(output / "update_plan.json", json.dumps(plan, ensure_ascii=False, indent=2))
                 return plan
