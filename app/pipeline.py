@@ -68,6 +68,9 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
         ident = parse_voice_identity(entry.filename, entry.group)
         row["logical_id"] = ident.logical_id
         row["variant"] = ident.variant
+        row["source_text"] = entry.english
+        row["target_text"] = entry.chinese
+        row["reference_text"] = str(getattr(entry, "reference_text", "") or "")
         variants += bool(ident.variant)
     report["count_variants"] = variants
     payload["report"] = report
@@ -83,12 +86,15 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
     corrected = out_dir / "bilingual_index_corrected.csv"
     with corrected.open("r", encoding="utf-8-sig", newline="") as f:
         old_rows = list(csv.DictReader(f))
-    fields = ["index", "start", "audio_end", "display_end", "group", "filename", "logical_id", "variant", "chinese_source", "chinese", "english", "source_duration_seconds", "sha256"]
+    fields = ["index", "start", "audio_end", "display_end", "group", "filename", "logical_id", "variant", "chinese_source", "target_text", "source_text", "reference_text", "chinese", "english", "source_duration_seconds", "sha256"]
     updated_rows = []
     for old, entry in zip(old_rows, entries, strict=True):
         ident = parse_voice_identity(entry.filename, entry.group)
         old["logical_id"] = ident.logical_id
         old["variant"] = ident.variant
+        old["source_text"] = entry.english
+        old["target_text"] = entry.chinese
+        old["reference_text"] = str(getattr(entry, "reference_text", "") or "")
         updated_rows.append(old)
     write_csv_rows(corrected, updated_rows, fields)
 
@@ -1144,6 +1150,11 @@ def build_project_v02(
             )
             rebuilt_stages.extend(["translation", "translation_qa"])
 
+        report["audio_language"] = audio_language
+        report["source_text_language"] = source_text_language
+        report["target_language"] = target_language
+        report["reference_language"] = reference_language
+
         progress("manifest", "4/6 正在生成字幕与清单", 4)
 
         manifest_artifacts = [
@@ -1224,10 +1235,6 @@ def build_project_v02(
 
         progress("final", "6/6 正在写入最终报告", 6)
 
-        report["audio_language"] = audio_language
-        report["source_text_language"] = source_text_language
-        report["target_language"] = target_language
-        report["reference_language"] = reference_language
         report["stage_resume"] = {
             "input_fingerprint": input_fingerprint,
             "resumed": resumed_stages,
