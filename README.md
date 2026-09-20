@@ -111,7 +111,7 @@ chmod +x run_termux.sh
 ./run_termux.sh
 ```
 
-Termux uses native 7-Zip and a reduced Python dependency set. The current OpenAI Python SDK is intentionally omitted on Android because its required `jiter`/Rust dependency chain is not reliably buildable in Termux. Core archive functions work normally; GPT fallback translation should be run from a desktop host for now.
+Termux uses a dependency-light stdlib HTTP server plus native 7-Zip. It intentionally avoids the FastAPI/Pydantic stack because current Pydantic v2 pulls `pydantic-core`, which frequently falls back to a Rust/maturin source build on Android and fails on `aarch64-unknown-linux-android`. The OpenAI Python SDK is also omitted because it pulls `jiter`/Rust. Core archive, update, subtitle and FLAC functions remain available; GPT fallback translation should be run from a desktop host for now.
 
 Default local URL:
 
