@@ -9,7 +9,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.builder import build_entries
-from app.jobs import create_job, get_job
+from app.jobs import create_job, delete_project_jobs, get_job
 from app.pipeline import _load_translation_checkpoint, _write_translation_checkpoint
 from app.project import (
     create_project,
@@ -139,6 +139,24 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
         self.assertIsNotNone(state)
         self.assertEqual(state["project_root"], "/tmp/project-a")
         self.assertEqual(state["project_name"], "Project A")
+
+    def test_deleted_project_history_can_be_purged(self) -> None:
+        job = create_job(
+            "unit-project-history",
+            lambda: {"ok": True},
+            project_root="/tmp/deleted-project",
+            project_name="Deleted",
+        )
+        import time
+        for _ in range(100):
+            state = get_job(job.id)
+            if state and state["state"] in {"succeeded", "failed"}:
+                break
+            time.sleep(0.01)
+        self.assertIsNotNone(get_job(job.id))
+        removed = delete_project_jobs("/tmp/deleted-project")
+        self.assertGreaterEqual(removed, 1)
+        self.assertIsNone(get_job(job.id))
 
     def test_translation_prompt_uses_language_roles_and_reference_text(self) -> None:
         prompt = _translation_prompt(
