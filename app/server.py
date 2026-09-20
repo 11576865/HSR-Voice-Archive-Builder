@@ -20,6 +20,8 @@ from .quick import create_quick_project, discover_source_candidates, quick_scan
 from .project import (
     ProjectConfig,
     create_project,
+    delete_project,
+    forget_project,
     last_project_root,
     load_project,
     project_summary,
@@ -253,6 +255,7 @@ def api_quick_build(
                 source_text_language=config.source_text_language,
                 target_language=config.target_language,
                 reference_language=config.reference_language,
+                reference_text_embedded=config.reference_text_embedded,
             )
 
         job = create_job(
@@ -323,6 +326,44 @@ def api_project_close():
     _clear_active()
     return {"ok": True, "project": None}
 
+
+@app.post("/api/project/forget")
+def api_project_forget(project_path: str = Form(...)):
+    try:
+        assert_no_active_build()
+        root = Path(project_path).expanduser().resolve()
+        result = forget_project(root)
+        global _active_root
+        if _active_root is not None and _active_root.resolve() == root:
+            _clear_active()
+        return {
+            "ok": True,
+            "result": result,
+            "project": None if _active_root is None else project_summary(_active_config()),
+            "recent_projects": recent_projects(12),
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/delete")
+def api_project_delete(project_path: str = Form(...)):
+    try:
+        assert_no_active_build()
+        root = Path(project_path).expanduser().resolve()
+        global _active_root
+        was_active = _active_root is not None and _active_root.resolve() == root
+        result = delete_project(root)
+        if was_active:
+            _clear_active()
+        return {
+            "ok": True,
+            "result": result,
+            "project": None if _active_root is None else project_summary(_active_config()),
+            "recent_projects": recent_projects(12),
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.post("/api/project/save")
@@ -423,6 +464,7 @@ def api_project_build():
                 source_text_language=config.source_text_language,
                 target_language=config.target_language,
                 reference_language=config.reference_language,
+                reference_text_embedded=config.reference_text_embedded,
             )
 
         job = create_job(
