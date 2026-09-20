@@ -11,4 +11,4 @@ fi
 
 python -m app.preflight --deps-only >/dev/null 2>&1 || python -m pip install -r requirements-termux.txt
 python -m app.preflight --deps-only
-python -m app.launch
+python -m app.launch --lite --no-browser
