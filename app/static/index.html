@@ -240,10 +240,10 @@ function fillProject(p){
   f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
   document.getElementById('candidatePath').value=c.update_candidates||'';
   document.getElementById('remoteCharacter').value=c.remote_character||'';
-  const r=p.report||{},has=!!p.has_manifest;
-  document.getElementById('manifestState').textContent=has?'完整成品已生成':'尚未完成';
+  const r=p.report||{},has=!!p.build_complete;
+  document.getElementById('manifestState').textContent=has?'完整构建已完成':'尚未完成';
   const hint=document.getElementById('archiveHint');
-  hint.textContent=has?'构建已产生完整 manifest；下方统计和成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
+  hint.textContent=has?'构建流程已完整结束；下方统计和成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
   hint.className='notice '+(has?'ok':'');
   document.getElementById('archiveStats').classList.toggle('hidden',!has);
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
