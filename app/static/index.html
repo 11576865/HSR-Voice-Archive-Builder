@@ -23,7 +23,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-C</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-D</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -75,6 +75,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
               <label>英文 WAV 来源</label><input name="wav_source" required placeholder="D:\HSR\English-WAV.zip">
               <label>双语索引 CSV（可选）</label><input name="bilingual_csv">
               <label>中文 LAB 来源（可选）</label><input name="chs_source">
+              <label>术语覆盖层 CSV / JSON（可选）</label><input name="glossary_path" placeholder="D:\\HSR\\glossary.csv">
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
               <div class="actions"><button class="primary">创建</button></div>
             </form>
@@ -93,6 +94,9 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <div><label>双语索引 CSV（可选）</label><input name="bilingual_csv"></div>
           <div><label>中文 LAB 来源（可选）</label><input name="chs_source"></div>
         </div>
+        <label>术语覆盖层 CSV / JSON（可选）</label>
+        <input name="glossary_path" placeholder="glossary.csv / glossary.json">
+        <p class="small muted">CSV 使用 English/Chinese（或 source/target）列；本地覆盖项优先于内置核心术语，并参与阶段指纹。</p>
         <div class="row3">
           <div><label>同组间隔</label><input name="same_group_gap" type="number" step=".01"></div>
           <div><label>组间间隔</label><input name="group_gap" type="number" step=".01"></div>
@@ -204,7 +208,7 @@ function fillProject(p){
   document.getElementById('projectName').textContent=p?p.name:'未打开';
   if(!p)return;
   const c=p.config,f=document.getElementById('projectForm');
-  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
+  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
   f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
