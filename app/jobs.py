@@ -180,3 +180,20 @@ def recent_jobs(limit: int = 20) -> list[dict[str, Any]]:
     with _LOCK:
         values = list(_JOBS.values())[-limit:]
         return [asdict(job) for job in reversed(values)]
+
+
+def delete_project_jobs(project_root: str) -> int:
+    """Remove completed/history records owned by a deleted project."""
+    target = str(project_root or "").strip()
+    if not target:
+        return 0
+    with _LOCK:
+        doomed = [
+            job_id for job_id, job in _JOBS.items()
+            if job.project_root == target and job.state not in {"queued", "running"}
+        ]
+        for job_id in doomed:
+            _JOBS.pop(job_id, None)
+        if doomed:
+            _persist_locked()
+        return len(doomed)
