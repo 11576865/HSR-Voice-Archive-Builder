@@ -95,6 +95,18 @@ def assert_no_active_build() -> None:
             )
 
 
+def assert_project_idle(project_root: str) -> None:
+    target = str(project_root or "").strip()
+    if not target:
+        return
+    with _LOCK:
+        for job in _JOBS.values():
+            if job.project_root == target and job.state in {"queued", "running"}:
+                raise RuntimeError(
+                    f"项目「{job.project_name or target}」仍有任务正在运行，请等待任务结束后再删除"
+                )
+
+
 def create_job(
     kind: str,
     fn: Callable[..., Any],
