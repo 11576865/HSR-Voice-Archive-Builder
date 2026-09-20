@@ -310,6 +310,7 @@ def ensure_translation_capability(
     *,
     client: OpenAIResponsesHTTPClient | None = None,
     force: bool = False,
+    before_request_callback: Callable[[], None] | None = None,
     usage_callback: Callable[[dict[str, int] | None], None] | None = None,
 ) -> dict[str, object]:
     """Verify the selected route can satisfy the structured translation schema.
@@ -351,6 +352,8 @@ def ensure_translation_capability(
             usage_callback(usage)
 
     try:
+        if before_request_callback is not None:
+            before_request_callback()
         rows = translate_records(
             [{"id": "smoke-1", "english": "The story's not finished."}],
             model=model,
