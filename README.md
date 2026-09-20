@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-B**.
+Current development version: **v0.9-C**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-B add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-C add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -71,7 +71,8 @@ v0.4-v0.9-B add failure-driven hardening based on upstream documentation, issue 
 - launchers run an offline dependency preflight and no longer reinstall packages on every start;
 - LAN startup checks port conflicts and supports `--display-host` for multi-NIC/offline networks;
 - Termux/Android interruption risk is surfaced rather than hidden;
-- v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart.
+- v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart;
+- v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -210,6 +211,8 @@ Useful options:
 --translate-missing
 --translation-model gpt-5.6-sol
 --translation-batch-size 80
+--translation-token-budget 0
+--translation-budget-usd 0
 ```
 
 ## Translation quality benchmark
@@ -281,6 +284,46 @@ final_report.json
 Every state file is atomically written and bound to the content fingerprints of the selected inputs, relevant build settings, translation provider/Base URL/model, and the stage schema version. Recorded output artifacts are checked by size and SHA-256 before reuse. If an input or artifact changes, the affected work is rebuilt instead of silently accepting stale state.
 
 `build_report.json` records `stage_resume.resumed` and `stage_resume.rebuilt`. Metadata and paid translation work can survive a Termux/process interruption. FLAC encoding remains all-or-nothing: only a completed, verified file is reusable; an interrupted encode starts again.
+
+## Translation usage, budgets, and capability cache
+
+v0.9-C makes API consumption observable instead of treating a successful translation as the only completion signal.
+
+Each translation build writes:
+
+```text
+output/translation_usage.json
+```
+
+The usage ledger records provider/Base URL/model identity, a pre-build heuristic token estimate, every capability/translation/repair API call, and the actual `usage` fields returned by the Responses endpoint. When the provider supplies them, cached-input and reasoning-token detail are retained as well.
+
+Two optional limits are available in Quick Mode, Advanced UI, and the CLI:
+
+```text
+--translation-token-budget 120000
+--translation-budget-usd 2.50
+```
+
+A value of `0` means unlimited. Budget checks run immediately before a new request. If the next request would cross the configured limit, the build stops before sending it and previously completed checkpoints remain available for resume.
+
+Token estimates are deliberately labeled estimates; they are not presented as exact tokenizer results. Actual API usage is the authoritative count after a response.
+
+USD budgeting is stricter. The built-in price table is used only for the official OpenAI provider and is versioned in code. V-API and custom relays do **not** silently inherit official OpenAI prices. If a relay has known rates, configure both overrides locally:
+
+```bash
+export HSR_TRANSLATION_INPUT_USD_PER_MTOK=...
+export HSR_TRANSLATION_OUTPUT_USD_PER_MTOK=...
+```
+
+Otherwise use a token budget. If a USD limit is requested while pricing is unknown, the request is blocked rather than inventing a cost.
+
+Structured-output smoke results are cached for seven days by provider + Base URL + model + schema fingerprint. Re-running:
+
+```bash
+python -m app.credentials test --model gpt-5.6-sol
+```
+
+reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
 
 ## Chinese text precedence
 
@@ -386,6 +429,8 @@ output/
 ├── bilingual_index_corrected.csv
 ├── bilingual.srt
 ├── build_report.json
+├── translation_qa.json
+├── translation_usage.json
 ├── update_plan.json
 └── continuous.flac
 ```
