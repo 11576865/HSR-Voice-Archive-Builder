@@ -33,6 +33,8 @@ class Job:
     phase: str = ""
     progress_current: int = 0
     progress_total: int = 0
+    project_root: str = ""
+    project_name: str = ""
 
 
 _LOCK = threading.Lock()
@@ -98,6 +100,8 @@ def create_job(
     fn: Callable[..., Any],
     *,
     with_progress: bool = False,
+    project_root: str = "",
+    project_name: str = "",
 ) -> Job:
     job = Job(
         id=uuid.uuid4().hex,
@@ -105,6 +109,8 @@ def create_job(
         state="queued",
         message="等待执行",
         created_at=now(),
+        project_root=str(project_root or ""),
+        project_name=str(project_name or ""),
     )
     with _LOCK:
         if kind in BUILD_KINDS:
