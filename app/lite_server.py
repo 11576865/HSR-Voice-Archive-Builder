@@ -17,7 +17,12 @@ from .diff import classify
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
-from .quick import create_quick_project, discover_source_candidates, quick_scan
+from .quick import (
+    create_quick_project,
+    discover_source_candidates,
+    quick_scan,
+    relink_project_source,
+)
 from .project import (
     ProjectConfig,
     create_project,
@@ -102,7 +107,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.9-F"
+    server_version = "HSRVoiceLite/0.9-G"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -266,7 +271,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.9-F-termux-lite",
+                "version": "0.9-G-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -463,6 +468,21 @@ class Handler(BaseHTTPRequestHandler):
                 "result": result,
                 "project": None if _active_root is None else project_summary(_active_config()),
                 "recent_projects": recent_projects(12),
+            })
+            return
+
+        if path == "/api/project/relink":
+            config = _active_config()
+            assert_project_idle(config.root)
+            role = data.get("role", "").strip()
+            replacement = data.get("replacement_path", "").strip()
+            if not replacement:
+                raise ValueError("Replacement path is required")
+            config, result = relink_project_source(config, role, Path(replacement))
+            self._json({
+                "ok": True,
+                "result": result,
+                "project": project_summary(config),
             })
             return
 
