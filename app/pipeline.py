@@ -218,6 +218,8 @@ def _translate_missing(
     model: str,
     batch_size: int,
     checkpoint_path: Path,
+    token_budget: int = 0,
+    usd_budget: float = 0.0,
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
@@ -232,6 +234,17 @@ def _translate_missing(
             "count_translation_qa_warnings": 0,
             "count_translation_qa_hard_failed": 0,
             "count_translation_qa_retried": 0,
+            "translation_estimated_input_tokens": 0,
+            "translation_estimated_output_tokens": 0,
+            "translation_estimated_total_tokens": 0,
+            "translation_estimated_api_calls": 0,
+            "translation_actual_input_tokens": 0,
+            "translation_actual_output_tokens": 0,
+            "translation_actual_total_tokens": 0,
+            "translation_api_call_count": 0,
+            "translation_estimated_cost_usd": 0.0,
+            "translation_token_budget": max(0, int(token_budget)),
+            "translation_budget_usd": max(0.0, float(usd_budget)),
         }
 
     from .credentials import translation_identity
@@ -241,7 +254,17 @@ def _translate_missing(
         qa_messages,
         translation_qa,
     )
-    from .translator import make_client, translate_records
+    from .translation_runtime import (
+        TranslationUsageLedger,
+        estimate_request_tokens,
+        estimate_workload_tokens,
+        records_fingerprint,
+    )
+    from .translator import (
+        ensure_translation_capability,
+        make_client,
+        translate_records,
+    )
 
     provider, base_url = translation_identity()
     checkpoint = _load_translation_checkpoint(
@@ -288,17 +311,54 @@ def _translate_missing(
     qa_retries = 0
     client = make_client() if remaining else None
 
+    usage_estimate = estimate_workload_tokens(remaining, batch_size)
+    ledger = TranslationUsageLedger(
+        checkpoint_path.with_name("translation_usage.json"),
+        identity={
+            "provider": provider,
+            "base_url": base_url,
+            "model": model,
+            "target_fingerprint": records_fingerprint(targets),
+        },
+        estimate=usage_estimate,
+        token_budget=token_budget,
+        usd_budget=usd_budget,
+    )
+
+    capability: dict[str, object] = {
+        "cached": True,
+        "usage_supported": True,
+    }
+    if remaining:
+        smoke = [{"id": "smoke-1", "english": "The story's not finished."}]
+        smoke_estimate = estimate_request_tokens(smoke)
+        capability = ensure_translation_capability(
+            model,
+            client=client,
+            before_request_callback=lambda: ledger.check_before_request(
+                smoke_estimate,
+                phase="capability-smoke",
+            ),
+            usage_callback=lambda usage: ledger.record("capability-smoke", usage),
+        )
+        if ledger.budget_active and not capability.get("usage_supported"):
+            ledger.assert_observable()
+
     for start in range(0, len(remaining), batch_size):
         batch = remaining[start:start + batch_size]
         batch_glossary = relevant_glossary(
             CORE_GLOSSARY,
             [row["english"] for row in batch],
         )
+        request_estimate = estimate_request_tokens(batch, batch_glossary)
+        phase = f"translation-batch-{start // batch_size + 1}"
+        ledger.check_before_request(request_estimate, phase=phase)
         translated = translate_records(
             batch,
             model=model,
             glossary=batch_glossary,
             client=client,
+            usage_callback=lambda usage, phase=phase: ledger.record(phase, usage),
         )
 
         retry_records: list[dict[str, str]] = []
@@ -327,11 +387,17 @@ def _translate_missing(
                 CORE_GLOSSARY,
                 [row["english"] for row in retry_records],
             )
+            repair_phase = f"repair-batch-{start // batch_size + 1}"
+            ledger.check_before_request(
+                estimate_request_tokens(retry_records, retry_glossary),
+                phase=repair_phase,
+            )
             retried_rows = translate_records(
                 retry_records,
                 model=model,
                 glossary=retry_glossary,
                 client=client,
+                usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
             )
             qa_retries += len(retry_records)
             repaired = {row["id"]: str(row["chinese"]).strip() for row in retried_rows}
@@ -383,6 +449,8 @@ def _translate_missing(
             records=qa_rows,
         )
 
+        ledger.assert_observable()
+
         if hard_failures:
             first = hard_failures[0]
             raise RuntimeError(
@@ -415,6 +483,9 @@ def _translate_missing(
     return {
         **_translation_counts(len(targets), reused, api_translated),
         **qa_summary,
+        **ledger.report(),
+        "translation_capability_probe_cached": bool(capability.get("cached", True)),
+        "translation_capability_usage_supported": bool(capability.get("usage_supported", True)),
         "count_translation_qa_api_retries": qa_retries,
         "translation_provider": provider,
         "translation_base_url": base_url,
@@ -436,6 +507,8 @@ def build_project_v02(
     translate_missing: bool = False,
     translation_model: str = "gpt-5.6-sol",
     translation_batch_size: int = 80,
+    translation_token_budget: int = 0,
+    translation_budget_usd: float = 0.0,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -557,6 +630,8 @@ def build_project_v02(
                         translation_model,
                         translation_batch_size,
                         out_dir / ".translation_checkpoint.json",
+                        translation_token_budget,
+                        translation_budget_usd,
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
@@ -674,7 +749,7 @@ def build_project_v02(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-B pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-C pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
@@ -686,10 +761,13 @@ if __name__ == "__main__":
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--translation-model", default="gpt-5.6-sol")
     p.add_argument("--translation-batch-size", type=int, default=80)
+    p.add_argument("--translation-token-budget", type=int, default=0)
+    p.add_argument("--translation-budget-usd", type=float, default=0.0)
     a = p.parse_args()
     result = build_project_v02(
         a.index, a.wavs, a.out, a.bilingual, a.chs,
         a.same_gap, a.group_gap, not a.no_flac,
         a.translate_missing, a.translation_model, a.translation_batch_size,
+        a.translation_token_budget, a.translation_budget_usd,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
