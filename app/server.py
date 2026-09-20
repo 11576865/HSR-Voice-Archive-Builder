@@ -176,6 +176,7 @@ def api_quick_scan(
     chs_source: str = Form(""),
     reference_source: str = Form(""),
     source_text_language: str = Form("en"),
+    reference_language: str = Form("auto"),
 ):
     try:
         plan = quick_scan(
@@ -183,6 +184,7 @@ def api_quick_scan(
             Path(chs_source) if chs_source.strip() else None,
             reference_source=Path(reference_source) if reference_source.strip() else None,
             source_text_language=source_text_language,
+            reference_language=reference_language,
         )
         return {"ok": True, "plan": plan}
     except Exception as exc:
