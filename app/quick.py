@@ -390,7 +390,11 @@ def _remote_candidate(
     }
 
 
-def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[str, str]]:
+def _remote_rows(
+    records: list[dict[str, str]],
+    wanted: set[str],
+    provider_label: str = "AI-Hobbyist EN.xlsx",
+) -> list[dict[str, str]]:
     result: list[dict[str, str]] = []
     seen: set[str] = set()
     for pos, row in enumerate(records, 1):
@@ -405,7 +409,7 @@ def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[s
             "index": str(pos),
             "group": parse_voice_identity(filename).group,
             "filename": filename,
-            "source": "AI-Hobbyist",
+            "source": provider_label,
             "source_detail": str(row.get("character", "")).strip(),
             "english": str(row.get("english", "")).strip(),
             "sha256": remote_hash if re.fullmatch(r"[0-9a-f]{64}", remote_hash) else "",
@@ -540,7 +544,11 @@ def quick_scan(
     official_chinese_matches = 0
     if selected_complete and selected_index is not None:
         if selected_index.get("source") == "remote":
-            index_rows = _remote_rows(remote_records, wav_names)
+            index_rows = _remote_rows(
+                remote_records,
+                wav_names,
+                str(selected_index.get("provider") or ai_hobbyist_index_label(remote_index_url)),
+            )
         else:
             index_rows = [
                 row for row in normalize_index(Path(selected_index["path"]))
@@ -700,7 +708,11 @@ def create_quick_project(
         )
         if _index_fingerprint(remote_records) != selected_index["records_fingerprint"]:
             raise RuntimeError("Remote index changed after Quick Scan; scan again before building")
-        filtered = _remote_rows(remote_records, wanted)
+        filtered = _remote_rows(
+            remote_records,
+            wanted,
+            str(selected_index.get("provider") or ai_hobbyist_index_label(str(selected_index["url"]))),
+        )
     else:
         local_index = Path(selected_index["path"])
         if sha256_file(local_index) != selected_index["file_sha256"]:
