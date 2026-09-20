@@ -8,6 +8,8 @@ import sys
 from importlib import metadata
 from typing import Any
 
+from .credentials import credentials_status
+
 MIN_PYTHON = (3, 11)
 COMMON_DEPENDENCIES = (
     ("openpyxl", "openpyxl", None),
@@ -79,10 +81,9 @@ def dependency_status() -> dict[str, Any]:
         for distribution, module, minimum in DESKTOP_DEPENDENCIES:
             _check_python_dependency(issues, versions, distribution, module, minimum)
 
-    # Translation uses the HTTPS Responses API directly through Python's
-    # standard library. No OpenAI SDK / jiter / Rust dependency is required.
-    openai_rest = True
-    openai_api_key_configured = bool(os.environ.get("OPENAI_API_KEY", "").strip())
+    # Translation uses an OpenAI-compatible Responses endpoint directly through
+    # Python's standard library. No vendor SDK / jiter / Rust dependency is required.
+    translation = credentials_status()
 
     seven_zip = shutil.which("7zz") or shutil.which("7z") or ""
     py7zr_ok = False
@@ -107,7 +108,7 @@ def dependency_status() -> dict[str, Any]:
         warnings.append(
             "Termux/Android detected: the lightweight stdlib HTTP server and native 7-Zip "
             "are used instead of FastAPI/Pydantic/py7zr because those dependency chains "
-            "are not reliably installable on Android. GPT translation uses direct HTTPS REST."
+            "are not reliably installable on Android. AI translation uses direct HTTPS REST."
         )
         warnings.append(
             "Android may terminate long CPU-heavy/background jobs; interrupted jobs are "
@@ -134,8 +135,15 @@ def dependency_status() -> dict[str, Any]:
         "warnings": warnings,
         "ffmpeg": ffmpeg,
         "seven_zip": seven_zip,
-        "openai_rest": openai_rest,
-        "openai_api_key_configured": openai_api_key_configured,
+        "translation_rest": True,
+        "translation_provider": translation["provider"],
+        "translation_base_url": translation["base_url"],
+        "translation_api_key_configured": translation["configured"],
+        # v0.6 compatibility fields retained for callers that have not migrated yet.
+        "openai_rest": True,
+        "openai_api_key_configured": bool(
+            translation["configured"] and translation["provider"] == "openai"
+        ),
         "termux": termux,
     }
 
@@ -161,6 +169,9 @@ def main() -> None:
             print(f"FFmpeg: {status['ffmpeg']}")
         else:
             print("FFmpeg: not found (FLAC building will be unavailable)")
+        provider = status["translation_provider"]
+        configured = "configured" if status["translation_api_key_configured"] else "not configured"
+        print(f"Translation API: {provider} ({configured})")
         for warning in status["warnings"]:
             print(f"Warning: {warning}")
 

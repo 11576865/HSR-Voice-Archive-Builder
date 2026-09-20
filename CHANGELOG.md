@@ -1,5 +1,15 @@
 # Changelog
 
+## v0.7
+
+- Generalized translation from OpenAI-only to OpenAI-compatible Responses API providers.
+- Added built-in provider presets for official OpenAI and V-API (`https://api.gpt.ge/v1`), plus custom HTTPS/loopback endpoints.
+- Added local credential management with hidden terminal input and best-effort `0600` key storage under `~/.hsr-voice-archive-builder/`; API keys are not written to project files or served to the browser.
+- Added `python -m app.credentials status` and a one-line structured-output smoke test.
+- Translation checkpoints are now bound to provider + Base URL + model so changing relay/provider cannot silently reuse cached translations from a different route.
+- Dashboard/runtime wording now reports generic AI API translation rather than assuming OpenAI.
+- Kept the v0.6 official OpenAI environment variable path backward compatible.
+
 ## v0.6
 
 - Replaced the OpenAI Python SDK dependency with a small standard-library HTTPS client for the official Responses API.

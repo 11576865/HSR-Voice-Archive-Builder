@@ -90,7 +90,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.5"
+    server_version = "HSRVoiceLite/0.7"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -254,7 +254,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.6-termux-lite",
+                "version": "0.7-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -345,8 +345,11 @@ class Handler(BaseHTTPRequestHandler):
             runtime = dependency_status()
             if config.make_flac and not runtime.get("ffmpeg"):
                 raise RuntimeError("FFmpeg is not installed or is not available on PATH")
-            if config.translate_missing and not os.environ.get("OPENAI_API_KEY"):
-                raise RuntimeError("OPENAI_API_KEY is not set")
+            if config.translate_missing and not runtime.get("translation_api_key_configured"):
+                raise RuntimeError(
+                    "Translation API key is not configured; run "
+                    "'python -m app.credentials configure --provider vapi'"
+                )
 
             def run():
                 return build_project_v02(

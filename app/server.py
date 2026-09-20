@@ -143,7 +143,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.6",
+        "version": "0.7",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -242,9 +242,11 @@ def api_project_build():
             raise ValueError("Project index, WAV source, and output directory are required")
         if config.make_flac and not shutil.which("ffmpeg"):
             raise RuntimeError("FFmpeg is not installed or is not available on PATH")
-        if config.translate_missing and not os.environ.get("OPENAI_API_KEY"):
+        if config.translate_missing and not dependency_status().get("translation_api_key_configured"):
             raise RuntimeError(
-                "OPENAI_API_KEY is not set; disable GPT fallback or configure the key in the local environment"
+                "Translation API key is not configured; run "
+                "'python -m app.credentials configure --provider vapi' "
+                "or disable AI fallback translation"
             )
 
         def run():

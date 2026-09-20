@@ -14,7 +14,7 @@ The Termux launcher therefore uses:
 
 - Python stdlib HTTP server instead of FastAPI/Uvicorn/Pydantic.
 - native Termux 7-Zip instead of py7zr.
-- no OpenAI Python SDK in the Android base install; translation calls the official Responses HTTPS API directly with Python's standard library.
+- no vendor AI SDK in the Android base install; translation calls an OpenAI-compatible Responses HTTPS API directly with Python's standard library.
 
 Desktop installs keep the richer Python dependency stack. No Rust toolchain is required for the normal Termux startup path.
 
@@ -42,11 +42,24 @@ Keep Termux running and open `http://127.0.0.1:8765/` in the browser.
 
 Core archive functions, local project management, update scanning, subtitles and FLAC remain available on Termux.
 
-GPT fallback translation also works without the OpenAI Python SDK. The project sends HTTPS requests directly to the official Responses API with Python's standard library. Configure the API key in the Termux environment before starting the local engine:
+AI fallback translation works without a vendor Python SDK. Configure a provider once with hidden terminal input:
 
 ```bash
-export OPENAI_API_KEY="..."
-bash run_termux.sh
+python -m app.credentials configure --provider vapi
 ```
 
-The key is not stored in the browser UI or project JSON. Translation keeps the existing batch checkpoint, ID validation and retry behavior.
+For the official OpenAI API instead:
+
+```bash
+python -m app.credentials configure --provider openai
+```
+
+The key is stored only in the local Termux home state directory with best-effort owner-only permissions. It is not placed in the browser UI or project JSON. Later `bash run_termux.sh` launches reuse the saved provider automatically.
+
+Before a real character batch, verify the configured Responses endpoint and Structured Outputs with one tiny request:
+
+```bash
+python -m app.credentials test --model gpt-5.6-luna
+```
+
+Translation keeps batch checkpoints, exact ID validation and bounded retry behavior. Checkpoints are bound to provider + Base URL + model.

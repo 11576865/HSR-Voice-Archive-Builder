@@ -55,15 +55,37 @@ def _text_fingerprint(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
-def _load_translation_checkpoint(path: Path, model: str) -> dict[str, dict[str, str]]:
+def _load_translation_checkpoint(
+    path: Path,
+    model: str,
+    provider: str,
+    base_url: str,
+) -> dict[str, dict[str, str]]:
     if not path.is_file():
         return {}
     try:
         payload = json.loads(path.read_text(encoding="utf-8"))
     except (OSError, ValueError, TypeError):
         return {}
-    if payload.get("schema_version") != 1 or payload.get("model") != model:
+
+    schema = payload.get("schema_version")
+    if schema == 1:
+        # v0.6 checkpoints were created only against the official OpenAI URL.
+        # Reuse them only when that identity is still selected.
+        if provider != "openai" or base_url != "https://api.openai.com/v1":
+            return {}
+        if payload.get("model") != model:
+            return {}
+    elif schema == 2:
+        if (
+            payload.get("model") != model
+            or payload.get("provider") != provider
+            or payload.get("base_url") != base_url
+        ):
+            return {}
+    else:
         return {}
+
     records = payload.get("records", {})
     return records if isinstance(records, dict) else {}
 
@@ -71,13 +93,17 @@ def _load_translation_checkpoint(path: Path, model: str) -> dict[str, dict[str, 
 def _write_translation_checkpoint(
     path: Path,
     model: str,
+    provider: str,
+    base_url: str,
     records: dict[str, dict[str, str]],
 ) -> None:
     atomic_write_text(
         path,
         json.dumps(
             {
-                "schema_version": 1,
+                "schema_version": 2,
+                "provider": provider,
+                "base_url": base_url,
                 "model": model,
                 "records": records,
             },
@@ -87,25 +113,46 @@ def _write_translation_checkpoint(
     )
 
 
+def _translation_counts(total: int, reused: int, api_translated: int) -> dict[str, int]:
+    # Generic names are authoritative in v0.7. The older count_gpt_* aliases are
+    # retained so existing dashboards/reports do not break immediately.
+    return {
+        "count_api_translated": total,
+        "count_api_checkpoint_reused": reused,
+        "count_api_new_translations": api_translated,
+        "count_gpt_translated": total,
+        "count_gpt_checkpoint_reused": reused,
+        "count_gpt_api_translated": api_translated,
+    }
+
+
 def _translate_missing(
     entries,
     model: str,
     batch_size: int,
     checkpoint_path: Path,
-) -> dict[str, int]:
+) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
     targets = [{"id": e.filename, "english": e.english} for e in entries if not e.chinese]
     if not targets:
         return {
-            "count_gpt_translated": 0,
-            "count_gpt_checkpoint_reused": 0,
-            "count_gpt_api_translated": 0,
+            **_translation_counts(0, 0, 0),
+            "translation_provider": "",
+            "translation_base_url": "",
+            "translation_model": model,
         }
 
+    from .credentials import translation_identity
     from .translator import make_client, translate_records
 
-    checkpoint = _load_translation_checkpoint(checkpoint_path, model)
+    provider, base_url = translation_identity()
+    checkpoint = _load_translation_checkpoint(
+        checkpoint_path,
+        model,
+        provider,
+        base_url,
+    )
     completed: dict[str, str] = {}
     reused = 0
     for row in targets:
@@ -143,8 +190,16 @@ def _translate_missing(
 
         # Persist after every successful batch. If a later batch gets a 429,
         # timeout, network failure, or the process exits, completed batches are
-        # reusable on the next build.
-        _write_translation_checkpoint(checkpoint_path, model, checkpoint)
+        # reusable on the next build. Provider/Base URL are part of checkpoint
+        # identity so switching relays cannot silently reuse another provider's
+        # translations.
+        _write_translation_checkpoint(
+            checkpoint_path,
+            model,
+            provider,
+            base_url,
+            checkpoint,
+        )
 
     wanted = {row["id"] for row in targets}
     if set(completed) != wanted:
@@ -158,12 +213,13 @@ def _translate_missing(
             if not text:
                 raise RuntimeError(f"Missing completed translation: {entry.filename}")
             entry.chinese = text
-            entry.chinese_source = f"gpt:{model}"
+            entry.chinese_source = f"api:{provider}:{model}"
 
     return {
-        "count_gpt_translated": len(targets),
-        "count_gpt_checkpoint_reused": reused,
-        "count_gpt_api_translated": api_translated,
+        **_translation_counts(len(targets), reused, api_translated),
+        "translation_provider": provider,
+        "translation_base_url": base_url,
+        "translation_model": model,
     }
 
 
@@ -224,7 +280,7 @@ def build_project_v02(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.2 pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.7 pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
