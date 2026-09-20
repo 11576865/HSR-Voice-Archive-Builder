@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import tempfile
+import threading
+import time
 import unittest
 import wave
 import zipfile
@@ -9,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app.builder import build_entries
-from app.jobs import create_job, delete_project_jobs, get_job
+from app.jobs import assert_project_idle, create_job, delete_project_jobs, get_job
 from app.pipeline import _load_translation_checkpoint, _write_translation_checkpoint
 from app.project import (
     create_project,
@@ -147,7 +149,6 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
             project_root="/tmp/deleted-project",
             project_name="Deleted",
         )
-        import time
         for _ in range(100):
             state = get_job(job.id)
             if state and state["state"] in {"succeeded", "failed"}:
@@ -157,6 +158,30 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
         removed = delete_project_jobs("/tmp/deleted-project")
         self.assertGreaterEqual(removed, 1)
         self.assertIsNone(get_job(job.id))
+
+    def test_active_project_job_blocks_deletion_guard(self) -> None:
+        gate = threading.Event()
+        job = create_job(
+            "unit-project-active",
+            lambda: gate.wait(2),
+            project_root="/tmp/active-project",
+            project_name="Active",
+        )
+        for _ in range(100):
+            state = get_job(job.id)
+            if state and state["state"] == "running":
+                break
+            time.sleep(0.01)
+        with self.assertRaisesRegex(RuntimeError, "仍有任务正在运行"):
+            assert_project_idle("/tmp/active-project")
+        gate.set()
+        for _ in range(100):
+            state = get_job(job.id)
+            if state and state["state"] in {"succeeded", "failed"}:
+                break
+            time.sleep(0.01)
+        assert_project_idle("/tmp/active-project")
+        delete_project_jobs("/tmp/active-project")
 
     def test_translation_prompt_uses_language_roles_and_reference_text(self) -> None:
         prompt = _translation_prompt(
