@@ -110,6 +110,47 @@ class V09CTranslationRuntimeTests(unittest.TestCase):
             client.create(model="gpt-5.6-sol", input="x")
         self.assertEqual(opener.calls, 1)
 
+    def test_403_is_not_retried(self) -> None:
+        headers = Message()
+        error = urllib.error.HTTPError(
+            "https://api.openai.com/v1/responses",
+            403,
+            "Forbidden",
+            headers,
+            io.BytesIO(b'{"error":{"message":"forbidden"}}'),
+        )
+        opener = ErrorOpener(error)
+        client = OpenAIResponsesHTTPClient(
+            "secret",
+            opener=opener,
+            sleeper=lambda _: None,
+            max_retries=5,
+        )
+        with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+            client.create(model="gpt-5.6-sol", input="x")
+        self.assertEqual(opener.calls, 1)
+
+    def test_5xx_is_retried_with_bound(self) -> None:
+        headers = Message()
+        error = urllib.error.HTTPError(
+            "https://api.openai.com/v1/responses",
+            503,
+            "Service Unavailable",
+            headers,
+            io.BytesIO(b'{"error":{"message":"temporary"}}'),
+        )
+        opener = ErrorOpener(error)
+        client = OpenAIResponsesHTTPClient(
+            "secret",
+            opener=opener,
+            sleeper=lambda _: None,
+            random_fn=lambda: 0.0,
+            max_retries=2,
+        )
+        with self.assertRaisesRegex(RuntimeError, "HTTP 503"):
+            client.create(model="gpt-5.6-sol", input="x")
+        self.assertEqual(opener.calls, 3)
+
     def test_token_budget_blocks_before_next_request(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             ledger = TranslationUsageLedger(
