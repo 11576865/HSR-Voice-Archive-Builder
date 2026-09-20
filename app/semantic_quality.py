@@ -86,7 +86,11 @@ def semantic_candidate(
 def summarize_semantic_qa(records: list[dict[str, Any]]) -> dict[str, int]:
     return {
         "count_semantic_qa_candidates": len(records),
-        "count_semantic_qa_failed": sum(not bool(row.get("ok")) for row in records),
+        # "failed" means initially flagged by the semantic verifier. A row can
+        # therefore be both failed=1 and repaired=1 while hard_failed remains 0.
+        "count_semantic_qa_failed": sum(
+            not bool(row.get("initial_ok", row.get("ok"))) for row in records
+        ),
         "count_semantic_qa_repaired": sum(bool(row.get("repaired")) for row in records),
         "count_semantic_qa_hard_failed": sum(bool(row.get("hard_failed")) for row in records),
     }
