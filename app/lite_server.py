@@ -21,6 +21,7 @@ from .quick import (
     create_quick_project,
     discover_source_candidates,
     quick_scan,
+    refresh_quick_project_source,
     relink_project_source,
 )
 from .project import (
@@ -108,7 +109,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.9-H"
+    server_version = "HSRVoiceLite/0.9-I"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -272,7 +273,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.9-H-termux-lite",
+                "version": "0.9-I-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -588,6 +589,27 @@ class Handler(BaseHTTPRequestHandler):
             "build", run, with_progress=True,
             project_root=config.root, project_name=config.name,
         )
+            self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/update/refresh-source":
+            assert_no_active_build()
+            config = _active_config()
+            replacement = data.get("replacement_source", "").strip()
+
+            def run():
+                current = load_project(Path(config.root))
+                return refresh_quick_project_source(
+                    current,
+                    Path(replacement) if replacement else None,
+                )
+
+            job = create_job(
+                "source-refresh",
+                run,
+                project_root=config.root,
+                project_name=config.name,
+            )
             self._json({"ok": True, "job": job.id})
             return
 
