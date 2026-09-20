@@ -308,6 +308,95 @@ def _is_within(path: Path, root: Path) -> bool:
         return False
 
 
+def _safe_clone_dir_name(value: str) -> str:
+    cleaned = "".join(
+        "-" if ch in '<>:"/\\|?*' or ord(ch) < 32 else ch
+        for ch in str(value or "").strip()
+    )
+    cleaned = " ".join(cleaned.split()).strip(" .-")
+    return (cleaned[:96].rstrip(" .-") or "voice-archive")
+
+
+def _allocate_clone_root(source_root: Path, name: str) -> Path:
+    base = source_root.resolve().parent
+    stem = _safe_clone_dir_name(name)
+    candidate = base / stem
+    if not candidate.exists():
+        return candidate
+    for i in range(2, 1000):
+        candidate = base / f"{stem}-{i}"
+        if not candidate.exists():
+            return candidate
+    raise RuntimeError("Could not allocate a unique cloned-project directory")
+
+
+def _clone_input_path(config: ProjectConfig, value: str) -> str:
+    value = str(value or "").strip()
+    if not value:
+        return ""
+    path = Path(value).expanduser()
+    if path.is_absolute():
+        return str(path.resolve())
+    # App-generated project-local inputs are copied into the clone and may
+    # remain relative. Other relative inputs are intentionally rebound to the
+    # original absolute location rather than silently duplicating user data.
+    if path.parts and path.parts[0] == ".generated":
+        return str(path)
+    resolved = resolve_project_path(config, value)
+    return str(resolved) if resolved is not None else value
+
+
+def clone_project(
+    config: ProjectConfig,
+    *,
+    name: str,
+    root: Path | None = None,
+) -> ProjectConfig:
+    """Clone project settings/generated metadata without copying outputs/state."""
+    new_name = str(name or "").strip()
+    if not new_name:
+        raise ValueError("Clone project name is required")
+
+    source_root = normalize_root(Path(config.root))
+    destination = normalize_root(root) if root is not None else _allocate_clone_root(
+        source_root, new_name
+    )
+    if destination == source_root:
+        raise ValueError("Clone destination must differ from the source project")
+    if destination.exists():
+        try:
+            if any(destination.iterdir()):
+                raise FileExistsError(
+                    f"Clone destination is not empty: {destination}"
+                )
+        except NotADirectoryError:
+            raise FileExistsError(f"Clone destination is not a directory: {destination}")
+    destination.mkdir(parents=True, exist_ok=True)
+
+    generated_source = source_root / ".generated"
+    generated_destination = destination / ".generated"
+    if generated_source.is_dir():
+        shutil.copytree(generated_source, generated_destination)
+
+    payload = asdict(config)
+    payload["name"] = new_name
+    payload["root"] = str(destination)
+    payload["index_csv"] = _clone_input_path(config, config.index_csv)
+    payload["wav_source"] = _clone_input_path(config, config.wav_source)
+    payload["bilingual_csv"] = _clone_input_path(config, config.bilingual_csv)
+    payload["chs_source"] = _clone_input_path(config, config.chs_source)
+    payload["glossary_path"] = _clone_input_path(config, config.glossary_path)
+    payload["reference_source"] = _clone_input_path(config, config.reference_source)
+    payload["update_candidates"] = _clone_input_path(config, config.update_candidates)
+    payload["output_dir"] = "output"
+    payload["state_dir"] = ".state"
+    payload["managed_project_root"] = True
+
+    clone = ProjectConfig(**payload)
+    save_project(clone)
+    return clone
+
+
 def delete_project(root: Path) -> dict[str, Any]:
     """Delete project-owned state while protecting external/user source files.
 
