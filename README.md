@@ -235,6 +235,23 @@ benchmark_sample.json
 
 `benchmark_results.csv` contains blank review fields for semantic fidelity, omission/addition, terminology, Chinese fluency, character tone, severity and notes. Official Chinese text is intentionally not used as the scoring target.
 
+## Translation automation and QA
+
+Production AI translation now adds two layers before accepting a line:
+
+1. **Context + terminology**: each missing line can carry its immediate previous/next English line as disambiguation context. Only glossary terms that actually occur in the batch are injected into the prompt.
+2. **Deterministic QA + targeted repair**: returned Chinese is checked for control-tag structure, required terminology, likely untranslated English residue and extreme length anomalies. Only suspicious rows are sent through one repair pass.
+
+The built-in glossary is intentionally small and conservative. Current hard constraints include stable terms such as Evanescia→绯英, Planarcadia→二相乐园, Phantasmoon Games→幻月游戏, Wishpower→愿力, Supplicant→谒者, Graphia→绘世, Yao Guang→爻光, Fulwish→满愿 and Stellar Jade→星琼.
+
+Every run writes:
+
+```text
+output/translation_qa.json
+```
+
+If a major formatting/terminology failure remains after the repair pass, the build stops before accepting the bad translation. Earlier paid batches remain checkpointed, so the failure does not force the whole character to be translated again.
+
 ## Chinese text precedence
 
 ```text
