@@ -17,9 +17,10 @@ from app.quick import (
     create_quick_project,
     infer_character,
     quick_scan,
+    remote_character_candidates,
     source_inventory,
 )
-from app.project import load_project
+from app.project import create_project, load_project
 
 
 def write_index(path: Path, rows: list[dict[str, str]]) -> None:
@@ -89,6 +90,37 @@ class QuickModeTests(unittest.TestCase):
         )
         self.assertEqual(candidate["primary_character"], "绯英")
         self.assertEqual(candidate["primary_character_share"], 0.75)
+
+    def test_legacy_project_prefers_remote_role_from_saved_quick_scan(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"
+            config = create_project(
+                root,
+                name="legacy",
+                index_csv="index.csv",
+                wav_source="voice.zip",
+                remote_character="evanescia",
+            )
+            generated = root / ".generated"
+            generated.mkdir(parents=True)
+            (generated / "quick_scan.json").write_text(
+                json.dumps({
+                    "index": {
+                        "source": "remote",
+                        "primary_character": "绯英",
+                    }
+                }, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            self.assertEqual(
+                remote_character_candidates(config, "evanescia"),
+                ["绯英", "evanescia"],
+            )
+            self.assertEqual(
+                remote_character_candidates(config, "花火"),
+                ["花火", "绯英", "evanescia"],
+            )
 
     def test_zip_inventory_is_read_only_and_counts_pairs(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -283,8 +315,8 @@ class QuickModeTests(unittest.TestCase):
             ]
             make_voice_zip(archive, names)
             records = [
-                {"filename": names[1], "english": "Archive.", "hash": "", "character": "Evanescia"},
-                {"filename": names[0], "english": "Story.", "hash": "", "character": "Evanescia"},
+                {"filename": names[1], "english": "Archive.", "hash": "", "character": "绯英"},
+                {"filename": names[0], "english": "Story.", "hash": "", "character": "绯英"},
             ]
             with patch(
                 "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
@@ -299,6 +331,7 @@ class QuickModeTests(unittest.TestCase):
                 config, plan = create_quick_project(archive, root=root / "project")
 
             self.assertEqual(plan["index"]["source"], "remote")
+            self.assertEqual(config.remote_character, "绯英")
             generated = Path(config.root) / ".generated" / "quick_index.csv"
             with generated.open("r", encoding="utf-8-sig", newline="") as f:
                 rows = list(csv.DictReader(f))
