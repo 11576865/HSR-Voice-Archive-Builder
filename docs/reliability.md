@@ -141,7 +141,7 @@ Network/API translation can fail after some batches have already completed, for 
 - The OpenAI SDK client is configured with finite retries and a request timeout.
 - Translation IDs must round-trip exactly and returned Chinese text must be non-empty.
 - After every successful batch, a local `.translation_checkpoint.json` is atomically updated.
-- A checkpoint row is reused only when the model matches and the SHA-256 of the source English text still matches.
+- A checkpoint row is reused only when provider, Base URL and model match and the SHA-256 of the source English text still matches.
 - A later failed batch therefore does not discard earlier successful batches.
 - The checkpoint is ignored by Git and remains local.
 
@@ -191,16 +191,27 @@ The API itself does not require that SDK. The Responses API is an HTTPS endpoint
 
 - v0.6 removes the OpenAI Python SDK from the normal dependency set.
 - Desktop and Termux now share one dependency-free Responses REST client implemented with Python's standard library.
-- The client posts only to `https://api.openai.com/v1/responses` and reads the API key from `OPENAI_API_KEY`.
+- The client defaults to `https://api.openai.com/v1/responses` but v0.7 can target a configured OpenAI-compatible HTTPS Base URL such as V-API. Loopback HTTP is allowed for local providers.
 - Structured Outputs use `text.format.type = json_schema`.
 - Temporary 408/409/429/5xx and network errors are retried with bounded exponential backoff and `Retry-After` support.
 - 401/403 and other non-transient HTTP failures are not blindly retried.
 - Translation batches remain checkpointed; successful earlier batches are reused after a later failure.
 - Returned translation IDs must exactly match the requested IDs and Chinese text must be non-empty before it is accepted.
-- API keys are not stored in project JSON or browser UI.
+- API keys are not stored in project JSON or browser UI. v0.7 can store a provider key in the local user state directory with best-effort owner-only permissions, or read it from environment variables.
+
+Third-party API relays add a separate trust and availability boundary. A provider advertising OpenAI-compatible endpoints does not by itself prove that every model route has the same upstream provenance or feature completeness as the official vendor endpoint.
+
+**v0.7 response**
+
+- Provider and Base URL are explicit runtime identity.
+- Switching provider/Base URL invalidates translation checkpoint reuse for that route.
+- A tiny structured-output smoke-test command is available before paid batch translation.
+- Only non-sensitive game dialogue should be sent through untrusted relays unless the operator has separately assessed their privacy and contractual terms.
 
 References:
 
+- https://gpt.ge/
+- https://gpt.ge/en/models/gpt-5.6-luna
 - https://developers.openai.com/api/reference/resources/responses/methods/create
 - https://developers.openai.com/api/docs/guides/structured-outputs
 - https://developers.openai.com/api/docs/models/gpt-5.6-luna
