@@ -11,6 +11,8 @@ from app.builder import build_entries
 from app.jobs import create_job, get_job
 from app.pipeline import _load_translation_checkpoint, _write_translation_checkpoint
 from app.project import create_project, recent_projects
+from app.quick import quick_scan
+from app.remote_index import ai_hobbyist_index_url
 from app.semantic_quality import semantic_risk_tags
 from app.translator import _translation_prompt
 
@@ -76,6 +78,68 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
         self.assertIn("into ko", prompt)
         self.assertIn("reference_text", prompt)
         self.assertIn("I'm going.", prompt)
+
+    def test_builtin_remote_indexes_cover_supported_voice_languages(self) -> None:
+        self.assertTrue(ai_hobbyist_index_url("en").endswith("/EN.xlsx"))
+        self.assertTrue(ai_hobbyist_index_url("zh-CN").endswith("/CHS.xlsx"))
+        self.assertTrue(ai_hobbyist_index_url("ja").endswith("/JP.xlsx"))
+        self.assertTrue(ai_hobbyist_index_url("ko").endswith("/KR.xlsx"))
+        with self.assertRaisesRegex(ValueError, "No built-in"):
+            ai_hobbyist_index_url("ru")
+
+    def test_non_english_quick_scan_uses_remote_language_index_without_local_lab(self) -> None:
+        inventory = {
+            "source": "/fake/voice.7z",
+            "kind": "7z",
+            "file_count": 1,
+            "wav_count": 1,
+            "lab_count": 0,
+            "wav_names": ["archive_evanescia_1.wav"],
+            "lab_names": [],
+            "duplicate_wav_names": [],
+            "wav_lab_pairs": 0,
+            "wav_without_lab": 1,
+            "declared_bytes": 123,
+            "fingerprint": {
+                "algorithm": "sha256",
+                "digest": "abc",
+                "source_size_bytes": 123,
+                "source_modified_ns": 1,
+            },
+        }
+        records = [
+            {
+                "filename": "archive_evanescia_1.wav",
+                "hash": "",
+                "character": "Evanescia",
+                "english": "行くよ。",
+                "battle": "",
+            }
+        ]
+        with (
+            patch("app.quick.source_inventory", return_value=inventory),
+            patch("app.quick._index_candidates", return_value=[]),
+            patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": False, "stale": False}),
+            ) as fetched,
+            patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "custom",
+                    "base_url": "https://example.invalid/v1",
+                    "configured": True,
+                },
+            ),
+        ):
+            plan = quick_scan(Path("/fake/voice.7z"), source_text_language="ja")
+
+        self.assertTrue(plan["ready"])
+        self.assertEqual(plan["source_text_language"], "ja")
+        self.assertTrue(plan["translation"]["remote_index_url"].endswith("/JP.xlsx"))
+        self.assertEqual(plan["index"]["english_matched"], 1)
+        called_url = fetched.call_args.args[1]
+        self.assertTrue(called_url.endswith("/JP.xlsx"))
 
     def test_multilingual_semantic_risk_heuristics(self) -> None:
         self.assertIn("negation", semantic_risk_tags("私は行かない。", "ja"))
