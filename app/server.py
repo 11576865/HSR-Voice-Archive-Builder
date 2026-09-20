@@ -16,7 +16,12 @@ from .diff import classify
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
-from .quick import create_quick_project, discover_source_candidates, quick_scan
+from .quick import (
+    create_quick_project,
+    discover_source_candidates,
+    quick_scan,
+    relink_project_source,
+)
 from .project import (
     ProjectConfig,
     create_project,
@@ -155,7 +160,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-F",
+        "version": "0.9-G",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -363,6 +368,27 @@ def api_project_delete(project_path: str = Form(...)):
             "result": result,
             "project": None if _active_root is None else project_summary(_active_config()),
             "recent_projects": recent_projects(12),
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/relink")
+def api_project_relink(
+    role: str = Form(...),
+    replacement_path: str = Form(...),
+):
+    try:
+        config = _active_config()
+        assert_project_idle(config.root)
+        replacement = replacement_path.strip()
+        if not replacement:
+            raise ValueError("Replacement path is required")
+        config, result = relink_project_source(config, role, Path(replacement))
+        return {
+            "ok": True,
+            "result": result,
+            "project": project_summary(config),
         }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
