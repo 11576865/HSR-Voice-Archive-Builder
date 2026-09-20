@@ -179,3 +179,22 @@ A fixed port may already be occupied, and a machine with VPNs, virtual adapters,
 - LAN mode gathers multiple IPv4 candidates instead of assuming a single UDP-route answer.
 - `--display-host <IP>` lets the user override the printed phone/tablet URL on multi-interface or offline LAN hosts.
 - Non-loopback binding is refused unless LAN mode is explicitly enabled.
+
+
+## OpenAI Python SDK on Termux / Android
+
+The current OpenAI Python SDK depends on `jiter`, a Rust-backed package. On Termux/Python 3.13 there are public reports of pip falling back to source builds, invoking `maturin`, and failing because the Android Rust target is not supported by the bootstrap path. The official SDK still lists `jiter` as a required dependency.
+
+**Project response**
+
+- The Termux base requirements do not install the OpenAI Python SDK.
+- Core archive, update-check, subtitle and FLAC functions therefore start without pulling the Android-incompatible Rust dependency chain.
+- Desktop installs keep the official SDK.
+- If GPT fallback translation is enabled on a Termux runtime without the SDK, the UI/build fails early with a clear capability message instead of failing during package installation.
+- This is a compatibility fallback, not a claim that the OpenAI API itself is unsupported on Android.
+
+References:
+
+- https://github.com/openai/openai-python/blob/main/pyproject.toml
+- https://github.com/NousResearch/hermes-agent/issues/26891
+- https://github.com/openai/openai-python/issues/2102

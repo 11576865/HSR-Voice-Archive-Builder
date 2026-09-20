@@ -212,6 +212,38 @@ Attributes = A_ -rw-r--r--
                 with self.assertRaises(ValueError):
                     read_ai_hobbyist_xlsx(path, "Evanescia")
 
+    def test_termux_preflight_does_not_require_openai_sdk(self) -> None:
+        import app.preflight as preflight
+
+        real_import = preflight.importlib.import_module
+        real_which = shutil.which
+
+        def fake_import(name, *args, **kwargs):
+            if name == "openai":
+                raise ImportError("simulated Android jiter incompatibility")
+            return real_import(name, *args, **kwargs)
+
+        with patch.dict(
+            os.environ,
+            {"TERMUX_VERSION": "0.119", "PREFIX": "/data/data/com.termux/files/usr"},
+            clear=False,
+        ), patch("app.preflight.shutil.which") as which, patch(
+            "app.preflight.importlib.import_module",
+            side_effect=fake_import,
+        ):
+            which.side_effect = lambda name: (
+                "/data/data/com.termux/files/usr/bin/7zz"
+                if name in {"7zz", "7z"}
+                else "/data/data/com.termux/files/usr/bin/ffmpeg"
+                if name == "ffmpeg"
+                else real_which(name)
+            )
+            status = dependency_status()
+
+        self.assertTrue(status["ok"], status["issues"])
+        self.assertFalse(status["openai_sdk"])
+        self.assertTrue(any("OpenAI Python SDK" in x for x in status["warnings"]))
+
     def test_runtime_preflight_dependencies_are_importable(self) -> None:
         status = dependency_status()
         self.assertTrue(status["ok"], status["issues"])

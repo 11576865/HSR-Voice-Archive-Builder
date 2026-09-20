@@ -20,7 +20,15 @@ def _chunks(records: list[dict[str, str]], size: int) -> Iterable[list[dict[str,
 def make_client():
     if not os.environ.get("OPENAI_API_KEY"):
         raise RuntimeError("OPENAI_API_KEY is not set")
-    from openai import OpenAI
+    try:
+        from openai import OpenAI
+    except ImportError as exc:
+        raise RuntimeError(
+            "The OpenAI Python SDK is unavailable on this runtime. "
+            "On Termux/Android the current SDK dependency chain requires jiter/Rust, "
+            "which is not reliably installable. Disable GPT fallback or run translation "
+            "from a desktop host."
+        ) from exc
 
     # The SDK retries transient connection/rate-limit/server failures. The
     # higher-level pipeline also checkpoints completed batches so a later

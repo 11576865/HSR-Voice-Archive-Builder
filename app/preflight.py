@@ -13,7 +13,6 @@ BASE_DEPENDENCIES = (
     ("fastapi", "fastapi", None),
     ("uvicorn", "uvicorn", None),
     ("python-multipart", "multipart", None),
-    ("openai", "openai", None),
     ("openpyxl", "openpyxl", None),
     ("defusedxml", "defusedxml", None),
 )
@@ -74,6 +73,20 @@ def dependency_status() -> dict[str, Any]:
     for distribution, module, minimum in BASE_DEPENDENCIES:
         _check_python_dependency(issues, versions, distribution, module, minimum)
 
+    openai_sdk = False
+    try:
+        importlib.import_module("openai")
+        versions["openai"] = metadata.version("openai")
+        openai_sdk = True
+    except Exception:
+        if not termux:
+            issues.append("openai: import failed")
+        else:
+            warnings.append(
+                "OpenAI Python SDK is not installed on Termux because its jiter/Rust "
+                "dependency is not reliably buildable on Android. Core archive functions remain available."
+            )
+
     seven_zip = shutil.which("7zz") or shutil.which("7z") or ""
     py7zr_ok = False
     try:
@@ -123,6 +136,7 @@ def dependency_status() -> dict[str, Any]:
         "warnings": warnings,
         "ffmpeg": ffmpeg,
         "seven_zip": seven_zip,
+        "openai_sdk": openai_sdk,
         "termux": termux,
     }
 
