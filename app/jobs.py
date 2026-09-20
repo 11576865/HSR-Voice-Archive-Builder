@@ -12,6 +12,7 @@ from .project import STATE_DIR, atomic_write_json
 
 JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
+BUILD_KINDS = {"build", "quick-build"}
 
 
 def now() -> str:
@@ -29,6 +30,9 @@ class Job:
     finished_at: str = ""
     result: Any = None
     error: str = ""
+    phase: str = ""
+    progress_current: int = 0
+    progress_total: int = 0
 
 
 _LOCK = threading.Lock()
@@ -67,7 +71,34 @@ def _load_previous() -> None:
 _load_previous()
 
 
-def create_job(kind: str, fn: Callable[[], Any]) -> Job:
+def _active_build_locked() -> Job | None:
+    for job in reversed(list(_JOBS.values())):
+        if job.kind in BUILD_KINDS and job.state in {"queued", "running"}:
+            return job
+    return None
+
+
+def active_build_job() -> dict[str, Any] | None:
+    with _LOCK:
+        job = _active_build_locked()
+        return asdict(job) if job else None
+
+
+def assert_no_active_build() -> None:
+    with _LOCK:
+        job = _active_build_locked()
+        if job is not None:
+            raise RuntimeError(
+                "已有构建任务正在运行，请等待它完成后再开始新的构建"
+            )
+
+
+def create_job(
+    kind: str,
+    fn: Callable[..., Any],
+    *,
+    with_progress: bool = False,
+) -> Job:
     job = Job(
         id=uuid.uuid4().hex,
         kind=kind,
@@ -76,27 +107,52 @@ def create_job(kind: str, fn: Callable[[], Any]) -> Job:
         created_at=now(),
     )
     with _LOCK:
+        if kind in BUILD_KINDS:
+            active = _active_build_locked()
+            if active is not None:
+                raise RuntimeError(
+                    "已有构建任务正在运行，请等待它完成后再开始新的构建"
+                )
         _JOBS[job.id] = job
         _persist_locked()
+
+    def report_progress(
+        phase: str,
+        message: str,
+        current: int = 0,
+        total: int = 0,
+    ) -> None:
+        with _LOCK:
+            if job.state not in {"queued", "running"}:
+                return
+            job.phase = str(phase or "")
+            job.message = str(message or "正在处理")
+            job.progress_current = max(0, int(current))
+            job.progress_total = max(0, int(total))
+            _persist_locked()
 
     def runner() -> None:
         with _LOCK:
             job.state = "running"
-            job.message = "正在处理"
+            job.message = "正在准备"
             job.started_at = now()
             _persist_locked()
         try:
-            result = fn()
+            result = fn(report_progress) if with_progress else fn()
             with _LOCK:
                 job.result = result
                 job.state = "succeeded"
-                job.message = "完成"
+                job.phase = "done"
+                job.message = "构建完成" if kind in BUILD_KINDS else "完成"
+                if kind in BUILD_KINDS:
+                    job.progress_current = max(job.progress_total, 1)
+                    job.progress_total = max(job.progress_total, 1)
                 job.finished_at = now()
                 _persist_locked()
         except Exception as exc:
             with _LOCK:
                 job.state = "failed"
-                job.message = "失败"
+                job.message = "构建失败" if kind in BUILD_KINDS else "失败"
                 job.finished_at = now()
                 job.error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=8)}"
                 _persist_locked()

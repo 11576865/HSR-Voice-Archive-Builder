@@ -5,6 +5,7 @@ import csv
 import hashlib
 import json
 import tempfile
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -273,10 +274,16 @@ def _translate_missing(
     token_budget: int = 0,
     usd_budget: float = 0.0,
     translation_glossary: dict[str, str] | None = None,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
     targets = _target_records(entries)
+
+    def translation_progress(message: str) -> None:
+        if progress_callback is not None:
+            progress_callback("translation", message, 3, 6)
+
     if not targets:
         return {
             **_translation_counts(0, 0, 0),
@@ -445,6 +452,7 @@ def _translate_missing(
         "usage_supported": True,
     }
     if (remaining or semantic_pending_ids) and isinstance(client, OpenAIResponsesHTTPClient):
+        translation_progress("3/6 正在验证翻译 API 能力")
         smoke = [{"id": "smoke-1", "english": "The story's not finished."}]
         smoke_estimate = estimate_request_tokens(smoke)
         capability = ensure_translation_capability(
@@ -462,7 +470,14 @@ def _translate_missing(
                 "token usage, so a token/USD budget cannot be enforced safely."
             )
 
+    translation_batch_count = (
+        (len(remaining) + batch_size - 1) // batch_size if remaining else 0
+    )
     for start in range(0, len(remaining), batch_size):
+        batch_number = start // batch_size + 1
+        translation_progress(
+            f"3/6 AI 翻译：批次 {batch_number}/{translation_batch_count}"
+        )
         batch = remaining[start:start + batch_size]
         batch_glossary = relevant_glossary(
             active_glossary,
@@ -511,6 +526,9 @@ def _translate_missing(
 
         repaired: dict[str, str] = {}
         if retry_records:
+            translation_progress(
+                f"3/6 翻译质量修复：批次 {batch_number}/{translation_batch_count}"
+            )
             retry_glossary = relevant_glossary(
                 active_glossary,
                 [row["english"] for row in retry_records],
@@ -608,7 +626,14 @@ def _translate_missing(
         semantic_targets = [
             row for row in targets if row["id"] in semantic_pending_ids
         ]
+        semantic_batch_count = (
+            (len(semantic_targets) + semantic_batch_size - 1) // semantic_batch_size
+        )
         for start in range(0, len(semantic_targets), semantic_batch_size):
+            semantic_batch_number = start // semantic_batch_size + 1
+            translation_progress(
+                f"3/6 语义检查：批次 {semantic_batch_number}/{semantic_batch_count}"
+            )
             batch_targets = semantic_targets[start:start + semantic_batch_size]
             candidates = [
                 semantic_candidate(
@@ -658,6 +683,9 @@ def _translate_missing(
             repaired_chinese: dict[str, str] = {}
             deterministic_failures: set[str] = set()
             if repair_records:
+                translation_progress(
+                    f"3/6 语义修复：批次 {semantic_batch_number}/{semantic_batch_count}"
+                )
                 semantic_repair_glossary = relevant_glossary(
                     active_glossary,
                     [row["english"] for row in repair_records],
@@ -712,6 +740,9 @@ def _translate_missing(
             repair_candidates = [row for row in repair_candidates if row is not None]
             final_repair_verdicts: dict[str, dict[str, object]] = {}
             if repair_candidates:
+                translation_progress(
+                    f"3/6 语义复核：批次 {semantic_batch_number}/{semantic_batch_count}"
+                )
                 reverify_phase = f"semantic-reverify-{start // semantic_batch_size + 1}"
                 ledger.check_before_request(
                     estimate_request_tokens(repair_candidates),
@@ -856,6 +887,7 @@ def build_project_v02(
     translation_token_budget: int = 0,
     translation_budget_usd: float = 0.0,
     glossary_path: Path | None = None,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -864,6 +896,12 @@ def build_project_v02(
     bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
     chs_source = chs_source.expanduser().resolve() if chs_source else None
     glossary_path = glossary_path.expanduser().resolve() if glossary_path else None
+
+    def progress(phase: str, message: str, current: int, total: int = 6) -> None:
+        if progress_callback is not None:
+            progress_callback(phase, message, current, total)
+
+    progress("prepare", "1/6 正在检查输入与恢复点", 1)
 
     from .glossary import (
         CORE_GLOSSARY,
@@ -914,6 +952,8 @@ def build_project_v02(
         )
         rebuilt_stages.append("scan")
 
+    progress("metadata", "2/6 正在读取语音包与元数据", 2)
+
     # Keep extraction/work files on the output filesystem instead of the OS
     # temp drive. On Windows/Android the system temp partition is often much
     # smaller than the drive selected for an archive project.
@@ -955,6 +995,12 @@ def build_project_v02(
             )
             rebuilt_stages.append("metadata")
 
+        progress(
+            "translation",
+            "3/6 正在处理中文翻译与质量检查" if translate_missing
+            else "3/6 中文翻译阶段无需 API",
+            3,
+        )
         translated = _stage_entries(load_stage(
             out_dir, STAGE_FILES["translation"], "translation", input_fingerprint
         ))
@@ -994,6 +1040,7 @@ def build_project_v02(
                         translation_token_budget,
                         translation_budget_usd,
                         active_glossary,
+                        progress_callback,
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
@@ -1026,6 +1073,8 @@ def build_project_v02(
             )
             rebuilt_stages.extend(["translation", "translation_qa"])
 
+        progress("manifest", "4/6 正在生成字幕与清单", 4)
+
         manifest_artifacts = [
             out_dir / "manifest.json",
             out_dir / "manifest.csv",
@@ -1049,6 +1098,12 @@ def build_project_v02(
             )
             rebuilt_stages.append("manifest")
 
+        progress(
+            "audio",
+            "5/6 正在构建并验证连续 FLAC" if make_flac
+            else "5/6 已跳过连续 FLAC",
+            5,
+        )
         if make_flac:
             audio = load_stage(
                 out_dir, STAGE_FILES["audio"], "audio", input_fingerprint
@@ -1095,6 +1150,8 @@ def build_project_v02(
                 {"skipped": True, "report": {}},
             )
             rebuilt_stages.append("audio")
+
+        progress("final", "6/6 正在写入最终报告", 6)
 
         report["stage_resume"] = {
             "input_fingerprint": input_fingerprint,

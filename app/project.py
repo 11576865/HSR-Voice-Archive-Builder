@@ -184,6 +184,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     assert output is not None
     manifest = output / "manifest.json"
     report_file = output / "build_report.json"
+    final_stage_file = output / "stages" / "final_report.json"
     report: dict[str, Any] = {}
     if report_file.is_file():
         try:
@@ -198,6 +199,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "bilingual.srt",
         "build_report.json",
         "translation_qa.json",
+        "semantic_qa.json",
         "translation_usage.json",
         "continuous.flac",
         "update_plan.json",
@@ -220,6 +222,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "root": config.root,
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
+        "build_complete": report_file.is_file() and final_stage_file.is_file(),
         "report": report,
         "outputs": outputs,
     }
