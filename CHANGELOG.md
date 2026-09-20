@@ -2,6 +2,14 @@
 
 ## v0.5
 
+### Termux hotfixes
+
+- Termux no longer installs py7zr; native 7-Zip is used instead.
+- Termux no longer installs the OpenAI Python SDK because its jiter/Rust dependency is not reliably buildable on Android.
+- Termux no longer installs FastAPI/Uvicorn/Pydantic. A standard-library HTTP server preserves the browser control UI without pulling pydantic-core/maturin/Rust.
+- Desktop builds keep the existing FastAPI/Uvicorn backend.
+- Added regression coverage that blocks FastAPI/Uvicorn/Pydantic imports while importing the Termux lightweight server.
+
 - Added a per-process control token for local mode as well as LAN mode; all control/data APIs require the custom token header.
 - Added Host allowlisting, explicit LAN-only non-loopback binds, no-store/referrer/CSP response hardening, and a LAN dashboard entry gate.
 - Added a project-owned RIFF/RF64 PCM parser so PCM `WAVE_FORMAT_EXTENSIBLE` works on Python 3.11 as well as 3.12+.
