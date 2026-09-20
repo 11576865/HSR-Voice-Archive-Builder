@@ -484,7 +484,10 @@ def api_update_check_remote(
             )
             return plan
 
-        job = create_job("remote-update-check", run)
+        job = create_job(
+            "remote-update-check", run,
+            project_root=config.root, project_name=config.name,
+        )
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
