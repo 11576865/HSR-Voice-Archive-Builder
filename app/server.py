@@ -202,7 +202,6 @@ def api_quick_build(
     source_text_language: str = Form("en"),
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
-    source_text_language: str = Form("en"),
 ):
     try:
         assert_no_active_build()
@@ -213,10 +212,9 @@ def api_quick_build(
             root=Path(project_root) if project_root.strip() else None,
             name=project_name,
             audio_language=audio_language,
-            source_text_language=source_text_language,
+            source_text_language=source_text_language.strip() or "en",
             target_language=target_language,
             reference_language=reference_language,
-            source_text_language=source_text_language.strip() or "en",
         )
         update_project(
             config,
