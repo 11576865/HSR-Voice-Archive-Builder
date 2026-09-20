@@ -34,9 +34,18 @@ class TranslationQualityTests(unittest.TestCase):
 
     def test_target_records_include_neighbor_context(self) -> None:
         entries = [
-            SimpleNamespace(filename="a.wav", english="Before.", chinese="已有"),
-            SimpleNamespace(filename="b.wav", english="Target?", chinese=""),
-            SimpleNamespace(filename="c.wav", english="After.", chinese="已有"),
+            SimpleNamespace(
+                filename="a.wav", english="Before.", chinese="已有",
+                group="scene-1", source_detail="archive-1",
+            ),
+            SimpleNamespace(
+                filename="b.wav", english="Target?", chinese="",
+                group="scene-1", source_detail="archive-1",
+            ),
+            SimpleNamespace(
+                filename="c.wav", english="After.", chinese="已有",
+                group="scene-1", source_detail="archive-1",
+            ),
         ]
         rows = _target_records(entries)
         self.assertEqual(len(rows), 1)
