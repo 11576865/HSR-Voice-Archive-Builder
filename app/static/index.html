@@ -23,7 +23,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.6</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.7</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -78,7 +78,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <div><label>远程 EN 索引 URL</label><input name="remote_index_url"></div>
         </div>
         <label class="check"><input name="make_flac" type="checkbox"> 构建连续 FLAC 并验证 PCM</label>
-        <label class="check"><input name="translate_missing" type="checkbox"> 仅对仍然缺失的中文调用 GPT 翻译</label>
+        <label class="check"><input name="translate_missing" type="checkbox"> 仅对仍然缺失的中文调用已配置的 AI API 翻译</label>
         <div class="actions">
           <button type="submit">保存设置</button>
           <button type="button" class="primary" id="buildBtn">开始构建</button>
@@ -92,7 +92,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <div class="stats">
         <div class="stat"><b id="statTotal">—</b><span>已归档语音</span></div>
         <div class="stat"><b id="statOfficial">—</b><span>官方中文 LAB</span></div>
-        <div class="stat"><b id="statTranslated">—</b><span>已有 / GPT 中文</span></div>
+        <div class="stat"><b id="statTranslated">—</b><span>已有 / API 中文</span></div>
         <div class="stat"><b id="statMissing">—</b><span>缺失中文</span></div>
       </div>
       <div class="divider"></div>
@@ -136,6 +136,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <details>
         <summary>本地优先与局域网控制</summary>
         <p class="small muted">默认地址仅绑定 127.0.0.1。使用 <code>python -m app.launch --lan</code> 时，后端会绑定局域网并生成临时控制 token。手机或平板可以控制电脑处理，但原始音频仍留在电脑。</p>
+        <p class="small muted">AI 翻译凭据只保存在处理设备本地。首次配置可运行 <code>python -m app.credentials configure --provider vapi</code>；之后启动器会自动读取，无需每次 export。</p>
       </details>
     </section>
   </div>
@@ -179,7 +180,7 @@ function fillProject(p){
   document.getElementById('manifestState').textContent=p.has_manifest?'manifest 已生成':'尚未构建';
   document.getElementById('statTotal').textContent=n(r.count_total);
   document.getElementById('statOfficial').textContent=n(r.count_official_chs_lab);
-  document.getElementById('statTranslated').textContent=n((r.count_translated_existing||0)+(r.count_gpt_translated||0));
+  document.getElementById('statTranslated').textContent=n((r.count_translated_existing||0)+(r.count_api_translated??r.count_gpt_translated??0));
   document.getElementById('statMissing').textContent=n(r.count_missing_chinese);
   const tb=document.getElementById('outputTable');tb.innerHTML='';
   for(const [name,o] of Object.entries(p.outputs||{})){
@@ -203,7 +204,7 @@ async function refresh(){
   try{
     const s=await api('/api/status');
     const rt=s.runtime||{}, base=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
-    document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失')+(rt.openai_api_key_configured?' · GPT REST ✓':'');
+    document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失')+(rt.translation_api_key_configured?' · '+(rt.translation_provider||'AI')+' API ✓':'');
     if(rt.warnings?.length && !currentProject){setLog(rt.warnings.join('\n'))}
     fillProject(s.project);renderJobs(s.jobs);
   }catch(e){setLog(String(e));document.getElementById('mode').textContent='后端连接失败'}
