@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from app.translation_benchmark import (
     classify_sample,
+    discover_index,
     run_benchmark,
     select_sample,
 )
@@ -58,6 +59,50 @@ class TranslationBenchmarkTests(unittest.TestCase):
         categories = {x["benchmark_category"] for x in first}
         self.assertIn("hsr_terminology", categories)
         self.assertIn("long_complex", categories)
+
+    def test_discover_index_prefers_expected_hsr_filename(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            expected = root / "绯英_379条_完整索引.csv"
+            other = root / "voice_index.csv"
+            rows = [
+                {"filename": "a.wav", "group": "g", "english": "Hello."},
+                {"filename": "b.wav", "group": "g", "english": "World."},
+            ]
+            write_index(expected, rows)
+            write_index(other, rows)
+
+            found, inspected = discover_index([root])
+
+            self.assertEqual(found, expected.resolve())
+            self.assertEqual(sum(bool(x.get("valid")) for x in inspected), 2)
+
+    def test_discover_index_skips_invalid_named_csv(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            bad = root / "379_index.csv"
+            good = root / "绯英_完整索引.csv"
+            bad.write_text("not,a,voice,index\n1,2,3,4\n", encoding="utf-8")
+            write_index(
+                good,
+                [{"filename": "a.wav", "group": "g", "english": "Hello."}],
+            )
+
+            found, inspected = discover_index([root])
+
+            self.assertEqual(found, good.resolve())
+            invalid = [x for x in inspected if not x.get("valid")]
+            self.assertTrue(invalid)
+
+    def test_discover_index_refuses_equal_score_ambiguity(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            rows = [{"filename": "a.wav", "group": "g", "english": "Hello."}]
+            write_index(root / "voice_index_a.csv", rows)
+            write_index(root / "voice_index_b.csv", rows)
+
+            with self.assertRaisesRegex(RuntimeError, "Multiple equally likely"):
+                discover_index([root])
 
     def test_dry_run_writes_sample_without_api(self) -> None:
         with tempfile.TemporaryDirectory() as td:
