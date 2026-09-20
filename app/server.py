@@ -155,7 +155,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-E",
+        "version": "0.9-F",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
