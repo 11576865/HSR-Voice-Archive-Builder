@@ -348,7 +348,7 @@ def translate_records(
     ordered = [by_id[i] for i in wanted_list]
     for row in ordered:
         if not str(row.get("chinese", "")).strip():
-            raise RuntimeError(f"Translation response contains empty Chinese text: {row['id']}")
+            raise RuntimeError(f"Translation response contains empty target text: {row['id']}")
     return ordered
 
 
@@ -370,8 +370,8 @@ def verify_semantic_records(
         "This is a narrow semantic verification pass, not a style review. "
         "Use risk_tags as attention hints, but also flag a major omission or addition if it changes meaning. "
         "Check negation polarity, quantities/comparatives, grammatical person/reference, and conditional logic. "
-        "Set ok=true when the Chinese preserves the source meaning even if wording is not literal. "
-        "Do not penalize natural Chinese phrasing. Return every input ID exactly once. "
+        "Set ok=true when the target translation preserves the source meaning even if wording is not literal. "
+        "Do not penalize natural target-language phrasing. Return every input ID exactly once. "
         "For ok=true, issues must be an empty array and note should be brief. "
         "For ok=false, list only the applicable issue categories and explain the concrete mismatch briefly. "
         "\n\nInput JSON:\n"
