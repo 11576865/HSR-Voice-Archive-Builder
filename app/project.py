@@ -25,6 +25,7 @@ class ProjectConfig:
     chs_source: str = ""
     glossary_path: str = ""
     reference_source: str = ""
+    reference_text_embedded: bool = False
     audio_language: str = "auto"
     source_text_language: str = "en"
     target_language: str = "zh-CN"
@@ -112,6 +113,7 @@ def create_project(
     chs_source: str = "",
     glossary_path: str = "",
     reference_source: str = "",
+    reference_text_embedded: bool = False,
     audio_language: str = "auto",
     source_text_language: str = "en",
     target_language: str = "zh-CN",
@@ -136,6 +138,7 @@ def create_project(
         chs_source=_portable_path(root, chs_source),
         glossary_path=_portable_path(root, glossary_path),
         reference_source=_portable_path(root, reference_source),
+        reference_text_embedded=bool(reference_text_embedded),
         audio_language=str(audio_language or "auto").strip() or "auto",
         source_text_language=str(source_text_language or "en").strip() or "en",
         target_language=str(target_language or "zh-CN").strip() or "zh-CN",
