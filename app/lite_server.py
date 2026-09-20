@@ -78,6 +78,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "glossary": resolve_project_path(config, config.glossary_path),
         "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
+        "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
 
