@@ -934,6 +934,13 @@ def create_quick_project(
         output_dir="output",
         chs_source=str(chs_source) if chs_source else "",
         reference_source=str(reference_source) if reference_source else "",
+        wav_source_fingerprint=str(current_inventory.get("fingerprint", {}).get("digest", "") or ""),
+        chs_source_fingerprint=str(
+            (current_chs or {}).get("fingerprint", {}).get("digest", "") or ""
+        ),
+        reference_source_fingerprint=str(
+            (current_reference or {}).get("fingerprint", {}).get("digest", "") or ""
+        ),
         reference_text_embedded=reference_text_embedded,
         managed_project_root=True,
         audio_language=audio_language,
@@ -959,3 +966,87 @@ def create_quick_project(
         json.dumps(plan, ensure_ascii=False, indent=2),
     )
     return config, plan
+
+
+_RELINK_ROLES = {
+    "primary": ("wav_source", "wav_source_fingerprint", "english"),
+    "target": ("chs_source", "chs_source_fingerprint", "chinese"),
+    "reference": (
+        "reference_source",
+        "reference_source_fingerprint",
+        "reference",
+    ),
+}
+
+
+def _legacy_quick_source_fingerprint(
+    config: ProjectConfig,
+    plan_key: str,
+) -> str:
+    path = Path(config.root).expanduser().resolve() / ".generated" / "quick_scan.json"
+    if not path.is_file():
+        return ""
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+        section = payload.get(plan_key)
+        if not isinstance(section, dict):
+            return ""
+        fingerprint = section.get("fingerprint")
+        if not isinstance(fingerprint, dict):
+            return ""
+        return str(fingerprint.get("digest", "") or "").strip()
+    except (OSError, ValueError, TypeError):
+        return ""
+
+
+def relink_project_source(
+    config: ProjectConfig,
+    role: str,
+    replacement: Path,
+) -> tuple[ProjectConfig, dict[str, Any]]:
+    """Relink a moved voice package only after content identity verification."""
+    role = str(role or "").strip().lower()
+    if role not in _RELINK_ROLES:
+        raise ValueError("Relink role must be primary, target, or reference")
+    field_name, fingerprint_field, legacy_plan_key = _RELINK_ROLES[role]
+    current_value = str(getattr(config, field_name) or "").strip()
+    if not current_value:
+        raise ValueError(f"Project source role {role!r} is not configured")
+
+    expected = str(getattr(config, fingerprint_field) or "").strip()
+    if not expected:
+        expected = _legacy_quick_source_fingerprint(config, legacy_plan_key)
+    if not expected:
+        raise ValueError(
+            "This project does not have a stored source fingerprint, so an automatic "
+            "relink cannot prove that the replacement is the same package. "
+            "Use Advanced settings if you intentionally want to replace the source."
+        )
+
+    replacement = replacement.expanduser().resolve()
+    inventory = source_inventory(replacement)
+    actual = str(inventory.get("fingerprint", {}).get("digest", "") or "").strip()
+    if not actual or actual != expected:
+        raise ValueError(
+            "Replacement package fingerprint does not match the original source; "
+            "automatic relink was refused."
+        )
+
+    embedded_before = bool(config.reference_text_embedded)
+    update_project(
+        config,
+        **{
+            field_name: str(replacement),
+            fingerprint_field: actual,
+        },
+    )
+    if embedded_before and role in {"primary", "reference"}:
+        update_project(config, reference_text_embedded=True)
+
+    return config, {
+        "role": role,
+        "previous_path": current_value,
+        "replacement_path": str(replacement),
+        "verified": True,
+        "fingerprint": actual,
+    }
