@@ -132,6 +132,19 @@ References:
 - https://docs.python.org/3/library/urllib.request.html
 - https://openpyxl.readthedocs.io/en/stable/
 
+## Quick Scan source and remote-index drift
+
+A package or index can change after preflight but before project creation. Reusing the earlier counts in that situation creates a time-of-check/time-of-use (TOCTOU) mismatch. Character-name filtering also fails when filenames use an English identifier while the remote workbook's character column is localized.
+
+**Project response**
+
+- Archive inputs receive a content SHA-256; directory inputs receive a deterministic tree SHA-256 over relative paths, sizes, and per-file hashes.
+- Chinese sources and selected local CSV indexes are fingerprinted as well, then checked again before the generated project index is written.
+- Remote fallback queries exact WAV basenames instead of relying on a localized character-name match.
+- A remote result must cover every WAV, contain non-empty English text, have no duplicate filename, and have one dominant character label covering at least 75% of matches. The threshold permits story-specific aliases without accepting a genuinely mixed-character package.
+- The selected remote rows preserve workbook order and receive their own fingerprint. A changed remote result forces a new scan.
+- Remote slices are cached for 24 hours; a failed refresh may use a cache no older than seven days.
+
 ## Translation failures and rate limits
 
 Network/API translation can fail after some batches have already completed, for example because of transient transport failures, server errors, rate limits, or the local process being interrupted. Re-running the whole character would waste time and paid requests.

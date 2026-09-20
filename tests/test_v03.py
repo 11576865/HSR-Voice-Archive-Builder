@@ -11,7 +11,7 @@ from openpyxl import Workbook
 from app.diff import classify_names
 from app.jobs import create_job, get_job
 from app.project import create_project, load_project, project_summary, update_project
-from app.remote_index import read_ai_hobbyist_xlsx
+from app.remote_index import read_ai_hobbyist_xlsx, read_ai_hobbyist_xlsx_for_filenames
 
 
 class V03Tests(unittest.TestCase):
@@ -55,6 +55,24 @@ class V03Tests(unittest.TestCase):
             rows = read_ai_hobbyist_xlsx(path, "evanescia")
             self.assertEqual(len(rows), 1)
             self.assertEqual(rows[0]["filename"], "chapter5_42_evanescia_101.wav")
+            self.assertEqual(rows[0]["english"], "Little Raccoon...")
+
+    def test_remote_index_parser_can_match_filename_across_localized_role_name(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "EN.xlsx"
+            wb = Workbook()
+            ws = wb.active
+            ws.append(["语音哈希", "语音文件名", "角色", "语音文本", "数据来源", "是否为战斗语音"])
+            ws.append(["111", "chapter5_42_evanescia_101", "绯英", "Little Raccoon...", "", ""])
+            ws.append(["222", "chapter5_42_other_101", "其他", "No.", "", ""])
+            wb.save(path)
+            wb.close()
+
+            rows = read_ai_hobbyist_xlsx_for_filenames(
+                path, {"chapter5_42_evanescia_101.wav"}
+            )
+            self.assertEqual(len(rows), 1)
+            self.assertEqual(rows[0]["character"], "绯英")
             self.assertEqual(rows[0]["english"], "Little Raccoon...")
 
     def test_variant_aware_name_classification_deduplicates_candidates(self) -> None:

@@ -23,7 +23,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.8</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-A</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -247,7 +247,7 @@ function renderQuickPlan(plan){
   const lines=[
     '英文 WAV：'+n(e.wav_count)+' · LAB：'+n(e.lab_count)+' · 同 stem：'+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
-    '顺序索引：'+(idx.path||'未找到')+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
+    '顺序索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '中文 LAB：'+(z?n(z.lab_count):'未提供'),
     'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置')
   ];

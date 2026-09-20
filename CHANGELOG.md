@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.9-A
+
+- Quick Mode now falls back to the configured AI-Hobbyist English index when no complete local CSV is available.
+- Remote fallback resolves exact WAV filenames directly, avoiding English/Chinese character-name mismatches. It requires a dominant remote character label (at least 75% while allowing story aliases) and one non-empty English record for every WAV; duplicate or partial matches remain blocking failures.
+- Remote character slices are cached for 24 hours, with a bounded seven-day stale-cache fallback for temporary network failures.
+- Quick Scan records a content-level SHA-256 fingerprint for each source package (or a deterministic tree hash for directories) and revalidates it before project creation.
+- Generated remote indexes preserve workbook order, derive stable groups from filenames, and are bound to a remote-record fingerprint so changed metadata cannot be silently reused.
+
 ## v0.8
 
 - Added context-aware AI translation: immediate neighboring English lines are supplied for disambiguation while only the target line is returned.

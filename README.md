@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.8**.
+Current development version: **v0.9-A**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -84,7 +84,7 @@ The dashboard can:
 - save the comparison as `update_plan.json` without modifying the current manifest;
 - open the output directory on the processing host.
 
-Remote index checking is currently **metadata/update discovery only**. v0.7 does not yet auto-download and splice new game audio into an existing archive.
+Remote index data can now resolve playback order and English text for Quick Mode, and it remains available for update discovery. The project still does not auto-download or splice new game audio into an existing archive.
 
 ## Requirements
 
@@ -158,6 +158,8 @@ Choose English voice package
 Read-only scan / preflight
         ↓
 Auto-detect character + covering local index
+        ↓ (if local coverage is incomplete)
+Safe remote EN-index fallback + cache
         ↓
 Optional Chinese LAB package
         ↓
@@ -170,7 +172,9 @@ AI translation is enabled automatically when a provider is configured
 
 On Termux, the dashboard discovers top-level `.7z` / `.zip` packages in the normal Download locations and passes filesystem paths to the local Python backend. It does not re-upload large archives through the browser. This avoids the browser file-input fake-path limitation and unnecessary localhost copies.
 
-Quick scan is read-only. It blocks build when no WAVs are present, duplicate WAV basenames exist, or no local CSV index fully covers the package with English text. It refuses to invent a playback order when no reliable order source exists.
+Quick scan is read-only. It prefers a complete local CSV. When none is available, it queries the configured AI-Hobbyist English index by exact WAV filenames, so an inferred English token does not need to match the index's Chinese character label. The fallback requires one ordered, non-empty English match for every package WAV and a dominant remote character label covering at least 75% of matches. This permits story aliases such as “绯英（？）” while still blocking partial coverage, duplicate names, or genuinely mixed-character packages.
+
+The scan records a SHA-256 content fingerprint for archive inputs and a deterministic tree SHA-256 for directory inputs. Project creation repeats and compares the fingerprint, preventing a package changed after preflight from silently using the old plan. Remote character slices are cached for 24 hours; temporary refresh failures may use a cached copy no older than seven days, and the selected records receive their own fingerprint.
 
 The old manual project form remains under **Advanced / Manual project**.
 

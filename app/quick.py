@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 import os
 import re
@@ -11,10 +12,11 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .builder import MAX_ARCHIVE_MEMBERS, atomic_write_text
+from .builder import MAX_ARCHIVE_MEMBERS, atomic_write_text, sha256_file
 from .credentials import credentials_status
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
+from .remote_index import DEFAULT_EN_INDEX_URL, fetch_ai_hobbyist_index_for_filenames_cached
 from .schema import normalize_index
 from .translator import DEFAULT_MODEL
 
@@ -72,15 +74,34 @@ def source_inventory(source: Path) -> dict[str, Any]:
         raise FileNotFoundError(source)
 
     files: list[dict[str, Any]] = []
+    source_stat = source.stat()
+    content_hash = hashlib.sha256()
     if source.is_dir():
-        for idx, path in enumerate(source.rglob("*"), 1):
+        for idx, path in enumerate(sorted(source.rglob("*"), key=lambda p: p.as_posix()), 1):
             if idx > MAX_SCAN_FILES:
                 raise ValueError(f"Source contains more than {MAX_SCAN_FILES} filesystem entries")
+            if path.is_symlink():
+                raise ValueError(f"Directory source contains a symbolic link: {path}")
             if not path.is_file():
                 continue
             rel = path.relative_to(source).as_posix()
-            files.append({"name": rel, "size": path.stat().st_size})
+            size = path.stat().st_size
+            file_hash = hashlib.sha256()
+            with path.open("rb") as f:
+                for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                    file_hash.update(chunk)
+            digest = file_hash.hexdigest()
+            content_hash.update(rel.encode("utf-8"))
+            content_hash.update(b"\0")
+            content_hash.update(str(size).encode("ascii"))
+            content_hash.update(b"\0")
+            content_hash.update(digest.encode("ascii"))
+            content_hash.update(b"\n")
+            files.append({"name": rel, "size": size})
     elif source.is_file() and source.suffix.lower() == ".zip":
+        with source.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                content_hash.update(chunk)
         with zipfile.ZipFile(source) as z:
             infos = z.infolist()
             if len(infos) > MAX_ARCHIVE_MEMBERS:
@@ -93,6 +114,9 @@ def source_inventory(source: Path) -> dict[str, Any]:
                     "size": max(0, int(info.file_size)),
                 })
     elif source.is_file() and source.suffix.lower() == ".7z":
+        with source.open("rb") as f:
+            for chunk in iter(lambda: f.read(1024 * 1024), b""):
+                content_hash.update(chunk)
         exe = shutil.which("7zz") or shutil.which("7z")
         if not exe:
             raise RuntimeError("7-Zip CLI is required to scan .7z packages")
@@ -143,6 +167,12 @@ def source_inventory(source: Path) -> dict[str, Any]:
         "wav_lab_pairs": len(wav_stems & lab_stems),
         "wav_without_lab": len(wav_stems - lab_stems),
         "declared_bytes": sum(int(item.get("size", 0)) for item in files),
+        "fingerprint": {
+            "algorithm": "tree-sha256-v1" if source.is_dir() else "sha256",
+            "digest": content_hash.hexdigest(),
+            "source_size_bytes": source_stat.st_size,
+            "source_modified_ns": source_stat.st_mtime_ns,
+        },
     }
 
 
@@ -257,6 +287,9 @@ def _index_candidates(source: Path, wav_names: set[str]) -> list[dict[str, Any]]
             score = coverage * 1000 + english_matched + name_bonus
             candidates.append({
                 "path": str(resolved),
+                "file_sha256": sha256_file(resolved),
+                "size_bytes": resolved.stat().st_size,
+                "modified_ns": resolved.stat().st_mtime_ns,
                 "row_count": len(rows),
                 "matched_wavs": len(matched),
                 "english_matched": english_matched,
@@ -292,7 +325,91 @@ def infer_character(wav_names: list[str]) -> dict[str, Any]:
     }
 
 
-def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str, Any]:
+def _index_fingerprint(rows: list[dict[str, str]]) -> str:
+    canonical = [
+        {
+            "filename": Path(str(row.get("filename", ""))).name,
+            "english": str(row.get("english", "")).strip(),
+            "hash": str(row.get("hash", row.get("sha256", ""))).strip().lower(),
+        }
+        for row in rows
+    ]
+    raw = json.dumps(canonical, ensure_ascii=False, separators=(",", ":")).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()
+
+
+def _remote_candidate(
+    records: list[dict[str, str]],
+    wav_names: set[str],
+    *,
+    url: str,
+    cache: dict[str, Any],
+) -> dict[str, Any]:
+    by_name: dict[str, dict[str, str]] = {}
+    duplicates: set[str] = set()
+    for row in records:
+        name = Path(str(row.get("filename", ""))).name
+        if not name:
+            continue
+        if name in by_name:
+            duplicates.add(name)
+        by_name[name] = row
+    matched = wav_names & set(by_name)
+    english_matched = sum(bool(str(by_name[name].get("english", "")).strip()) for name in matched)
+    character_counts = Counter(
+        str(by_name[name].get("character", "")).strip()
+        for name in matched
+        if str(by_name[name].get("character", "")).strip()
+    )
+    primary_character, primary_count = character_counts.most_common(1)[0] if character_counts else ("", 0)
+    return {
+        "source": "remote",
+        "provider": "AI-Hobbyist EN.xlsx",
+        "url": url,
+        "row_count": len(records),
+        "matched_wavs": len(matched),
+        "english_matched": english_matched,
+        "coverage": round(len(matched) / max(1, len(wav_names)), 6),
+        "duplicate_filenames": sorted(duplicates),
+        "characters": sorted(character_counts),
+        "character_counts": dict(character_counts.most_common()),
+        "primary_character": primary_character,
+        "primary_character_share": round(primary_count / max(1, len(matched)), 6),
+        "order_basis": "workbook_row_order",
+        "records_fingerprint": _index_fingerprint(records),
+        "cache": cache,
+    }
+
+
+def _remote_rows(records: list[dict[str, str]], wanted: set[str]) -> list[dict[str, str]]:
+    result: list[dict[str, str]] = []
+    seen: set[str] = set()
+    for pos, row in enumerate(records, 1):
+        filename = Path(str(row.get("filename", ""))).name
+        if filename not in wanted:
+            continue
+        if filename in seen:
+            raise RuntimeError(f"Remote index has a duplicate filename: {filename}")
+        seen.add(filename)
+        remote_hash = str(row.get("hash", "")).strip().lower()
+        result.append({
+            "index": str(pos),
+            "group": parse_voice_identity(filename).group,
+            "filename": filename,
+            "source": "AI-Hobbyist EN.xlsx",
+            "source_detail": str(row.get("character", "")).strip(),
+            "english": str(row.get("english", "")).strip(),
+            "sha256": remote_hash if re.fullmatch(r"[0-9a-f]{64}", remote_hash) else "",
+        })
+    return result
+
+
+def quick_scan(
+    english_source: Path,
+    chs_source: Path | None = None,
+    *,
+    remote_index_url: str = DEFAULT_EN_INDEX_URL,
+) -> dict[str, Any]:
     english = source_inventory(english_source)
     blockers: list[str] = []
     warnings: list[str] = []
@@ -308,22 +425,68 @@ def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str
     wav_names = {Path(name).name for name in english["wav_names"]}
     indexes = _index_candidates(Path(english["source"]), wav_names)
     selected_index = indexes[0] if indexes else None
+    if selected_index is not None:
+        selected_index = {**selected_index, "source": "local"}
 
-    if selected_index is None:
-        blockers.append(
-            "No local index CSV covers the package WAV names; reliable playback order is not available yet"
+    character = infer_character(list(wav_names))
+    local_complete = bool(
+        selected_index
+        and int(selected_index["matched_wavs"]) == int(english["wav_count"])
+        and int(selected_index["english_matched"]) == int(english["wav_count"])
+    )
+    remote_attempt: dict[str, Any] | None = None
+    if not local_complete and not blockers:
+        try:
+            remote_records, cache = fetch_ai_hobbyist_index_for_filenames_cached(
+                wav_names, remote_index_url
+            )
+            remote_attempt = _remote_candidate(
+                remote_records, wav_names, url=remote_index_url, cache=cache
+            )
+            if cache.get("stale"):
+                warnings.append("Remote index refresh failed; a stale cached copy was used")
+            remote_complete = (
+                not remote_attempt["duplicate_filenames"]
+                and float(remote_attempt["primary_character_share"]) >= 0.75
+                and int(remote_attempt["matched_wavs"]) == int(english["wav_count"])
+                and int(remote_attempt["english_matched"]) == int(english["wav_count"])
+            )
+            if remote_complete:
+                selected_index = remote_attempt
+        except Exception as exc:
+            warnings.append(f"Remote index fallback failed: {type(exc).__name__}: {exc}")
+
+    selected_complete = bool(
+        selected_index
+        and int(selected_index["matched_wavs"]) == int(english["wav_count"])
+        and int(selected_index["english_matched"]) == int(english["wav_count"])
+        and not selected_index.get("duplicate_filenames")
+        and (
+            selected_index.get("source") != "remote"
+            or float(selected_index.get("primary_character_share", 0.0)) >= 0.75
         )
-    else:
-        if int(selected_index["matched_wavs"]) != int(english["wav_count"]):
-            blockers.append(
-                f"Best local index covers only {selected_index['matched_wavs']} / "
-                f"{english['wav_count']} WAV files"
-            )
-        if int(selected_index["english_matched"]) != int(english["wav_count"]):
-            blockers.append(
-                f"Best local index has English text for only {selected_index['english_matched']} / "
-                f"{english['wav_count']} WAV files"
-            )
+    )
+    if not selected_complete:
+        if selected_index is None:
+            blockers.append("No reliable local or remote index covers the package WAV names")
+        else:
+            if selected_index.get("duplicate_filenames"):
+                blockers.append("The candidate index contains duplicate filenames")
+            if (
+                selected_index.get("source") == "remote"
+                and float(selected_index.get("primary_character_share", 0.0)) < 0.75
+            ):
+                blockers.append("Remote index matches do not have a sufficiently dominant character identity")
+            if int(selected_index["matched_wavs"]) != int(english["wav_count"]):
+                blockers.append(
+                    f"Best index covers only {selected_index['matched_wavs']} / "
+                    f"{english['wav_count']} WAV files"
+                )
+            if int(selected_index["english_matched"]) != int(english["wav_count"]):
+                blockers.append(
+                    f"Best index has English text for only {selected_index['english_matched']} / "
+                    f"{english['wav_count']} WAV files"
+                )
 
     chs = None
     if chs_source is not None and str(chs_source).strip():
@@ -333,7 +496,6 @@ def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str
         if chs["lab_count"] == 0:
             warnings.append("Chinese source contains no LAB files")
 
-    character = infer_character(list(wav_names))
     if character["confidence"] == "low":
         warnings.append("Character inference confidence is low; review before building")
 
@@ -342,7 +504,7 @@ def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str
         warnings.append("AI translation API is not configured; unmatched Chinese text will remain missing")
 
     return {
-        "schema_version": 1,
+        "schema_version": 2,
         "kind": "quick_scan",
         "english": {
             key: value for key, value in english.items() if key != "wav_names"
@@ -354,6 +516,7 @@ def quick_scan(english_source: Path, chs_source: Path | None = None) -> dict[str
         "character": character,
         "index": selected_index,
         "index_candidates": indexes[:8],
+        "remote_index_attempt": remote_attempt,
         "translation": {
             "provider": api["provider"],
             "base_url": api["base_url"],
@@ -400,9 +563,28 @@ def create_quick_project(
 
     selected_index = plan["index"]
     assert selected_index is not None
-    original_rows = normalize_index(Path(selected_index["path"]))
-    wanted = set(source_inventory(english_source)["wav_names"])
-    filtered = [row for row in original_rows if Path(row["filename"]).name in wanted]
+    current_inventory = source_inventory(english_source)
+    if current_inventory["fingerprint"] != plan["english"]["fingerprint"]:
+        raise RuntimeError("English source changed after Quick Scan; scan again before building")
+    if chs_source is not None:
+        current_chs = source_inventory(chs_source)
+        if current_chs["fingerprint"] != plan["chinese"]["fingerprint"]:
+            raise RuntimeError("Chinese source changed after Quick Scan; scan again before building")
+    wanted = set(current_inventory["wav_names"])
+    if selected_index.get("source") == "remote":
+        remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+            wanted,
+            str(selected_index["url"]),
+        )
+        if _index_fingerprint(remote_records) != selected_index["records_fingerprint"]:
+            raise RuntimeError("Remote index changed after Quick Scan; scan again before building")
+        filtered = _remote_rows(remote_records, wanted)
+    else:
+        local_index = Path(selected_index["path"])
+        if sha256_file(local_index) != selected_index["file_sha256"]:
+            raise RuntimeError("Local index changed after Quick Scan; scan again before building")
+        original_rows = normalize_index(local_index)
+        filtered = [row for row in original_rows if Path(row["filename"]).name in wanted]
     if len(filtered) != len(wanted):
         raise RuntimeError("Index coverage changed between scan and project creation")
 
@@ -431,6 +613,7 @@ def create_quick_project(
         make_flac=True,
         translate_missing=bool(plan["translation"]["configured"]),
         translation_model=DEFAULT_MODEL,
+        remote_index_url=str(selected_index.get("url", DEFAULT_EN_INDEX_URL)),
     )
 
     atomic_write_text(

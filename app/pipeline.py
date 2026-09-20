@@ -440,7 +440,7 @@ def build_project_v02(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.8 pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-A pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
