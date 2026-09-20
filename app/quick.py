@@ -18,6 +18,7 @@ from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
 from .remote_index import DEFAULT_EN_INDEX_URL, fetch_ai_hobbyist_index_for_filenames_cached
 from .schema import normalize_index
+from .translation_runtime import estimate_workload_tokens
 from .translator import DEFAULT_MODEL
 
 SUPPORTED_ARCHIVES = {".zip", ".7z"}
@@ -163,6 +164,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
         "wav_count": len(wavs),
         "lab_count": len(labs),
         "wav_names": wavs,
+        "lab_names": labs,
         "duplicate_wav_names": duplicate_wavs,
         "wav_lab_pairs": len(wav_stems & lab_stems),
         "wav_without_lab": len(wav_stems - lab_stems),
@@ -435,6 +437,7 @@ def quick_scan(
         and int(selected_index["english_matched"]) == int(english["wav_count"])
     )
     remote_attempt: dict[str, Any] | None = None
+    remote_records: list[dict[str, str]] = []
     if not local_complete and not blockers:
         try:
             remote_records, cache = fetch_ai_hobbyist_index_for_filenames_cached(
@@ -503,14 +506,39 @@ def quick_scan(
     if not api["configured"]:
         warnings.append("AI translation API is not configured; unmatched Chinese text will remain missing")
 
+    pending_records: list[dict[str, str]] = []
+    official_chinese_matches = 0
+    if selected_complete and selected_index is not None:
+        if selected_index.get("source") == "remote":
+            index_rows = _remote_rows(remote_records, wav_names)
+        else:
+            index_rows = [
+                row for row in normalize_index(Path(selected_index["path"]))
+                if Path(str(row.get("filename", ""))).name in wav_names
+            ]
+        chinese_stems = set(chs.get("lab_names", [])) if chs else set()
+        official_chinese_matches = sum(
+            Path(str(row.get("filename", ""))).stem in chinese_stems
+            for row in index_rows
+        )
+        pending_records = [
+            {
+                "id": Path(str(row.get("filename", ""))).name,
+                "english": str(row.get("english", "")).strip(),
+            }
+            for row in index_rows
+            if Path(str(row.get("filename", ""))).stem not in chinese_stems
+        ]
+    translation_estimate = estimate_workload_tokens(pending_records, 80)
+
     return {
         "schema_version": 2,
         "kind": "quick_scan",
         "english": {
-            key: value for key, value in english.items() if key != "wav_names"
+            key: value for key, value in english.items() if key not in {"wav_names", "lab_names"}
         },
         "chinese": (
-            {key: value for key, value in chs.items() if key != "wav_names"}
+            {key: value for key, value in chs.items() if key not in {"wav_names", "lab_names"}
             if chs else None
         ),
         "character": character,
@@ -522,6 +550,9 @@ def quick_scan(
             "base_url": api["base_url"],
             "configured": api["configured"],
             "model": DEFAULT_MODEL,
+            "official_chinese_matches": official_chinese_matches,
+            "pending_translation_count": len(pending_records),
+            **translation_estimate,
         },
         "blockers": blockers,
         "warnings": warnings,
