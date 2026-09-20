@@ -103,6 +103,23 @@ def _text_fingerprint(text: str) -> str:
     return hashlib.sha256(text.encode("utf-8")).hexdigest()
 
 
+def _translation_input_fingerprint(
+    row: dict[str, str],
+    source_language: str,
+    target_language: str,
+) -> str:
+    payload = {
+        "english": str(row.get("english", "")),
+        "reference_text": str(row.get("reference_text", "")),
+        "reference_language": str(row.get("reference_language", "")),
+        "source_language": source_language,
+        "target_language": target_language,
+    }
+    return _text_fingerprint(
+        json.dumps(payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"))
+    )
+
+
 def _load_translation_checkpoint(
     path: Path,
     model: str,
@@ -398,11 +415,22 @@ def _translate_missing(
     for row in targets:
         saved = checkpoint.get(row["id"], {})
         expected = _text_fingerprint(row["english"])
-        if not (
-            isinstance(saved, dict)
-            and saved.get("english_sha256") == expected
-            and str(saved.get("chinese", "")).strip()
+        expected_input = _translation_input_fingerprint(
+            row, source_language, target_language
+        )
+        if not isinstance(saved, dict) or not str(saved.get("chinese", "")).strip():
+            continue
+        saved_input = str(saved.get("input_sha256", "") or "")
+        if saved_input:
+            if saved_input != expected_input:
+                continue
+        elif (
+            source_language != "en"
+            or target_language != "zh-CN"
+            or bool(row.get("reference_text"))
+            or saved.get("english_sha256") != expected
         ):
+            # Legacy row checkpoints did not include language/reference roles.
             continue
         chinese = str(saved["chinese"]).strip()
         row_glossary = relevant_glossary(active_glossary, [row["english"]])
@@ -620,6 +648,9 @@ def _translate_missing(
 
             checkpoint[source["id"]] = {
                 "english_sha256": _text_fingerprint(source["english"]),
+                "input_sha256": _translation_input_fingerprint(
+                    source, source_language, target_language
+                ),
                 "chinese": chinese,
                 "qa_version": 1,
                 "qa_issues": final_issues,
