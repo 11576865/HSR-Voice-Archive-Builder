@@ -935,6 +935,7 @@ def create_quick_project(
         chs_source=str(chs_source) if chs_source else "",
         reference_source=str(reference_source) if reference_source else "",
         reference_text_embedded=reference_text_embedded,
+        managed_project_root=True,
         audio_language=audio_language,
         source_text_language=source_text_language,
         target_language=target_language,
