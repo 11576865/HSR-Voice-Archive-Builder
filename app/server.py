@@ -124,6 +124,11 @@ def _set_active(config: ProjectConfig) -> None:
     _active_root = Path(config.root).resolve()
 
 
+def _clear_active() -> None:
+    global _active_root
+    _active_root = None
+
+
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
     return {
         "index": resolve_project_path(config, config.index_csv),
@@ -306,6 +311,12 @@ def api_project_open(project_path: str = Form(...)):
         return {"ok": True, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+@app.post("/api/project/close")
+def api_project_close():
+    _clear_active()
+    return {"ok": True, "project": None}
+
 
 
 @app.post("/api/project/save")
