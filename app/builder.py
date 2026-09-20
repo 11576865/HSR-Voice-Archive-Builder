@@ -134,11 +134,109 @@ def _extract_zip(path: Path, dest: Path, max_bytes: int) -> None:
         z.extractall(dest)
 
 
+def _parse_7z_slt(text: str) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    current: dict[str, str] = {}
+    in_entries = False
+    for raw in text.splitlines():
+        line = raw.rstrip("\r\n")
+        if line.startswith("----------"):
+            in_entries = True
+            current = {}
+            continue
+        if not in_entries:
+            continue
+        if not line.strip():
+            if current:
+                records.append(current)
+                current = {}
+            continue
+        if " = " in line:
+            key, value = line.split(" = ", 1)
+            current[key.strip()] = value.strip()
+    if current:
+        records.append(current)
+    return records
+
+
+def _extract_7z_cli(path: Path, dest: Path, max_bytes: int) -> None:
+    exe = shutil.which("7zz") or shutil.which("7z")
+    if not exe:
+        raise RuntimeError(
+            "Reading .7z requires py7zr>=1.1.3 or a native 7zz/7z executable"
+        )
+
+    listed = subprocess.run(
+        [exe, "l", "-slt", str(path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    if listed.returncode != 0:
+        raise RuntimeError(
+            f"7-Zip listing failed ({listed.returncode}): {listed.stderr.strip()}"
+        )
+
+    records = _parse_7z_slt(listed.stdout)
+    if len(records) > MAX_ARCHIVE_MEMBERS:
+        raise ValueError(f"7z has too many members: {len(records)}")
+
+    total = 0
+    for record in records:
+        name = record.get("Path", "")
+        if not name:
+            continue
+        _validate_member_name(name, dest)
+        attrs = record.get("Attributes", "")
+        if (
+            record.get("Symbolic Link")
+            or record.get("Hard Link")
+            or " l" in f" {attrs.lower()}"
+            or attrs.lower().endswith("l")
+        ):
+            raise ValueError(f"7z links are not accepted: {name}")
+        size_text = record.get("Size", "0").strip()
+        try:
+            size = int(size_text or "0")
+        except ValueError as exc:
+            raise ValueError(f"Invalid 7z member size for {name}: {size_text!r}") from exc
+        total += max(0, size)
+        if total > max_bytes:
+            raise ValueError(
+                f"7z uncompressed size exceeds safety limit: {total} > {max_bytes} bytes"
+            )
+
+    extracted = subprocess.run(
+        [exe, "x", "-y", f"-o{dest}", str(path)],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        errors="replace",
+        check=False,
+    )
+    if extracted.returncode != 0:
+        raise RuntimeError(
+            f"7-Zip extraction failed ({extracted.returncode}): {extracted.stderr.strip()}"
+        )
+
+    root = dest.resolve()
+    for item in dest.rglob("*"):
+        if item.is_symlink():
+            raise ValueError(f"Extracted symbolic links are not accepted: {item}")
+        try:
+            item.resolve().relative_to(root)
+        except ValueError as exc:
+            raise ValueError(f"Extracted path escapes destination: {item}") from exc
+
+
 def _extract_7z(path: Path, dest: Path, max_bytes: int) -> None:
     try:
         import py7zr  # type: ignore
-    except ImportError as exc:
-        raise RuntimeError("Reading .7z requires py7zr>=1.1.3") from exc
+    except ImportError:
+        _extract_7z_cli(path, dest, max_bytes)
+        return
 
     with py7zr.SevenZipFile(path, mode="r", max_extract_size=max_bytes) as z:
         infos = z.list()

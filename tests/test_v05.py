@@ -11,7 +11,7 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.builder import Entry, build_continuous_flac
+from app.builder import Entry, _parse_7z_slt, build_continuous_flac
 from app.security import api_token
 from app.pipeline import _translate_missing
 from app.preflight import dependency_status
@@ -143,6 +143,23 @@ class V05SecurityAndWavTests(unittest.TestCase):
             else:
                 os.environ["HSR_VOICE_ALLOWED_HOSTS"] = old_allowed
 
+
+    def test_native_7z_listing_parser_ignores_archive_header(self) -> None:
+        sample = """Path = archive.7z
+Type = 7z
+
+----------
+Path = folder/file.wav
+Size = 123
+Attributes = A_ -rw-r--r--
+
+Path = folder/line.lab
+Size = 8
+Attributes = A_ -rw-r--r--
+"""
+        records = _parse_7z_slt(sample)
+        self.assertEqual([r["Path"] for r in records], ["folder/file.wav", "folder/line.lab"])
+        self.assertEqual(records[0]["Size"], "123")
 
     def test_translation_checkpoint_survives_later_batch_failure(self) -> None:
         with tempfile.TemporaryDirectory() as td:
