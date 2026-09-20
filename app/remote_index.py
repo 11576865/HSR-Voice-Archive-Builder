@@ -7,6 +7,7 @@ import tempfile
 import time
 import urllib.request
 import zipfile
+from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
@@ -375,7 +376,13 @@ def fetch_ai_hobbyist_index_for_filenames_cached(
     )
 
 
-def remote_update_plan(manifest_path: Path, records: list[dict[str, str]]) -> dict[str, Any]:
+def remote_update_plan(
+    manifest_path: Path,
+    records: list[dict[str, str]],
+    *,
+    url: str = DEFAULT_EN_INDEX_URL,
+    queried_character: str = "",
+) -> dict[str, Any]:
     from .diff import classify_names
 
     result = classify_names(manifest_path, [row["filename"] for row in records])
@@ -388,7 +395,18 @@ def remote_update_plan(manifest_path: Path, records: list[dict[str, str]]) -> di
         ]
     for item in result["variant_of_existing"]:
         item["metadata"] = details.get(item["candidate"], {})
-    result["provider"] = ai_hobbyist_index_label(DEFAULT_EN_INDEX_URL)
-    result["character"] = records[0]["character"] if records else ""
+
+    character_counts = Counter(
+        str(row.get("character", "") or "").strip()
+        for row in records
+        if str(row.get("character", "") or "").strip()
+    )
+    primary_character = (
+        character_counts.most_common(1)[0][0] if character_counts else ""
+    )
+    result["provider"] = ai_hobbyist_index_label(url)
+    result["character"] = primary_character
+    result["queried_character"] = queried_character
+    result["character_counts"] = dict(character_counts.most_common())
     result["remote_rows"] = len(records)
     return result
