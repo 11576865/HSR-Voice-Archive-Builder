@@ -316,6 +316,8 @@ class Entry:
     audio_end_seconds: float
     display_end_seconds: float
     sha256: str
+    reference_text: str = ""
+    reference_language: str = "auto"
 
 
 def build_entries(
@@ -325,6 +327,8 @@ def build_entries(
     wav_root: Path,
     same_group_gap: float = 0.40,
     group_gap: float = 1.20,
+    reference_lab_root: Path | None = None,
+    reference_language: str = "auto",
 ) -> tuple[list[Entry], dict[str, object]]:
     full = read_csv_rows(full_index_csv)
     bi = read_csv_rows(bilingual_csv)
@@ -336,6 +340,7 @@ def build_entries(
         raise ValueError("Duplicate 文件名 in bilingual CSV")
 
     labs = collect_labs(chs_lab_root)
+    reference_labs = collect_labs(reference_lab_root) if reference_lab_root else {}
     wavs = collect_wavs(wav_root)
 
     sample_rate: int | None = None
@@ -407,6 +412,8 @@ def build_entries(
                 "source_frames": frames,
                 "source_duration_seconds": frames / sr,
                 "sha256": got_hash,
+                "reference_text": reference_labs.get(stem, ""),
+                "reference_language": reference_language,
             }
         )
 
@@ -453,6 +460,8 @@ def build_entries(
                 audio_end_seconds=audio_end / sample_rate,
                 display_end_seconds=display_end / sample_rate,
                 sha256=str(r["sha256"]),
+                reference_text=str(r.get("reference_text", "")),
+                reference_language=str(r.get("reference_language", "auto") or "auto"),
             )
         )
         cursor = next_start
@@ -462,6 +471,7 @@ def build_entries(
         "count_official_chs_lab": official_count,
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
+        "count_reference_lab": sum(bool(e.reference_text) for e in entries),
         "sample_rate": sample_rate,
         "channels": channels,
         "sample_width_bits": sample_width * 8,
