@@ -13,6 +13,7 @@ import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
+from .timeline import resolve_timeline, write_ass, write_resolved_timeline
 from .wavpcm import iter_pcm_chunks, parse_wav_pcm
 
 SRT_TS = re.compile(r"^(\d+):(\d+):(\d+),(\d+)$")
@@ -327,6 +328,7 @@ def build_entries(
     wav_root: Path,
     same_group_gap: float = 0.40,
     group_gap: float = 1.20,
+    intro_gap: float = 5.0,
     reference_lab_root: Path | None = None,
     reference_language: str = "auto",
     source_text_language: str = "en",
@@ -450,20 +452,19 @@ def build_entries(
     if sample_rate is None or channels is None or sample_width is None:
         raise ValueError("No usable WAV entries")
 
-    same_gap_samples = round(same_group_gap * sample_rate)
-    group_gap_samples = round(group_gap * sample_rate)
+    resolved = resolve_timeline(
+        raw,
+        sample_rate,
+        intro_gap=intro_gap,
+        same_group_gap=same_group_gap,
+        group_gap=group_gap,
+    )
 
-    for i, r in enumerate(raw):
-        start = cursor
-        audio_end = start + int(r["source_frames"])
-        if i + 1 < len(raw):
-            next_group = raw[i + 1]["group"]
-            gap = group_gap_samples if next_group != r["group"] else same_gap_samples
-            next_start = audio_end + gap
-            display_end = max(audio_end, next_start - round(0.001 * sample_rate))
-        else:
-            next_start = audio_end
-            display_end = audio_end
+    for r, timing in zip(raw, resolved["entry_timings"], strict=True):
+        start = int(timing["start_sample"])
+        audio_end = int(timing["audio_end_sample"])
+        next_start = int(timing["next_start_sample"])
+        display_end = int(timing["display_end_sample"])
         entries.append(
             Entry(
                 index=int(r["index"]),
@@ -490,7 +491,7 @@ def build_entries(
                 reference_language=str(r.get("reference_language", "auto") or "auto"),
             )
         )
-        cursor = next_start
+    cursor = int(resolved["total_samples"])
 
     report = {
         "count_total": len(entries),
@@ -507,8 +508,9 @@ def build_entries(
         "sample_rate": sample_rate,
         "channels": channels,
         "sample_width_bits": sample_width * 8,
-        "same_group_gap_seconds": same_group_gap,
-        "group_gap_seconds": group_gap,
+        "intro_gap_seconds": float(resolved["intro_gap_seconds"]),
+        "same_group_gap_seconds": float(resolved["same_group_gap_seconds"]),
+        "group_gap_seconds": float(resolved["group_gap_seconds"]),
         "group_boundaries": sum(entries[i].group != entries[i + 1].group for i in range(len(entries) - 1)),
         "total_samples": cursor,
         "duration_continuous_seconds": cursor / sample_rate,
@@ -537,16 +539,16 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
     fields = list(asdict(entries[0]).keys()) if entries else []
     write_csv_rows(out_dir / "manifest.csv", js, fields)
 
-    srt: list[str] = []
-    for i, e in enumerate(entries, 1):
-        srt.extend([
-            str(i),
-            f"{srt_time(e.start_seconds)} --> {srt_time(e.display_end_seconds)}",
-            e.english.strip(),
-            e.chinese.strip(),
-            "",
-        ])
-    atomic_write_text(out_dir / "bilingual.srt", "\n".join(srt), encoding="utf-8-sig")
+    # SRT was an interim output. Timeline and ASS are now generated from the
+    # same sample positions used by the FLAC builder.
+    (out_dir / "bilingual.srt").unlink(missing_ok=True)
+    write_resolved_timeline(entries, report, out_dir / "timeline_resolved.json")
+    write_ass(
+        entries,
+        out_dir / "HSR_Voice_Archive.ass",
+        source_language=str(report.get("source_text_language", "en")),
+        target_language=str(report.get("target_language", "zh-CN")),
+    )
 
     timeline_fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
@@ -642,6 +644,18 @@ def build_continuous_flac(
             raise RuntimeError("Unable to open FFmpeg stdin")
 
         try:
+            initial_silence = entries[0].start_sample
+            remaining = initial_silence
+            block_frames = 65536
+            block = silence_frame * block_frames
+            while remaining > 0:
+                n = min(block_frames, remaining)
+                data = block if n == block_frames else silence_frame * n
+                proc.stdin.write(data)
+                pcm_hash.update(data)
+                written_frames += n
+                remaining -= n
+
             for i, e in enumerate(entries):
                 src = wavs[e.filename]
                 info = parse_wav_pcm(src)
