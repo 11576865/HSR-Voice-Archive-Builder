@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-D**.
+Current development version: **v0.9-E**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-D add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-E add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -73,7 +73,8 @@ v0.4-v0.9-D add failure-driven hardening based on upstream documentation, issue 
 - Termux/Android interruption risk is surfaced rather than hidden;
 - v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart;
 - v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes;
-- v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts.
+- v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts;
+- v0.9-E adds recent-project switching, project-scoped task history, explicit language roles, multilingual EN/CHS/JP/KR Quick indexes, and optional second-package reference text.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -84,7 +85,8 @@ A project directory contains a local `.hsr-voice-project.json` file with source 
 The dashboard can:
 
 - create or reopen a project;
-- remember the most recent project;
+- switch directly among recent projects;
+- remember recent projects and keep task history associated with the project that created each job;
 - edit build settings once instead of re-entering paths every run;
 - launch a build as a background job;
 - show current archive counts and generated outputs;
@@ -160,33 +162,37 @@ Open that URL on another device on the same LAN. The LAN entry URL carries a tem
 
 ## Quick mode
 
-The default dashboard workflow is now package-first:
+The default dashboard workflow is package-first and language-aware:
 
 ```text
-Choose English voice package
+Choose primary voice package
+        ↓
+Choose primary-audio language + source-text language
         ↓
 Read-only scan / preflight
         ↓
-Auto-detect character + covering local index
-        ↓ (if local coverage is incomplete)
-Safe remote EN-index fallback + cache
+Resolve source text from local data or AI-Hobbyist EN / CHS / JP / KR index
         ↓
-Optional Chinese LAB package
+Optional target-language LAB package
         ↓
-Auto-create internal filtered index/project
+Optional second voice/text package used only as semantic reference
         ↓
-Build FLAC + subtitles + manifest
+Auto-create filtered internal index/project
         ↓
-AI translation is enabled automatically when a provider is configured
+Build continuous FLAC from the primary package only
+        ↓
+Generate bilingual metadata/subtitles and translate missing target text
 ```
 
-On Termux, the dashboard discovers top-level `.7z` / `.zip` packages in the normal Download locations and passes filesystem paths to the local Python backend. It does not re-upload large archives through the browser. This avoids the browser file-input fake-path limitation and unnecessary localhost copies.
+On Termux, the dashboard discovers top-level `.7z` / `.zip` packages in the normal Download locations and passes filesystem paths to the local Python backend. It does not re-upload large archives through the browser.
 
-Quick Mode also places new Termux projects in shared storage by default. With normal Android storage access, the layout is `/storage/emulated/0/Download/HSR_Voice_Test/<project-name>/output`. The project-name directory keeps different characters/projects separated; `output` is only the generated-results subdirectory inside that project. Existing projects keep their saved paths unchanged. Set `HSR_VOICE_PROJECTS_DIR` to override the default project base.
+Quick Mode places new Termux projects in shared storage by default at `/storage/emulated/0/Download/HSR_Voice_Test/<project-name>/output`. Existing projects keep their saved paths. Set `HSR_VOICE_PROJECTS_DIR` to override the default project base.
 
-Quick scan is read-only. It prefers a complete local CSV. When none is available, it queries the configured AI-Hobbyist English index by exact WAV filenames, so an inferred English token does not need to match the index's Chinese character label. The fallback requires one ordered, non-empty English match for every package WAV and a dominant remote character label covering at least 75% of matches. This permits story aliases such as “绯英（？）” while still blocking partial coverage, duplicate names, or genuinely mixed-character packages.
+The source-text language is independent from the translation target. Built-in remote discovery currently maps `en` → `EN.xlsx`, `zh-CN` → `CHS.xlsx`, `ja` → `JP.xlsx`, and `ko` → `KR.xlsx`. A same-stem LAB in the primary package is preferred for non-English source text when available; otherwise the selected language index can supply the text.
 
-The scan records a SHA-256 content fingerprint for archive inputs and a deterministic tree SHA-256 for directory inputs. Project creation repeats and compares the fingerprint, preventing a package changed after preflight from silently using the old plan. Remote character slices are cached for 24 hours; temporary refresh failures may use a cached copy no older than seven days, and the selected records receive their own fingerprint.
+A second reference package never contributes PCM to `continuous.flac`. If it contains same-stem LAB files, those texts are supplied to the translator as semantic reference. For audio-only EN/CHS/JP/KR reference packages, Quick Mode can recover text from the corresponding AI-Hobbyist index and align it to primary lines by exact filename or a conservative structural identity. This avoids requiring ASR for indexed game resources; unmatched reference lines are reported rather than guessed.
+
+Quick scan is read-only. It records content fingerprints for package inputs and revalidates them before project creation. Remote slices are cached for 24 hours, with bounded stale-cache fallback for temporary network failures.
 
 The old manual project form remains under **Advanced / Manual project**.
 
@@ -217,6 +223,11 @@ Useful options:
 --translation-token-budget 0
 --translation-budget-usd 0
 --glossary /path/to/terms.csv
+--reference /path/to/reference-package.7z
+--audio-language ja
+--source-language ja
+--target-language zh-CN
+--reference-language en
 ```
 
 ## Translation quality benchmark
@@ -333,14 +344,14 @@ python -m app.credentials test --model gpt-5.6-sol
 
 reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
 
-## Chinese text precedence
+## Target-text precedence
 
 ```text
-same-stem official Chinese LAB
+same-stem official target-language LAB
         ↓
-existing bilingual-index Chinese text
+existing target text in the bilingual index
         ↓
-AI API fallback, only when explicitly enabled
+AI API translation into the configured target language
         ↓
 missing
 ```
@@ -383,7 +394,7 @@ python -m app.credentials test --model gpt-5.6-sol
 
 Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.
 
-Translation checkpoints are bound to provider + Base URL + model. Switching from the official API to a relay cannot silently reuse another provider's cached translations.
+Translation checkpoints are bound to provider + Base URL + model + source language + target language. Changing the provider, route, or language pair cannot silently reuse incompatible cached translations.
 
 ## Voice identity
 
@@ -409,14 +420,7 @@ python -m app.diff \
   --out update_plan.json
 ```
 
-The dashboard additionally supports a remote metadata check against:
-
-```text
-AI-Hobbyist/StarRail_Voice_Sorting_Scripts
-Indexs/EN.xlsx
-```
-
-The remote URL is project-configurable and restricted to HTTPS.
+The dashboard additionally supports a remote metadata check against the project's configured AI-Hobbyist source-text index. Quick Mode provides built-in mappings for `EN.xlsx`, `CHS.xlsx`, `JP.xlsx`, and `KR.xlsx`; the remote URL remains project-configurable and restricted to HTTPS.
 
 ## Archive extraction safety
 
