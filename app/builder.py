@@ -329,6 +329,7 @@ def build_entries(
     group_gap: float = 1.20,
     reference_lab_root: Path | None = None,
     reference_language: str = "auto",
+    source_text_language: str = "en",
 ) -> tuple[list[Entry], dict[str, object]]:
     full = read_csv_rows(full_index_csv)
     bi = read_csv_rows(bilingual_csv)
@@ -341,6 +342,7 @@ def build_entries(
 
     labs = collect_labs(chs_lab_root)
     reference_labs = collect_labs(reference_lab_root) if reference_lab_root else {}
+    primary_labs = collect_labs(wav_root) if source_text_language != "en" else {}
     wavs = collect_wavs(wav_root)
 
     sample_rate: int | None = None
@@ -396,6 +398,15 @@ def build_entries(
             if chinese:
                 translated_count += 1
 
+        source_text = row.get("英文文本", b.get("ENGLISH", ""))
+        if source_text_language != "en":
+            source_text = primary_labs.get(stem, "")
+            if not source_text:
+                raise ValueError(
+                    f"Missing {source_text_language} source LAB for {filename}; "
+                    "choose English index text or provide LAB text in the primary package"
+                )
+
         raw.append(
             {
                 "index": int(row["序号"]),
@@ -403,7 +414,7 @@ def build_entries(
                 "filename": filename,
                 "source": row.get("来源", ""),
                 "source_detail": row.get("来源细分", ""),
-                "english": row.get("英文文本", b.get("ENGLISH", "")),
+                "english": source_text,
                 "chinese": chinese,
                 "chinese_source": chinese_source,
                 "sample_rate": sr,
@@ -472,6 +483,9 @@ def build_entries(
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
         "count_reference_lab": sum(bool(e.reference_text) for e in entries),
+        "count_source_lab": sum(
+            bool(primary_labs.get(stem_of(e.filename))) for e in entries
+        ) if source_text_language != "en" else 0,
         "sample_rate": sample_rate,
         "channels": channels,
         "sample_width_bits": sample_width * 8,
