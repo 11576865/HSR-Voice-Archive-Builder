@@ -410,6 +410,7 @@ def quick_scan(
     english_source: Path,
     chs_source: Path | None = None,
     *,
+    reference_source: Path | None = None,
     remote_index_url: str = DEFAULT_EN_INDEX_URL,
 ) -> dict[str, Any]:
     english = source_inventory(english_source)
@@ -494,10 +495,19 @@ def quick_scan(
     chs = None
     if chs_source is not None and str(chs_source).strip():
         if Path(chs_source).expanduser().resolve() == Path(english["source"]).resolve():
-            warnings.append("English and Chinese source point to the same package")
+            warnings.append("Primary audio and target-text source point to the same package")
         chs = source_inventory(chs_source)
         if chs["lab_count"] == 0:
-            warnings.append("Chinese source contains no LAB files")
+            warnings.append("Target-text source contains no LAB files")
+
+    reference = None
+    if reference_source is not None and str(reference_source).strip():
+        reference = source_inventory(reference_source)
+        if reference["lab_count"] == 0:
+            warnings.append(
+                "Reference package contains no LAB text; audio-only reference transcription "
+                "is not implemented yet"
+            )
 
     if character["confidence"] == "low":
         warnings.append("Character inference confidence is low; review before building")
@@ -544,6 +554,15 @@ def quick_scan(
                 if key not in {"wav_names", "lab_names"}
             }
             if chs
+            else None
+        ),
+        "reference": (
+            {
+                key: value
+                for key, value in reference.items()
+                if key not in {"wav_names", "lab_names"}
+            }
+            if reference
             else None
         ),
         "character": character,
@@ -621,12 +640,21 @@ def create_quick_project(
     english_source: Path,
     *,
     chs_source: Path | None = None,
+    reference_source: Path | None = None,
     root: Path | None = None,
     name: str = "",
+    audio_language: str = "auto",
+    target_language: str = "zh-CN",
+    reference_language: str = "auto",
 ) -> tuple[ProjectConfig, dict[str, Any]]:
     english_source = english_source.expanduser().resolve()
     chs_source = chs_source.expanduser().resolve() if chs_source else None
-    plan = quick_scan(english_source, chs_source)
+    reference_source = reference_source.expanduser().resolve() if reference_source else None
+    plan = quick_scan(
+        english_source,
+        chs_source,
+        reference_source=reference_source,
+    )
     if not plan["ready"]:
         raise RuntimeError("Quick scan has blockers: " + "; ".join(plan["blockers"]))
 
@@ -675,6 +703,11 @@ def create_quick_project(
         wav_source=str(english_source),
         output_dir="output",
         chs_source=str(chs_source) if chs_source else "",
+        reference_source=str(reference_source) if reference_source else "",
+        audio_language=audio_language,
+        source_text_language="en",
+        target_language=target_language,
+        reference_language=reference_language,
         remote_character=str(plan.get("character", {}).get("value", "")),
     )
     update_project(
