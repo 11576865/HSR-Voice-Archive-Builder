@@ -9,12 +9,15 @@ from importlib import metadata
 from typing import Any
 
 MIN_PYTHON = (3, 11)
-BASE_DEPENDENCIES = (
+COMMON_DEPENDENCIES = (
+    ("openpyxl", "openpyxl", None),
+    ("defusedxml", "defusedxml", None),
+)
+
+DESKTOP_DEPENDENCIES = (
     ("fastapi", "fastapi", None),
     ("uvicorn", "uvicorn", None),
     ("python-multipart", "multipart", None),
-    ("openpyxl", "openpyxl", None),
-    ("defusedxml", "defusedxml", None),
 )
 
 
@@ -70,8 +73,11 @@ def dependency_status() -> dict[str, Any]:
     versions: dict[str, str] = {}
     termux = _is_termux()
 
-    for distribution, module, minimum in BASE_DEPENDENCIES:
+    for distribution, module, minimum in COMMON_DEPENDENCIES:
         _check_python_dependency(issues, versions, distribution, module, minimum)
+    if not termux:
+        for distribution, module, minimum in DESKTOP_DEPENDENCIES:
+            _check_python_dependency(issues, versions, distribution, module, minimum)
 
     openai_sdk = False
     try:
@@ -108,8 +114,9 @@ def dependency_status() -> dict[str, Any]:
                 "7-Zip CLI not found. Install Termux package '7zip' (or legacy 'p7zip')."
             )
         warnings.append(
-            "Termux/Android detected: native 7-Zip is used instead of py7zr because "
-            "py7zr's dependency chain is not reliably installable on Android."
+            "Termux/Android detected: the lightweight stdlib HTTP server and native 7-Zip "
+            "are used instead of FastAPI/Pydantic/py7zr because those dependency chains "
+            "are not reliably installable on Android."
         )
         warnings.append(
             "Android may terminate long CPU-heavy/background jobs; interrupted jobs are "
