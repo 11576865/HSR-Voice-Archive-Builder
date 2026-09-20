@@ -187,6 +187,7 @@ def api_quick_build(
     translation_budget_usd: float = Form(0.0),
 ):
     try:
+        assert_no_active_build()
         config, plan = create_quick_project(
             Path(english_source),
             chs_source=Path(chs_source) if chs_source.strip() else None,
@@ -197,7 +198,6 @@ def api_quick_build(
             config,
             translation_token_budget=max(0, translation_token_budget),
             translation_budget_usd=max(0.0, translation_budget_usd),
-            glossary_path=optional_path(glossary_path),
         )
         _set_active(config)
         paths = _project_paths(config)
