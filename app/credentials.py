@@ -72,11 +72,11 @@ def translation_identity() -> tuple[str, str]:
         or saved.get("provider", "").strip()
         or "openai"
     )
-    base_url = (
-        os.environ.get("HSR_TRANSLATION_BASE_URL", "").strip()
-        or saved.get("base_url", "").strip()
-        or _default_base_url(provider)
-    )
+    env_base = os.environ.get("HSR_TRANSLATION_BASE_URL", "").strip()
+    saved_base = ""
+    if saved.get("provider", "").strip() == provider:
+        saved_base = saved.get("base_url", "").strip()
+    base_url = env_base or saved_base or _default_base_url(provider)
     if not base_url:
         raise RuntimeError(
             "No translation API Base URL is configured. "
