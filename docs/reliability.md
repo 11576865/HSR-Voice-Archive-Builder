@@ -198,3 +198,26 @@ References:
 - https://github.com/openai/openai-python/blob/main/pyproject.toml
 - https://github.com/NousResearch/hermes-agent/issues/26891
 - https://github.com/openai/openai-python/issues/2102
+
+
+## FastAPI / Pydantic v2 on Termux
+
+The previous Termux launcher still installed FastAPI. Modern FastAPI depends on Pydantic v2, which depends on the Rust-backed `pydantic-core`. On Termux/Python 3.13, pip commonly has no official Android wheel and falls back to a maturin source build. Current Termux bug reports show the same failure seen here: `aarch64-unknown-linux-android` is rejected by rustup during the build bootstrap.
+
+There are workarounds in the ecosystem: installing Termux Rust/binutils and compiling locally, or consuming third-party Android wheels. Both add substantial install time/complexity, and the latter also adds a separate binary supply-chain trust decision.
+
+**Project response**
+
+- Termux no longer installs FastAPI, Uvicorn, python-multipart, Pydantic or pydantic-core.
+- Android uses a project-owned HTTP server built only on Python's standard library.
+- The existing browser UI and API surface are preserved.
+- Desktop builds keep FastAPI/Uvicorn.
+- This removes the Rust compiler from the normal Android startup path instead of asking users to compile Pydantic on-device.
+- Third-party prebuilt pydantic-core wheels are not used by default.
+
+References:
+
+- https://github.com/termux/termux-packages/issues/29818
+- https://github.com/pydantic/pydantic-core/issues/1474
+- https://github.com/fastapi/fastapi/discussions/6544
+- https://github.com/Eutalix/android-pydantic-core
