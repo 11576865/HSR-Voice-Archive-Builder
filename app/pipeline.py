@@ -114,8 +114,9 @@ def _load_translation_checkpoint(
 
     schema = payload.get("schema_version")
     if schema == 1:
-        # v0.6 checkpoints were created only against the official OpenAI URL.
-        # Reuse them only when that identity is still selected.
+        # v0.6 checkpoints implicitly meant English -> Simplified Chinese.
+        if source_language != "en" or target_language != "zh-CN":
+            return {}
         if provider != "openai" or base_url != "https://api.openai.com/v1":
             return {}
         if payload.get("model") != model:
@@ -633,6 +634,8 @@ def _translate_missing(
             provider,
             base_url,
             checkpoint,
+            source_language,
+            target_language,
         )
         qa_summary = _write_qa_report(
             checkpoint_path.with_name("translation_qa.json"),
@@ -678,6 +681,7 @@ def _translate_missing(
                     row_id=row["id"],
                     english=row["english"],
                     chinese=completed[row["id"]],
+                    source_language=source_language,
                 )
                 for row in batch_targets
             ]
@@ -693,6 +697,8 @@ def _translate_missing(
             verdicts = verify_semantic_records(
                 candidates,
                 model=model,
+                source_language=source_language,
+                target_language=target_language,
                 client=client,
                 usage_callback=lambda usage, phase=verify_phase: ledger.record(phase, usage),
             )
@@ -773,6 +779,7 @@ def _translate_missing(
                     row_id=source["id"],
                     english=source["english"],
                     chinese=completed[source["id"]],
+                    source_language=source_language,
                 )
                 for source in repair_records
                 if source["id"] not in deterministic_failures
@@ -1059,8 +1066,8 @@ def build_project_v02(
 
         progress(
             "translation",
-            "3/6 正在处理中文翻译与质量检查" if translate_missing
-            else "3/6 中文翻译阶段无需 API",
+            f"3/6 正在处理 {target_language} 翻译与质量检查" if translate_missing
+            else f"3/6 {target_language} 翻译阶段无需 API",
             3,
         )
         translated = _stage_entries(load_stage(
