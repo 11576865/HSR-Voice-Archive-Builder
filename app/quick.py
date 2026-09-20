@@ -956,7 +956,10 @@ def create_quick_project(
         source_text_language=source_text_language,
         target_language=target_language,
         reference_language=reference_language,
-        remote_character=str(plan.get("character", {}).get("value", "")),
+        remote_character=str(
+            selected_index.get("primary_character")
+            or plan.get("character", {}).get("value", "")
+        ),
     )
     update_project(
         config,
@@ -975,6 +978,58 @@ def create_quick_project(
         json.dumps(plan, ensure_ascii=False, indent=2),
     )
     return config, plan
+
+
+def remote_character_candidates(
+    config: ProjectConfig,
+    requested: str = "",
+) -> list[str]:
+    """Return remote role labels in the order an update check should try.
+
+    Quick Mode can infer an ASCII token from WAV filenames, such as
+    "evanescia", while the remote workbook stores a localized role label,
+    such as "绯英". The saved Quick Scan result is therefore a more reliable
+    source for the remote role filter than the filename token.
+    """
+
+    saved = str(config.remote_character or "").strip()
+    detected = ""
+    scan_path = (
+        Path(config.root).expanduser().resolve()
+        / ".generated"
+        / "quick_scan.json"
+    )
+    try:
+        payload = json.loads(scan_path.read_text(encoding="utf-8"))
+        sections = (payload.get("index"), payload.get("remote_index_attempt"))
+        for section in sections:
+            if not isinstance(section, dict):
+                continue
+            candidate = str(section.get("primary_character", "") or "").strip()
+            if candidate:
+                detected = candidate
+                break
+    except (OSError, ValueError, TypeError):
+        pass
+
+    explicit = str(requested or "").strip()
+    ordered: list[str] = []
+    # A value different from the saved project value is an intentional manual
+    # override. Otherwise prefer the role detected from the remote workbook so
+    # legacy projects automatically repair an ASCII/localized-name mismatch.
+    if explicit and explicit.casefold() != saved.casefold():
+        ordered.append(explicit)
+    ordered.extend((detected, saved, explicit))
+
+    result: list[str] = []
+    seen: set[str] = set()
+    for value in ordered:
+        key = value.casefold()
+        if not value or key in seen:
+            continue
+        seen.add(key)
+        result.append(value)
+    return result
 
 
 _RELINK_ROLES = {
