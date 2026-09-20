@@ -261,19 +261,20 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 
     <section class="card hidden" id="updateCard">
       <h2>增量更新</h2>
-      <p class="small muted">先比较身份，不改已有 manifest。远程检查使用当前项目保存的源文本索引 URL；音频下载仍作为后续独立步骤处理。</p>
-      <div class="row">
-        <div>
-          <h3>本地候选</h3>
-          <label>TXT / JSON / CSV</label><input id="candidatePath">
-          <div class="actions"><button id="scanLocalBtn">扫描候选</button></div>
-        </div>
-        <div>
-          <h3>远程索引</h3>
-          <label>角色过滤词</label><input id="remoteCharacter">
-          <div class="actions"><button id="scanRemoteBtn">检查远程索引</button></div>
-        </div>
+      <p class="small muted">这里检查索引中是否出现了新的语音记录，不会修改已有 manifest，也不会下载音频。角色身份由快速扫描自动保存，不需要手动输入文件名或角色名。</p>
+      <div>
+        <h3>远程索引</h3>
+        <label>自动识别的角色</label><input id="remoteCharacter" readonly>
+        <p class="small muted">程序优先使用远程表格中识别到的角色名；旧项目会在检查时自动修正英文文件标识与中文角色名不一致的问题。</p>
+        <div class="actions"><button id="scanRemoteBtn">检查新增语音</button></div>
       </div>
+      <div id="updateResult" class="small muted" style="margin-top:10px">尚未检查。</div>
+      <details style="margin-top:14px">
+        <summary>手动导入候选清单（高级）</summary>
+        <p class="small muted">只在你已经有额外的 TXT、JSON 或 CSV 文件时使用。普通的远程更新不需要填写。</p>
+        <label>候选清单路径</label><input id="candidatePath" placeholder="pending.txt / new_index.csv">
+        <div class="actions"><button id="scanLocalBtn">扫描本地清单</button></div>
+      </details>
       <div id="updateStats" class="stats" style="margin-top:14px">
         <div class="stat"><b id="uExisting">—</b><span>已存在</span></div>
         <div class="stat"><b id="uVariant">—</b><span>已有台词变量</span></div>
@@ -510,6 +511,15 @@ function showPlan(plan){
   document.getElementById('uVariant').textContent=n(c.variant_of_existing);
   document.getElementById('uNew').textContent=n(c.new_logical);
   document.getElementById('uRows').textContent=n(plan.remote_rows??plan.candidate_unique_count);
+  const result=document.getElementById('updateResult');
+  if(result){
+    if(plan.remote_rows!==undefined){
+      const role=plan.character||plan.queried_character||'未识别';
+      result.textContent='已按角色“'+role+'”读取 '+n(plan.remote_rows)+' 条远程记录；发现真正新增 '+n(c.new_logical)+' 条。这里只生成检查结果，尚未下载音频。';
+    }else{
+      result.textContent='本地候选清单已扫描；发现真正新增 '+n(c.new_logical)+' 条。';
+    }
+  }
   setLog(plan);
 }
 let quickPlanState=null;
@@ -672,6 +682,10 @@ async function watchJob(id){
       }
       if(x.job.state==='failed'){
         clearInterval(pollTimer);setLog(x.job.error||x.job);
+        if(x.job.kind==='remote-update-check'){
+          const result=document.getElementById('updateResult');
+          if(result)result.textContent='远程检查失败：'+shortError(x.job.error||x.job);
+        }
         const d=document.getElementById('diagnosticLog');if(d)d.open=true;
         await refresh();
       }
@@ -707,7 +721,7 @@ async function saveProject(){
 document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
-document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();d.set('character',document.getElementById('remoteCharacter').value);const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
+document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
 document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSelectedSource()}catch(x){const s=document.getElementById('relinkStatus');s.textContent=shortError(x);s.className='small status-bad';setLog(String(x))}};
