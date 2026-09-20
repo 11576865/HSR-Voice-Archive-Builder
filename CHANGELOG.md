@@ -2,7 +2,7 @@
 
 ## v0.9-E
 
-- Added a recent-project switcher. Build/task history is now associated with project identity; the current project's recent tasks are shown first, while other-project and legacy records are collapsed.
+- Added explicit recent-project selection with separate Open, New/Import, Remove-from-list, and Delete actions. Removing only hides a project from the switcher; reopening restores it. Deleting a Quick Mode managed project removes its dedicated project root, while manual-project deletion removes only app-owned config/generated/output data and preserves unrelated user files. Deleted-project task history is purged.
 - Added explicit language roles for primary audio, source text, translation target and optional reference text. Translation prompts, semantic verification, stage fingerprints and translation checkpoints now include the selected source/target languages.
 - Quick Mode can resolve source text from AI-Hobbyist EN, CHS, JP or KR indexes according to the selected source language instead of assuming English.
 - Added an optional second voice/text package used only as translation reference. Same-stem LAB is preferred; for audio-only EN/CHS/JP/KR packages, Quick Mode can recover indexed text and align it to the primary package by exact filename or a conservative group + numeric-tail identity. Reference audio is never mixed into the output FLAC.
