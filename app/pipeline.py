@@ -255,6 +255,7 @@ def _translate_missing(
         translation_qa,
     )
     from .translation_runtime import (
+        TranslationBudgetExceeded,
         TranslationUsageLedger,
         estimate_request_tokens,
         estimate_workload_tokens,
@@ -342,7 +343,10 @@ def _translate_missing(
             usage_callback=lambda usage: ledger.record("capability-smoke", usage),
         )
         if ledger.budget_active and not capability.get("usage_supported"):
-            ledger.assert_observable()
+            raise TranslationBudgetExceeded(
+                "The cached capability result says this provider/model does not expose "
+                "token usage, so a token/USD budget cannot be enforced safely."
+            )
 
     for start in range(0, len(remaining), batch_size):
         batch = remaining[start:start + batch_size]
