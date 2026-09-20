@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-E**.
+Current development version: **v0.9-F**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-E add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-F add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -74,7 +74,8 @@ v0.4-v0.9-E add failure-driven hardening based on upstream documentation, issue 
 - v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart;
 - v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes;
 - v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts;
-- v0.9-E adds recent-project switching, project-scoped task history, explicit language roles, multilingual EN/CHS/JP/KR Quick indexes, and optional second-package reference text.
+- v0.9-E adds recent-project switching, project-scoped task history, explicit language roles, multilingual EN/CHS/JP/KR Quick indexes, and optional second-package reference text;
+- v0.9-F separates internal resumable state from user-facing output files through a project-local `.state` directory.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -231,6 +232,7 @@ Useful options:
 --source-language ja
 --target-language zh-CN
 --reference-language en
+--state-dir /path/to/project/.state
 ```
 
 ## Translation quality benchmark
@@ -289,6 +291,30 @@ output/semantic_qa.json
 
 If deterministic or semantic QA still has a hard failure after its one repair pass, the build stops before accepting the bad translation. Earlier paid batches and successfully verified semantic rows remain checkpointed, so a later restart does not force the whole character through the API again.
 
+## Project state vs output
+
+Dashboard-created projects now use two distinct locations:
+
+```text
+<project>/
+├── output/      # user-facing finished artifacts
+└── .state/      # checkpoints, QA, usage and validated stage state
+```
+
+The normal `output/` directory is intended for files you may actually consume or export: manifests, corrected bilingual index, subtitles, build report, update plan, and `continuous.flac` when enabled. Internal files such as `.translation_checkpoint.json`, `translation_qa.json`, `semantic_qa.json`, `translation_usage.json`, and the `stages/` chain live in `.state/`.
+
+Existing projects are migrated conservatively on their next build. A legacy internal item is moved out of `output/` only when the corresponding destination does not already exist in `.state/`; newer state is never overwritten by migration.
+
+Direct CLI users can opt into the same separation explicitly:
+
+```bash
+python -m app.pipeline \
+  --index index.csv \
+  --wavs Voice-WAV.zip \
+  --out output \
+  --state-dir .state
+```
+
 ## Stage recovery
 
 Each output directory contains a `stages/` chain:
@@ -305,7 +331,7 @@ final_report.json
 
 Every state file is atomically written and bound to the content fingerprints of the selected inputs, relevant build settings, translation provider/Base URL/model, and the stage schema version. Recorded output artifacts are checked by size and SHA-256 before reuse. If an input or artifact changes, the affected work is rebuilt instead of silently accepting stale state.
 
-`build_report.json` records `stage_resume.resumed` and `stage_resume.rebuilt`. Metadata and paid translation work can survive a Termux/process interruption. FLAC encoding remains all-or-nothing: only a completed, verified file is reusable; an interrupted encode starts again.
+`build_report.json` records `stage_resume.resumed` and `stage_resume.rebuilt`. In project-dashboard builds, the validated stage chain itself is stored under `.state/stages/`. Metadata and paid translation work can survive a Termux/process interruption. FLAC encoding remains all-or-nothing: only a completed, verified file is reusable; an interrupted encode starts again.
 
 ## Translation usage, budgets, and capability cache
 
