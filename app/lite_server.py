@@ -367,6 +367,11 @@ class Handler(BaseHTTPRequestHandler):
                     translation_budget_usd=config.translation_budget_usd,
                     glossary_path=paths["glossary"],
                     progress_callback=report_progress,
+                    reference_source=paths["reference"],
+                    audio_language=config.audio_language,
+                    source_text_language=config.source_text_language,
+                    target_language=config.target_language,
+                    reference_language=config.reference_language,
                 )
 
             job = create_job(
@@ -476,6 +481,11 @@ class Handler(BaseHTTPRequestHandler):
                     translation_budget_usd=config.translation_budget_usd,
                     glossary_path=paths["glossary"],
                     progress_callback=report_progress,
+                    reference_source=paths["reference"],
+                    audio_language=config.audio_language,
+                    source_text_language=config.source_text_language,
+                    target_language=config.target_language,
+                    reference_language=config.reference_language,
                 )
 
             job = create_job(
@@ -523,7 +533,10 @@ class Handler(BaseHTTPRequestHandler):
                 atomic_write_text(output / "update_plan.json", json.dumps(plan, ensure_ascii=False, indent=2))
                 return plan
 
-            job = create_job("remote-update-check", run)
+            job = create_job(
+            "remote-update-check", run,
+            project_root=config.root, project_name=config.name,
+        )
             self._json({"ok": True, "job": job.id})
             return
 
