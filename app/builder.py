@@ -494,6 +494,9 @@ def build_entries(
         "count_official_chs_lab": official_count,
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
+        "count_official_target_lab": official_count,
+        "count_existing_target_text": translated_count,
+        "count_missing_target_text": sum(not e.chinese for e in entries),
         "count_reference_lab": sum(bool(e.reference_text) for e in entries),
         "count_source_lab": sum(
             bool(primary_labs.get(stem_of(e.filename))) for e in entries
@@ -515,6 +518,15 @@ def build_entries(
 def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     js = [asdict(e) for e in entries]
+    for row in js:
+        row["source_text"] = row.get("english", "")
+        row["target_text"] = row.get("chinese", "")
+        legacy_source = str(row.get("chinese_source", "") or "")
+        row["target_text_source"] = (
+            "official_target_lab"
+            if legacy_source == "official_chs_lab"
+            else legacy_source
+        )
     atomic_write_text(
         out_dir / "manifest.json",
         json.dumps({"report": report, "entries": js}, ensure_ascii=False, indent=2),
@@ -535,7 +547,10 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
 
     timeline_fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
-        "chinese_source", "chinese", "english", "source_duration_seconds", "sha256",
+        "target_text_source", "target_text", "source_text",
+        "chinese_source", "chinese", "english",
+        "reference_language", "reference_text",
+        "source_duration_seconds", "sha256",
     ]
     timeline_rows: list[dict[str, object]] = []
     for e in entries:
@@ -546,9 +561,18 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
             "display_end": clock_time(e.display_end_seconds),
             "group": e.group,
             "filename": e.filename,
+            "target_text_source": (
+                "official_target_lab"
+                if e.chinese_source == "official_chs_lab"
+                else e.chinese_source
+            ),
+            "target_text": e.chinese,
+            "source_text": e.english,
             "chinese_source": e.chinese_source,
             "chinese": e.chinese,
             "english": e.english,
+            "reference_language": e.reference_language,
+            "reference_text": e.reference_text,
             "source_duration_seconds": f"{e.source_duration_seconds:.6f}",
             "sha256": e.sha256,
         })
