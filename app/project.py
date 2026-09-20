@@ -432,6 +432,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     manifest = output / "manifest.json"
     report_file = output / "build_report.json"
     final_stage_file = state / "stages" / "final_report.json"
+    legacy_final_stage_file = output / "stages" / "final_report.json"
     report: dict[str, Any] = {}
     if report_file.is_file():
         try:
@@ -480,7 +481,9 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "root": config.root,
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
-        "build_complete": report_file.is_file() and final_stage_file.is_file(),
+        "build_complete": report_file.is_file() and (
+            final_stage_file.is_file() or legacy_final_stage_file.is_file()
+        ),
         "report": report,
         "outputs": outputs,
         "state_outputs": state_outputs,
