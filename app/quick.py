@@ -417,12 +417,80 @@ def _remote_rows(
     return result
 
 
+_CROSS_LANGUAGE_KEY_RE = re.compile(
+    r"^(?P<group>(?:archive|chapter\\d+(?:_\\d+)?|companion\\d+(?:_\\d+)?|side\\d+(?:_\\w+)?))_.+?_(?P<tail>\\d+(?:_[fm])?)$",
+    re.IGNORECASE,
+)
+
+
+def _cross_language_voice_key(filename: str) -> str:
+    stem = Path(filename).stem.casefold()
+    match = _CROSS_LANGUAGE_KEY_RE.match(stem)
+    if match:
+        return f"{match.group('group').casefold()}::{match.group('tail').casefold()}"
+    return stem
+
+
+def _map_reference_records(
+    primary_names: set[str],
+    records: list[dict[str, str]],
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Map a second localization's indexed text onto primary voice filenames.
+
+    Exact filenames win. For character-localized filenames, a conservative
+    group+numeric-tail key can bridge names such as
+    chapter5_13_evanescia_103.wav and chapter5_13_<localized-name>_103.wav.
+    Structural fallback is used only when the key is unique on both sides.
+    """
+    by_exact = {
+        Path(str(row.get("filename", ""))).name: str(row.get("english", "")).strip()
+        for row in records
+        if str(row.get("filename", "")).strip() and str(row.get("english", "")).strip()
+    }
+    mapped: dict[str, str] = {}
+    exact = 0
+    for name in primary_names:
+        text = by_exact.get(Path(name).name, "")
+        if text:
+            mapped[name] = text
+            exact += 1
+
+    remaining_primary = [name for name in primary_names if name not in mapped]
+    primary_by_key: dict[str, list[str]] = {}
+    for name in remaining_primary:
+        primary_by_key.setdefault(_cross_language_voice_key(name), []).append(name)
+
+    reference_by_key: dict[str, list[tuple[str, str]]] = {}
+    for row in records:
+        filename = Path(str(row.get("filename", ""))).name
+        text = str(row.get("english", "")).strip()
+        if not filename or not text:
+            continue
+        reference_by_key.setdefault(
+            _cross_language_voice_key(filename), []
+        ).append((filename, text))
+
+    structural = 0
+    for key, names in primary_by_key.items():
+        refs = reference_by_key.get(key, [])
+        if len(names) == 1 and len(refs) == 1:
+            mapped[names[0]] = refs[0][1]
+            structural += 1
+
+    return mapped, {
+        "exact": exact,
+        "structural": structural,
+        "total": len(mapped),
+    }
+
+
 def quick_scan(
     english_source: Path,
     chs_source: Path | None = None,
     *,
     reference_source: Path | None = None,
     source_text_language: str = "en",
+    reference_language: str = "auto",
     remote_index_url: str = "",
 ) -> dict[str, Any]:
     english = source_inventory(english_source)
@@ -551,13 +619,70 @@ def quick_scan(
             warnings.append("Target-text source contains no LAB files")
 
     reference = None
+    reference_index_attempt: dict[str, Any] | None = None
+    reference_text_match = {"exact": 0, "structural": 0, "total": 0}
     if reference_source is not None and str(reference_source).strip():
         reference = source_inventory(reference_source)
-        if reference["lab_count"] == 0:
+        primary_stems = {Path(name).stem for name in wav_names}
+        reference_lab_stems = set(reference.get("lab_names", []))
+        lab_matches = len(primary_stems & reference_lab_stems)
+        if reference["lab_count"] > 0:
+            reference_text_match = {
+                "exact": lab_matches,
+                "structural": 0,
+                "total": lab_matches,
+            }
+            if lab_matches < len(wav_names):
+                warnings.append(
+                    f"Reference LAB matches only {lab_matches} / {len(wav_names)} primary voices"
+                )
+        elif reference_language == "auto":
             warnings.append(
-                "Reference package contains no LAB text; audio-only reference transcription "
-                "is not implemented yet"
+                "Reference package has no LAB text. Choose its language (EN/CHS/JP/KR) "
+                "so Quick Mode can recover reference text from the matching remote index."
             )
+        else:
+            try:
+                reference_index_url = ai_hobbyist_index_url(reference_language)
+                reference_wavs = {Path(name).name for name in reference["wav_names"]}
+                reference_records, reference_cache = (
+                    fetch_ai_hobbyist_index_for_filenames_cached(
+                        reference_wavs, reference_index_url
+                    )
+                )
+                reference_index_attempt = _remote_candidate(
+                    reference_records,
+                    reference_wavs,
+                    url=reference_index_url,
+                    cache=reference_cache,
+                    source_text_language=reference_language,
+                )
+                mapped_reference, reference_text_match = _map_reference_records(
+                    wav_names, reference_records
+                )
+                reference_index_attempt["primary_text_matches"] = len(mapped_reference)
+                reference_index_attempt["match_detail"] = reference_text_match
+                reference_index_attempt["records_fingerprint"] = _index_fingerprint(
+                    reference_records
+                )
+                if reference_cache.get("stale"):
+                    warnings.append(
+                        "Reference index refresh failed; a stale cached copy was used"
+                    )
+                if not mapped_reference:
+                    warnings.append(
+                        "Reference package index was found, but no voice lines could be "
+                        "aligned with the primary package"
+                    )
+                elif len(mapped_reference) < len(wav_names):
+                    warnings.append(
+                        f"Reference text aligns with {len(mapped_reference)} / "
+                        f"{len(wav_names)} primary voices"
+                    )
+            except Exception as exc:
+                warnings.append(
+                    f"Reference text index fallback failed: {type(exc).__name__}: {exc}"
+                )
 
     if character["confidence"] == "low":
         warnings.append("Character inference confidence is low; review before building")
@@ -611,6 +736,8 @@ def quick_scan(
             if chs
             else None
         ),
+        "reference_index_attempt": reference_index_attempt,
+        "reference_text_match": reference_text_match,
         "reference": (
             {
                 key: value
@@ -713,6 +840,7 @@ def create_quick_project(
         chs_source,
         reference_source=reference_source,
         source_text_language=source_text_language,
+        reference_language=reference_language,
     )
     if not plan["ready"]:
         raise RuntimeError("Quick scan has blockers: " + "; ".join(plan["blockers"]))
@@ -726,6 +854,11 @@ def create_quick_project(
         current_chs = source_inventory(chs_source)
         if current_chs["fingerprint"] != plan["chinese"]["fingerprint"]:
             raise RuntimeError("Target-text source changed after Quick Scan; scan again before building")
+    current_reference = None
+    if reference_source is not None:
+        current_reference = source_inventory(reference_source)
+        if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
+            raise RuntimeError("Reference source changed after Quick Scan; scan again before building")
     wanted = set(current_inventory["wav_names"])
     if selected_index.get("source") == "remote":
         remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
@@ -748,12 +881,46 @@ def create_quick_project(
     if len(filtered) != len(wanted):
         raise RuntimeError("Index coverage changed between scan and project creation")
 
+    reference_text_embedded = False
+    reference_attempt = plan.get("reference_index_attempt")
+    if (
+        reference_source is not None
+        and current_reference is not None
+        and int(current_reference.get("lab_count", 0)) == 0
+        and isinstance(reference_attempt, dict)
+        and reference_attempt.get("url")
+    ):
+        reference_wavs = {
+            Path(name).name for name in current_reference.get("wav_names", [])
+        }
+        reference_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+            reference_wavs,
+            str(reference_attempt["url"]),
+        )
+        if _index_fingerprint(reference_records) != reference_attempt.get(
+            "records_fingerprint"
+        ):
+            raise RuntimeError(
+                "Reference remote index changed after Quick Scan; scan again before building"
+            )
+        mapped_reference, _ = _map_reference_records(wanted, reference_records)
+        for row in filtered:
+            filename = Path(str(row.get("filename", ""))).name
+            text = mapped_reference.get(filename, "")
+            if text:
+                row["reference_text"] = text
+                row["reference_language"] = reference_language
+        reference_text_embedded = bool(mapped_reference)
+
     project_root = (root or _default_project_root(plan, english_source)).expanduser().resolve()
     generated_dir = project_root / ".generated"
     generated_dir.mkdir(parents=True, exist_ok=True)
     generated_index = generated_dir / "quick_index.csv"
 
-    fields = ["index", "group", "filename", "source", "source_detail", "english", "sha256"]
+    fields = [
+        "index", "group", "filename", "source", "source_detail", "english",
+        "reference_text", "reference_language", "sha256",
+    ]
     with generated_index.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
         writer.writeheader()
@@ -767,6 +934,7 @@ def create_quick_project(
         output_dir="output",
         chs_source=str(chs_source) if chs_source else "",
         reference_source=str(reference_source) if reference_source else "",
+        reference_text_embedded=reference_text_embedded,
         audio_language=audio_language,
         source_text_language=source_text_language,
         target_language=target_language,
