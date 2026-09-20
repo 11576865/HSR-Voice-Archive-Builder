@@ -5,6 +5,7 @@ import csv
 import hashlib
 import json
 import tempfile
+from collections.abc import Callable
 from dataclasses import asdict
 from pathlib import Path
 
@@ -856,6 +857,7 @@ def build_project_v02(
     translation_token_budget: int = 0,
     translation_budget_usd: float = 0.0,
     glossary_path: Path | None = None,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -864,6 +866,12 @@ def build_project_v02(
     bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
     chs_source = chs_source.expanduser().resolve() if chs_source else None
     glossary_path = glossary_path.expanduser().resolve() if glossary_path else None
+
+    def progress(phase: str, message: str, current: int, total: int = 6) -> None:
+        if progress_callback is not None:
+            progress_callback(phase, message, current, total)
+
+    progress("prepare", "1/6 正在检查输入与恢复点", 1)
 
     from .glossary import (
         CORE_GLOSSARY,
@@ -914,6 +922,8 @@ def build_project_v02(
         )
         rebuilt_stages.append("scan")
 
+    progress("metadata", "2/6 正在读取语音包与元数据", 2)
+
     # Keep extraction/work files on the output filesystem instead of the OS
     # temp drive. On Windows/Android the system temp partition is often much
     # smaller than the drive selected for an archive project.
@@ -955,6 +965,12 @@ def build_project_v02(
             )
             rebuilt_stages.append("metadata")
 
+        progress(
+            "translation",
+            "3/6 正在处理中文翻译与质量检查" if translate_missing
+            else "3/6 中文翻译阶段无需 API",
+            3,
+        )
         translated = _stage_entries(load_stage(
             out_dir, STAGE_FILES["translation"], "translation", input_fingerprint
         ))
@@ -1026,6 +1042,8 @@ def build_project_v02(
             )
             rebuilt_stages.extend(["translation", "translation_qa"])
 
+        progress("manifest", "4/6 正在生成字幕与清单", 4)
+
         manifest_artifacts = [
             out_dir / "manifest.json",
             out_dir / "manifest.csv",
@@ -1049,6 +1067,12 @@ def build_project_v02(
             )
             rebuilt_stages.append("manifest")
 
+        progress(
+            "audio",
+            "5/6 正在构建并验证连续 FLAC" if make_flac
+            else "5/6 已跳过连续 FLAC",
+            5,
+        )
         if make_flac:
             audio = load_stage(
                 out_dir, STAGE_FILES["audio"], "audio", input_fingerprint
@@ -1095,6 +1119,8 @@ def build_project_v02(
                 {"skipped": True, "report": {}},
             )
             rebuilt_stages.append("audio")
+
+        progress("final", "6/6 正在写入最终报告", 6)
 
         report["stage_resume"] = {
             "input_fingerprint": input_fingerprint,
