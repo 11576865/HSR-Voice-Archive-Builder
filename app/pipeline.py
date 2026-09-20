@@ -536,13 +536,11 @@ def _translate_missing(
                 usage_callback=lambda usage, phase=phase: ledger.record(phase, usage),
             )
         else:
-            # Test/injected clients predate usage callbacks. Production make_client()
-            # always returns OpenAIResponsesHTTPClient.
+            # Test/injected clients predate language/usage callbacks. Production
+            # make_client() always returns OpenAIResponsesHTTPClient.
             translated = translate_records(
                 batch,
                 model=model,
-                source_language=source_language,
-                target_language=target_language,
                 glossary=batch_glossary,
                 client=client,
             )
@@ -595,8 +593,6 @@ def _translate_missing(
                 retried_rows = translate_records(
                     retry_records,
                     model=model,
-                    source_language=source_language,
-                    target_language=target_language,
                     glossary=retry_glossary,
                     client=client,
                 )
