@@ -180,7 +180,7 @@ def _read_state() -> dict[str, Any]:
     if not STATE_FILE.is_file():
         return {}
     try:
-        data = _read_state()
+        data = json.loads(STATE_FILE.read_text(encoding="utf-8"))
         return data if isinstance(data, dict) else {}
     except (OSError, ValueError, TypeError):
         return {}
