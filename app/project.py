@@ -565,6 +565,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     report_file = output / "build_report.json"
     final_stage_file = state / "stages" / "final_report.json"
     legacy_final_stage_file = output / "stages" / "final_report.json"
+    update_pending_file = state / "update_pending.json"
     report: dict[str, Any] = {}
     if report_file.is_file():
         try:
@@ -616,16 +617,27 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "bilingual": _path_status(config, config.bilingual_csv),
         "glossary": _path_status(config, config.glossary_path),
     }
+    update_pending: dict[str, Any] | None = None
+    if update_pending_file.is_file():
+        try:
+            payload = json.loads(update_pending_file.read_text(encoding="utf-8"))
+            if isinstance(payload, dict):
+                update_pending = payload
+        except (OSError, ValueError, TypeError):
+            update_pending = {"reason": "unknown", "damaged": True}
     return {
         "name": config.name,
         "root": config.root,
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
-        "build_complete": report_file.is_file() and (
-            final_stage_file.is_file() or legacy_final_stage_file.is_file()
+        "build_complete": (
+            update_pending is None
+            and report_file.is_file()
+            and (final_stage_file.is_file() or legacy_final_stage_file.is_file())
         ),
         "report": report,
         "outputs": outputs,
         "state_outputs": state_outputs,
         "source_status": source_status,
+        "update_pending": update_pending,
     }
