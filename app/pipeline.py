@@ -70,7 +70,15 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
         row["variant"] = ident.variant
         row["source_text"] = entry.english
         row["target_text"] = entry.chinese
+        row["target_text_source"] = (
+            "official_target_lab"
+            if entry.chinese_source == "official_chs_lab"
+            else entry.chinese_source
+        )
         row["reference_text"] = str(getattr(entry, "reference_text", "") or "")
+        row["reference_language"] = str(
+            getattr(entry, "reference_language", "auto") or "auto"
+        )
         variants += bool(ident.variant)
     report["count_variants"] = variants
     payload["report"] = report
@@ -86,7 +94,14 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
     corrected = out_dir / "bilingual_index_corrected.csv"
     with corrected.open("r", encoding="utf-8-sig", newline="") as f:
         old_rows = list(csv.DictReader(f))
-    fields = ["index", "start", "audio_end", "display_end", "group", "filename", "logical_id", "variant", "chinese_source", "target_text", "source_text", "reference_text", "chinese", "english", "source_duration_seconds", "sha256"]
+    fields = [
+        "index", "start", "audio_end", "display_end", "group", "filename",
+        "logical_id", "variant",
+        "target_text_source", "target_text", "source_text",
+        "reference_language", "reference_text",
+        "chinese_source", "chinese", "english",
+        "source_duration_seconds", "sha256",
+    ]
     updated_rows = []
     for old, entry in zip(old_rows, entries, strict=True):
         ident = parse_voice_identity(entry.filename, entry.group)
@@ -94,7 +109,15 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
         old["variant"] = ident.variant
         old["source_text"] = entry.english
         old["target_text"] = entry.chinese
+        old["target_text_source"] = (
+            "official_target_lab"
+            if entry.chinese_source == "official_chs_lab"
+            else entry.chinese_source
+        )
         old["reference_text"] = str(getattr(entry, "reference_text", "") or "")
+        old["reference_language"] = str(
+            getattr(entry, "reference_language", "auto") or "auto"
+        )
         updated_rows.append(old)
     write_csv_rows(corrected, updated_rows, fields)
 
@@ -1157,6 +1180,7 @@ def build_project_v02(
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
+                report["count_missing_target_text"] = report["count_missing_chinese"]
             save_stage(
                 out_dir,
                 STAGE_FILES["translation"],
