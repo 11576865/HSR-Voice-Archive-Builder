@@ -12,7 +12,7 @@ h1{font-size:26px;margin:0}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px;m
 main{max-width:1180px;margin:0 auto;padding:14px 22px 50px}.grid{display:grid;grid-template-columns:1.25fr .75fr;gap:16px}.stack{display:grid;gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
 .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{padding:14px;border:1px solid var(--line);border-radius:10px;background:#fafafa}.stat b{display:block;font-size:24px;margin-bottom:3px}.stat span{font-size:12px;color:var(--muted)}
 label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}input,select{width:100%;padding:9px 10px;border:1px solid #c7cbd1;border-radius:7px;background:#fff;color:var(--text)}input:focus,select:focus{outline:2px solid #b9c3d0;outline-offset:1px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button{padding:9px 14px;border:1px solid #b9bdc4;border-radius:8px;background:#fff;cursor:pointer;font-weight:650}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button:disabled{opacity:.45;cursor:not-allowed}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button{padding:9px 14px;border:1px solid #b9bdc4;border-radius:8px;background:#fff;cursor:pointer;font-weight:650}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.danger{border-color:#d8a3a3;color:var(--bad);background:#fff8f8}button:disabled{opacity:.45;cursor:not-allowed}
 .check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px}.check input{width:auto}.muted{color:var(--muted)}.hidden{display:none!important}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px 7px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:650}
 pre{margin:0;background:#111318;color:#e9ebef;border-radius:9px;padding:13px;white-space:pre-wrap;max-height:330px;overflow:auto;font-size:12px}
@@ -32,14 +32,16 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
   <div class="stack">
     <section class="card">
       <div class="topline"><h2>项目</h2><span id="projectName" class="muted">未打开</span></div>
-      <div class="row" style="align-items:end;margin-bottom:12px">
-        <div>
-          <label>快速切换项目</label>
-          <select id="projectSwitcher"><option value="">正在读取项目…</option></select>
-        </div>
-        <div class="actions" style="margin-top:0">
+      <div style="margin-bottom:12px">
+        <label>项目选择</label>
+        <select id="projectSwitcher"><option value="">正在读取项目…</option></select>
+        <div class="actions">
+          <button type="button" class="primary" id="openSelectedProjectBtn">打开所选</button>
           <button type="button" id="newProjectBtn">新建 / 导入项目</button>
+          <button type="button" id="forgetProjectBtn">移出列表</button>
+          <button type="button" class="danger" id="deleteProjectBtn">删除项目</button>
         </div>
+        <p class="small muted">“移出列表”只隐藏项目，不删除任何文件；重新手动打开后会再次出现在列表里。“删除项目”会清理程序管理的项目数据。Quick Mode 创建的专用项目目录可整目录删除；手动项目会保留目录中的其他用户文件。</p>
       </div>
       <div id="noProject">
         <h3>快速创建</h3>
@@ -307,21 +309,61 @@ function n(v){return v===undefined||v===null?'—':String(v)}
 function bytes(v){if(!v)return '—';const u=['B','KB','MB','GB'];let i=0,x=v;while(x>=1024&&i<u.length-1){x/=1024;i++}return x.toFixed(i?1:0)+' '+u[i]}
 function renderProjectSwitcher(items){
   const select=document.getElementById('projectSwitcher');if(!select)return;
+  const previous=select.value||'';
   const current=currentProject?.root||'';
-  select.innerHTML='<option value="__new__">＋ 新建 / 导入项目</option>';
+  select.innerHTML='<option value="">请选择项目…</option>';
   for(const p of items||[]){
-    const o=document.createElement('option');o.value=p.root;o.textContent=p.name+' · '+p.root;select.appendChild(o);
+    const o=document.createElement('option');
+    o.value=p.root;
+    o.dataset.managed=p.managed_project_root?'1':'0';
+    o.textContent=(p.root===current?'● ':'')+p.name+' · '+p.root;
+    select.appendChild(o);
   }
-  select.value=current&&[...select.options].some(o=>o.value===current)?current:'__new__';
+  if(current&&[...select.options].some(o=>o.value===current))select.value=current;
+  else if(previous&&[...select.options].some(o=>o.value===previous))select.value=previous;
+  else select.value='';
+  updateProjectActionButtons();
+}
+function updateProjectActionButtons(){
+  const select=document.getElementById('projectSwitcher');
+  const chosen=!!select?.value;
+  for(const id of ['openSelectedProjectBtn','forgetProjectBtn','deleteProjectBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=!chosen;
+  }
 }
 async function switchProject(root){
-  if(root==='__new__'){
-    await api('/api/project/close',{method:'POST'});
-    fillProject(null);quickPlanState=null;await loadQuickCandidates();await refresh();return;
-  }
+  if(!root)throw new Error('请先选择一个项目');
   const d=new FormData();d.set('project_path',root);
   const j=await api('/api/project/open',{method:'POST',body:d});
-  fillProject(j.project);await refresh();
+  fillProject(j.project);quickPlanState=null;await refresh();
+}
+async function startNewProject(){
+  await api('/api/project/close',{method:'POST'});
+  fillProject(null);quickPlanState=null;await loadQuickCandidates();await refresh();
+}
+async function forgetSelectedProject(){
+  const select=document.getElementById('projectSwitcher'),root=select.value;
+  if(!root)throw new Error('请先选择一个项目');
+  const d=new FormData();d.set('project_path',root);
+  const j=await api('/api/project/forget',{method:'POST',body:d});
+  fillProject(j.project||null);
+  setLog('已将项目移出列表；项目文件仍保留在磁盘。');
+  await refresh();
+}
+async function deleteSelectedProject(){
+  const select=document.getElementById('projectSwitcher'),root=select.value;
+  if(!root)throw new Error('请先选择一个项目');
+  const option=select.options[select.selectedIndex];
+  const managed=option?.dataset?.managed==='1';
+  const mode=managed
+    ? '这是 Quick Mode 管理的专用项目目录，将删除整个项目目录，但不会删除项目目录之外的原始语音包。'
+    : '这是手动项目。只会删除项目配置、.generated 和项目目录内的输出目录；其他用户文件会保留。';
+  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n'+root))return;
+  const d=new FormData();d.set('project_path',root);
+  const j=await api('/api/project/delete',{method:'POST',body:d});
+  fillProject(j.project||null);
+  setLog(j.result||'项目已删除。');
+  await refresh();
 }
 function fillProject(p){
   currentProject=p;
@@ -569,8 +611,11 @@ document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();awa
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();d.set('character',document.getElementById('remoteCharacter').value);const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
 document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
-document.getElementById('projectSwitcher').onchange=async e=>{try{await switchProject(e.target.value)}catch(x){setLog(String(x))}};
-document.getElementById('newProjectBtn').onclick=async()=>{try{await switchProject('__new__')}catch(x){setLog(String(x))}};
+document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
+document.getElementById('openSelectedProjectBtn').onclick=async()=>{try{await switchProject(document.getElementById('projectSwitcher').value)}catch(x){setLog(String(x))}};
+document.getElementById('newProjectBtn').onclick=async()=>{try{await startNewProject()}catch(x){setLog(String(x))}};
+document.getElementById('forgetProjectBtn').onclick=async()=>{try{await forgetSelectedProject()}catch(x){setLog(String(x))}};
+document.getElementById('deleteProjectBtn').onclick=async()=>{try{await deleteSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('refreshBtn').onclick=refresh;
 refresh();loadQuickCandidates();
 </script>
