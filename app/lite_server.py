@@ -14,7 +14,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text
 from .diff import classify
-from .jobs import create_job, get_job, recent_jobs
+from .jobs import assert_no_active_build, create_job, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import create_quick_project, discover_source_candidates, quick_scan
@@ -92,7 +92,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.9-C"
+    server_version = "HSRVoiceLite/0.9-D"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -256,7 +256,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.9-C-termux-lite",
+                "version": "0.9-D-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -311,6 +311,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/quick/build":
+            assert_no_active_build()
             english_source = data.get("english_source", "").strip()
             if not english_source:
                 raise ValueError("English voice package is required")
@@ -335,7 +336,7 @@ class Handler(BaseHTTPRequestHandler):
             if config.make_flac and not runtime.get("ffmpeg"):
                 raise RuntimeError("FFmpeg is not installed or is not available on PATH")
 
-            def run():
+            def run(report_progress):
                 return build_project_v02(
                     paths["index"],
                     paths["wavs"],
@@ -351,9 +352,10 @@ class Handler(BaseHTTPRequestHandler):
                     translation_token_budget=config.translation_token_budget,
                     translation_budget_usd=config.translation_budget_usd,
                     glossary_path=paths["glossary"],
+                    progress_callback=report_progress,
                 )
 
-            job = create_job("quick-build", run)
+            job = create_job("quick-build", run, with_progress=True)
             self._json({
                 "ok": True,
                 "job": job.id,
@@ -411,6 +413,7 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/project/build":
+            assert_no_active_build()
             config = _active_config()
             paths = _project_paths(config)
             if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
@@ -424,7 +427,7 @@ class Handler(BaseHTTPRequestHandler):
                     "'python -m app.credentials configure --provider vapi'"
                 )
 
-            def run():
+            def run(report_progress):
                 return build_project_v02(
                     paths["index"],
                     paths["wavs"],
@@ -440,9 +443,10 @@ class Handler(BaseHTTPRequestHandler):
                     translation_token_budget=config.translation_token_budget,
                     translation_budget_usd=config.translation_budget_usd,
                     glossary_path=paths["glossary"],
+                    progress_callback=report_progress,
                 )
 
-            job = create_job("build", run)
+            job = create_job("build", run, with_progress=True)
             self._json({"ok": True, "job": job.id})
             return
 
