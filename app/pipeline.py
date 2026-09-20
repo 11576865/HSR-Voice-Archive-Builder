@@ -1025,6 +1025,7 @@ def build_project_v02(
     chs_source: Path | None = None,
     same_group_gap: float = 0.40,
     group_gap: float = 1.20,
+    intro_gap: float = 5.0,
     make_flac: bool = True,
     translate_missing: bool = False,
     translation_model: str = "gpt-5.6-sol",
@@ -1094,6 +1095,7 @@ def build_project_v02(
         "target_language": target_language,
         "reference_language": reference_language,
         "reference_text_embedded": bool(reference_text_embedded),
+        "intro_gap": intro_gap,
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
@@ -1153,6 +1155,7 @@ def build_project_v02(
                 wav_root,
                 same_group_gap=same_group_gap,
                 group_gap=group_gap,
+                intro_gap=intro_gap,
                 reference_lab_root=reference_root,
                 reference_language=reference_language,
                 source_text_language=source_text_language,
@@ -1260,7 +1263,8 @@ def build_project_v02(
             out_dir / "manifest.json",
             out_dir / "manifest.csv",
             out_dir / "bilingual_index_corrected.csv",
-            out_dir / "bilingual.srt",
+            out_dir / "timeline_resolved.json",
+            out_dir / "HSR_Voice_Archive.ass",
         ]
         if load_stage(
             state_dir,
@@ -1382,6 +1386,7 @@ if __name__ == "__main__":
     p.add_argument("--state-dir", type=Path)
     p.add_argument("--bilingual", type=Path)
     p.add_argument("--chs", type=Path)
+    p.add_argument("--intro-gap", type=float, default=5.0)
     p.add_argument("--same-gap", type=float, default=0.40)
     p.add_argument("--group-gap", type=float, default=1.20)
     p.add_argument("--no-flac", action="store_true")
@@ -1398,10 +1403,19 @@ if __name__ == "__main__":
     p.add_argument("--reference-language", default="auto")
     a = p.parse_args()
     result = build_project_v02(
-        a.index, a.wavs, a.out, a.bilingual, a.chs,
-        a.same_gap, a.group_gap, not a.no_flac,
-        a.translate_missing, a.translation_model, a.translation_batch_size,
-        a.translation_token_budget, a.translation_budget_usd, a.glossary,
+        a.index, a.wavs, a.out,
+        bilingual_csv=a.bilingual,
+        chs_source=a.chs,
+        same_group_gap=a.same_gap,
+        group_gap=a.group_gap,
+        intro_gap=a.intro_gap,
+        make_flac=not a.no_flac,
+        translate_missing=a.translate_missing,
+        translation_model=a.translation_model,
+        translation_batch_size=a.translation_batch_size,
+        translation_token_budget=a.translation_token_budget,
+        translation_budget_usd=a.translation_budget_usd,
+        glossary_path=a.glossary,
         reference_source=a.reference,
         audio_language=a.audio_language,
         source_text_language=a.source_language,
