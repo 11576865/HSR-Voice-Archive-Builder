@@ -144,6 +144,53 @@ def source_inventory(source: Path) -> dict[str, Any]:
     }
 
 
+def discover_source_candidates() -> list[dict[str, Any]]:
+    """List likely local voice-package archives without opening or uploading them."""
+    home = Path.home()
+    roots = [
+        home / "storage" / "downloads",
+        home / "storage" / "shared" / "Download",
+        Path("/storage/emulated/0/Download"),
+        Path.cwd(),
+    ]
+    result: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for root in roots:
+        try:
+            if not root.is_dir():
+                continue
+            candidates = [
+                p for p in root.iterdir()
+                if p.is_file() and p.suffix.lower() in SUPPORTED_ARCHIVES
+            ]
+        except (OSError, PermissionError):
+            continue
+        for path in candidates:
+            try:
+                resolved = path.resolve()
+                key = str(resolved)
+                stat = resolved.stat()
+            except OSError:
+                continue
+            if key in seen:
+                continue
+            seen.add(key)
+            lower = path.name.casefold()
+            role_hint = (
+                "english" if re.search(r"(^|[^a-z])(en|english)([^a-z]|$)", lower)
+                else ("chinese" if any(x in lower for x in ("chs", "chinese", "中文")) else "")
+            )
+            result.append({
+                "path": key,
+                "name": path.name,
+                "size_bytes": stat.st_size,
+                "modified_ns": stat.st_mtime_ns,
+                "role_hint": role_hint,
+            })
+    result.sort(key=lambda item: (-int(item["modified_ns"]), str(item["name"])))
+    return result
+
+
 def _candidate_roots(source: Path) -> list[Path]:
     home = Path.home()
     roots = [
