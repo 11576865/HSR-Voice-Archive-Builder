@@ -171,7 +171,7 @@ Attributes = A_ -rw-r--r--
                 SimpleNamespace(filename="b.wav", english="Beta", chinese="", chinese_source="missing"),
             ]
 
-            def flaky(batch, model, client):
+            def flaky(batch, model, client, glossary=None):
                 if batch[0]["id"] == "b.wav":
                     raise RuntimeError("simulated 429")
                 return [{"id": "a.wav", "chinese": "阿尔法"}]
@@ -187,7 +187,7 @@ Attributes = A_ -rw-r--r--
             self.assertIn("a.wav", saved)
             self.assertNotIn('"b.wav"', saved)
 
-            def stable(batch, model, client):
+            def stable(batch, model, client, glossary=None):
                 self.assertEqual(batch[0]["id"], "b.wav")
                 return [{"id": "b.wav", "chinese": "贝塔"}]
 
