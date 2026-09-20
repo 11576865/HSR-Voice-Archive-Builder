@@ -170,7 +170,7 @@ Useful options:
 --group-gap 1.20
 --no-flac
 --translate-missing
---translation-model gpt-5.6-luna
+--translation-model gpt-5.6-sol
 --translation-batch-size 80
 ```
 
@@ -181,12 +181,14 @@ same-stem official Chinese LAB
         ↓
 existing bilingual-index Chinese text
         ↓
-GPT fallback, only when explicitly enabled
+AI API fallback, only when explicitly enabled
         ↓
 missing
 ```
 
 Translation providers are configured locally and are not stored in project files or the browser UI.
+
+Existing project files keep their saved `translation_model`; change the dashboard field once if an older project still says `gpt-5.6-luna`.
 
 For V-API:
 
@@ -217,7 +219,7 @@ python -m app.credentials status
 Run a tiny paid/usage-bearing structured-output smoke test before a real batch:
 
 ```bash
-python -m app.credentials test --model gpt-5.6-luna
+python -m app.credentials test --model gpt-5.6-sol
 ```
 
 Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.
