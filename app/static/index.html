@@ -106,10 +106,17 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         </div>
         <pre id="quickPlan" style="margin-top:12px;background:#fafafa;color:var(--text);border:1px solid var(--line);max-height:none">尚未扫描。</pre>
         <div class="row">
-          <div><label>Token 预算（0 = 不限）</label><input id="quickTokenBudget" type="number" min="0" step="1" value="0"></div>
-          <div><label>美元预算（0 = 不限）</label><input id="quickUsdBudget" type="number" min="0" step="0.001" value="0"></div>
+          <div><label>同组语音间隔（秒）</label><input id="quickSameGroupGap" type="number" min="0" step="0.01" value="0.40"></div>
+          <div><label>不同分组间隔（秒）</label><input id="quickGroupGap" type="number" min="0" step="0.01" value="1.20"></div>
         </div>
-        <p class="small muted">美元预算只有在当前 Provider / 模型价格可确定时才会执行；未知价格不会伪造金额。</p>
+        <p class="small muted">这两个值会直接影响连续 FLAC 和字幕时间，不再藏在首次构建后的高级设置里。</p>
+        <div id="quickAiBudget" class="hidden">
+          <div class="row">
+            <div><label>AI 翻译 Token 上限（0 = 不限）</label><input id="quickTokenBudget" type="number" min="0" step="1" value="0"></div>
+            <div><label>AI 翻译美元上限（0 = 不限）</label><input id="quickUsdBudget" type="number" min="0" step="0.001" value="0"></div>
+          </div>
+          <p class="small muted">只有存在缺失中文字幕时才显示。美元上限仅在当前 Provider / 模型价格可确定时执行。</p>
+        </div>
         <div class="actions">
           <button type="button" class="primary" id="quickBuildBtn" disabled>开始构建</button>
         </div>
@@ -458,6 +465,18 @@ async function relinkSelectedSource(){
   await refresh();
 }
 
+const outputDescriptions={
+  'continuous.flac':'连续播放的无损语音音频',
+  'bilingual.srt':'当前版本的兼容字幕；Timeline / ASS 完成后将被替代',
+  'manifest.json':'完整的机器可读档案，保存语音、文本、来源与时间',
+  'manifest.csv':'便于在表格软件中查看和整理的档案清单',
+  'bilingual_index_corrected.csv':'带实际时间位置的双语对照表',
+  'build_report.json':'本次构建的统计、校验结果与资源使用记录'
+};
+function outputDescription(name){
+  return outputDescriptions[name]||'构建生成的项目成品文件';
+}
+
 function fillProject(p){
   currentProject=p;
   document.getElementById('noProject').classList.toggle('hidden',!!p);
@@ -496,7 +515,8 @@ function fillProject(p){
   main.innerHTML='';diag.innerHTML='';
   for(const [name,o] of Object.entries(p.outputs||{})){
     if(!o.exists)continue;
-    const tr=document.createElement('tr');tr.innerHTML='<td>'+name+'</td><td>'+bytes(o.size_bytes)+'</td>';
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+name+'<div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
     (has?main:diag).appendChild(tr);
   }
   for(const [name,o] of Object.entries(p.state_outputs||{})){
@@ -566,6 +586,8 @@ function renderQuickPlan(plan){
   lines.push(plan.ready?'预检通过：可以开始构建。':'预检未通过：不会开始构建。');
   document.getElementById('quickPlan').textContent=lines.join('\n');
   document.getElementById('quickBuildBtn').disabled=!plan.ready;
+  const aiBudget=document.getElementById('quickAiBudget');
+  if(aiBudget)aiBudget.classList.toggle('hidden',n(tr.pending_translation_count)===0);
 }
 async function quickScan(){
   const english=document.getElementById('quickEnglish').value;if(!english)throw new Error('请选择主音频包');
@@ -628,11 +650,11 @@ function renderJobs(jobs){
     if(failed && (!succeeded || String(failed.finished_at)>String(succeeded.finished_at))){
       state.textContent='当前项目最近一次构建失败。';state.className='notice bad';bar.style.width='0%';
       textBox.textContent='修复原因后可以重新构建；已完成检查点通常仍会复用。';failure.textContent='失败原因：'+shortError(failed.error);failure.classList.remove('hidden');
-      setBuildButtonText('重新构建');setInlineBuildStatus('最近一次构建失败；修复后可重新构建。',true);
+      setBuildButtonText('继续构建');setInlineBuildStatus('最近一次构建失败；修复后会复用仍然有效的检查点。',true);
     }else if(succeeded){
       state.textContent='当前项目最近一次构建已完成。';state.className='notice ok';bar.style.width='100%';
       textBox.textContent='构建完成，可以查看“构建结果”或打开输出目录。';failure.classList.add('hidden');
-      setBuildButtonText('重新构建');setInlineBuildStatus('构建已完成。');
+      setBuildButtonText('应用设置并构建');setInlineBuildStatus('构建已完成；修改设置后再次构建时，只重跑受影响的阶段。');
     }else{
       state.textContent=root?'当前项目暂无新版任务记录。':'尚未打开项目。';state.className='notice';bar.style.width='0%';
       textBox.textContent=root?'旧版本任务记录已归入下方“其他项目 / 旧版任务”。':'请选择或新建项目。';failure.classList.add('hidden');
@@ -704,6 +726,8 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
   d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
   d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
+  d.set('same_group_gap',document.getElementById('quickSameGroupGap').value||'0.40');
+  d.set('group_gap',document.getElementById('quickGroupGap').value||'1.20');
   d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
   d.set('translation_budget_usd',document.getElementById('quickUsdBudget').value||'0');
   const j=await api('/api/quick/build',{method:'POST',body:d});
