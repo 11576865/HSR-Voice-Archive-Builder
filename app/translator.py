@@ -282,7 +282,7 @@ def _translation_prompt(
         "previous target translation specifically for those issues. Preserve HTML-like tags and the structural "
         "form of brace control tokens such as {NICKNAME}, {M#...}{F#...}, and RUBY markers. Text payloads inside "
         "control tokens may be translated when they are user-visible, but the token type/structure must remain. "
-        "Use the supplied terminology exactly when its source term occurs in the target. "
+        "Use the supplied terminology exactly when its source term occurs in the source text. "
         "Return every input ID exactly once. The JSON field remains named 'chinese' for backward compatibility, "
         f"but its value must be the requested {target_language} translation."
         + glossary_text
