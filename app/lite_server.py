@@ -322,12 +322,14 @@ class Handler(BaseHTTPRequestHandler):
             chs_value = data.get("chs_source", "").strip()
             reference_value = data.get("reference_source", "").strip()
             source_text_language = data.get("source_text_language", "en").strip() or "en"
+            target_language = data.get("target_language", "zh-CN").strip() or "zh-CN"
             reference_language = data.get("reference_language", "auto").strip() or "auto"
             plan = quick_scan(
                 Path(english_source),
                 Path(chs_value) if chs_value else None,
                 reference_source=Path(reference_value) if reference_value else None,
                 source_text_language=source_text_language,
+                target_language=target_language,
                 reference_language=reference_language,
             )
             self._json({"ok": True, "plan": plan})
