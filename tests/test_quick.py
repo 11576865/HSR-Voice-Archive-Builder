@@ -14,6 +14,7 @@ from app.quick import (
     _default_project_root,
     _remote_candidate,
     _safe_project_dir_name,
+    apply_quick_source_update,
     create_quick_project,
     infer_character,
     quick_scan,
@@ -400,6 +401,98 @@ class QuickModeTests(unittest.TestCase):
             self.assertNotIn("not-in-package.wav", text)
             scan = json.loads((project_root / ".generated" / "quick_scan.json").read_text(encoding="utf-8"))
             self.assertTrue(scan["ready"])
+
+
+    def test_incremental_apply_requires_every_existing_wav(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"
+            generated = root / ".generated"
+            output = root / "output"
+            generated.mkdir(parents=True)
+            output.mkdir()
+            old_names = ["chapter1_evanescia_1.wav", "chapter1_evanescia_2.wav"]
+            write_index(
+                generated / "quick_index.csv",
+                [
+                    {"index": str(i), "group": "chapter1", "filename": name, "english": f"Old {i}", "sha256": ""}
+                    for i, name in enumerate(old_names, 1)
+                ],
+            )
+            (output / "manifest.json").write_text(
+                json.dumps({"report": {}, "entries": [{"filename": name} for name in old_names]}),
+                encoding="utf-8",
+            )
+            config = create_project(
+                root,
+                name="incremental",
+                index_csv=str(generated / "quick_index.csv"),
+                wav_source=str(Path(td) / "old.zip"),
+                output_dir="output",
+                remote_index_url="https://example.test/EN.xlsx",
+            )
+            incomplete = Path(td) / "incomplete.zip"
+            make_voice_zip(incomplete, [old_names[0]])
+
+            with self.assertRaisesRegex(ValueError, "missing 1 archived WAV"):
+                apply_quick_source_update(config, incomplete)
+
+            self.assertEqual(load_project(root).wav_source, str(Path(td) / "old.zip"))
+
+    def test_incremental_apply_adopts_new_rows_and_updates_quick_index(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "project"
+            generated = root / ".generated"
+            output = root / "output"
+            generated.mkdir(parents=True)
+            output.mkdir()
+            old_names = ["chapter1_evanescia_1.wav", "chapter1_evanescia_2.wav"]
+            new_name = "chapter2_evanescia_3.wav"
+            write_index(
+                generated / "quick_index.csv",
+                [
+                    {"index": str(i), "group": "chapter1", "filename": name, "english": f"Old {i}", "sha256": ""}
+                    for i, name in enumerate(old_names, 1)
+                ],
+            )
+            (output / "manifest.json").write_text(
+                json.dumps({"report": {}, "entries": [{"filename": name} for name in old_names]}),
+                encoding="utf-8",
+            )
+            (output / "update_plan.json").write_text(
+                json.dumps({"new_logical": [{"filename": new_name, "metadata": {}}]}),
+                encoding="utf-8",
+            )
+            config = create_project(
+                root,
+                name="incremental",
+                index_csv=str(generated / "quick_index.csv"),
+                wav_source=str(Path(td) / "old.zip"),
+                output_dir="output",
+                remote_index_url="https://example.test/EN.xlsx",
+                remote_character="绯英",
+            )
+            replacement = Path(td) / "updated.zip"
+            make_voice_zip(replacement, old_names + [new_name])
+            records = [
+                {"filename": name, "english": f"Text {i}", "hash": "", "character": "绯英"}
+                for i, name in enumerate(old_names + [new_name], 1)
+            ]
+
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": False, "stale": False}),
+            ):
+                updated, result = apply_quick_source_update(config, replacement)
+
+            self.assertEqual(updated.wav_source, str(replacement.resolve()))
+            self.assertEqual(result["adopted_count"], 1)
+            self.assertEqual(result["still_missing_count"], 0)
+            with (generated / "quick_index.csv").open(
+                "r", encoding="utf-8-sig", newline=""
+            ) as stream:
+                rows = list(csv.DictReader(stream))
+            self.assertEqual([row["filename"] for row in rows], old_names + [new_name])
+
 
 
 if __name__ == "__main__":
