@@ -538,8 +538,13 @@ def quick_scan(
             key: value for key, value in english.items() if key not in {"wav_names", "lab_names"}
         },
         "chinese": (
-            {key: value for key, value in chs.items() if key not in {"wav_names", "lab_names"}
-            if chs else None
+            {
+                key: value
+                for key, value in chs.items()
+                if key not in {"wav_names", "lab_names"}
+            }
+            if chs
+            else None
         ),
         "character": character,
         "index": selected_index,
