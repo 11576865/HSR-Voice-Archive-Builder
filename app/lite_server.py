@@ -24,6 +24,7 @@ from .project import (
     last_project_root,
     load_project,
     project_summary,
+    recent_projects,
     resolve_project_path,
     update_project,
 )
@@ -68,6 +69,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "bilingual": resolve_project_path(config, config.bilingual_csv),
         "chs": resolve_project_path(config, config.chs_source),
         "glossary": resolve_project_path(config, config.glossary_path),
+        "reference": resolve_project_path(config, config.reference_source),
         "output": resolve_project_path(config, config.output_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
@@ -303,9 +305,11 @@ class Handler(BaseHTTPRequestHandler):
             if not english_source:
                 raise ValueError("English voice package is required")
             chs_value = data.get("chs_source", "").strip()
+            reference_value = data.get("reference_source", "").strip()
             plan = quick_scan(
                 Path(english_source),
                 Path(chs_value) if chs_value else None,
+                reference_source=Path(reference_value) if reference_value else None,
             )
             self._json({"ok": True, "plan": plan})
             return
@@ -316,12 +320,17 @@ class Handler(BaseHTTPRequestHandler):
             if not english_source:
                 raise ValueError("English voice package is required")
             chs_value = data.get("chs_source", "").strip()
+            reference_value = data.get("reference_source", "").strip()
             root_value = data.get("project_root", "").strip()
             config, plan = create_quick_project(
                 Path(english_source),
                 chs_source=Path(chs_value) if chs_value else None,
+                reference_source=Path(reference_value) if reference_value else None,
                 root=Path(root_value) if root_value else None,
                 name=data.get("project_name", ""),
+                audio_language=data.get("audio_language", "auto"),
+                target_language=data.get("target_language", "zh-CN"),
+                reference_language=data.get("reference_language", "auto"),
             )
             update_project(
                 config,
@@ -355,7 +364,10 @@ class Handler(BaseHTTPRequestHandler):
                     progress_callback=report_progress,
                 )
 
-            job = create_job("quick-build", run, with_progress=True)
+            job = create_job(
+            "quick-build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
             self._json({
                 "ok": True,
                 "job": job.id,
@@ -374,6 +386,11 @@ class Handler(BaseHTTPRequestHandler):
                 bilingual_csv=data.get("bilingual_csv", ""),
                 chs_source=data.get("chs_source", ""),
                 glossary_path=data.get("glossary_path", ""),
+                reference_source=data.get("reference_source", ""),
+                audio_language=data.get("audio_language", "auto"),
+                source_text_language=data.get("source_text_language", "en"),
+                target_language=data.get("target_language", "zh-CN"),
+                reference_language=data.get("reference_language", "auto"),
                 remote_character=data.get("remote_character", ""),
             )
             _set_active(config)
@@ -397,6 +414,11 @@ class Handler(BaseHTTPRequestHandler):
                 bilingual_csv=data.get("bilingual_csv", "").strip(),
                 chs_source=data.get("chs_source", "").strip(),
                 glossary_path=data.get("glossary_path", "").strip(),
+                reference_source=data.get("reference_source", "").strip(),
+                audio_language=data.get("audio_language", "auto").strip() or "auto",
+                source_text_language=data.get("source_text_language", "en").strip() or "en",
+                target_language=data.get("target_language", "zh-CN").strip() or "zh-CN",
+                reference_language=data.get("reference_language", "auto").strip() or "auto",
                 update_candidates=data.get("update_candidates", "").strip(),
                 remote_character=data.get("remote_character", "").strip(),
                 remote_index_url=data.get("remote_index_url", "").strip() or config.remote_index_url,
@@ -446,7 +468,10 @@ class Handler(BaseHTTPRequestHandler):
                     progress_callback=report_progress,
                 )
 
-            job = create_job("build", run, with_progress=True)
+            job = create_job(
+            "build", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
             self._json({"ok": True, "job": job.id})
             return
 
