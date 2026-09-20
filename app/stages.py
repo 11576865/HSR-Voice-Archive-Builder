@@ -10,7 +10,7 @@ from typing import Any
 
 
 STAGE_SCHEMA_VERSION = 1
-SOFTWARE_STAGE_VERSION = "0.9-E"
+SOFTWARE_STAGE_VERSION = "0.9-F"
 
 
 def _sha256_file(path: Path, chunk_size: int = 1024 * 1024) -> str:
