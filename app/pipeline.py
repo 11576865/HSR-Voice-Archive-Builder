@@ -1370,11 +1370,12 @@ def build_project_v02(
             artifacts=[out_dir / "build_report.json"],
             artifact_root=out_dir,
         )
+        (state_dir / "update_pending.json").unlink(missing_ok=True)
     return report
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-H pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-I pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
