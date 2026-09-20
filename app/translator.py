@@ -246,11 +246,15 @@ def translate_records(
             f"- {src} => {dst}" for src, dst in glossary.items()
         )
     prompt = (
-        "Translate the following Honkai: Star Rail English voice lines into Simplified Chinese. "
-        "Preserve meaning, character tone, placeholders/tags, punctuation intent, and one-to-one IDs. "
-        "Do not add information. Preserve tokens such as {NICKNAME}, {M#...}{F#...}, HTML-like color tags, "
-        "and RUBY tags exactly unless translating text inside the token is necessary. Use established official "
-        "Chinese terminology when known. Return every input exactly once."
+        "Translate the target field 'english' in each Honkai: Star Rail record into Simplified Chinese. "
+        "Preserve meaning, character tone, punctuation intent, and one-to-one IDs. Do not add information. "
+        "Records may include context_before/context_after; use them only to disambiguate the target and do not "
+        "translate them as separate outputs. Records may also include previous_chinese and qa_issues; when present, "
+        "repair the previous translation specifically for those issues. Preserve HTML-like tags and the structural "
+        "form of brace control tokens such as {NICKNAME}, {M#...}{F#...}, and RUBY markers. Text payloads inside "
+        "control tokens may be translated when they are user-visible, but the token type/structure must remain. "
+        "Use the supplied terminology exactly when its English source term occurs in the target. "
+        "Return every input ID exactly once and output only the requested Chinese target translation."
         + glossary_text
         + "\n\nInput JSON:\n"
         + json.dumps(records, ensure_ascii=False)
