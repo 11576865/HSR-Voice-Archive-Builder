@@ -18,6 +18,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import (
+    apply_quick_source_update,
     create_quick_project,
     discover_source_candidates,
     quick_scan,
@@ -673,6 +674,34 @@ class Handler(BaseHTTPRequestHandler):
         )
             self._json({"ok": True, "job": job.id})
             return
+
+
+        if path == "/api/update/apply-local-package":
+            config = _active_config()
+            assert_project_idle(config.root)
+            replacement_path = data.get("replacement_path", "").strip()
+            if not replacement_path:
+                raise ValueError("Select an updated primary audio package")
+
+            def run():
+                current = _active_config()
+                updated, result = apply_quick_source_update(
+                    current, Path(replacement_path).expanduser()
+                )
+                return {
+                    **result,
+                    "project": project_summary(updated),
+                }
+
+            job = create_job(
+                "update-apply",
+                run,
+                project_root=config.root,
+                project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
+            return
+
 
         if path == "/api/output/open":
             config = _active_config()
