@@ -198,6 +198,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "bilingual.srt",
         "build_report.json",
         "translation_qa.json",
+        "semantic_qa.json",
         "translation_usage.json",
         "continuous.flac",
         "update_plan.json",
