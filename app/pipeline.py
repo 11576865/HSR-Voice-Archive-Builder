@@ -297,6 +297,11 @@ def _translate_missing(
 
     from .credentials import translation_identity
     from .glossary import CORE_GLOSSARY, glossary_fingerprint, relevant_glossary
+    from .semantic_quality import (
+        SEMANTIC_QA_VERSION,
+        semantic_candidate,
+        semantic_risk_tags,
+    )
     from .translation_quality import (
         has_hard_issue,
         qa_messages,
@@ -314,6 +319,7 @@ def _translate_missing(
         ensure_translation_capability,
         make_client,
         translate_records,
+        verify_semantic_records,
     )
 
     active_glossary = dict(
@@ -330,6 +336,7 @@ def _translate_missing(
     )
     completed: dict[str, str] = {}
     qa_rows: list[dict[str, object]] = []
+    semantic_verified_ids: set[str] = set()
     reused = 0
 
     target_by_id = {row["id"]: row for row in targets}
@@ -357,6 +364,8 @@ def _translate_missing(
             # Re-run only this item instead of trusting stale paid output.
             continue
         completed[row["id"]] = chinese
+        if int(saved.get("semantic_qa_version", 0) or 0) == SEMANTIC_QA_VERSION:
+            semantic_verified_ids.add(row["id"])
         reused += 1
         qa_rows.append({
             "id": row["id"],
@@ -369,11 +378,43 @@ def _translate_missing(
         })
 
     remaining = [row for row in targets if row["id"] not in completed]
+    semantic_risky_ids = {
+        row["id"] for row in targets if semantic_risk_tags(row["english"])
+    }
+    semantic_pending_ids = semantic_risky_ids - semantic_verified_ids
     api_translated = 0
     qa_retries = 0
-    client = make_client() if remaining else None
+    client = make_client() if (remaining or semantic_pending_ids) else None
 
     usage_estimate = estimate_workload_tokens(remaining, batch_size)
+    semantic_batch_size = max(1, min(batch_size, 40))
+    semantic_estimate_rows = [
+        {
+            "id": row["id"],
+            "english": row["english"],
+            "chinese": row["english"],
+            "risk_tags": semantic_risk_tags(row["english"]),
+        }
+        for row in targets
+        if row["id"] in semantic_pending_ids
+    ]
+    semantic_estimate = estimate_workload_tokens(
+        semantic_estimate_rows,
+        semantic_batch_size,
+    )
+    usage_estimate["translation_estimated_input_tokens"] += int(
+        semantic_estimate["translation_estimated_input_tokens"]
+    )
+    usage_estimate["translation_estimated_output_tokens"] += int(
+        semantic_estimate["translation_estimated_output_tokens"]
+    )
+    usage_estimate["translation_estimated_total_tokens"] += int(
+        semantic_estimate["translation_estimated_total_tokens"]
+    )
+    usage_estimate["translation_estimated_api_calls"] += int(
+        semantic_estimate["translation_estimated_api_calls"]
+    )
+    usage_estimate["translation_estimate_includes_semantic_verifier"] = True
     ledger = TranslationUsageLedger(
         checkpoint_path.with_name("translation_usage.json"),
         identity={
@@ -392,7 +433,7 @@ def _translate_missing(
         "cached": True,
         "usage_supported": True,
     }
-    if remaining and isinstance(client, OpenAIResponsesHTTPClient):
+    if (remaining or semantic_pending_ids) and isinstance(client, OpenAIResponsesHTTPClient):
         smoke = [{"id": "smoke-1", "english": "The story's not finished."}]
         smoke_estimate = estimate_request_tokens(smoke)
         capability = ensure_translation_capability(
