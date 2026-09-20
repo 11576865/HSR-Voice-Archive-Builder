@@ -24,6 +24,7 @@ from .quick import (
 )
 from .project import (
     ProjectConfig,
+    clone_project,
     create_project,
     delete_project,
     forget_project,
@@ -160,7 +161,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-G",
+        "version": "0.9-H",
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,
@@ -332,6 +333,34 @@ def api_project_open(project_path: str = Form(...)):
 def api_project_close():
     _clear_active()
     return {"ok": True, "project": None}
+
+
+@app.post("/api/project/clone")
+def api_project_clone(
+    project_path: str = Form(...),
+    name: str = Form(...),
+    root: str = Form(""),
+):
+    try:
+        source = load_project(Path(project_path))
+        assert_project_idle(source.root)
+        clone = clone_project(
+            source,
+            name=name,
+            root=Path(root) if root.strip() else None,
+        )
+        _set_active(clone)
+        return {
+            "ok": True,
+            "project": project_summary(clone),
+            "recent_projects": recent_projects(12),
+            "source_project": {
+                "name": source.name,
+                "root": source.root,
+            },
+        }
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.post("/api/project/forget")

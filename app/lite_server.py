@@ -25,6 +25,7 @@ from .quick import (
 )
 from .project import (
     ProjectConfig,
+    clone_project,
     create_project,
     delete_project,
     forget_project,
@@ -107,7 +108,7 @@ def _float(value: object, default: float) -> float:
 
 
 class Handler(BaseHTTPRequestHandler):
-    server_version = "HSRVoiceLite/0.9-G"
+    server_version = "HSRVoiceLite/0.9-H"
 
     def log_message(self, fmt: str, *args) -> None:
         sys.stderr.write("%s - - [%s] %s\n" % (self.address_string(), self.log_date_time_string(), fmt % args))
@@ -271,7 +272,7 @@ class Handler(BaseHTTPRequestHandler):
                     project = None
             self._json({
                 "ok": True,
-                "version": "0.9-G-termux-lite",
+                "version": "0.9-H-termux-lite",
                 "processing_mode": "local-first",
                 "lan_control": lan_mode(),
                 "project": project,
@@ -432,6 +433,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/project/close":
             _clear_active()
             self._json({"ok": True, "project": None})
+            return
+
+        if path == "/api/project/clone":
+            raw = data.get("project_path", "").strip()
+            name = data.get("name", "").strip()
+            root_value = data.get("root", "").strip()
+            if not raw:
+                raise ValueError("Project path is required")
+            source = load_project(Path(raw))
+            assert_project_idle(source.root)
+            clone = clone_project(
+                source,
+                name=name,
+                root=Path(root_value) if root_value else None,
+            )
+            _set_active(clone)
+            self._json({
+                "ok": True,
+                "project": project_summary(clone),
+                "recent_projects": recent_projects(12),
+                "source_project": {
+                    "name": source.name,
+                    "root": source.root,
+                },
+            })
             return
 
         if path == "/api/project/forget":
