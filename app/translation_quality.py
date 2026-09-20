@@ -29,6 +29,7 @@ def translation_qa(
     english: str,
     chinese: str,
     glossary: dict[str, str] | None = None,
+    target_language: str = "zh-CN",
 ) -> list[dict[str, str]]:
     issues: list[dict[str, str]] = []
     glossary = glossary or {}
@@ -55,7 +56,7 @@ def translation_qa(
 
     stripped = HTML_TAG_RE.sub("", BRACE_TOKEN_RE.sub("", chinese))
     residues = sorted(set(ASCII_WORD_RE.findall(stripped)))
-    if residues:
+    if str(target_language).lower().startswith("zh") and residues:
         issues.append({
             "code": "english_residue",
             "severity": "minor",
