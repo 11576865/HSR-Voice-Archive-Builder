@@ -418,7 +418,7 @@ def _remote_rows(
 
 
 _CROSS_LANGUAGE_KEY_RE = re.compile(
-    r"^(?P<group>(?:archive|chapter\\d+(?:_\\d+)?|companion\\d+(?:_\\d+)?|side\\d+(?:_\\w+)?))_.+?_(?P<tail>\\d+(?:_[fm])?)$",
+    r"^(?P<group>(?:archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?))_.+?_(?P<tail>\d+(?:_[fm])?)$",
     re.IGNORECASE,
 )
 
