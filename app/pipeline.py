@@ -564,6 +564,7 @@ def build_project_v02(
     translation_batch_size: int = 80,
     translation_token_budget: int = 0,
     translation_budget_usd: float = 0.0,
+    glossary_path: Path | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -571,6 +572,18 @@ def build_project_v02(
     wav_source = wav_source.expanduser().resolve()
     bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
     chs_source = chs_source.expanduser().resolve() if chs_source else None
+    glossary_path = glossary_path.expanduser().resolve() if glossary_path else None
+
+    from .glossary import (
+        CORE_GLOSSARY,
+        glossary_fingerprint,
+        load_glossary_overlay,
+        merge_glossary,
+    )
+
+    glossary_overlay = load_glossary_overlay(glossary_path)
+    active_glossary = merge_glossary(CORE_GLOSSARY, glossary_overlay)
+    active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
     translation_route: dict[str, str] | None = None
     if translate_missing:
@@ -587,12 +600,14 @@ def build_project_v02(
         "wavs": path_fingerprint(wav_source),
         "bilingual": path_fingerprint(bilingual_csv),
         "chinese": path_fingerprint(chs_source),
+        "glossary": path_fingerprint(glossary_path),
+        "glossary_fingerprint": active_glossary_fingerprint,
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
         "translate_missing": translate_missing,
         "translation_route": translation_route,
-        "translation_qa_version": 1,
+        "translation_qa_version": 2,
     })
     resumed_stages: list[str] = []
     rebuilt_stages: list[str] = []
@@ -687,6 +702,7 @@ def build_project_v02(
                         out_dir / ".translation_checkpoint.json",
                         translation_token_budget,
                         translation_budget_usd,
+                        active_glossary,
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
@@ -818,11 +834,12 @@ if __name__ == "__main__":
     p.add_argument("--translation-batch-size", type=int, default=80)
     p.add_argument("--translation-token-budget", type=int, default=0)
     p.add_argument("--translation-budget-usd", type=float, default=0.0)
+    p.add_argument("--glossary", type=Path)
     a = p.parse_args()
     result = build_project_v02(
         a.index, a.wavs, a.out, a.bilingual, a.chs,
         a.same_gap, a.group_gap, not a.no_flac,
         a.translate_missing, a.translation_model, a.translation_batch_size,
-        a.translation_token_budget, a.translation_budget_usd,
+        a.translation_token_budget, a.translation_budget_usd, a.glossary,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
