@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import io
 import hashlib
 import json
 import os
@@ -978,6 +979,178 @@ def create_quick_project(
         json.dumps(plan, ensure_ascii=False, indent=2),
     )
     return config, plan
+
+
+
+def apply_quick_source_update(
+    config: ProjectConfig,
+    replacement: Path,
+) -> tuple[ProjectConfig, dict[str, Any]]:
+    """Adopt a newer complete primary package without discarding the old archive.
+
+    The remote index is metadata-only and does not expose downloadable audio.
+    Applying an update therefore requires a local replacement package. The
+    replacement must contain every WAV already present in the current manifest;
+    otherwise the update is refused before project configuration is changed.
+    """
+    root = Path(config.root).expanduser().resolve()
+    manifest_path = root / config.output_dir / "manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError("Build the project once before applying an update")
+    generated_dir = root / ".generated"
+    generated_index = generated_dir / "quick_index.csv"
+    if not generated_index.is_file():
+        raise RuntimeError(
+            "Incremental package application is available only for Quick Mode projects"
+        )
+
+    try:
+        manifest_payload = json.loads(manifest_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("Current manifest.json is not readable") from exc
+    entries = manifest_payload.get("entries")
+    if not isinstance(entries, list):
+        raise ValueError("Current manifest.json does not contain an entries list")
+    existing_names = {
+        Path(str(row.get("filename", ""))).name
+        for row in entries
+        if isinstance(row, dict) and str(row.get("filename", "")).strip()
+    }
+    if not existing_names:
+        raise ValueError("Current manifest does not contain any voice filenames")
+
+    replacement = replacement.expanduser().resolve()
+    inventory = source_inventory(replacement)
+    wanted = {Path(name).name for name in inventory.get("wav_names", [])}
+    missing_existing = sorted(existing_names - wanted)
+    if missing_existing:
+        preview = ", ".join(missing_existing[:5])
+        raise ValueError(
+            "The selected package is not a complete replacement: it is missing "
+            f"{len(missing_existing)} archived WAV files"
+            + (f" ({preview})" if preview else "")
+        )
+
+    remote_url = str(config.remote_index_url or "").strip()
+    if not remote_url:
+        remote_url = ai_hobbyist_index_url(config.source_text_language)
+    records, cache = fetch_ai_hobbyist_index_for_filenames_cached(wanted, remote_url)
+    candidate = _remote_candidate(
+        records,
+        wanted,
+        url=remote_url,
+        cache=cache,
+        source_text_language=config.source_text_language,
+    )
+    if candidate.get("duplicate_filenames"):
+        raise ValueError("Remote index contains duplicate filenames for the replacement package")
+    if int(candidate.get("matched_wavs", 0)) != len(wanted):
+        raise ValueError(
+            "Remote index covers only "
+            f"{candidate.get('matched_wavs', 0)} / {len(wanted)} WAV files in the replacement package"
+        )
+    if int(candidate.get("english_matched", 0)) != len(wanted):
+        raise ValueError(
+            "Remote index does not provide source text for every WAV in the replacement package"
+        )
+    if float(candidate.get("primary_character_share", 0.0)) < 0.75:
+        raise ValueError("Replacement package does not have a sufficiently dominant character identity")
+
+    filtered = _remote_rows(
+        records,
+        wanted,
+        str(candidate.get("provider") or ai_hobbyist_index_label(remote_url)),
+    )
+    previous_rows = normalize_index(generated_index)
+    previous_reference = {
+        Path(str(row.get("filename", ""))).name: (
+            str(row.get("reference_text", "")),
+            str(row.get("reference_language", "")),
+        )
+        for row in previous_rows
+    }
+    for row in filtered:
+        reference_text, reference_language = previous_reference.get(
+            Path(row["filename"]).name, ("", "")
+        )
+        row["reference_text"] = reference_text
+        row["reference_language"] = reference_language
+
+    fields = [
+        "index", "group", "filename", "source", "source_detail", "english",
+        "reference_text", "reference_language", "sha256",
+    ]
+    stream = io.StringIO(newline="")
+    writer = csv.DictWriter(stream, fieldnames=fields)
+    writer.writeheader()
+    writer.writerows(filtered)
+
+    plan_path = root / config.output_dir / "update_plan.json"
+    planned_new: set[str] = set()
+    if plan_path.is_file():
+        try:
+            update_plan = json.loads(plan_path.read_text(encoding="utf-8"))
+            for item in update_plan.get("new_logical", []):
+                if isinstance(item, dict):
+                    name = item.get("filename", "")
+                else:
+                    name = item
+                if str(name).strip():
+                    planned_new.add(Path(str(name)).name)
+        except (OSError, ValueError, TypeError):
+            planned_new = set()
+
+    adopted_new = sorted((wanted - existing_names) & planned_new)
+    unplanned_extra = sorted((wanted - existing_names) - planned_new)
+    still_missing = sorted(planned_new - wanted)
+
+    generated_dir.mkdir(parents=True, exist_ok=True)
+    atomic_write_text(generated_index, "\ufeff" + stream.getvalue())
+    scan_payload = {
+        "schema_version": 1,
+        "kind": "incremental_primary_package_apply",
+        "english": inventory,
+        "index": candidate,
+        "ready": True,
+        "blockers": [],
+        "warnings": (
+            ["Remote index refresh failed; a stale cached copy was used"]
+            if cache.get("stale") else []
+        ),
+        "incremental_update": {
+            "previous_count": len(existing_names),
+            "replacement_count": len(wanted),
+            "adopted_planned_new": adopted_new,
+            "unplanned_extra": unplanned_extra,
+            "still_missing_planned": still_missing,
+        },
+    }
+    atomic_write_text(
+        generated_dir / "quick_scan.json",
+        json.dumps(scan_payload, ensure_ascii=False, indent=2),
+    )
+    updated = update_project(
+        config,
+        index_csv=str(generated_index),
+        wav_source=str(replacement),
+        wav_source_fingerprint=str(
+            inventory.get("fingerprint", {}).get("digest", "") or ""
+        ),
+        remote_character=str(candidate.get("primary_character", "") or config.remote_character),
+        remote_index_url=remote_url,
+    )
+    return updated, {
+        "previous_count": len(existing_names),
+        "replacement_count": len(wanted),
+        "adopted_count": len(adopted_new),
+        "adopted": adopted_new,
+        "unplanned_extra_count": len(unplanned_extra),
+        "unplanned_extra": unplanned_extra,
+        "still_missing_count": len(still_missing),
+        "still_missing": still_missing,
+        "remote_index_cache": cache,
+        "next_action": "build",
+    }
 
 
 def remote_character_candidates(
