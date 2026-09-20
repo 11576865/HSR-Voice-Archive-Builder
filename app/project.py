@@ -32,6 +32,8 @@ class ProjectConfig:
     translate_missing: bool = False
     translation_model: str = "gpt-5.6-sol"
     translation_batch_size: int = 80
+    translation_token_budget: int = 0
+    translation_budget_usd: float = 0.0
 
 
 def utc_now() -> str:
@@ -193,6 +195,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "bilingual.srt",
         "build_report.json",
         "translation_qa.json",
+        "translation_usage.json",
         "continuous.flac",
         "update_plan.json",
         "stages/01_scan.json",
