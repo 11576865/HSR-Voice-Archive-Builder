@@ -23,6 +23,7 @@ class ProjectConfig:
     output_dir: str = "output"
     bilingual_csv: str = ""
     chs_source: str = ""
+    glossary_path: str = ""
     update_candidates: str = ""
     remote_character: str = ""
     remote_index_url: str = "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx"
@@ -104,6 +105,7 @@ def create_project(
     output_dir: str = "output",
     bilingual_csv: str = "",
     chs_source: str = "",
+    glossary_path: str = "",
     remote_character: str = "",
 ) -> ProjectConfig:
     root = normalize_root(root)
@@ -122,6 +124,7 @@ def create_project(
         output_dir=_portable_path(root, output_dir) or "output",
         bilingual_csv=_portable_path(root, bilingual_csv),
         chs_source=_portable_path(root, chs_source),
+        glossary_path=_portable_path(root, glossary_path),
         remote_character=remote_character.strip(),
     )
     save_project(config)
@@ -152,7 +155,7 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
             continue
         setattr(config, key, value)
     root = normalize_root(Path(config.root))
-    for key in ("index_csv", "wav_source", "output_dir", "bilingual_csv", "chs_source", "update_candidates"):
+    for key in ("index_csv", "wav_source", "output_dir", "bilingual_csv", "chs_source", "glossary_path", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
     save_project(config)
     return config

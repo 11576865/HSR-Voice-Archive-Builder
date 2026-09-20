@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-C**.
+Current development version: **v0.9-D**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-C add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-D add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -72,7 +72,8 @@ v0.4-v0.9-C add failure-driven hardening based on upstream documentation, issue 
 - LAN startup checks port conflicts and supports `--display-host` for multi-NIC/offline networks;
 - Termux/Android interruption risk is surfaced rather than hidden;
 - v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart;
-- v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes.
+- v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes;
+- v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -213,6 +214,7 @@ Useful options:
 --translation-batch-size 80
 --translation-token-budget 0
 --translation-budget-usd 0
+--glossary /path/to/terms.csv
 ```
 
 ## Translation quality benchmark
@@ -252,20 +254,24 @@ benchmark_sample.json
 
 ## Translation automation and QA
 
-Production AI translation now adds two layers before accepting a line:
+Production AI translation now adds three acceptance layers:
 
-1. **Context + terminology**: each missing line can carry its immediate previous/next English line as disambiguation context. Only glossary terms that actually occur in the batch are injected into the prompt.
-2. **Deterministic QA + targeted repair**: returned Chinese is checked for control-tag structure, required terminology, likely untranslated English residue and extreme length anomalies. Only suspicious rows are sent through one repair pass.
+1. **Structural context + terminology**: a missing line receives its immediate previous/next English line only when the neighbor shares an explicit group or source-detail relation. Only glossary terms that actually occur in the batch are injected into the prompt.
+2. **Deterministic QA + targeted repair**: returned Chinese is checked for control-tag structure, required terminology, likely untranslated English residue and extreme length anomalies. Only suspicious rows receive one repair pass.
+3. **Sparse semantic QA**: lines carrying higher semantic-risk signals—negation, quantities/comparatives, conditional logic, or mixed grammatical-person references—receive a separate structured verifier pass. A failed row gets one targeted repair and one re-verification; persistent semantic mismatches stop the build.
 
 The built-in glossary is intentionally small and conservative. Current hard constraints include stable terms such as Evanescia→绯英, Planarcadia→二相乐园, Phantasmoon Games→幻月游戏, Wishpower→愿力, Supplicant→谒者, Graphia→绘世, Yao Guang→爻光, Fulwish→满愿 and Stellar Jade→星琼.
 
-Every run writes:
+A project can add or override terminology with `--glossary` (CSV columns `English,Chinese` / `source,target`, or an equivalent JSON mapping/list). The merged glossary is fingerprinted, and row checkpoints are revalidated against the terminology relevant to that source line.
+
+Translation builds write:
 
 ```text
 output/translation_qa.json
+output/semantic_qa.json
 ```
 
-If a major formatting/terminology failure remains after the repair pass, the build stops before accepting the bad translation. Earlier paid batches remain checkpointed, so the failure does not force the whole character to be translated again.
+If deterministic or semantic QA still has a hard failure after its one repair pass, the build stops before accepting the bad translation. Earlier paid batches and successfully verified semantic rows remain checkpointed, so a later restart does not force the whole character through the API again.
 
 ## Stage recovery
 
@@ -430,6 +436,7 @@ output/
 ├── bilingual.srt
 ├── build_report.json
 ├── translation_qa.json
+├── semantic_qa.json
 ├── translation_usage.json
 ├── update_plan.json
 └── continuous.flac
@@ -447,7 +454,7 @@ The builder checks expected WAV presence, duplicate filename conflicts, optional
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the synthetic test suite on Python 3.11, 3.12 and 3.13. No game data is required. The suite includes archive traversal/size-limit tests, a real FFmpeg streaming-FLAC regression test, localhost/LAN token and Host-header checks, `WAVE_FORMAT_EXTENSIBLE` input, remote-XLSX limits, runtime preflight, and translation-checkpoint recovery.
+GitHub Actions runs the synthetic test suite on Python 3.11, 3.12 and 3.13. No game data is required. The suite includes archive traversal/size-limit tests, a real FFmpeg streaming-FLAC regression test, localhost/LAN token and Host-header checks, `WAVE_FORMAT_EXTENSIBLE` input, remote-XLSX limits, runtime preflight, translation-checkpoint recovery, local glossary validation, structural context isolation, semantic repair/re-verification, and semantic-QA artifact recovery.
 
 ## Current regression validation
 

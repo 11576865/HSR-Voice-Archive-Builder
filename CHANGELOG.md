@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.9-D
+
+- Added validated local glossary overlays in CSV or JSON. Project glossaries override the conservative built-in terminology map, are fingerprinted deterministically, and participate in stage/checkpoint validation.
+- Translation context is now structural rather than blindly adjacent: previous/next English lines are supplied only when they share an explicit group or source-detail relation with the target.
+- Added sparse semantic QA for high-risk lines containing negation, quantities/comparatives, conditional logic, or mixed grammatical-person references.
+- High-risk translations receive a structured semantic verifier pass. Failed rows receive one targeted translation repair followed by one re-verification; persistent semantic failures stop the build.
+- Semantic QA state is checkpointed per row, so verified rows are not re-audited after restart. `semantic_qa.json` is bound into the validated translation-QA stage and tampering forces stage recovery without discarding reusable paid translations.
+- Added Quick/Advanced project wiring for an optional glossary path and expanded regression coverage for glossary parsing, structural context, semantic verifier behavior, targeted repair, checkpoint reuse, and QA-artifact recovery.
+
 ## v0.9-C
 
 - Added per-build translation token and USD budget controls. A projected over-budget request is stopped before the request is sent; completed batches and checkpoints remain reusable.

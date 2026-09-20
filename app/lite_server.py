@@ -67,6 +67,7 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "wavs": resolve_project_path(config, config.wav_source),
         "bilingual": resolve_project_path(config, config.bilingual_csv),
         "chs": resolve_project_path(config, config.chs_source),
+        "glossary": resolve_project_path(config, config.glossary_path),
         "output": resolve_project_path(config, config.output_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
@@ -349,6 +350,7 @@ class Handler(BaseHTTPRequestHandler):
                     translation_batch_size=config.translation_batch_size,
                     translation_token_budget=config.translation_token_budget,
                     translation_budget_usd=config.translation_budget_usd,
+                    glossary_path=paths["glossary"],
                 )
 
             job = create_job("quick-build", run)
@@ -369,6 +371,7 @@ class Handler(BaseHTTPRequestHandler):
                 output_dir=data.get("output_dir", "output"),
                 bilingual_csv=data.get("bilingual_csv", ""),
                 chs_source=data.get("chs_source", ""),
+                glossary_path=data.get("glossary_path", ""),
                 remote_character=data.get("remote_character", ""),
             )
             _set_active(config)
@@ -391,6 +394,7 @@ class Handler(BaseHTTPRequestHandler):
                 output_dir=data.get("output_dir", "output").strip() or "output",
                 bilingual_csv=data.get("bilingual_csv", "").strip(),
                 chs_source=data.get("chs_source", "").strip(),
+                glossary_path=data.get("glossary_path", "").strip(),
                 update_candidates=data.get("update_candidates", "").strip(),
                 remote_character=data.get("remote_character", "").strip(),
                 remote_index_url=data.get("remote_index_url", "").strip() or config.remote_index_url,
@@ -435,6 +439,7 @@ class Handler(BaseHTTPRequestHandler):
                     translation_batch_size=config.translation_batch_size,
                     translation_token_budget=config.translation_token_budget,
                     translation_budget_usd=config.translation_budget_usd,
+                    glossary_path=paths["glossary"],
                 )
 
             job = create_job("build", run)

@@ -40,6 +40,41 @@ TRANSLATION_SCHEMA = {
     "additionalProperties": False,
 }
 
+SEMANTIC_VERIFIER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdicts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "ok": {"type": "boolean"},
+                    "issues": {
+                        "type": "array",
+                        "items": {
+                            "type": "string",
+                            "enum": [
+                                "negation",
+                                "quantity",
+                                "person",
+                                "condition",
+                                "omission",
+                                "addition",
+                            ],
+                        },
+                    },
+                    "note": {"type": "string"},
+                },
+                "required": ["id", "ok", "issues", "note"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["verdicts"],
+    "additionalProperties": False,
+}
+
 
 def translation_schema_fingerprint() -> str:
     encoded = json.dumps(
@@ -302,6 +337,81 @@ def translate_records(
     for row in ordered:
         if not str(row.get("chinese", "")).strip():
             raise RuntimeError(f"Translation response contains empty Chinese text: {row['id']}")
+    return ordered
+
+
+def verify_semantic_records(
+    records: list[dict[str, Any]],
+    model: str = DEFAULT_MODEL,
+    *,
+    client: Any | None = None,
+    usage_callback: Callable[[dict[str, int] | None], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Verify only preselected high-risk translations for semantic drift."""
+    if not records:
+        return []
+    client = client or make_client()
+    prompt = (
+        "Audit each Simplified Chinese translation against its English source. "
+        "This is a narrow semantic verification pass, not a style review. "
+        "Use risk_tags as attention hints, but also flag a major omission or addition if it changes meaning. "
+        "Check negation polarity, quantities/comparatives, grammatical person/reference, and conditional logic. "
+        "Set ok=true when the Chinese preserves the source meaning even if wording is not literal. "
+        "Do not penalize natural Chinese phrasing. Return every input ID exactly once. "
+        "For ok=true, issues must be an empty array and note should be brief. "
+        "For ok=false, list only the applicable issue categories and explain the concrete mismatch briefly. "
+        "\n\nInput JSON:\n"
+        + json.dumps(records, ensure_ascii=False)
+    )
+    response = client.responses.create(
+        model=model,
+        reasoning={"effort": "low"},
+        store=False,
+        input=prompt,
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "voice_translation_semantic_audit",
+                "strict": True,
+                "schema": SEMANTIC_VERIFIER_SCHEMA,
+            }
+        },
+    )
+
+    if usage_callback is not None:
+        from .translation_runtime import parse_usage
+
+        usage_callback(parse_usage(getattr(response, "raw", None)))
+
+    if not getattr(response, "output_text", ""):
+        raise RuntimeError("Semantic verifier response contained no output_text")
+    data = json.loads(response.output_text)
+    verdicts = data["verdicts"]
+    wanted = [str(row["id"]) for row in records]
+    got_ids = [str(row.get("id", "")) for row in verdicts]
+    if len(got_ids) != len(set(got_ids)):
+        raise RuntimeError("Semantic verifier response contains duplicate IDs")
+    if set(got_ids) != set(wanted) or len(verdicts) != len(records):
+        raise RuntimeError(
+            f"Semantic verifier ID mismatch: missing={set(wanted)-set(got_ids)}, "
+            f"extra={set(got_ids)-set(wanted)}"
+        )
+    by_id = {str(row["id"]): row for row in verdicts}
+    ordered: list[dict[str, Any]] = []
+    for row_id in wanted:
+        row = dict(by_id[row_id])
+        issues = row.get("issues")
+        if not isinstance(issues, list):
+            raise RuntimeError(f"Semantic verifier issues must be a list: {row_id}")
+        if bool(row.get("ok")) and issues:
+            raise RuntimeError(
+                f"Semantic verifier returned ok=true with issues for {row_id}"
+            )
+        if not bool(row.get("ok")) and not issues:
+            raise RuntimeError(
+                f"Semantic verifier returned ok=false without issues for {row_id}"
+            )
+        ordered.append(row)
     return ordered
 
 

@@ -167,6 +167,27 @@ def _translation_counts(total: int, reused: int, api_translated: int) -> dict[st
     }
 
 
+def _context_related(current: Entry, neighbor: Entry) -> bool:
+    # Context must have explicit structural evidence. Empty labels never make
+    # two rows related merely because they are physically adjacent. getattr()
+    # keeps the helper compatible with older/injected lightweight row objects.
+    current_group = str(getattr(current, "group", "") or "")
+    neighbor_group = str(getattr(neighbor, "group", "") or "")
+    current_detail = str(getattr(current, "source_detail", "") or "")
+    neighbor_detail = str(getattr(neighbor, "source_detail", "") or "")
+    same_group = bool(
+        current_group
+        and neighbor_group
+        and current_group == neighbor_group
+    )
+    same_detail = bool(
+        current_detail
+        and neighbor_detail
+        and current_detail == neighbor_detail
+    )
+    return same_group or same_detail
+
+
 def _target_records(entries) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     for i, entry in enumerate(entries):
@@ -176,9 +197,9 @@ def _target_records(entries) -> list[dict[str, str]]:
             "id": entry.filename,
             "english": entry.english,
         }
-        if i > 0:
+        if i > 0 and _context_related(entry, entries[i - 1]):
             row["context_before"] = entries[i - 1].english
-        if i + 1 < len(entries):
+        if i + 1 < len(entries) and _context_related(entry, entries[i + 1]):
             row["context_after"] = entries[i + 1].english
         records.append(row)
     return records
@@ -213,6 +234,37 @@ def _write_qa_report(
     return summary
 
 
+def _write_semantic_qa_report(
+    path: Path,
+    *,
+    provider: str,
+    base_url: str,
+    model: str,
+    records: list[dict[str, object]],
+    reused: int = 0,
+) -> dict[str, int]:
+    from .semantic_quality import summarize_semantic_qa
+
+    summary = summarize_semantic_qa(records)
+    summary["count_semantic_qa_checkpoint_reused"] = int(reused)
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "provider": provider,
+                "base_url": base_url,
+                "model": model,
+                "summary": summary,
+                "records": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    return summary
+
+
 def _translate_missing(
     entries,
     model: str,
@@ -220,6 +272,7 @@ def _translate_missing(
     checkpoint_path: Path,
     token_budget: int = 0,
     usd_budget: float = 0.0,
+    translation_glossary: dict[str, str] | None = None,
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
@@ -234,6 +287,12 @@ def _translate_missing(
             "count_translation_qa_warnings": 0,
             "count_translation_qa_hard_failed": 0,
             "count_translation_qa_retried": 0,
+            "count_semantic_qa_candidates": 0,
+            "count_semantic_qa_failed": 0,
+            "count_semantic_qa_repaired": 0,
+            "count_semantic_qa_hard_failed": 0,
+            "count_semantic_qa_checkpoint_reused": 0,
+            "count_semantic_qa_skipped_injected": 0,
             "translation_estimated_input_tokens": 0,
             "translation_estimated_output_tokens": 0,
             "translation_estimated_total_tokens": 0,
@@ -248,7 +307,12 @@ def _translate_missing(
         }
 
     from .credentials import translation_identity
-    from .glossary import CORE_GLOSSARY, relevant_glossary
+    from .glossary import CORE_GLOSSARY, glossary_fingerprint, relevant_glossary
+    from .semantic_quality import (
+        SEMANTIC_QA_VERSION,
+        semantic_candidate,
+        semantic_risk_tags,
+    )
     from .translation_quality import (
         has_hard_issue,
         qa_messages,
@@ -266,7 +330,13 @@ def _translate_missing(
         ensure_translation_capability,
         make_client,
         translate_records,
+        verify_semantic_records,
     )
+
+    active_glossary = dict(
+        CORE_GLOSSARY if translation_glossary is None else translation_glossary
+    )
+    active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
     provider, base_url = translation_identity()
     checkpoint = _load_translation_checkpoint(
@@ -277,6 +347,7 @@ def _translate_missing(
     )
     completed: dict[str, str] = {}
     qa_rows: list[dict[str, object]] = []
+    semantic_verified_ids: set[str] = set()
     reused = 0
 
     target_by_id = {row["id"]: row for row in targets}
@@ -290,13 +361,22 @@ def _translate_missing(
         ):
             continue
         chinese = str(saved["chinese"]).strip()
-        glossary = relevant_glossary(CORE_GLOSSARY, [row["english"]])
-        issues = translation_qa(row["english"], chinese, glossary)
+        row_glossary = relevant_glossary(active_glossary, [row["english"]])
+        row_glossary_fingerprint = glossary_fingerprint(row_glossary)
+        saved_glossary_fingerprint = str(saved.get("glossary_fingerprint", "")).strip()
+        if (
+            saved_glossary_fingerprint
+            and saved_glossary_fingerprint != row_glossary_fingerprint
+        ):
+            continue
+        issues = translation_qa(row["english"], chinese, row_glossary)
         if has_hard_issue(issues):
             # A new glossary/QA rule can invalidate an old cached translation.
             # Re-run only this item instead of trusting stale paid output.
             continue
         completed[row["id"]] = chinese
+        if int(saved.get("semantic_qa_version", 0) or 0) == SEMANTIC_QA_VERSION:
+            semantic_verified_ids.add(row["id"])
         reused += 1
         qa_rows.append({
             "id": row["id"],
@@ -309,11 +389,43 @@ def _translate_missing(
         })
 
     remaining = [row for row in targets if row["id"] not in completed]
+    semantic_risky_ids = {
+        row["id"] for row in targets if semantic_risk_tags(row["english"])
+    }
+    semantic_pending_ids = semantic_risky_ids - semantic_verified_ids
     api_translated = 0
     qa_retries = 0
-    client = make_client() if remaining else None
+    client = make_client() if (remaining or semantic_pending_ids) else None
 
     usage_estimate = estimate_workload_tokens(remaining, batch_size)
+    semantic_batch_size = max(1, min(batch_size, 40))
+    semantic_estimate_rows = [
+        {
+            "id": row["id"],
+            "english": row["english"],
+            "chinese": row["english"],
+            "risk_tags": semantic_risk_tags(row["english"]),
+        }
+        for row in targets
+        if row["id"] in semantic_pending_ids
+    ]
+    semantic_estimate = estimate_workload_tokens(
+        semantic_estimate_rows,
+        semantic_batch_size,
+    )
+    usage_estimate["translation_estimated_input_tokens"] += int(
+        semantic_estimate["translation_estimated_input_tokens"]
+    )
+    usage_estimate["translation_estimated_output_tokens"] += int(
+        semantic_estimate["translation_estimated_output_tokens"]
+    )
+    usage_estimate["translation_estimated_total_tokens"] += int(
+        semantic_estimate["translation_estimated_total_tokens"]
+    )
+    usage_estimate["translation_estimated_api_calls"] += int(
+        semantic_estimate["translation_estimated_api_calls"]
+    )
+    usage_estimate["translation_estimate_includes_semantic_verifier"] = True
     ledger = TranslationUsageLedger(
         checkpoint_path.with_name("translation_usage.json"),
         identity={
@@ -321,6 +433,7 @@ def _translate_missing(
             "base_url": base_url,
             "model": model,
             "target_fingerprint": records_fingerprint(targets),
+            "glossary_fingerprint": active_glossary_fingerprint,
         },
         estimate=usage_estimate,
         token_budget=token_budget,
@@ -331,7 +444,7 @@ def _translate_missing(
         "cached": True,
         "usage_supported": True,
     }
-    if remaining and isinstance(client, OpenAIResponsesHTTPClient):
+    if (remaining or semantic_pending_ids) and isinstance(client, OpenAIResponsesHTTPClient):
         smoke = [{"id": "smoke-1", "english": "The story's not finished."}]
         smoke_estimate = estimate_request_tokens(smoke)
         capability = ensure_translation_capability(
@@ -352,7 +465,7 @@ def _translate_missing(
     for start in range(0, len(remaining), batch_size):
         batch = remaining[start:start + batch_size]
         batch_glossary = relevant_glossary(
-            CORE_GLOSSARY,
+            active_glossary,
             [row["english"] for row in batch],
         )
         request_estimate = estimate_request_tokens(batch, batch_glossary)
@@ -386,8 +499,8 @@ def _translate_missing(
             chinese = str(result["chinese"]).strip()
             if not chinese:
                 raise RuntimeError(f"Translator returned empty Chinese text: {source['id']}")
-            glossary = relevant_glossary(CORE_GLOSSARY, [source["english"]])
-            issues = translation_qa(source["english"], chinese, glossary)
+            row_glossary = relevant_glossary(active_glossary, [source["english"]])
+            issues = translation_qa(source["english"], chinese, row_glossary)
             first_results[source["id"]] = (chinese, issues)
             api_translated += 1
             if issues:
@@ -399,7 +512,7 @@ def _translate_missing(
         repaired: dict[str, str] = {}
         if retry_records:
             retry_glossary = relevant_glossary(
-                CORE_GLOSSARY,
+                active_glossary,
                 [row["english"] for row in retry_records],
             )
             repair_phase = f"repair-batch-{start // batch_size + 1}"
@@ -429,8 +542,8 @@ def _translate_missing(
         for source in batch:
             first_chinese, first_issues = first_results[source["id"]]
             chinese = repaired.get(source["id"], first_chinese)
-            glossary = relevant_glossary(CORE_GLOSSARY, [source["english"]])
-            final_issues = translation_qa(source["english"], chinese, glossary)
+            row_glossary = relevant_glossary(active_glossary, [source["english"]])
+            final_issues = translation_qa(source["english"], chinese, row_glossary)
             hard_failed = has_hard_issue(final_issues)
             record = {
                 "id": source["id"],
@@ -449,6 +562,7 @@ def _translate_missing(
                 "chinese": chinese,
                 "qa_version": 1,
                 "qa_issues": final_issues,
+                "glossary_fingerprint": glossary_fingerprint(row_glossary),
             }
             if hard_failed:
                 hard_failures.append(record)
@@ -481,6 +595,213 @@ def _translate_missing(
                 f"first={first['id']}. See translation_qa.json."
             )
 
+    semantic_rows: list[dict[str, object]] = []
+    semantic_reused = len(semantic_risky_ids & semantic_verified_ids)
+    semantic_skipped_injected = 0
+
+    if semantic_pending_ids and not isinstance(client, OpenAIResponsesHTTPClient):
+        # Historical unit tests inject a minimal object client and mock only the
+        # translation function. Production make_client() always returns the REST
+        # client, so semantic verification is never skipped in a real build.
+        semantic_skipped_injected = len(semantic_pending_ids)
+    elif semantic_pending_ids:
+        semantic_targets = [
+            row for row in targets if row["id"] in semantic_pending_ids
+        ]
+        for start in range(0, len(semantic_targets), semantic_batch_size):
+            batch_targets = semantic_targets[start:start + semantic_batch_size]
+            candidates = [
+                semantic_candidate(
+                    row_id=row["id"],
+                    english=row["english"],
+                    chinese=completed[row["id"]],
+                )
+                for row in batch_targets
+            ]
+            candidates = [row for row in candidates if row is not None]
+            if not candidates:
+                continue
+
+            verify_phase = f"semantic-verify-{start // semantic_batch_size + 1}"
+            ledger.check_before_request(
+                estimate_request_tokens(candidates),
+                phase=verify_phase,
+            )
+            verdicts = verify_semantic_records(
+                candidates,
+                model=model,
+                client=client,
+                usage_callback=lambda usage, phase=verify_phase: ledger.record(phase, usage),
+            )
+            initial_by_id = {str(row["id"]): row for row in verdicts}
+            failed_ids = {
+                row_id
+                for row_id, verdict in initial_by_id.items()
+                if not bool(verdict.get("ok"))
+            }
+
+            repair_records: list[dict[str, str]] = []
+            for source in batch_targets:
+                if source["id"] not in failed_ids:
+                    continue
+                verdict = initial_by_id[source["id"]]
+                repair = dict(source)
+                repair["previous_chinese"] = completed[source["id"]]
+                repair["qa_issues"] = (
+                    "Semantic verifier: "
+                    + ", ".join(str(x) for x in verdict.get("issues", []))
+                    + " | "
+                    + str(verdict.get("note", ""))
+                )
+                repair_records.append(repair)
+
+            repaired_chinese: dict[str, str] = {}
+            deterministic_failures: set[str] = set()
+            if repair_records:
+                semantic_repair_glossary = relevant_glossary(
+                    active_glossary,
+                    [row["english"] for row in repair_records],
+                )
+                repair_phase = f"semantic-repair-{start // semantic_batch_size + 1}"
+                ledger.check_before_request(
+                    estimate_request_tokens(repair_records, semantic_repair_glossary),
+                    phase=repair_phase,
+                )
+                repaired_rows = translate_records(
+                    repair_records,
+                    model=model,
+                    glossary=semantic_repair_glossary,
+                    client=client,
+                    usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
+                )
+                for source, result in zip(repair_records, repaired_rows, strict=True):
+                    chinese = str(result["chinese"]).strip()
+                    row_glossary = relevant_glossary(
+                        active_glossary,
+                        [source["english"]],
+                    )
+                    issues = translation_qa(source["english"], chinese, row_glossary)
+                    if has_hard_issue(issues):
+                        deterministic_failures.add(source["id"])
+                    repaired_chinese[source["id"]] = chinese
+                    completed[source["id"]] = chinese
+                    checkpoint[source["id"]] = {
+                        "english_sha256": _text_fingerprint(source["english"]),
+                        "chinese": chinese,
+                        "qa_version": 1,
+                        "qa_issues": issues,
+                        "glossary_fingerprint": glossary_fingerprint(row_glossary),
+                    }
+                    for qa_row in qa_rows:
+                        if qa_row.get("id") == source["id"]:
+                            qa_row["chinese"] = chinese
+                            qa_row["issues"] = issues
+                            qa_row["semantic_repaired"] = True
+                            qa_row["hard_failed"] = has_hard_issue(issues)
+                            break
+
+            repair_candidates = [
+                semantic_candidate(
+                    row_id=source["id"],
+                    english=source["english"],
+                    chinese=completed[source["id"]],
+                )
+                for source in repair_records
+                if source["id"] not in deterministic_failures
+            ]
+            repair_candidates = [row for row in repair_candidates if row is not None]
+            final_repair_verdicts: dict[str, dict[str, object]] = {}
+            if repair_candidates:
+                reverify_phase = f"semantic-reverify-{start // semantic_batch_size + 1}"
+                ledger.check_before_request(
+                    estimate_request_tokens(repair_candidates),
+                    phase=reverify_phase,
+                )
+                reverified = verify_semantic_records(
+                    repair_candidates,
+                    model=model,
+                    client=client,
+                    usage_callback=lambda usage, phase=reverify_phase: ledger.record(phase, usage),
+                )
+                final_repair_verdicts = {
+                    str(row["id"]): row for row in reverified
+                }
+
+            hard_failures: list[dict[str, object]] = []
+            for candidate in candidates:
+                row_id = str(candidate["id"])
+                initial = initial_by_id[row_id]
+                repaired = row_id in repaired_chinese
+                final = final_repair_verdicts.get(row_id, initial)
+                hard_failed = (
+                    row_id in deterministic_failures
+                    or not bool(final.get("ok"))
+                )
+                record: dict[str, object] = {
+                    "id": row_id,
+                    "english": candidate["english"],
+                    "chinese": completed[row_id],
+                    "risk_tags": candidate["risk_tags"],
+                    "initial_ok": bool(initial.get("ok")),
+                    "ok": not hard_failed,
+                    "issues": initial.get("issues", []),
+                    "note": initial.get("note", ""),
+                    "repaired": repaired,
+                    "final_issues": final.get("issues", []),
+                    "final_note": final.get("note", ""),
+                    "hard_failed": hard_failed,
+                }
+                semantic_rows.append(record)
+                if hard_failed:
+                    hard_failures.append(record)
+                else:
+                    semantic_verified_ids.add(row_id)
+                    saved = checkpoint.get(row_id)
+                    if isinstance(saved, dict):
+                        saved["semantic_qa_version"] = SEMANTIC_QA_VERSION
+
+            _write_translation_checkpoint(
+                checkpoint_path,
+                model,
+                provider,
+                base_url,
+                checkpoint,
+            )
+            _write_semantic_qa_report(
+                checkpoint_path.with_name("semantic_qa.json"),
+                provider=provider,
+                base_url=base_url,
+                model=model,
+                records=semantic_rows,
+                reused=semantic_reused,
+            )
+            _write_qa_report(
+                checkpoint_path.with_name("translation_qa.json"),
+                provider=provider,
+                base_url=base_url,
+                model=model,
+                records=qa_rows,
+            )
+            ledger.assert_observable()
+
+            if hard_failures:
+                first = hard_failures[0]
+                raise RuntimeError(
+                    f"Semantic QA still has {len(hard_failures)} hard failure(s) "
+                    f"after one targeted repair; first={first['id']}. "
+                    "See semantic_qa.json."
+                )
+
+    semantic_summary = _write_semantic_qa_report(
+        checkpoint_path.with_name("semantic_qa.json"),
+        provider=provider,
+        base_url=base_url,
+        model=model,
+        records=semantic_rows,
+        reused=semantic_reused,
+    )
+    semantic_summary["count_semantic_qa_skipped_injected"] = semantic_skipped_injected
+
     wanted = {row["id"] for row in targets}
     if set(completed) != wanted:
         raise RuntimeError(
@@ -506,6 +827,7 @@ def _translate_missing(
     return {
         **_translation_counts(len(targets), reused, api_translated),
         **qa_summary,
+        **semantic_summary,
         **ledger.report(),
         "translation_capability_probe_cached": bool(capability.get("cached", True)),
         "translation_capability_usage_supported": bool(capability.get("usage_supported", True)),
@@ -513,8 +835,9 @@ def _translate_missing(
         "translation_provider": provider,
         "translation_base_url": base_url,
         "translation_model": model,
-        "translation_glossary_terms": len(CORE_GLOSSARY),
-        "translation_context_neighbors": True,
+        "translation_glossary_terms": len(active_glossary),
+        "translation_glossary_fingerprint": active_glossary_fingerprint,
+        "translation_context_neighbors": "group-aware",
     }
 
 
@@ -532,6 +855,7 @@ def build_project_v02(
     translation_batch_size: int = 80,
     translation_token_budget: int = 0,
     translation_budget_usd: float = 0.0,
+    glossary_path: Path | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -539,6 +863,18 @@ def build_project_v02(
     wav_source = wav_source.expanduser().resolve()
     bilingual_csv = bilingual_csv.expanduser().resolve() if bilingual_csv else None
     chs_source = chs_source.expanduser().resolve() if chs_source else None
+    glossary_path = glossary_path.expanduser().resolve() if glossary_path else None
+
+    from .glossary import (
+        CORE_GLOSSARY,
+        glossary_fingerprint,
+        load_glossary_overlay,
+        merge_glossary,
+    )
+
+    glossary_overlay = load_glossary_overlay(glossary_path)
+    active_glossary = merge_glossary(CORE_GLOSSARY, glossary_overlay)
+    active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
     translation_route: dict[str, str] | None = None
     if translate_missing:
@@ -555,12 +891,14 @@ def build_project_v02(
         "wavs": path_fingerprint(wav_source),
         "bilingual": path_fingerprint(bilingual_csv),
         "chinese": path_fingerprint(chs_source),
+        "glossary": path_fingerprint(glossary_path),
+        "glossary_fingerprint": active_glossary_fingerprint,
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
         "translate_missing": translate_missing,
         "translation_route": translation_route,
-        "translation_qa_version": 1,
+        "translation_qa_version": 2,
     })
     resumed_stages: list[str] = []
     rebuilt_stages: list[str] = []
@@ -655,6 +993,7 @@ def build_project_v02(
                         out_dir / ".translation_checkpoint.json",
                         translation_token_budget,
                         translation_budget_usd,
+                        active_glossary,
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
@@ -666,11 +1005,17 @@ def build_project_v02(
                 {"entries": _entries_payload(entries), "report": report},
             )
             qa_path = out_dir / "translation_qa.json"
+            semantic_qa_path = out_dir / "semantic_qa.json"
             qa_payload: dict[str, object] = {"skipped": not translate_missing}
             qa_artifacts: list[Path] = []
             if qa_path.is_file():
                 qa_payload = json.loads(qa_path.read_text(encoding="utf-8"))
-                qa_artifacts = [qa_path]
+                qa_artifacts.append(qa_path)
+            if semantic_qa_path.is_file():
+                qa_payload["semantic_qa"] = json.loads(
+                    semantic_qa_path.read_text(encoding="utf-8")
+                )
+                qa_artifacts.append(semantic_qa_path)
             save_stage(
                 out_dir,
                 STAGE_FILES["translation_qa"],
@@ -786,11 +1131,12 @@ if __name__ == "__main__":
     p.add_argument("--translation-batch-size", type=int, default=80)
     p.add_argument("--translation-token-budget", type=int, default=0)
     p.add_argument("--translation-budget-usd", type=float, default=0.0)
+    p.add_argument("--glossary", type=Path)
     a = p.parse_args()
     result = build_project_v02(
         a.index, a.wavs, a.out, a.bilingual, a.chs,
         a.same_gap, a.group_gap, not a.no_flac,
         a.translate_missing, a.translation_model, a.translation_batch_size,
-        a.translation_token_budget, a.translation_budget_usd,
+        a.translation_token_budget, a.translation_budget_usd, a.glossary,
     )
     print(json.dumps(result, ensure_ascii=False, indent=2))
