@@ -52,6 +52,18 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("d.set('same_group_gap'", html)
         self.assertIn("d.set('group_gap'", html)
 
+    def test_language_package_roles_and_chinese_translation_visibility_are_clear(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("官方中文语音包（可选）", html)
+        self.assertIn("额外语言参考包（可选，不写入成品音频）", html)
+        self.assertIn("主音频对应文本语言", html)
+        self.assertIn('id="advancedTranslateRow"', html)
+        self.assertIn("syncAdvancedTranslationVisibility", html)
+        self.assertIn("不进行中文到中文翻译", html)
+
     def test_finished_files_have_user_facing_descriptions(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
