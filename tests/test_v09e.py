@@ -133,6 +133,51 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
             self.assertEqual(report["count_reference_lab"], 1)
             self.assertEqual(entries[0].filename, "a.wav")
 
+    def test_non_english_source_text_can_come_from_primary_lab(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            wavs.mkdir()
+            write_wav(wavs / "a.wav")
+            (wavs / "a.lab").write_text("行くよ。", encoding="utf-8")
+            chs = root / "target"
+            chs.mkdir()
+
+            index = root / "index.csv"
+            with index.open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(
+                    stream,
+                    fieldnames=["序号", "分组", "文件名", "来源", "来源细分", "英文文本", "SHA-256"],
+                )
+                writer.writeheader()
+                writer.writerow(
+                    {
+                        "序号": "1",
+                        "分组": "g",
+                        "文件名": "a.wav",
+                        "来源": "",
+                        "来源细分": "",
+                        "英文文本": "I am going.",
+                        "SHA-256": "",
+                    }
+                )
+
+            bilingual = root / "bilingual.csv"
+            with bilingual.open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(stream, fieldnames=["文件名", "中文", "ENGLISH"])
+                writer.writeheader()
+                writer.writerow({"文件名": "a.wav", "中文": "", "ENGLISH": "I am going."})
+
+            entries, report = build_entries(
+                index,
+                bilingual,
+                chs,
+                wavs,
+                source_text_language="ja",
+            )
+            self.assertEqual(entries[0].english, "行くよ。")
+            self.assertEqual(report["count_source_lab"], 1)
+
     def test_checkpoint_is_invalidated_when_target_language_changes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             path = Path(td) / "checkpoint.json"
