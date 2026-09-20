@@ -166,6 +166,12 @@ def load_project(root_or_file: Path) -> ProjectConfig:
 
 def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
     allowed = set(ProjectConfig.__dataclass_fields__)
+    old_reference_identity = (
+        str(resolve_project_path(config, config.reference_source) or ""),
+        str(resolve_project_path(config, config.index_csv) or ""),
+        str(resolve_project_path(config, config.wav_source) or ""),
+        str(config.reference_language or "auto"),
+    )
     for key, value in changes.items():
         if key not in allowed or key in {"schema_version", "root"}:
             continue
@@ -175,6 +181,17 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
     root = normalize_root(Path(config.root))
     for key in ("index_csv", "wav_source", "output_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
+    new_reference_identity = (
+        str(resolve_project_path(config, config.reference_source) or ""),
+        str(resolve_project_path(config, config.index_csv) or ""),
+        str(resolve_project_path(config, config.wav_source) or ""),
+        str(config.reference_language or "auto"),
+    )
+    if config.reference_text_embedded and new_reference_identity != old_reference_identity:
+        # Embedded reference text is aligned to a particular primary index,
+        # primary package and reference package/language. Manual edits to any of
+        # those inputs must not silently keep the old materialized mapping.
+        config.reference_text_embedded = False
     save_project(config)
     return config
 
