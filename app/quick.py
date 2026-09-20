@@ -668,7 +668,6 @@ def create_quick_project(
     source_text_language: str = "en",
     target_language: str = "zh-CN",
     reference_language: str = "auto",
-    source_text_language: str = "en",
 ) -> tuple[ProjectConfig, dict[str, Any]]:
     english_source = english_source.expanduser().resolve()
     chs_source = chs_source.expanduser().resolve() if chs_source else None
