@@ -2,6 +2,12 @@
 
 ## v0.8
 
+- Added context-aware AI translation: immediate neighboring English lines are supplied for disambiguation while only the target line is returned.
+- Added a conservative built-in HSR terminology set and inject only terms relevant to the current batch.
+- Added deterministic translation QA for control-token structure, terminology, English residue and extreme length anomalies.
+- Suspicious new translations receive one targeted repair pass; persistent major failures stop the build and are written to `translation_qa.json`.
+- Existing paid translation checkpoints are revalidated against current QA rules before reuse.
+
 - Added package-first Quick Mode as the default dashboard workflow.
 - Auto-discovers local `.7z` / `.zip` voice packages in common Termux Download paths without browser re-upload.
 - Added read-only package inventory for WAV/LAB counts, duplicate-basename detection and character hints.

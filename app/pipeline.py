@@ -126,6 +126,52 @@ def _translation_counts(total: int, reused: int, api_translated: int) -> dict[st
     }
 
 
+def _target_records(entries) -> list[dict[str, str]]:
+    records: list[dict[str, str]] = []
+    for i, entry in enumerate(entries):
+        if entry.chinese:
+            continue
+        row = {
+            "id": entry.filename,
+            "english": entry.english,
+        }
+        if i > 0:
+            row["context_before"] = entries[i - 1].english
+        if i + 1 < len(entries):
+            row["context_after"] = entries[i + 1].english
+        records.append(row)
+    return records
+
+
+def _write_qa_report(
+    path: Path,
+    *,
+    provider: str,
+    base_url: str,
+    model: str,
+    records: list[dict[str, object]],
+) -> dict[str, int]:
+    from .translation_quality import summarize_qa
+
+    summary = summarize_qa(records)
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "provider": provider,
+                "base_url": base_url,
+                "model": model,
+                "summary": summary,
+                "records": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    return summary
+
+
 def _translate_missing(
     entries,
     model: str,
@@ -134,16 +180,26 @@ def _translate_missing(
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
-    targets = [{"id": e.filename, "english": e.english} for e in entries if not e.chinese]
+    targets = _target_records(entries)
     if not targets:
         return {
             **_translation_counts(0, 0, 0),
             "translation_provider": "",
             "translation_base_url": "",
             "translation_model": model,
+            "count_translation_qa_records": 0,
+            "count_translation_qa_warnings": 0,
+            "count_translation_qa_hard_failed": 0,
+            "count_translation_qa_retried": 0,
         }
 
     from .credentials import translation_identity
+    from .glossary import CORE_GLOSSARY, relevant_glossary
+    from .translation_quality import (
+        has_hard_issue,
+        qa_messages,
+        translation_qa,
+    )
     from .translator import make_client, translate_records
 
     provider, base_url = translation_identity()
@@ -154,25 +210,58 @@ def _translate_missing(
         base_url,
     )
     completed: dict[str, str] = {}
+    qa_rows: list[dict[str, object]] = []
     reused = 0
+
+    target_by_id = {row["id"]: row for row in targets}
     for row in targets:
         saved = checkpoint.get(row["id"], {})
         expected = _text_fingerprint(row["english"])
-        if (
+        if not (
             isinstance(saved, dict)
             and saved.get("english_sha256") == expected
             and str(saved.get("chinese", "")).strip()
         ):
-            completed[row["id"]] = str(saved["chinese"]).strip()
-            reused += 1
+            continue
+        chinese = str(saved["chinese"]).strip()
+        glossary = relevant_glossary(CORE_GLOSSARY, [row["english"]])
+        issues = translation_qa(row["english"], chinese, glossary)
+        if has_hard_issue(issues):
+            # A new glossary/QA rule can invalidate an old cached translation.
+            # Re-run only this item instead of trusting stale paid output.
+            continue
+        completed[row["id"]] = chinese
+        reused += 1
+        qa_rows.append({
+            "id": row["id"],
+            "english": row["english"],
+            "chinese": chinese,
+            "issues": issues,
+            "retried": False,
+            "checkpoint_reused": True,
+            "hard_failed": False,
+        })
 
     remaining = [row for row in targets if row["id"] not in completed]
     api_translated = 0
+    qa_retries = 0
     client = make_client() if remaining else None
 
     for start in range(0, len(remaining), batch_size):
         batch = remaining[start:start + batch_size]
-        translated = translate_records(batch, model=model, client=client)
+        batch_glossary = relevant_glossary(
+            CORE_GLOSSARY,
+            [row["english"] for row in batch],
+        )
+        translated = translate_records(
+            batch,
+            model=model,
+            glossary=batch_glossary,
+            client=client,
+        )
+
+        retry_records: list[dict[str, str]] = []
+        first_results: dict[str, tuple[str, list[dict[str, str]]]] = {}
         for source, result in zip(batch, translated, strict=True):
             if result["id"] != source["id"]:
                 raise RuntimeError(
@@ -181,18 +270,63 @@ def _translate_missing(
             chinese = str(result["chinese"]).strip()
             if not chinese:
                 raise RuntimeError(f"Translator returned empty Chinese text: {source['id']}")
-            completed[source["id"]] = chinese
+            glossary = relevant_glossary(CORE_GLOSSARY, [source["english"]])
+            issues = translation_qa(source["english"], chinese, glossary)
+            first_results[source["id"]] = (chinese, issues)
+            api_translated += 1
+            if issues:
+                repair = dict(source)
+                repair["previous_chinese"] = chinese
+                repair["qa_issues"] = " | ".join(qa_messages(issues))
+                retry_records.append(repair)
+
+        repaired: dict[str, str] = {}
+        if retry_records:
+            retry_glossary = relevant_glossary(
+                CORE_GLOSSARY,
+                [row["english"] for row in retry_records],
+            )
+            retried_rows = translate_records(
+                retry_records,
+                model=model,
+                glossary=retry_glossary,
+                client=client,
+            )
+            qa_retries += len(retry_records)
+            repaired = {row["id"]: str(row["chinese"]).strip() for row in retried_rows}
+
+        hard_failures: list[dict[str, object]] = []
+        for source in batch:
+            first_chinese, first_issues = first_results[source["id"]]
+            chinese = repaired.get(source["id"], first_chinese)
+            glossary = relevant_glossary(CORE_GLOSSARY, [source["english"]])
+            final_issues = translation_qa(source["english"], chinese, glossary)
+            hard_failed = has_hard_issue(final_issues)
+            record = {
+                "id": source["id"],
+                "english": source["english"],
+                "chinese": chinese,
+                "issues": final_issues,
+                "initial_issues": first_issues,
+                "retried": source["id"] in repaired,
+                "checkpoint_reused": False,
+                "hard_failed": hard_failed,
+            }
+            qa_rows.append(record)
+
             checkpoint[source["id"]] = {
                 "english_sha256": _text_fingerprint(source["english"]),
                 "chinese": chinese,
+                "qa_version": 1,
+                "qa_issues": final_issues,
             }
-            api_translated += 1
+            if hard_failed:
+                hard_failures.append(record)
+            else:
+                completed[source["id"]] = chinese
 
-        # Persist after every successful batch. If a later batch gets a 429,
-        # timeout, network failure, or the process exits, completed batches are
-        # reusable on the next build. Provider/Base URL are part of checkpoint
-        # identity so switching relays cannot silently reuse another provider's
-        # translations.
+        # Persist successful and failed QA results after every batch. A later
+        # network/process failure never discards already-paid translations.
         _write_translation_checkpoint(
             checkpoint_path,
             model,
@@ -200,6 +334,20 @@ def _translate_missing(
             base_url,
             checkpoint,
         )
+        qa_summary = _write_qa_report(
+            checkpoint_path.with_name("translation_qa.json"),
+            provider=provider,
+            base_url=base_url,
+            model=model,
+            records=qa_rows,
+        )
+
+        if hard_failures:
+            first = hard_failures[0]
+            raise RuntimeError(
+                f"Translation QA still has {len(hard_failures)} hard failure(s) after one repair pass; "
+                f"first={first['id']}. See translation_qa.json."
+            )
 
     wanted = {row["id"] for row in targets}
     if set(completed) != wanted:
@@ -213,13 +361,25 @@ def _translate_missing(
             if not text:
                 raise RuntimeError(f"Missing completed translation: {entry.filename}")
             entry.chinese = text
-            entry.chinese_source = f"api:{provider}:{model}"
+            entry.chinese_source = f"api:{provider}:{model}:qa"
+
+    qa_summary = _write_qa_report(
+        checkpoint_path.with_name("translation_qa.json"),
+        provider=provider,
+        base_url=base_url,
+        model=model,
+        records=qa_rows,
+    )
 
     return {
         **_translation_counts(len(targets), reused, api_translated),
+        **qa_summary,
+        "count_translation_qa_api_retries": qa_retries,
         "translation_provider": provider,
         "translation_base_url": base_url,
         "translation_model": model,
+        "translation_glossary_terms": len(CORE_GLOSSARY),
+        "translation_context_neighbors": True,
     }
 
 
@@ -280,7 +440,7 @@ def build_project_v02(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.7 pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.8 pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)
