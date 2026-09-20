@@ -13,6 +13,7 @@ from .project import STATE_DIR, atomic_write_json
 JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
 BUILD_KINDS = {"build", "quick-build"}
+EXCLUSIVE_KINDS = BUILD_KINDS | {"source-refresh"}
 
 
 def now() -> str:
@@ -75,7 +76,7 @@ _load_previous()
 
 def _active_build_locked() -> Job | None:
     for job in reversed(list(_JOBS.values())):
-        if job.kind in BUILD_KINDS and job.state in {"queued", "running"}:
+        if job.kind in EXCLUSIVE_KINDS and job.state in {"queued", "running"}:
             return job
     return None
 
@@ -91,7 +92,7 @@ def assert_no_active_build() -> None:
         job = _active_build_locked()
         if job is not None:
             raise RuntimeError(
-                "已有构建任务正在运行，请等待它完成后再开始新的构建"
+                "已有构建或项目更新任务正在运行，请等待它完成"
             )
 
 
@@ -125,11 +126,11 @@ def create_job(
         project_name=str(project_name or ""),
     )
     with _LOCK:
-        if kind in BUILD_KINDS:
+        if kind in EXCLUSIVE_KINDS:
             active = _active_build_locked()
             if active is not None:
                 raise RuntimeError(
-                    "已有构建任务正在运行，请等待它完成后再开始新的构建"
+                    "已有构建或项目更新任务正在运行，请等待它完成"
                 )
         _JOBS[job.id] = job
         _persist_locked()
