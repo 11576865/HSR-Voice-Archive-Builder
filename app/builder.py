@@ -428,8 +428,15 @@ def build_entries(
                 "source_frames": frames,
                 "source_duration_seconds": frames / sr,
                 "sha256": got_hash,
-                "reference_text": reference_labs.get(stem, ""),
-                "reference_language": reference_language,
+                "reference_text": (
+                    reference_labs.get(stem, "")
+                    or str(row.get("参考文本", "") or "").strip()
+                ),
+                "reference_language": (
+                    reference_language
+                    if reference_labs.get(stem, "")
+                    else str(row.get("参考语言", "") or reference_language or "auto")
+                ),
             }
         )
 
