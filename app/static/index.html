@@ -24,7 +24,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-G</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-H</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -38,10 +38,11 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="actions">
           <button type="button" class="primary" id="openSelectedProjectBtn">打开所选</button>
           <button type="button" id="newProjectBtn">新建 / 导入项目</button>
+          <button type="button" id="cloneProjectBtn">复制项目</button>
           <button type="button" id="forgetProjectBtn">移出列表</button>
           <button type="button" class="danger" id="deleteProjectBtn">删除项目</button>
         </div>
-        <p class="small muted">“移出列表”只隐藏项目，不删除任何文件；重新手动打开后会再次出现在列表里。“删除项目”会清理程序管理的项目数据。Quick Mode 创建的专用项目目录可整目录删除；手动项目会保留目录中的其他用户文件。</p>
+        <p class="small muted">“复制项目”会复制设置和程序生成的索引，但不复制 output 成品、.state 恢复状态或原始语音包，适合从同一素材派生另一套语言/参数。“移出列表”只隐藏项目，不删除文件；“删除项目”会清理程序管理的数据。</p>
       </div>
       <div id="noProject">
         <h3>快速创建</h3>
@@ -342,6 +343,7 @@ function renderProjectSwitcher(items){
     const o=document.createElement('option');
     o.value=p.root;
     o.dataset.managed=p.managed_project_root?'1':'0';
+    o.dataset.name=p.name||'';
     o.textContent=(p.root===current?'● ':'')+p.name+' · '+p.root;
     select.appendChild(o);
   }
@@ -353,7 +355,7 @@ function renderProjectSwitcher(items){
 function updateProjectActionButtons(){
   const select=document.getElementById('projectSwitcher');
   const chosen=!!select?.value;
-  for(const id of ['openSelectedProjectBtn','forgetProjectBtn','deleteProjectBtn']){
+  for(const id of ['openSelectedProjectBtn','cloneProjectBtn','forgetProjectBtn','deleteProjectBtn']){
     const button=document.getElementById(id);if(button)button.disabled=!chosen;
   }
 }
@@ -367,6 +369,24 @@ async function startNewProject(){
   await api('/api/project/close',{method:'POST'});
   fillProject(null);quickPlanState=null;await loadQuickCandidates();await refresh();
 }
+async function cloneSelectedProject(){
+  const select=document.getElementById('projectSwitcher'),root=select.value;
+  if(!root)throw new Error('请先选择一个项目');
+  const option=select.options[select.selectedIndex];
+  const original=(option?.dataset?.name||'项目').trim();
+  const name=prompt('新项目名称',original+' 副本');
+  if(name===null)return;
+  if(!name.trim())throw new Error('项目名称不能为空');
+  const d=new FormData();
+  d.set('project_path',root);
+  d.set('name',name.trim());
+  const j=await api('/api/project/clone',{method:'POST',body:d});
+  fillProject(j.project);
+  quickPlanState=null;
+  setLog('项目已复制。新项目复用原始数据源，但 output 与 .state 从空状态开始。');
+  await refresh();
+}
+
 async function forgetSelectedProject(){
   const select=document.getElementById('projectSwitcher'),root=select.value;
   if(!root)throw new Error('请先选择一个项目');
@@ -696,6 +716,7 @@ document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSel
 document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
 document.getElementById('openSelectedProjectBtn').onclick=async()=>{try{await switchProject(document.getElementById('projectSwitcher').value)}catch(x){setLog(String(x))}};
 document.getElementById('newProjectBtn').onclick=async()=>{try{await startNewProject()}catch(x){setLog(String(x))}};
+document.getElementById('cloneProjectBtn').onclick=async()=>{try{await cloneSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('forgetProjectBtn').onclick=async()=>{try{await forgetSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('deleteProjectBtn').onclick=async()=>{try{await deleteSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('refreshBtn').onclick=refresh;
