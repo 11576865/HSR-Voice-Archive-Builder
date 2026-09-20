@@ -63,7 +63,8 @@ class V09FStateLayoutTests(unittest.TestCase):
                 "manifest.json",
                 "manifest.csv",
                 "bilingual_index_corrected.csv",
-                "bilingual.srt",
+                "timeline_resolved.json",
+                "HSR_Voice_Archive.ass",
                 "build_report.json",
             ):
                 self.assertTrue((out / name).is_file(), name)
