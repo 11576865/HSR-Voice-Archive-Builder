@@ -398,13 +398,18 @@ def build_entries(
             if chinese:
                 translated_count += 1
 
-        source_text = row.get("英文文本", b.get("ENGLISH", ""))
+        source_text = str(row.get("英文文本", b.get("ENGLISH", "")) or "").strip()
         if source_text_language != "en":
-            source_text = primary_labs.get(stem, "")
+            # A same-stem LAB in the primary package is the closest text to the
+            # actual selected voice and therefore wins when present. Otherwise
+            # use the selected CHS/JP/KR index text instead of requiring LAB.
+            primary_lab_text = str(primary_labs.get(stem, "") or "").strip()
+            if primary_lab_text:
+                source_text = primary_lab_text
             if not source_text:
                 raise ValueError(
-                    f"Missing {source_text_language} source LAB for {filename}; "
-                    "choose English index text or provide LAB text in the primary package"
+                    f"Missing {source_text_language} source text for {filename}; "
+                    "the selected index has no text and the primary package has no matching LAB"
                 )
 
         raw.append(
