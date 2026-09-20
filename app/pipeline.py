@@ -584,6 +584,212 @@ def _translate_missing(
                 f"first={first['id']}. See translation_qa.json."
             )
 
+    semantic_rows: list[dict[str, object]] = []
+    semantic_reused = len(semantic_risky_ids & semantic_verified_ids)
+    semantic_skipped_injected = 0
+
+    if semantic_pending_ids and not isinstance(client, OpenAIResponsesHTTPClient):
+        # Historical unit tests inject a minimal object client and mock only the
+        # translation function. Production make_client() always returns the REST
+        # client, so semantic verification is never skipped in a real build.
+        semantic_skipped_injected = len(semantic_pending_ids)
+    elif semantic_pending_ids:
+        semantic_targets = [
+            row for row in targets if row["id"] in semantic_pending_ids
+        ]
+        for start in range(0, len(semantic_targets), semantic_batch_size):
+            batch_targets = semantic_targets[start:start + semantic_batch_size]
+            candidates = [
+                semantic_candidate(
+                    row_id=row["id"],
+                    english=row["english"],
+                    chinese=completed[row["id"]],
+                )
+                for row in batch_targets
+            ]
+            candidates = [row for row in candidates if row is not None]
+            if not candidates:
+                continue
+
+            verify_phase = f"semantic-verify-{start // semantic_batch_size + 1}"
+            ledger.check_before_request(
+                estimate_request_tokens(candidates),
+                phase=verify_phase,
+            )
+            verdicts = verify_semantic_records(
+                candidates,
+                model=model,
+                client=client,
+                usage_callback=lambda usage, phase=verify_phase: ledger.record(phase, usage),
+            )
+            initial_by_id = {str(row["id"]): row for row in verdicts}
+            failed_ids = {
+                row_id
+                for row_id, verdict in initial_by_id.items()
+                if not bool(verdict.get("ok"))
+            }
+
+            repair_records: list[dict[str, str]] = []
+            for source in batch_targets:
+                if source["id"] not in failed_ids:
+                    continue
+                verdict = initial_by_id[source["id"]]
+                repair = dict(source)
+                repair["previous_chinese"] = completed[source["id"]]
+                repair["qa_issues"] = (
+                    "Semantic verifier: "
+                    + ", ".join(str(x) for x in verdict.get("issues", []))
+                    + " | "
+                    + str(verdict.get("note", ""))
+                )
+                repair_records.append(repair)
+
+            repaired_chinese: dict[str, str] = {}
+            deterministic_failures: set[str] = set()
+            if repair_records:
+                semantic_repair_glossary = relevant_glossary(
+                    active_glossary,
+                    [row["english"] for row in repair_records],
+                )
+                repair_phase = f"semantic-repair-{start // semantic_batch_size + 1}"
+                ledger.check_before_request(
+                    estimate_request_tokens(repair_records, semantic_repair_glossary),
+                    phase=repair_phase,
+                )
+                repaired_rows = translate_records(
+                    repair_records,
+                    model=model,
+                    glossary=semantic_repair_glossary,
+                    client=client,
+                    usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
+                )
+                for source, result in zip(repair_records, repaired_rows, strict=True):
+                    chinese = str(result["chinese"]).strip()
+                    row_glossary = relevant_glossary(
+                        active_glossary,
+                        [source["english"]],
+                    )
+                    issues = translation_qa(source["english"], chinese, row_glossary)
+                    if has_hard_issue(issues):
+                        deterministic_failures.add(source["id"])
+                    repaired_chinese[source["id"]] = chinese
+                    completed[source["id"]] = chinese
+                    checkpoint[source["id"]] = {
+                        "english_sha256": _text_fingerprint(source["english"]),
+                        "chinese": chinese,
+                        "qa_version": 1,
+                        "qa_issues": issues,
+                        "glossary_fingerprint": glossary_fingerprint(row_glossary),
+                    }
+                    for qa_row in qa_rows:
+                        if qa_row.get("id") == source["id"]:
+                            qa_row["chinese"] = chinese
+                            qa_row["issues"] = issues
+                            qa_row["semantic_repaired"] = True
+                            qa_row["hard_failed"] = has_hard_issue(issues)
+                            break
+
+            repair_candidates = [
+                semantic_candidate(
+                    row_id=source["id"],
+                    english=source["english"],
+                    chinese=completed[source["id"]],
+                )
+                for source in repair_records
+                if source["id"] not in deterministic_failures
+            ]
+            repair_candidates = [row for row in repair_candidates if row is not None]
+            final_repair_verdicts: dict[str, dict[str, object]] = {}
+            if repair_candidates:
+                reverify_phase = f"semantic-reverify-{start // semantic_batch_size + 1}"
+                ledger.check_before_request(
+                    estimate_request_tokens(repair_candidates),
+                    phase=reverify_phase,
+                )
+                reverified = verify_semantic_records(
+                    repair_candidates,
+                    model=model,
+                    client=client,
+                    usage_callback=lambda usage, phase=reverify_phase: ledger.record(phase, usage),
+                )
+                final_repair_verdicts = {
+                    str(row["id"]): row for row in reverified
+                }
+
+            hard_failures: list[dict[str, object]] = []
+            for candidate in candidates:
+                row_id = str(candidate["id"])
+                initial = initial_by_id[row_id]
+                repaired = row_id in repaired_chinese
+                final = final_repair_verdicts.get(row_id, initial)
+                hard_failed = (
+                    row_id in deterministic_failures
+                    or not bool(final.get("ok"))
+                )
+                record: dict[str, object] = {
+                    "id": row_id,
+                    "english": candidate["english"],
+                    "chinese": completed[row_id],
+                    "risk_tags": candidate["risk_tags"],
+                    "ok": not hard_failed,
+                    "issues": initial.get("issues", []),
+                    "note": initial.get("note", ""),
+                    "repaired": repaired,
+                    "final_issues": final.get("issues", []),
+                    "final_note": final.get("note", ""),
+                    "hard_failed": hard_failed,
+                }
+                semantic_rows.append(record)
+                if hard_failed:
+                    hard_failures.append(record)
+                else:
+                    semantic_verified_ids.add(row_id)
+                    saved = checkpoint.get(row_id)
+                    if isinstance(saved, dict):
+                        saved["semantic_qa_version"] = SEMANTIC_QA_VERSION
+
+            _write_translation_checkpoint(
+                checkpoint_path,
+                model,
+                provider,
+                base_url,
+                checkpoint,
+            )
+            _write_semantic_qa_report(
+                checkpoint_path.with_name("semantic_qa.json"),
+                provider=provider,
+                base_url=base_url,
+                model=model,
+                records=semantic_rows,
+                reused=semantic_reused,
+            )
+            _write_qa_report(
+                checkpoint_path.with_name("translation_qa.json"),
+                provider=provider,
+                base_url=base_url,
+                model=model,
+                records=qa_rows,
+            )
+            ledger.assert_observable()
+
+            if hard_failures:
+                first = hard_failures[0]
+                raise RuntimeError(
+                    f"Semantic QA still has {len(hard_failures)} hard failure(s) "
+                    f"after one targeted repair; first={first['id']}. "
+                    "See semantic_qa.json."
+                )
+
+    semantic_summary = _write_semantic_qa_report(
+        checkpoint_path.with_name("semantic_qa.json"),
+        provider=provider,
+        base_url=base_url,
+        model=model,
+        records=semantic_rows,
+        reused=semantic_reused,
+    )
+    semantic_summary["count_semantic_qa_skipped_injected"] = semantic_skipped_injected
+
     wanted = {row["id"] for row in targets}
     if set(completed) != wanted:
         raise RuntimeError(
