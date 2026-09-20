@@ -386,9 +386,9 @@ def _translate_missing(
         raise ValueError("translation_batch_size must be >= 1")
     targets = _target_records(entries)
 
-    def translation_progress(message: str) -> None:
+    def translation_progress(message: str, current: int = 0, total: int = 0) -> None:
         if progress_callback is not None:
-            progress_callback("translation", message, 3, 6)
+            progress_callback("translation", message, current, total)
 
     if not targets:
         return {
@@ -575,7 +575,7 @@ def _translate_missing(
         "usage_supported": True,
     }
     if (remaining or semantic_pending_ids) and isinstance(client, OpenAIResponsesHTTPClient):
-        translation_progress("3/6 正在验证翻译 API 能力")
+        translation_progress("正在验证翻译 API 能力", 0, max(1, len(remaining)))
         smoke = [{"id": "smoke-1", "english": "The story's not finished."}]
         smoke_estimate = estimate_request_tokens(smoke)
         capability = ensure_translation_capability(
@@ -599,7 +599,9 @@ def _translate_missing(
     for start in range(0, len(remaining), batch_size):
         batch_number = start // batch_size + 1
         translation_progress(
-            f"3/6 AI 翻译：批次 {batch_number}/{translation_batch_count}"
+            f"AI 翻译：已完成 {start}/{len(remaining)} 条 · 批次 {batch_number}/{translation_batch_count} · 已复用 {reused} 条",
+            start,
+            len(remaining),
         )
         batch = remaining[start:start + batch_size]
         batch_glossary = relevant_glossary(
@@ -652,7 +654,9 @@ def _translate_missing(
         repaired: dict[str, str] = {}
         if retry_records:
             translation_progress(
-                f"3/6 翻译质量修复：批次 {batch_number}/{translation_batch_count}"
+                f"翻译质量修复：本批 {len(retry_records)} 条 · 批次 {batch_number}/{translation_batch_count}",
+                min(start + len(batch), len(remaining)),
+                len(remaining),
             )
             retry_glossary = relevant_glossary(
                 active_glossary,
@@ -764,7 +768,9 @@ def _translate_missing(
         for start in range(0, len(semantic_targets), semantic_batch_size):
             semantic_batch_number = start // semantic_batch_size + 1
             translation_progress(
-                f"3/6 语义检查：批次 {semantic_batch_number}/{semantic_batch_count}"
+                f"语义检查：已检查 {start}/{len(semantic_targets)} 条 · 批次 {semantic_batch_number}/{semantic_batch_count}",
+                start,
+                len(semantic_targets),
             )
             batch_targets = semantic_targets[start:start + semantic_batch_size]
             candidates = [
@@ -819,7 +825,9 @@ def _translate_missing(
             deterministic_failures: set[str] = set()
             if repair_records:
                 translation_progress(
-                    f"3/6 语义修复：批次 {semantic_batch_number}/{semantic_batch_count}"
+                    f"语义修复：本批 {len(repair_records)} 条 · 批次 {semantic_batch_number}/{semantic_batch_count}",
+                    min(start + len(batch_targets), len(semantic_targets)),
+                    len(semantic_targets),
                 )
                 semantic_repair_glossary = relevant_glossary(
                     active_glossary,
@@ -882,7 +890,9 @@ def _translate_missing(
             final_repair_verdicts: dict[str, dict[str, object]] = {}
             if repair_candidates:
                 translation_progress(
-                    f"3/6 语义复核：批次 {semantic_batch_number}/{semantic_batch_count}"
+                    f"语义复核：本批 {len(repair_candidates)} 条 · 批次 {semantic_batch_number}/{semantic_batch_count}",
+                    min(start + len(batch_targets), len(semantic_targets)),
+                    len(semantic_targets),
                 )
                 reverify_phase = f"semantic-reverify-{start // semantic_batch_size + 1}"
                 ledger.check_before_request(

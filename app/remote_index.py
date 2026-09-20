@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
 import os
@@ -410,3 +411,67 @@ def remote_update_plan(
     result["character_counts"] = dict(character_counts.most_common())
     result["remote_rows"] = len(records)
     return result
+
+
+def exclude_applied_updates(plan: dict[str, Any], apply_report_path: Path) -> dict[str, Any]:
+    """Move successfully applied filenames out of a repeated remote-update plan."""
+    try:
+        report = json.loads(apply_report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return plan
+    applied = {
+        Path(str(name)).name
+        for name in report.get("applied_filenames", [])
+        if str(name).strip()
+    }
+    if not applied:
+        return plan
+    pending = []
+    moved = []
+    for item in plan.get("new_logical", []):
+        name = item.get("filename", "") if isinstance(item, dict) else str(item)
+        if Path(name).name in applied:
+            moved.append(item)
+        else:
+            pending.append(item)
+    if moved:
+        plan["new_logical"] = pending
+        plan.setdefault("exact_existing", []).extend(moved)
+        counts = plan.setdefault("counts", {})
+        counts["new_logical"] = len(pending)
+        counts["exact_existing"] = len(plan["exact_existing"])
+        plan["already_applied_count"] = len(moved)
+        plan["applied"] = not pending
+    return plan
+
+
+def exclude_indexed_updates(plan: dict[str, Any], index_path: Path | None) -> dict[str, Any]:
+    """Treat files already adopted into the current project index as applied."""
+    if index_path is None or not index_path.is_file():
+        return plan
+    try:
+        with index_path.open("r", encoding="utf-8-sig", newline="") as handle:
+            rows = list(csv.DictReader(handle))
+    except (OSError, csv.Error):
+        return plan
+    indexed = {
+        Path(str(row.get("filename", ""))).name
+        for row in rows
+        if str(row.get("filename", "")).strip()
+    }
+    if not indexed:
+        return plan
+    pending = []
+    moved = []
+    for item in plan.get("new_logical", []):
+        name = item.get("filename", "") if isinstance(item, dict) else str(item)
+        (moved if Path(name).name in indexed else pending).append(item)
+    if moved:
+        plan["new_logical"] = pending
+        plan.setdefault("exact_existing", []).extend(moved)
+        counts = plan.setdefault("counts", {})
+        counts["new_logical"] = len(pending)
+        counts["exact_existing"] = len(plan["exact_existing"])
+        plan["already_applied_count"] = int(plan.get("already_applied_count", 0)) + len(moved)
+        plan["applied"] = not pending
+    return plan

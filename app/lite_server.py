@@ -41,7 +41,7 @@ from .project import (
     resolve_project_path,
     update_project,
 )
-from .remote_index import fetch_ai_hobbyist_index, remote_update_plan
+from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
 
 BASE = Path(__file__).resolve().parent
@@ -660,6 +660,8 @@ class Handler(BaseHTTPRequestHandler):
                     url=remote_url,
                     queried_character=matched_character,
                 )
+                plan = exclude_applied_updates(plan, output / "update_apply_report.json")
+                plan = exclude_indexed_updates(plan, resolve_project_path(config, config.index_csv))
                 resolved_character = str(plan.get("character") or matched_character)
                 plan["attempted_characters"] = attempted
                 update_project(
@@ -706,6 +708,7 @@ class Handler(BaseHTTPRequestHandler):
                 report_progress("metadata", "正在取得 Hugging Face 定位索引", 0, 1)
                 download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1))
                 resolved = resolve_targets(result_json, targets)
+                report_progress("resolve", f"已可靠定位 {len(resolved['targets'])}/{len(targets)} 条新增语音", len(targets), len(targets))
                 atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
                 if not resolved["targets"]:
                     raise RuntimeError("新增条目均无法可靠映射到 Hugging Face 音频；未修改项目")
@@ -718,6 +721,7 @@ class Handler(BaseHTTPRequestHandler):
                 atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
                 if not successful:
                     raise RuntimeError("没有新增音频下载成功；未修改项目")
+                report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
                 generated.mkdir(parents=True, exist_ok=True)
                 temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
                 combined = generated / "combined_audio"
@@ -752,8 +756,9 @@ class Handler(BaseHTTPRequestHandler):
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
                 update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "project_updated": True, "rebuild_required": True}
+                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
+                report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
 
             job = create_job("remote-update-apply", run, with_progress=True, project_root=config.root, project_name=config.name)

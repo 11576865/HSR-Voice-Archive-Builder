@@ -5,20 +5,21 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>HSR Voice Archive Builder</title>
 <style>
-:root{color-scheme:light;--bg:#f4f5f7;--card:#fff;--text:#17181a;--muted:#6f747c;--line:#dfe2e6;--accent:#202328;--ok:#176b3a;--warn:#8a5a00;--bad:#a52a2a}
+:root{color-scheme:dark;--bg:#0e1117;--card:#171b23;--soft:#202631;--text:#edf1f7;--muted:#9ba5b3;--line:#303846;--accent:#566274;--ok:#38b46b;--warn:#f0a640;--bad:#ef6b73;--blue:#5d9cec;--purple:#b78cff}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
 header{max-width:1180px;margin:0 auto;padding:28px 22px 10px;display:flex;align-items:end;justify-content:space-between;gap:20px}
-h1{font-size:26px;margin:0}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px;margin:0 0 10px}.sub{color:var(--muted);font-size:13px}.badge{display:inline-flex;padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:#fff}
+h1{font-size:26px;margin:0}h2{font-size:18px;margin:0 0 14px}h3{font-size:15px;margin:0 0 10px}.sub{color:var(--muted);font-size:13px}.badge{display:inline-flex;padding:4px 8px;border:1px solid var(--line);border-radius:999px;font-size:12px;background:var(--card)}
 main{max-width:1180px;margin:0 auto;padding:14px 22px 50px}.grid{display:grid;grid-template-columns:1.25fr .75fr;gap:16px}.stack{display:grid;gap:16px}.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;box-shadow:0 1px 2px rgba(0,0,0,.03)}
-.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{padding:14px;border:1px solid var(--line);border-radius:10px;background:#fafafa}.stat b{display:block;font-size:24px;margin-bottom:3px}.stat span{font-size:12px;color:var(--muted)}
-label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}input,select{width:100%;padding:9px 10px;border:1px solid #c7cbd1;border-radius:7px;background:#fff;color:var(--text)}input:focus,select:focus{outline:2px solid #b9c3d0;outline-offset:1px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
-.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button{padding:9px 14px;border:1px solid #b9bdc4;border-radius:8px;background:#fff;cursor:pointer;font-weight:650}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.danger{border-color:#d8a3a3;color:var(--bad);background:#fff8f8}button:disabled{opacity:.45;cursor:not-allowed}
+.stats{display:grid;grid-template-columns:repeat(4,1fr);gap:10px}.stat{padding:14px;border:1px solid var(--line);border-radius:10px;background:var(--soft)}.stat b{display:block;font-size:24px;margin-bottom:3px}.stat span{font-size:12px;color:var(--muted)}.stat.existing b{color:var(--blue)}.stat.variant b{color:var(--warn)}.stat.new b{color:var(--ok)}
+label{display:block;font-size:13px;font-weight:650;margin:12px 0 5px}input,select{width:100%;padding:9px 10px;border:1px solid var(--line);border-radius:7px;background:var(--soft);color:var(--text)}input:focus,select:focus{outline:2px solid var(--blue);outline-offset:1px}.row{display:grid;grid-template-columns:1fr 1fr;gap:12px}.row3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px}
+.actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:14px}button{padding:9px 14px;border:1px solid var(--line);border-radius:8px;background:var(--soft);color:var(--text);cursor:pointer;font-weight:650}button.primary{background:var(--accent);border-color:var(--accent);color:#fff}button.success{background:#218c4b;border-color:#2ca95c;color:#fff}button.danger{border-color:#753b41;color:var(--bad);background:#28191d}button:disabled{background:#343a44!important;border-color:#424957!important;color:#89919d!important;opacity:.72;cursor:not-allowed}
 .check{display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px}.check input{width:auto}.muted{color:var(--muted)}.hidden{display:none!important}
 table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:8px 7px;border-bottom:1px solid var(--line);vertical-align:top}th{color:var(--muted);font-weight:650}
 pre{margin:0;background:#111318;color:#e9ebef;border-radius:9px;padding:13px;white-space:pre-wrap;max-height:330px;overflow:auto;font-size:12px}
+#quickPlan{background:var(--soft)!important;color:var(--text)!important;border-color:var(--line)!important}
 .status-ok{color:var(--ok)}.status-warn{color:var(--warn)}.status-bad{color:var(--bad)}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
 details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{height:1px;background:var(--line);margin:15px 0}
-.progress-track{height:10px;background:#e8eaed;border-radius:999px;overflow:hidden;margin:10px 0}.progress-bar{height:100%;width:0;background:#202328;transition:width .2s ease}.notice{padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:#fafafa;font-size:13px}.notice.bad{border-color:#e1b3b3;background:#fff8f8;color:var(--bad)}.notice.ok{border-color:#b9d8c5;background:#f7fcf9;color:var(--ok)}
+.progress-track{height:10px;background:var(--soft);border-radius:999px;overflow:hidden;margin:10px 0}.progress-bar{height:100%;width:0;background:linear-gradient(90deg,#238e4d,#45c879);transition:width .2s ease}.notice{padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--soft);font-size:13px}.notice.bad{border-color:#753b41;background:#28191d;color:var(--bad)}.notice.ok{border-color:#275f40;background:#15271d;color:var(--ok)}.file-audio{color:var(--ok);font-weight:700}.file-subtitle{color:var(--purple);font-weight:700}.action-status{margin-top:8px;min-height:18px}
 @media(max-width:820px){.grid{grid-template-columns:1fr}.stats{grid-template-columns:1fr 1fr}.row,.row3{grid-template-columns:1fr}header{align-items:start;flex-direction:column}}
 </style>
 </head>
@@ -36,8 +37,8 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <label>项目选择</label>
         <select id="projectSwitcher"><option value="">正在读取项目…</option></select>
         <div class="actions">
-          <button type="button" class="primary" id="openSelectedProjectBtn">打开所选</button>
-          <button type="button" id="newProjectBtn">新建 / 导入项目</button>
+          <button type="button" class="success" id="openSelectedProjectBtn">打开所选</button>
+          <button type="button" class="success" id="newProjectBtn">新建 / 导入项目</button>
           <button type="button" id="cloneProjectBtn">复制项目</button>
           <button type="button" id="forgetProjectBtn">移出列表</button>
           <button type="button" class="danger" id="deleteProjectBtn">删除项目</button>
@@ -130,7 +131,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
               <h3>打开项目</h3>
               <label>项目目录或 .hsr-voice-project.json</label>
               <input name="project_path" required placeholder="D:\HSR\Evanescia">
-              <div class="actions"><button class="primary">打开</button></div>
+              <div class="actions"><button class="success">打开</button></div>
             </form>
             <form id="createForm">
               <h3>手动新建项目</h3>
@@ -151,7 +152,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
               </div>
               <label>术语覆盖层 CSV / JSON（可选）</label><input name="glossary_path" placeholder="D:\\HSR\\glossary.csv">
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
-              <div class="actions"><button class="primary">创建</button></div>
+              <div class="actions"><button class="success">创建</button></div>
             </form>
           </div>
         </details>
@@ -171,15 +172,16 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           </select></div>
         </div>
         <label class="check"><input name="make_flac" type="checkbox"> 生成连续 FLAC 并验证音频完整性</label>
-        <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox"> 缺失中文字幕时调用已配置的 AI API 翻译</label>
+        <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <div class="actions">
           <button type="button" class="primary" id="buildBtn">开始构建</button>
           <button type="button" id="openOutputBtn">打开输出目录</button>
         </div>
+        <div id="projectActionStatus" class="small muted action-status"></div>
         <div id="buildInlineStatus" class="small muted" style="margin-top:8px">准备就绪。</div>
 
         <div class="divider"></div>
-        <details id="sourceHealthDetails" open>
+        <details id="sourceHealthDetails">
           <summary>数据源状态与重新定位</summary>
           <p class="small muted">如果你只是把原始语音包移动到了别的位置，不需要重建项目。这里会先校验内容指纹；只有确认是同一个包才会自动重新绑定。</p>
           <div id="sourceHealth" class="small muted">正在读取数据源状态…</div>
@@ -260,6 +262,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="divider"></div>
         <h3>成品文件</h3>
         <table><tbody id="outputTable"></tbody></table>
+        <p class="small muted">ASS 是独立字幕文件。许多播放器把 FLAC 当作纯音频时不会加载 ASS，这不代表字幕损坏；请使用支持“音频 + 外挂 ASS”的播放器，或之后封装进带黑色视频轨的 MKV。SRT 能显示而 ASS 不显示，通常是播放器对纯音频容器的字幕支持差异。</p>
       </div>
       <details id="diagnosticOutputs" style="margin-top:14px">
         <summary>项目状态文件（高级）</summary>
@@ -275,7 +278,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <h3>远程索引</h3>
         <label>自动识别的角色</label><input id="remoteCharacter" readonly>
         <p class="small muted">程序优先使用远程表格中识别到的角色名；旧项目会在检查时自动修正英文文件标识与中文角色名不一致的问题。</p>
-        <div class="actions"><button id="scanRemoteBtn">检查新增语音</button><button id="applyRemoteBtn" disabled>下载并应用新增语音</button></div>
+        <div class="actions"><button id="scanRemoteBtn">检查新增语音</button><button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button></div>
       </div>
       <div id="updateResult" class="small muted" style="margin-top:10px">尚未检查。</div>
       <div id="updateActionHint" class="notice" style="margin-top:12px">先检查新增语音。</div>
@@ -286,9 +289,9 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="actions"><button id="scanLocalBtn">扫描本地清单</button></div>
       </details>
       <div id="updateStats" class="stats" style="margin-top:14px">
-        <div class="stat"><b id="uExisting">—</b><span>已存在</span></div>
-        <div class="stat"><b id="uVariant">—</b><span>已有台词变量</span></div>
-        <div class="stat"><b id="uNew">—</b><span>真正新增</span></div>
+        <div class="stat existing"><b id="uExisting">—</b><span>已存在</span></div>
+        <div class="stat variant"><b id="uVariant">—</b><span>已有台词变量</span></div>
+        <div class="stat new"><b id="uNew">—</b><span>真正新增</span></div>
         <div class="stat"><b id="uRows">—</b><span>候选总数</span></div>
       </div>
     </section>
@@ -520,8 +523,8 @@ function fillProject(p){
   main.innerHTML='';diag.innerHTML='';
   for(const [name,o] of Object.entries(p.outputs||{})){
     if(!o.exists)continue;
-    const tr=document.createElement('tr');
-    tr.innerHTML='<td>'+name+'<div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
+    const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':name.endsWith('.ass')?'file-subtitle':'';
+    tr.innerHTML='<td><span class="'+fileClass+'">'+name+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
     (has?main:diag).appendChild(tr);
   }
   for(const [name,o] of Object.entries(p.state_outputs||{})){
@@ -546,8 +549,8 @@ function showPlan(plan){
     }
   }
   const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn'),hint=document.getElementById('updateActionHint');
-  button.disabled=additions<1;
-  hint.textContent=additions>0?'发现 '+additions+' 条新增记录。点击“下载并应用新增语音”后，程序会定位并下载可确认的音频；无法可靠定位的条目会单独报告。':'没有发现需要下载的新增语音。';
+  button.disabled=additions<1||!!plan.applied;
+  hint.textContent=plan.applied?'这批新增语音已经应用到项目，下一步请重新构建成品。':additions>0?'发现 '+additions+' 条新增记录。点击“下载并应用新增语音”后，程序会定位并下载可确认的音频；无法可靠定位的条目会单独报告。':'没有发现需要下载的新增语音。';
   setLog(plan);
 }
 let quickPlanState=null;
@@ -631,6 +634,7 @@ function beginBuildLaunch(){
 }
 function shortError(raw){
   const first=String(raw||'').split('\n').find(x=>x.trim())||'未知错误';
+  if(first.includes('Translation API key is not configured'))return '尚未配置翻译 API Key。请先运行 python -m app.credentials configure --provider vapi，或取消 AI 翻译。';
   if(first.includes('HTTP 401'))return '翻译 API 鉴权失败：请检查 API Key。';
   if(first.includes('HTTP 403'))return '翻译 API 拒绝访问：请检查账号、模型权限或中转配置。';
   if(first.includes('HTTP 429'))return '翻译 API 请求过多或额度受限；已完成的检查点会保留。';
@@ -639,26 +643,47 @@ function shortError(raw){
   if(first.includes('Translation QA'))return '翻译质量检查未通过，构建已停止以避免接受错误翻译。';
   return first.replace(/^RuntimeError:\s*/,'');
 }
+function jobProgressPercent(job){
+  const cur=Number(job.progress_current||0),tot=Number(job.progress_total||0),ratio=tot>0?Math.max(0,Math.min(1,cur/tot)):0;
+  if(job.kind==='remote-update-apply'){
+    if(job.phase==='metadata')return 8;
+    if(job.phase==='resolve')return 20+Math.round(ratio*15);
+    if(job.phase==='download')return 35+Math.round(ratio*55);
+    if(job.phase==='apply')return 90+Math.round(ratio*10);
+  }
+  if(['build','quick-build'].includes(job.kind)){
+    if(job.phase==='prepare')return 8;
+    if(job.phase==='metadata')return 20;
+    if(job.phase==='translation')return 25+Math.round(ratio*45);
+    if(job.phase==='manifest')return 75;
+    if(job.phase==='audio')return 88;
+    if(job.phase==='final'||job.phase==='done')return 100;
+  }
+  return tot>0?Math.round(ratio*100):5;
+}
 function renderJobs(jobs){
   const all=jobs||[],root=currentProject?.root||'';
-  const active=all.find(j=>['queued','running'].includes(j.state)&&['build','quick-build'].includes(j.kind));
+  const active=all.find(j=>['queued','running'].includes(j.state));
   const projectJobs=root?all.filter(j=>j.project_root===root):[];
   const otherJobs=all.filter(j=>!root||j.project_root!==root);
   const state=document.getElementById('activeJobState'),bar=document.getElementById('progressBar'),textBox=document.getElementById('progressText'),failure=document.getElementById('failureSummary');
   const activeForCurrent=active&&(!root||!active.project_root||active.project_root===root);
   if(active){
     const cur=Number(active.progress_current||0),tot=Number(active.progress_total||0);
-    const pct=tot>0?Math.max(0,Math.min(100,Math.round(cur/tot*100))):5;
-    state.textContent=(activeForCurrent?'正在构建当前项目':'另一项目正在构建')+(active.project_name?'「'+active.project_name+'」':'')+'；构建期间不能启动第二个构建。';
-    state.className='notice';bar.style.width=pct+'%';textBox.textContent=active.message||'正在处理';failure.classList.add('hidden');
-    setBuildButtonsDisabled(true);setBuildButtonText('构建中…');setInlineBuildStatus(active.message||'构建已经启动。');
+    const pct=jobProgressPercent(active);
+    const isBuild=['build','quick-build'].includes(active.kind),label=active.kind==='remote-update-check'?'检查新增语音':active.kind==='remote-update-apply'?'下载并应用新增语音':'构建';
+    state.textContent=(activeForCurrent?'正在':'另一项目正在')+label+(active.project_name?'「'+active.project_name+'」':'')+'。';
+    const count=tot>0?' · '+cur+'/'+tot:'';
+    state.className='notice';bar.style.width=pct+'%';textBox.textContent=(active.message||'正在处理')+count;failure.classList.add('hidden');
+    if(isBuild){setBuildButtonsDisabled(true);setBuildButtonText('构建中…');setInlineBuildStatus(active.message||'构建已经启动。');}
   }else{
-    const failed=projectJobs.find(j=>j.state==='failed'&&['build','quick-build'].includes(j.kind));
+    const latest=projectJobs[0];
     const succeeded=projectJobs.find(j=>j.state==='succeeded'&&['build','quick-build'].includes(j.kind));
-    if(failed && (!succeeded || String(failed.finished_at)>String(succeeded.finished_at))){
-      state.textContent='当前项目最近一次构建失败。';state.className='notice bad';bar.style.width='0%';
-      textBox.textContent='修复原因后可以重新构建；已完成检查点通常仍会复用。';failure.textContent='失败原因：'+shortError(failed.error);failure.classList.remove('hidden');
-      setBuildButtonText('继续构建');setInlineBuildStatus('最近一次构建失败；修复后会复用仍然有效的检查点。',true);
+    if(latest?.state==='failed'){
+      const isBuildFailure=['build','quick-build'].includes(latest.kind);
+      state.textContent='当前项目最近一次'+(isBuildFailure?'构建':'操作')+'失败。';state.className='notice bad';bar.style.width='0%';
+      textBox.textContent=isBuildFailure?'修复原因后可以重新构建；已完成检查点通常仍会复用。':'失败原因已显示在下方；修复后可重新执行该操作。';failure.textContent='失败原因：'+shortError(latest.error);failure.classList.remove('hidden');
+      if(isBuildFailure){setBuildButtonText('继续构建');setInlineBuildStatus('最近一次构建失败；修复后会复用仍然有效的检查点。',true);}
     }else if(succeeded){
       state.textContent='当前项目最近一次构建已完成。';state.className='notice ok';bar.style.width='100%';
       textBox.textContent='构建完成，可以查看“构建结果”或打开输出目录。';failure.classList.add('hidden');
@@ -771,12 +796,12 @@ document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();awa
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;document.getElementById('updateActionHint').textContent='正在准备 Hugging Face 定位索引并下载新增音频；首次运行需要下载约 188 MiB 的定位文件。';const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setLog(String(x))}};
-document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
+document.getElementById('openOutputBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{const j=await api('/api/output/open',{method:'POST'});s.textContent='已交给系统文件管理器：'+j.path;s.className='small status-ok action-status';setLog('已请求打开：'+j.path)}catch(x){s.textContent='无法自动打开。请在文件管理器中打开项目的 output 目录。原因：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
 document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSelectedSource()}catch(x){const s=document.getElementById('relinkStatus');s.textContent=shortError(x);s.className='small status-bad';setLog(String(x))}};
 document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
-document.getElementById('openSelectedProjectBtn').onclick=async()=>{try{await switchProject(document.getElementById('projectSwitcher').value)}catch(x){setLog(String(x))}};
-document.getElementById('newProjectBtn').onclick=async()=>{try{await startNewProject()}catch(x){setLog(String(x))}};
+document.getElementById('openSelectedProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await switchProject(document.getElementById('projectSwitcher').value);s.textContent='项目已打开。';s.className='small status-ok action-status'}catch(x){s.textContent='打开失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
+document.getElementById('newProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await startNewProject();s.textContent='已进入新建 / 导入模式。';s.className='small status-ok action-status'}catch(x){s.textContent='操作失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
 document.getElementById('cloneProjectBtn').onclick=async()=>{try{await cloneSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('forgetProjectBtn').onclick=async()=>{try{await forgetSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('deleteProjectBtn').onclick=async()=>{try{await deleteSelectedProject()}catch(x){setLog(String(x))}};

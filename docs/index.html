@@ -3,42 +3,29 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="color-scheme" content="light dark">
-<meta name="theme-color" content="#f3f4f6">
+<meta name="color-scheme" content="dark">
+<meta name="theme-color" content="#0e1117">
 <title>HSR Voice Archive Builder</title>
 <meta name="description" content="HSR Voice Archive Builder — static launcher for local-first voice archive processing.">
 <style>
 :root{
-  --bg:#f3f4f6;
-  --surface:#ffffff;
-  --surface-2:#f8f9fb;
-  --text:#111318;
-  --muted:#6f7680;
-  --line:#dde1e6;
-  --line-strong:#cfd4da;
-  --accent:#17191d;
+  color-scheme:dark;
+  --bg:#0e1117;
+  --surface:#171b23;
+  --surface-2:#202631;
+  --text:#edf1f7;
+  --muted:#9ba5b3;
+  --line:#303846;
+  --line-strong:#424c5c;
+  --accent:#238e4d;
   --accent-text:#ffffff;
-  --code:#101216;
+  --code:#0b0d10;
   --code-text:#eef1f4;
-  --success:#237a4b;
-  --shadow:0 10px 30px rgba(17,19,24,.06);
-}
-@media(prefers-color-scheme:dark){
-  :root{
-    --bg:#101214;
-    --surface:#181b1f;
-    --surface-2:#20242a;
-    --text:#f1f3f5;
-    --muted:#9da4ad;
-    --line:#30353b;
-    --line-strong:#3a4048;
-    --accent:#f0f2f4;
-    --accent-text:#111318;
-    --code:#0b0d10;
-    --code-text:#f3f5f7;
-    --success:#63c18b;
-    --shadow:none;
-  }
+  --success:#45c879;
+  --blue:#5d9cec;
+  --orange:#f0a640;
+  --purple:#b78cff;
+  --shadow:0 10px 30px rgba(0,0,0,.18);
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
@@ -206,6 +193,10 @@ pre{
 }
 .flow-title{font-size:12px;font-weight:760;margin-bottom:3px}
 .flow-text{font-size:11px;color:var(--muted);line-height:1.45}
+.feature-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:15px}
+.feature{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:13px}
+.feature b{display:block;font-size:12px;margin-bottom:5px}.feature span{display:block;color:var(--muted);font-size:11px;line-height:1.5}
+.feature.progress b{color:var(--success)}.feature.update b{color:var(--blue)}.feature.translation b{color:var(--orange)}.feature.output b{color:var(--purple)}
 .accordion{
   border-top:1px solid var(--line);
 }
@@ -265,6 +256,7 @@ details[open] .chevron{transform:rotate(180deg)}
   .hero-actions{display:grid;grid-template-columns:1fr}
   .btn{text-align:center;width:100%}
   .flow{grid-template-columns:1fr}
+  .feature-grid{grid-template-columns:1fr}
   .flow-step{min-height:auto;display:grid;grid-template-columns:30px 1fr;column-gap:9px;align-items:start}
   .flow-num{grid-row:1/3;margin:0}
   .accordion summary{padding:15px 16px}
@@ -287,18 +279,33 @@ details[open] .chevron{transform:rotate(180deg)}
   </header>
 
   <section class="hero">
-    <div class="eyebrow"><span class="dot"></span> STATIC ENTRY</div>
+    <div class="eyebrow"><span class="dot"></span> v0.9-H · STATIC ENTRY</div>
     <h1>打开网页，启动本地引擎。</h1>
     <p class="lead">这个页面长期存在，只负责启动说明、复制命令和进入控制台。语音、7z、FLAC、字幕与索引仍然只在你的设备上处理。</p>
     <div class="chips">
       <span class="chip">GitHub Pages 常驻</span>
       <span class="chip">Android / Termux</span>
       <span class="chip">本地 FFmpeg</span>
+      <span class="chip">深色控制台</span>
       <span class="chip" id="platform-chip">正在识别设备</span>
     </div>
     <div class="hero-actions">
       <a class="btn primary" href="http://127.0.0.1:8765/">进入本机控制台</a>
       <a class="btn" href="#termux">复制启动命令</a>
+    </div>
+  </section>
+
+  <section class="section panel">
+    <div class="panel-pad">
+      <div class="section-kicker">CURRENT WORKFLOW</div>
+      <h2>控制台已同步更新</h2>
+      <p class="small">更新本地仓库后，控制台会采用新的深色界面，并把耗时操作直接显示在“当前进度”区域。</p>
+      <div class="feature-grid">
+        <div class="feature progress"><b>进度不再藏在任务历史</b><span>构建、增量定位、下载、合并、AI 翻译与语义检查都会显示当前阶段及已完成数量。</span></div>
+        <div class="feature update"><b>增量更新防止重复应用</b><span>已经写入当前项目索引的语音会被识别为已应用，不会因旧 manifest 再次启用下载按钮。</span></div>
+        <div class="feature translation"><b>翻译启动前预检</b><span>缺失中文字幕时默认启用已配置的 AI API；凭据缺失会在启动阶段给出明确提示。</span></div>
+        <div class="feature output"><b>成品与操作反馈更明确</b><span>ASS、FLAC 和增量统计使用区分色；打开项目或输出目录时会显示成功或失败原因。</span></div>
+      </div>
     </div>
   </section>
 
@@ -435,7 +442,7 @@ bash run_termux.sh</pre>
   </section>
 
   <footer class="footer">
-    <span>HSR Voice Archive Builder · v0.5</span>
+    <span>HSR Voice Archive Builder · v0.9-H</span>
     <span>Static launcher / Local engine</span>
   </footer>
 </main>

@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import csv
 import tempfile
 import time
 import unittest
@@ -11,7 +12,7 @@ from openpyxl import Workbook
 from app.diff import classify_names
 from app.jobs import create_job, get_job
 from app.project import create_project, load_project, project_summary, update_project
-from app.remote_index import read_ai_hobbyist_xlsx, read_ai_hobbyist_xlsx_for_filenames
+from app.remote_index import exclude_indexed_updates, read_ai_hobbyist_xlsx, read_ai_hobbyist_xlsx_for_filenames
 
 
 class V03Tests(unittest.TestCase):
@@ -106,6 +107,25 @@ class V03Tests(unittest.TestCase):
         self.assertIsNotNone(state)
         self.assertEqual(state["state"], "succeeded")
         self.assertEqual(state["result"], {"value": 42})
+
+    def test_repeated_remote_check_excludes_files_already_adopted_into_index(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            index = Path(td) / "index.csv"
+            with index.open("w", encoding="utf-8-sig", newline="") as handle:
+                writer = csv.DictWriter(handle, fieldnames=["filename"])
+                writer.writeheader()
+                writer.writerow({"filename": "new_a.wav"})
+            plan = {
+                "new_logical": [{"filename": "new_a.wav"}, {"filename": "new_b.wav"}],
+                "exact_existing": [],
+                "counts": {"new_logical": 2, "exact_existing": 0},
+            }
+
+            result = exclude_indexed_updates(plan, index)
+
+            self.assertEqual(result["counts"]["new_logical"], 1)
+            self.assertEqual(result["counts"]["exact_existing"], 1)
+            self.assertEqual(result["new_logical"][0]["filename"], "new_b.wav")
 
 
 if __name__ == "__main__":

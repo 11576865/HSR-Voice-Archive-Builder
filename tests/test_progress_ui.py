@@ -74,6 +74,21 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("'manifest.json':'完整的机器可读档案", html)
         self.assertIn("'build_report.json':'本次构建的统计", html)
 
+    def test_workflow_actions_and_incremental_progress_are_visible(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(':root{color-scheme:dark', html)
+        self.assertIn('class="success" id="newProjectBtn"', html)
+        self.assertIn('id="applyRemoteBtn" class="success"', html)
+        self.assertIn('id="sourceHealthDetails">', html)
+        self.assertIn("const active=all.find(j=>['queued','running'].includes(j.state));", html)
+        self.assertIn("job.kind==='remote-update-apply'", html)
+        self.assertIn("already_applied_count", (
+            Path(__file__).resolve().parents[1] / "app" / "remote_index.py"
+        ).read_text(encoding="utf-8"))
+
 
 class BuildProgressTests(unittest.TestCase):
     def test_build_jobs_report_progress_and_reject_concurrent_build(self) -> None:
