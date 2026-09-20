@@ -270,7 +270,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 
     <section class="card hidden" id="updateCard">
       <h2>增量更新</h2>
-      <p class="small muted">这里检查索引中是否出现了新的语音记录，不会修改已有 manifest，也不会下载音频。角色身份由快速扫描自动保存，不需要手动输入文件名或角色名。</p>
+      <p class="small muted">先检查远程索引中的新增记录。索引只提供文件名、哈希、角色与文本，不包含音频下载地址；检测后可选择本机已有的新版完整主音频包，验证无缺失后应用并重建成品。</p>
       <div>
         <h3>远程索引</h3>
         <label>自动识别的角色</label><input id="remoteCharacter" readonly>
@@ -289,6 +289,21 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="stat"><b id="uVariant">—</b><span>已有台词变量</span></div>
         <div class="stat"><b id="uNew">—</b><span>真正新增</span></div>
         <div class="stat"><b id="uRows">—</b><span>候选总数</span></div>
+      </div>
+      <details id="updateDetails" style="margin-top:14px">
+        <summary>查看新增语音明细</summary>
+        <div id="updateCandidateList" class="small muted" style="margin-top:10px">检查完成后在这里显示文件名与文本。</div>
+      </details>
+      <div style="margin-top:18px">
+        <h3>应用本机新版完整主音频包</h3>
+        <p class="small muted">新版包必须包含当前档案中的全部旧 WAV。程序会先验证完整性，再更新内部索引和主音频来源；验证失败不会改动项目。应用成功后自动重新构建 Timeline、ASS 与 FLAC。</p>
+        <label>新版主音频包</label>
+        <select id="updatePackage"><option value="">扫描本机文件后选择</option></select>
+        <div class="actions">
+          <button id="refreshUpdatePackagesBtn">刷新本机语音包</button>
+          <button id="applyUpdatePackageBtn" class="primary">验证、应用并构建</button>
+        </div>
+        <div id="updateApplyStatus" class="small muted">尚未选择新版主音频包。</div>
       </div>
     </section>
   </div>
@@ -535,6 +550,28 @@ function showPlan(plan){
   document.getElementById('uVariant').textContent=n(c.variant_of_existing);
   document.getElementById('uNew').textContent=n(c.new_logical);
   document.getElementById('uRows').textContent=n(plan.remote_rows??plan.candidate_unique_count);
+  const listRoot=document.getElementById('updateCandidateList');
+  if(listRoot){
+    listRoot.innerHTML='';
+    const rows=Array.isArray(plan.new_logical)?plan.new_logical:[];
+    if(!rows.length){
+      listRoot.textContent='没有检测到真正新增的语音。';
+    }else{
+      for(const raw of rows.slice(0,300)){
+        const item=typeof raw==='string'?{filename:raw,metadata:{}}:raw;
+        const row=document.createElement('div');
+        row.style.padding='8px 0';row.style.borderBottom='1px solid var(--line)';
+        const name=document.createElement('b');name.textContent=item.filename||'未命名文件';
+        const text=document.createElement('div');text.className='muted';
+        text.textContent=item.metadata?.english||'（索引没有文本）';
+        row.append(name,text);listRoot.appendChild(row);
+      }
+      if(rows.length>300){
+        const more=document.createElement('div');more.className='muted';more.style.padding='8px 0';
+        more.textContent='仅显示前 300 条；完整记录保存在 update_plan.json。';listRoot.appendChild(more);
+      }
+    }
+  }
   const result=document.getElementById('updateResult');
   if(result){
     if(plan.remote_rows!==undefined){
@@ -548,11 +585,11 @@ function showPlan(plan){
 }
 let quickPlanState=null;
 async function loadQuickCandidates(){
-  const primary=document.getElementById('quickEnglish'), target=document.getElementById('quickChinese'), reference=document.getElementById('quickReference');
+  const primary=document.getElementById('quickEnglish'), target=document.getElementById('quickChinese'), reference=document.getElementById('quickReference'), updatePackage=document.getElementById('updatePackage');
   if(!primary||!target||!reference)return;
   try{
     const j=await api('/api/quick/candidates'),items=j.candidates||[];
-    primary.innerHTML='';target.innerHTML='<option value="">不提供；缺失中文字幕交给翻译</option>';reference.innerHTML='<option value="">不提供参考包</option>';
+    primary.innerHTML='';target.innerHTML='<option value="">不提供；缺失中文字幕交给翻译</option>';reference.innerHTML='<option value="">不提供参考包</option>';if(updatePackage)updatePackage.innerHTML='<option value="">请选择新版完整主音频包</option>';
     if(!items.length){
       primary.innerHTML='<option value="">Download 中未发现 .7z / .zip</option>';
       document.getElementById('quickPlan').textContent='未发现语音包。若 Termux 尚未获得共享存储权限，请先运行 termux-setup-storage。';
@@ -560,7 +597,7 @@ async function loadQuickCandidates(){
     }
     for(const item of items){
       const label=item.name+' · '+bytes(item.size_bytes);
-      for(const select of [primary,target,reference]){
+      for(const select of [primary,target,reference,updatePackage].filter(Boolean)){
         const option=document.createElement('option');option.value=item.path;option.textContent=label;select.appendChild(option);
       }
     }
@@ -700,6 +737,13 @@ async function watchJob(id){
         clearInterval(pollTimer);
         if(x.job.kind==='remote-update-check'){
           showPlan(x.job.result);
+        }else if(x.job.kind==='update-apply'){
+          const result=x.job.result||{},status=document.getElementById('updateApplyStatus');
+          if(status)status.textContent='已安全采用 '+n(result.adopted_count)+' 条计划内新增语音；正在重新构建全部成品…';
+          setLog(result);
+          const build=await api('/api/project/build',{method:'POST'});
+          watchJob(build.job);
+          return;
         }else{
           setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
           const d=document.getElementById('diagnosticLog');if(d)d.open=false;
@@ -711,6 +755,10 @@ async function watchJob(id){
         if(x.job.kind==='remote-update-check'){
           const result=document.getElementById('updateResult');
           if(result)result.textContent='远程检查失败：'+shortError(x.job.error||x.job);
+        }
+        if(x.job.kind==='update-apply'){
+          const status=document.getElementById('updateApplyStatus');
+          if(status)status.textContent='应用失败，项目未切换到该包：'+shortError(x.job.error||x.job);
         }
         const d=document.getElementById('diagnosticLog');if(d)d.open=true;
         await refresh();
@@ -761,6 +809,16 @@ async function saveProject(){
 document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
+document.getElementById('refreshUpdatePackagesBtn').onclick=async()=>{await loadQuickCandidates()};
+document.getElementById('applyUpdatePackageBtn').onclick=async()=>{try{
+  const selected=document.getElementById('updatePackage').value;
+  if(!selected)throw new Error('请先选择新版完整主音频包');
+  if(!confirm('程序将验证新版包包含全部旧语音。验证通过后会更新项目并重新构建成品，是否继续？'))return;
+  const d=new FormData();d.set('replacement_path',selected);
+  const status=document.getElementById('updateApplyStatus');status.textContent='正在扫描新版包并验证旧语音完整性…';
+  const j=await api('/api/update/apply-local-package',{method:'POST',body:d});
+  watchJob(j.job);
+}catch(x){const status=document.getElementById('updateApplyStatus');if(status)status.textContent='无法开始：'+shortError(x);setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
