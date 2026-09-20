@@ -12,6 +12,7 @@ venv/
 
 # Build/output
 output/
+translation_benchmark/
 build/
 dist/
 *.log

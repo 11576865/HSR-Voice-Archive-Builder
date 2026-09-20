@@ -174,6 +174,41 @@ Useful options:
 --translation-batch-size 80
 ```
 
+## Translation quality benchmark
+
+To test the configured provider directly without treating official Chinese localization as a single gold answer, run:
+
+```bash
+python -m app.translation_benchmark --sample-size 50
+```
+
+If no recent project is available, pass an index explicitly:
+
+```bash
+python -m app.translation_benchmark \
+  --index "/path/to/index.csv" \
+  --sample-size 50 \
+  --model gpt-5.6-sol
+```
+
+The default 50-line benchmark is deterministic and deliberately spreads samples across terminology-heavy, long/complex, short/context-sensitive, expressive, tag/placeholder and general dialogue. It uses one 50-line API batch by default; batching is internal and requires no manual "continue" interaction.
+
+To inspect the selected sample without spending API balance:
+
+```bash
+python -m app.translation_benchmark --sample-size 50 --dry-run
+```
+
+Outputs are written to `translation_benchmark/`:
+
+```text
+benchmark_report.json
+benchmark_results.csv
+benchmark_sample.json
+```
+
+`benchmark_results.csv` contains blank review fields for semantic fidelity, omission/addition, terminology, Chinese fluency, character tone, severity and notes. Official Chinese text is intentionally not used as the scoring target.
+
 ## Chinese text precedence
 
 ```text

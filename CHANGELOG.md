@@ -2,6 +2,7 @@
 
 ## v0.7
 
+- Added a deterministic 50-line direct translation-quality benchmark with dry-run mode, integrity checks and review-ready CSV/JSON output; official Chinese localization is not treated as a gold answer.
 - Set `gpt-5.6-sol` as the default translation model after validating the configured V-API route; existing project files retain their saved model until changed.
 - Generalized translation from OpenAI-only to OpenAI-compatible Responses API providers.
 - Added built-in provider presets for official OpenAI and V-API (`https://api.gpt.ge/v1`), plus custom HTTPS/loopback endpoints.
