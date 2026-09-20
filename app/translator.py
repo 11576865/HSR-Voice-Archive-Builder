@@ -11,6 +11,8 @@ from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any
 
+from .credentials import load_translation_credentials, normalize_base_url
+
 DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_TIMEOUT_SECONDS = 120.0
@@ -75,7 +77,7 @@ def _extract_output_text(payload: dict[str, Any]) -> str:
             elif kind == "refusal":
                 refusal = str(part.get("refusal", "")).strip()
                 raise RuntimeError(
-                    "OpenAI response was refused"
+                    "Translation response was refused"
                     + (f": {refusal}" if refusal else "")
                 )
     text = "".join(pieces)
@@ -83,7 +85,8 @@ def _extract_output_text(payload: dict[str, Any]) -> str:
         status = payload.get("status")
         error = payload.get("error")
         raise RuntimeError(
-            f"OpenAI response contained no output text (status={status!r}, error={error!r})"
+            f"Translation API response contained no output text "
+            f"(status={status!r}, error={error!r})"
         )
     return text
 
@@ -95,16 +98,20 @@ class HTTPResponse:
 
 
 class OpenAIResponsesHTTPClient:
-    """Dependency-free OpenAI Responses API client.
+    """Dependency-free OpenAI-compatible Responses API client.
 
-    Uses only Python standard library modules so the same translation path works
-    on desktop and Termux/Android without jiter, pydantic-core, maturin, or Rust.
+    The transport intentionally uses only Python standard-library modules so it
+    works on desktop and Termux/Android without jiter, pydantic-core, maturin,
+    or Rust. The default endpoint is OpenAI, but an HTTPS OpenAI-compatible
+    Base URL can be supplied for providers such as V-API.
     """
 
     def __init__(
         self,
         api_key: str,
         *,
+        base_url: str = "https://api.openai.com/v1",
+        provider: str = "openai",
         timeout: float = DEFAULT_TIMEOUT_SECONDS,
         max_retries: int = DEFAULT_MAX_RETRIES,
         opener: Any | None = None,
@@ -112,8 +119,11 @@ class OpenAIResponsesHTTPClient:
         random_fn: Any = random.random,
     ) -> None:
         if not api_key.strip():
-            raise RuntimeError("OPENAI_API_KEY is not set")
+            raise RuntimeError("Translation API key is not configured")
         self.api_key = api_key.strip()
+        self.base_url = normalize_base_url(base_url)
+        self.provider = str(provider or "custom").strip() or "custom"
+        self.responses_url = self.base_url.rstrip("/") + "/responses"
         self.timeout = float(timeout)
         self.max_retries = max(0, int(max_retries))
         self.opener = opener or urllib.request.build_opener()
@@ -131,13 +141,13 @@ class OpenAIResponsesHTTPClient:
     def create(self, **payload: Any) -> HTTPResponse:
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
-            RESPONSES_URL,
+            self.responses_url,
             data=body,
             method="POST",
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "HSR-Voice-Archive-Builder/0.6",
+                "User-Agent": "HSR-Voice-Archive-Builder/0.7",
             },
         )
 
@@ -148,12 +158,13 @@ class OpenAIResponsesHTTPClient:
                     raw = response.read()
                 data = json.loads(raw.decode("utf-8"))
                 if not isinstance(data, dict):
-                    raise RuntimeError("OpenAI API returned a non-object JSON response")
+                    raise RuntimeError("Translation API returned a non-object JSON response")
                 status = data.get("status")
                 if status not in (None, "completed"):
                     raise RuntimeError(
-                        f"OpenAI response did not complete (status={status!r}, "
-                        f"error={data.get('error')!r}, incomplete={data.get('incomplete_details')!r})"
+                        f"Translation response did not complete (status={status!r}, "
+                        f"error={data.get('error')!r}, "
+                        f"incomplete={data.get('incomplete_details')!r})"
                     )
                 return HTTPResponse(output_text=_extract_output_text(data), raw=data)
 
@@ -161,26 +172,33 @@ class OpenAIResponsesHTTPClient:
                 error_body = exc.read()
                 retryable = exc.code in RETRYABLE_HTTP or 500 <= exc.code <= 599
                 message = _extract_api_error(error_body)
-                last_error = RuntimeError(f"OpenAI HTTP {exc.code}: {message}")
+                last_error = RuntimeError(
+                    f"Translation API HTTP {exc.code} via {self.provider}: {message}"
+                )
                 if not retryable or attempt >= self.max_retries:
                     raise last_error from exc
                 self.sleeper(self._delay(attempt, exc.headers))
 
             except (urllib.error.URLError, TimeoutError, ConnectionError) as exc:
-                last_error = RuntimeError(f"OpenAI network error: {exc}")
+                last_error = RuntimeError(
+                    f"Translation API network error via {self.provider}: {exc}"
+                )
                 if attempt >= self.max_retries:
                     raise last_error from exc
                 self.sleeper(self._delay(attempt))
 
             except json.JSONDecodeError as exc:
-                raise RuntimeError("OpenAI API returned invalid JSON") from exc
+                raise RuntimeError("Translation API returned invalid JSON") from exc
 
-        raise last_error or RuntimeError("OpenAI request failed")
+        raise last_error or RuntimeError("Translation API request failed")
 
 
 def make_client() -> OpenAIResponsesHTTPClient:
+    creds = load_translation_credentials()
     return OpenAIResponsesHTTPClient(
-        os.environ.get("OPENAI_API_KEY", ""),
+        creds.api_key,
+        base_url=creds.base_url,
+        provider=creds.provider,
         max_retries=DEFAULT_MAX_RETRIES,
         timeout=DEFAULT_TIMEOUT_SECONDS,
     )
@@ -193,11 +211,11 @@ def translate_records(
     *,
     client: Any | None = None,
 ) -> list[dict[str, str]]:
-    """Translate one batch through the OpenAI Responses REST API.
+    """Translate one batch through an OpenAI-compatible Responses REST API.
 
-    Each input must contain id and english. The API key is read only from
-    OPENAI_API_KEY. Structured Outputs are requested with JSON Schema and IDs
-    must round-trip exactly before any translation is accepted.
+    Each input must contain id and english. Structured Outputs are requested
+    with JSON Schema and IDs must round-trip exactly before any translation is
+    accepted.
     """
     if not records:
         return []
@@ -252,7 +270,7 @@ def translate_records(
         },
     )
     if not getattr(response, "output_text", ""):
-        raise RuntimeError("OpenAI response contained no output_text")
+        raise RuntimeError("Translation API response contained no output_text")
     data = json.loads(response.output_text)
     got = data["translations"]
     wanted_list = [r["id"] for r in records]
