@@ -21,6 +21,8 @@ from .quick import create_quick_project, discover_source_candidates, quick_scan
 from .project import (
     ProjectConfig,
     create_project,
+    delete_project,
+    forget_project,
     last_project_root,
     load_project,
     project_summary,
@@ -423,6 +425,43 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/project/close":
             _clear_active()
             self._json({"ok": True, "project": None})
+            return
+
+        if path == "/api/project/forget":
+            assert_no_active_build()
+            raw = data.get("project_path", "").strip()
+            if not raw:
+                raise ValueError("Project path is required")
+            root = Path(raw).expanduser().resolve()
+            result = forget_project(root)
+            global _active_root
+            if _active_root is not None and _active_root.resolve() == root:
+                _clear_active()
+            self._json({
+                "ok": True,
+                "result": result,
+                "project": None if _active_root is None else project_summary(_active_config()),
+                "recent_projects": recent_projects(12),
+            })
+            return
+
+        if path == "/api/project/delete":
+            assert_no_active_build()
+            raw = data.get("project_path", "").strip()
+            if not raw:
+                raise ValueError("Project path is required")
+            root = Path(raw).expanduser().resolve()
+            global _active_root
+            was_active = _active_root is not None and _active_root.resolve() == root
+            result = delete_project(root)
+            if was_active:
+                _clear_active()
+            self._json({
+                "ok": True,
+                "result": result,
+                "project": None if _active_root is None else project_summary(_active_config()),
+                "recent_projects": recent_projects(12),
+            })
             return
 
         if path == "/api/project/save":
