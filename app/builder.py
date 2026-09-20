@@ -330,6 +330,7 @@ def build_entries(
     reference_lab_root: Path | None = None,
     reference_language: str = "auto",
     source_text_language: str = "en",
+    target_language: str = "zh-CN",
 ) -> tuple[list[Entry], dict[str, object]]:
     full = read_csv_rows(full_index_csv)
     bi = read_csv_rows(bilingual_csv)
@@ -343,6 +344,8 @@ def build_entries(
     labs = collect_labs(chs_lab_root)
     reference_labs = collect_labs(reference_lab_root) if reference_lab_root else {}
     primary_labs = collect_labs(wav_root) if source_text_language != "en" else {}
+    if source_text_language == target_language == "zh-CN":
+        labs = {**primary_labs, **labs}
     wavs = collect_wavs(wav_root)
 
     sample_rate: int | None = None
