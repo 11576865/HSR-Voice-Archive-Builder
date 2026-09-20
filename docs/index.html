@@ -7,16 +7,34 @@
 <title>HSR Voice Archive Builder</title>
 <meta name="description" content="HSR Voice Archive Builder — browser control, local-first audio processing.">
 <style>
-:root{--bg:#f4f5f7;--card:#fff;--text:#17181a;--muted:#676d75;--line:#dfe2e6;--accent:#202328;--soft:#f8f9fa}
-@media(prefers-color-scheme:dark){:root{--bg:#111315;--card:#191c1f;--text:#f0f2f4;--muted:#a7adb4;--line:#30353a;--accent:#f0f2f4;--soft:#202428}}
-*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
-main{max-width:880px;margin:0 auto;padding:48px 22px 70px}.hero,.card{background:var(--card);border:1px solid var(--line);border-radius:14px}.hero{padding:30px}.card{padding:20px;margin-top:16px}
-h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}h2{font-size:18px;margin:0 0 12px}p{line-height:1.65}.muted{color:var(--muted)}
+:root{--bg:#f4f5f7;--card:#fff;--text:#17181a;--muted:#676d75;--line:#dfe2e6;--accent:#202328;--soft:#f8f9fa;--code:#111318;--codeText:#eef1f4}
+@media(prefers-color-scheme:dark){:root{--bg:#111315;--card:#191c1f;--text:#f0f2f4;--muted:#a7adb4;--line:#30353a;--accent:#f0f2f4;--soft:#202428;--code:#0d0f12;--codeText:#f4f6f8}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font-family:system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif}
+main{max-width:920px;margin:0 auto;padding:48px 22px 70px}
+.hero,.card{background:var(--card);border:1px solid var(--line);border-radius:14px}
+.hero{padding:30px}.card{padding:20px;margin-top:16px}
+h1{font-size:30px;margin:0 0 8px;letter-spacing:-.02em}
+h2{font-size:18px;margin:0 0 12px}
+h3{font-size:15px;margin:18px 0 8px}
+p{line-height:1.65}
+.muted{color:var(--muted)}
 .badge{display:inline-block;font-size:12px;border:1px solid var(--line);border-radius:999px;padding:4px 8px;margin-bottom:16px}
-.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}.button{display:inline-block;text-decoration:none;padding:11px 16px;border-radius:9px;border:1px solid var(--line);font-weight:700;color:var(--text);background:var(--card)}.button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
-code{background:var(--soft);border:1px solid var(--line);padding:2px 5px;border-radius:5px}.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.step{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:14px}.step b{display:block;margin-bottom:6px}
+.actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
+.button,button{display:inline-block;text-decoration:none;padding:11px 16px;border-radius:9px;border:1px solid var(--line);font-weight:700;color:var(--text);background:var(--card);cursor:pointer}
+.button.primary,button.primary{background:var(--accent);color:var(--bg);border-color:var(--accent)}
+code{background:var(--soft);border:1px solid var(--line);padding:2px 5px;border-radius:5px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.step{background:var(--soft);border:1px solid var(--line);border-radius:10px;padding:14px}
+.step b{display:block;margin-bottom:6px}
 .notice{border-left:3px solid var(--muted);padding-left:13px}
-@media(max-width:680px){main{padding-top:24px}.hero{padding:22px}.steps{grid-template-columns:1fr}h1{font-size:25px}}
+.command{margin-top:10px;border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.command-head{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--soft);border-bottom:1px solid var(--line)}
+.command-title{font-weight:700;font-size:13px}
+.copy{padding:7px 11px;border-radius:8px;font-size:12px}
+pre{margin:0;padding:16px;overflow:auto;background:var(--code);color:var(--codeText);font-size:13px;line-height:1.55;white-space:pre}
+.tip{font-size:13px;color:var(--muted);margin-top:8px}
+@media(max-width:680px){main{padding-top:24px}.hero{padding:22px}.steps{grid-template-columns:1fr}h1{font-size:25px}.command-head{align-items:flex-start}}
 </style>
 </head>
 <body>
@@ -24,7 +42,7 @@ code{background:var(--soft);border:1px solid var(--line);padding:2px 5px;border-
 <section class="hero">
   <div class="badge">GitHub Pages 入口 · 本地优先处理</div>
   <h1>HSR Voice Archive Builder</h1>
-  <p class="muted">把碎片化角色语音整理为连续 FLAC、中英时间轴、字幕与可复查 manifest。这个网页只提供稳定入口与说明；真正的解压、哈希、FFmpeg、翻译和文件生成仍由你的设备完成。</p>
+  <p class="muted">把碎片化角色语音整理为连续 FLAC、中英时间轴、字幕与可复查 manifest。这个网页长期存在；真正的解压、哈希、FFmpeg、更新检查和文件生成仍由你的设备完成。</p>
   <div class="actions">
     <a class="button primary" href="http://127.0.0.1:8765/">进入本机控制台</a>
     <a class="button" href="https://github.com/11576865/HSR-Voice-Archive-Builder">查看 GitHub 仓库</a>
@@ -32,11 +50,52 @@ code{background:var(--soft);border:1px solid var(--line);padding:2px 5px;border-
 </section>
 
 <section class="card">
+  <h2>Android / Termux：一键复制命令</h2>
+  <p class="muted">网页不能直接替你执行 Termux 命令，但可以把完整命令一次复制到剪贴板。打开 Termux 后长按粘贴并回车即可。</p>
+
+  <h3>日常启动</h3>
+  <div class="command">
+    <div class="command-head">
+      <span class="command-title">已经安装过项目时</span>
+      <button class="copy" data-copy="cmd-start">一键复制</button>
+    </div>
+    <pre id="cmd-start">cd ~/HSR-Voice-Archive-Builder
+bash run_termux.sh</pre>
+  </div>
+  <p class="tip">正常启动后，保持 Termux 运行，再点击页面顶部“进入本机控制台”。</p>
+
+  <h3>更新后启动</h3>
+  <div class="command">
+    <div class="command-head">
+      <span class="command-title">先拉取最新 main，再启动</span>
+      <button class="copy" data-copy="cmd-update">一键复制</button>
+    </div>
+    <pre id="cmd-update">cd ~/HSR-Voice-Archive-Builder
+git switch main
+git pull --ff-only
+bash run_termux.sh</pre>
+  </div>
+
+  <h3>第一次安装</h3>
+  <div class="command">
+    <div class="command-head">
+      <span class="command-title">仅首次使用</span>
+      <button class="copy" data-copy="cmd-install">一键复制</button>
+    </div>
+    <pre id="cmd-install">pkg install -y git
+cd ~
+git clone https://github.com/11576865/HSR-Voice-Archive-Builder.git
+cd HSR-Voice-Archive-Builder
+bash run_termux.sh</pre>
+  </div>
+</section>
+
+<section class="card">
   <h2>怎么用</h2>
   <div class="steps">
-    <div class="step"><b>1. 启动本地引擎</b>Windows 运行 <code>run_windows.bat</code>；Android / Termux 运行 <code>./run_termux.sh</code>。</div>
-    <div class="step"><b>2. 打开固定入口</b>以后可以直接收藏这个 GitHub Pages 页面。</div>
-    <div class="step"><b>3. 进入控制台</b>点击上面的“进入本机控制台”，工作页面运行在 <code>127.0.0.1:8765</code>。</div>
+    <div class="step"><b>1. 打开 Termux</b>在上面复制“日常启动”或“更新后启动”的命令并粘贴执行。</div>
+    <div class="step"><b>2. 等本地引擎启动</b>终端应显示 <code>127.0.0.1:8765</code>，不要关闭 Termux。</div>
+    <div class="step"><b>3. 进入控制台</b>回到这个页面，点击“进入本机控制台”。</div>
   </div>
 </section>
 
@@ -47,14 +106,49 @@ code{background:var(--soft);border:1px solid var(--line);padding:2px 5px;border-
 </section>
 
 <section class="card notice">
-  <h2>为什么这里不直接“检测本地后端”</h2>
-  <p>公网 HTTPS 页面主动请求 <code>localhost</code> / 局域网 HTTP 服务，会受到浏览器的本地网络访问权限、CORS 和地址空间策略影响。不同浏览器与版本的行为并不稳定。因此这个入口只做明确的顶层导航，不把“能否 fetch 到 localhost”当成程序运行条件。</p>
+  <h2>为什么网页不能直接启动 Termux</h2>
+  <p>普通网页没有执行 Android shell 命令的权限。这里采用“静态网页负责复制命令，本地 Termux 负责执行”的方式，避免给网页额外系统权限，也不依赖后台服务器。</p>
 </section>
 
 <section class="card">
   <h2>当前处理原则</h2>
-  <p class="muted">Browser UI, local-first processing. 原始 WAV、FLAC、7z、LAB 与最终构建文件不需要上传到 GitHub Pages。公网页面可以消失，已有本地项目和 <code>http://127.0.0.1:8765/</code> 仍然能工作。</p>
+  <p class="muted">Browser UI, local-first processing. 原始 WAV、FLAC、7z、LAB 与最终构建文件不需要上传到 GitHub Pages。GitHub Pages 只负责固定入口、说明和复制命令。</p>
 </section>
 </main>
+
+<script>
+async function copyText(text){
+  if(navigator.clipboard && window.isSecureContext){
+    await navigator.clipboard.writeText(text);
+    return;
+  }
+  const ta=document.createElement("textarea");
+  ta.value=text;
+  ta.setAttribute("readonly","");
+  ta.style.position="fixed";
+  ta.style.opacity="0";
+  document.body.appendChild(ta);
+  ta.select();
+  const ok=document.execCommand("copy");
+  ta.remove();
+  if(!ok) throw new Error("copy failed");
+}
+
+document.querySelectorAll("[data-copy]").forEach(btn=>{
+  btn.addEventListener("click",async()=>{
+    const id=btn.getAttribute("data-copy");
+    const el=document.getElementById(id);
+    if(!el) return;
+    const old=btn.textContent;
+    try{
+      await copyText(el.textContent.trim());
+      btn.textContent="已复制";
+    }catch(e){
+      btn.textContent="复制失败";
+    }
+    setTimeout(()=>btn.textContent=old,1800);
+  });
+});
+</script>
 </body>
 </html>
