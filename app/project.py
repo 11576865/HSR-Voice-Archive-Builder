@@ -182,10 +182,15 @@ def load_project(root_or_file: Path) -> ProjectConfig:
 
 def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
     allowed = set(ProjectConfig.__dataclass_fields__)
+    old_source_paths = {
+        "wav_source": str(resolve_project_path(config, config.wav_source) or ""),
+        "chs_source": str(resolve_project_path(config, config.chs_source) or ""),
+        "reference_source": str(resolve_project_path(config, config.reference_source) or ""),
+    }
     old_reference_identity = (
-        str(resolve_project_path(config, config.reference_source) or ""),
+        old_source_paths["reference_source"],
         str(resolve_project_path(config, config.index_csv) or ""),
-        str(resolve_project_path(config, config.wav_source) or ""),
+        old_source_paths["wav_source"],
         str(config.reference_language or "auto"),
     )
     for key, value in changes.items():
@@ -197,6 +202,19 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
     root = normalize_root(Path(config.root))
     for key in ("index_csv", "wav_source", "output_dir", "state_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
+    fingerprint_fields = {
+        "wav_source": "wav_source_fingerprint",
+        "chs_source": "chs_source_fingerprint",
+        "reference_source": "reference_source_fingerprint",
+    }
+    for source_field, fingerprint_field in fingerprint_fields.items():
+        current_path = str(resolve_project_path(config, getattr(config, source_field)) or "")
+        if (
+            current_path != old_source_paths[source_field]
+            and fingerprint_field not in changes
+        ):
+            setattr(config, fingerprint_field, "")
+
     new_reference_identity = (
         str(resolve_project_path(config, config.reference_source) or ""),
         str(resolve_project_path(config, config.index_csv) or ""),
