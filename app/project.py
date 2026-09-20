@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import tempfile
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
@@ -26,6 +27,7 @@ class ProjectConfig:
     glossary_path: str = ""
     reference_source: str = ""
     reference_text_embedded: bool = False
+    managed_project_root: bool = False
     audio_language: str = "auto"
     source_text_language: str = "en"
     target_language: str = "zh-CN"
@@ -114,6 +116,7 @@ def create_project(
     glossary_path: str = "",
     reference_source: str = "",
     reference_text_embedded: bool = False,
+    managed_project_root: bool = False,
     audio_language: str = "auto",
     source_text_language: str = "en",
     target_language: str = "zh-CN",
@@ -139,6 +142,7 @@ def create_project(
         glossary_path=_portable_path(root, glossary_path),
         reference_source=_portable_path(root, reference_source),
         reference_text_embedded=bool(reference_text_embedded),
+        managed_project_root=bool(managed_project_root),
         audio_language=str(audio_language or "auto").strip() or "auto",
         source_text_language=str(source_text_language or "en").strip() or "en",
         target_language=str(target_language or "zh-CN").strip() or "zh-CN",
@@ -214,22 +218,141 @@ def remember_project(root: Path) -> None:
         for item in state.get("recent_projects", [])
         if isinstance(item, str) and item.strip()
     ]
+    hidden = [
+        str(Path(item).expanduser())
+        for item in state.get("hidden_projects", [])
+        if isinstance(item, str) and item.strip()
+    ]
     value = str(root)
     recent = [item for item in recent if item != value]
     recent.insert(0, value)
+    hidden = [item for item in hidden if item != value]
     atomic_write_json(
         STATE_FILE,
         {
             "last_project": value,
             "recent_projects": recent[:20],
+            "hidden_projects": hidden[:100],
             "updated_at": utc_now(),
         },
     )
 
 
+def forget_project(root: Path) -> dict[str, Any]:
+    """Remove a project from the switcher without deleting project files."""
+    root = normalize_root(root)
+    value = str(root)
+    state = _read_state()
+    recent = [
+        str(Path(item).expanduser())
+        for item in state.get("recent_projects", [])
+        if isinstance(item, str) and item.strip() and str(Path(item).expanduser()) != value
+    ]
+    hidden = [
+        str(Path(item).expanduser())
+        for item in state.get("hidden_projects", [])
+        if isinstance(item, str) and item.strip()
+    ]
+    hidden = [item for item in hidden if item != value]
+    hidden.insert(0, value)
+    last = str(state.get("last_project", "") or "").strip()
+    if last == value:
+        last = recent[0] if recent else ""
+    atomic_write_json(
+        STATE_FILE,
+        {
+            "last_project": last,
+            "recent_projects": recent[:20],
+            "hidden_projects": hidden[:100],
+            "updated_at": utc_now(),
+        },
+    )
+    return {"root": value, "forgotten": True}
+
+
+def _is_within(path: Path, root: Path) -> bool:
+    try:
+        path.resolve().relative_to(root.resolve())
+        return True
+    except ValueError:
+        return False
+
+
+def delete_project(root: Path) -> dict[str, Any]:
+    """Delete project-owned state while protecting external/user source files.
+
+    Quick Mode roots are explicitly marked as managed and may be removed in full.
+    Manual roots keep arbitrary user files; only the project marker, generated
+    directory, and an in-root output directory are removed.
+    """
+    root = normalize_root(root)
+    marker = root / PROJECT_FILENAME
+    if not marker.is_file():
+        raise FileNotFoundError(marker)
+    if root == Path.home().resolve() or root.parent == root:
+        raise ValueError(f"Refusing to delete unsafe project root: {root}")
+
+    config = load_project(root)
+    removed: list[str] = []
+    retained: list[str] = []
+
+    # Remove it from selection state before filesystem mutation. Hidden state
+    # also prevents sibling discovery from re-adding a partially deleted project.
+    forget_project(root)
+
+    if config.managed_project_root:
+        shutil.rmtree(root)
+        removed.append(str(root))
+        return {
+            "root": str(root),
+            "deleted": True,
+            "managed_root": True,
+            "removed": removed,
+            "retained": retained,
+        }
+
+    output = resolve_project_path(config, config.output_dir)
+    generated = root / ".generated"
+    if output is not None and output != root and _is_within(output, root) and output.exists():
+        if output.is_dir():
+            shutil.rmtree(output)
+        else:
+            output.unlink()
+        removed.append(str(output))
+    if generated.is_dir() and _is_within(generated, root):
+        shutil.rmtree(generated)
+        removed.append(str(generated))
+    if marker.is_file():
+        marker.unlink()
+        removed.append(str(marker))
+
+    try:
+        leftovers = list(root.iterdir())
+    except OSError:
+        leftovers = []
+    if not leftovers:
+        root.rmdir()
+        removed.append(str(root))
+    else:
+        retained = [str(p) for p in leftovers[:50]]
+
+    return {
+        "root": str(root),
+        "deleted": True,
+        "managed_root": False,
+        "removed": removed,
+        "retained": retained,
+    }
+
+
 def recent_projects(limit: int = 12) -> list[dict[str, str]]:
     state = _read_state()
     roots: list[str] = []
+    hidden = {
+        str(Path(item).expanduser())
+        for item in state.get("hidden_projects", [])
+        if isinstance(item, str) and item.strip()
+    }
     last = str(state.get("last_project", "") or "").strip()
     if last:
         roots.append(last)
@@ -254,12 +377,13 @@ def recent_projects(limit: int = 12) -> list[dict[str, str]]:
         try:
             for marker in base.glob(f"*/{PROJECT_FILENAME}"):
                 value = str(marker.parent.resolve())
-                if value not in roots:
+                if value not in roots and value not in hidden:
                     roots.append(value)
         except (OSError, PermissionError):
             continue
 
     result: list[dict[str, str]] = []
+    roots = [raw for raw in roots if raw not in hidden]
     for raw in roots[: max(1, int(limit)) * 2]:
         root = Path(raw).expanduser()
         path = root / PROJECT_FILENAME
