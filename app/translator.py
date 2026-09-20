@@ -264,6 +264,8 @@ def make_client() -> OpenAIResponsesHTTPClient:
 def _translation_prompt(
     records: list[dict[str, str]],
     glossary: dict[str, str] | None,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
 ) -> str:
     glossary_text = ""
     if glossary:
@@ -271,15 +273,18 @@ def _translation_prompt(
             f"- {src} => {dst}" for src, dst in glossary.items()
         )
     return (
-        "Translate the target field 'english' in each Honkai: Star Rail record into Simplified Chinese. "
-        "Preserve meaning, character tone, punctuation intent, and one-to-one IDs. Do not add information. "
-        "Records may include context_before/context_after; use them only to disambiguate the target and do not "
-        "translate them as separate outputs. Records may also include previous_chinese and qa_issues; when present, "
-        "repair the previous translation specifically for those issues. Preserve HTML-like tags and the structural "
+        f"Translate the target field 'english' in each Honkai: Star Rail record from {source_language} "
+        f"into {target_language}. Preserve meaning, character tone, punctuation intent, and one-to-one IDs. "
+        "Do not add information. Records may include context_before/context_after; use them only to disambiguate "
+        "the target and do not translate them as separate outputs. A record may also include reference_text and "
+        "reference_language from a second official voice/text package; treat it only as semantic reference and "
+        "never as a second output. Records may include previous_chinese and qa_issues; when present, repair the "
+        "previous target translation specifically for those issues. Preserve HTML-like tags and the structural "
         "form of brace control tokens such as {NICKNAME}, {M#...}{F#...}, and RUBY markers. Text payloads inside "
         "control tokens may be translated when they are user-visible, but the token type/structure must remain. "
-        "Use the supplied terminology exactly when its English source term occurs in the target. "
-        "Return every input ID exactly once and output only the requested Chinese target translation."
+        "Use the supplied terminology exactly when its source term occurs in the target. "
+        "Return every input ID exactly once. The JSON field remains named 'chinese' for backward compatibility, "
+        f"but its value must be the requested {target_language} translation."
         + glossary_text
         + "\n\nInput JSON:\n"
         + json.dumps(records, ensure_ascii=False)
@@ -291,6 +296,8 @@ def translate_records(
     model: str = DEFAULT_MODEL,
     glossary: dict[str, str] | None = None,
     *,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
     client: Any | None = None,
     usage_callback: Callable[[dict[str, int] | None], None] | None = None,
 ) -> list[dict[str, str]]:
@@ -303,7 +310,12 @@ def translate_records(
         model=model,
         reasoning={"effort": "low"},
         store=False,
-        input=_translation_prompt(records, glossary),
+        input=_translation_prompt(
+            records,
+            glossary,
+            source_language=source_language,
+            target_language=target_language,
+        ),
         text={
             "format": {
                 "type": "json_schema",
@@ -344,6 +356,8 @@ def verify_semantic_records(
     records: list[dict[str, Any]],
     model: str = DEFAULT_MODEL,
     *,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
     client: Any | None = None,
     usage_callback: Callable[[dict[str, int] | None], None] | None = None,
 ) -> list[dict[str, Any]]:
@@ -352,7 +366,7 @@ def verify_semantic_records(
         return []
     client = client or make_client()
     prompt = (
-        "Audit each Simplified Chinese translation against its English source. "
+        f"Audit each {target_language} translation against its {source_language} source. "
         "This is a narrow semantic verification pass, not a style review. "
         "Use risk_tags as attention hints, but also flag a major omission or addition if it changes meaning. "
         "Check negation polarity, quantities/comparatives, grammatical person/reference, and conditional logic. "
