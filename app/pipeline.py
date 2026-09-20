@@ -167,6 +167,22 @@ def _translation_counts(total: int, reused: int, api_translated: int) -> dict[st
     }
 
 
+def _context_related(current: Entry, neighbor: Entry) -> bool:
+    # Context must have explicit structural evidence. Empty labels never make
+    # two rows related merely because they are physically adjacent.
+    same_group = bool(
+        current.group
+        and neighbor.group
+        and current.group == neighbor.group
+    )
+    same_detail = bool(
+        current.source_detail
+        and neighbor.source_detail
+        and current.source_detail == neighbor.source_detail
+    )
+    return same_group or same_detail
+
+
 def _target_records(entries) -> list[dict[str, str]]:
     records: list[dict[str, str]] = []
     for i, entry in enumerate(entries):
@@ -176,9 +192,9 @@ def _target_records(entries) -> list[dict[str, str]]:
             "id": entry.filename,
             "english": entry.english,
         }
-        if i > 0:
+        if i > 0 and _context_related(entry, entries[i - 1]):
             row["context_before"] = entries[i - 1].english
-        if i + 1 < len(entries):
+        if i + 1 < len(entries) and _context_related(entry, entries[i + 1]):
             row["context_after"] = entries[i + 1].english
         records.append(row)
     return records
