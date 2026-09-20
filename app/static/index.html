@@ -58,6 +58,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="actions">
           <button type="button" class="primary" id="quickBuildBtn" disabled>开始构建</button>
         </div>
+        <div id="quickLaunchStatus" class="small muted" style="margin-top:8px">点击“开始构建”后会立即锁定按钮并显示启动状态。</div>
         <div class="divider"></div>
         <details>
           <summary>高级 / 手动项目</summary>
@@ -95,6 +96,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <button type="button" class="primary" id="buildBtn">开始构建</button>
           <button type="button" id="openOutputBtn">打开输出目录</button>
         </div>
+        <div id="buildInlineStatus" class="small muted" style="margin-top:8px">准备就绪。</div>
 
         <div class="divider"></div>
         <details id="advancedProjectSettings">
@@ -324,6 +326,23 @@ function setBuildButtonsDisabled(disabled){
   if(a)a.disabled=!!disabled;
   if(b)b.disabled=!!disabled||!quickPlanState?.ready;
 }
+function setBuildButtonText(text){
+  const a=document.getElementById('buildBtn'),b=document.getElementById('quickBuildBtn');
+  if(a)a.textContent=text;
+  if(b)b.textContent=text;
+}
+function setInlineBuildStatus(message,bad=false){
+  for(const id of ['buildInlineStatus','quickLaunchStatus']){
+    const el=document.getElementById(id);if(!el)continue;
+    el.textContent=message;
+    el.className='small '+(bad?'status-bad':'muted');
+  }
+}
+function beginBuildLaunch(){
+  setBuildButtonsDisabled(true);
+  setBuildButtonText('正在启动…');
+  setInlineBuildStatus('已收到操作，正在创建构建任务，请勿重复点击。');
+}
 function shortError(raw){
   const first=String(raw||'').split('\n').find(x=>x.trim())||'未知错误';
   if(first.includes('HTTP 401'))return '翻译 API 鉴权失败：请检查 API Key。';
@@ -346,6 +365,8 @@ function renderJobs(jobs){
     textBox.textContent=active.message||'正在处理';
     failure.classList.add('hidden');
     setBuildButtonsDisabled(true);
+    setBuildButtonText('构建中…');
+    setInlineBuildStatus('构建已经启动：'+(active.message||'正在处理'));
   }else{
     const failed=list.find(j=>j.state==='failed'&&['build','quick-build'].includes(j.kind));
     const succeeded=list.find(j=>j.state==='succeeded'&&['build','quick-build'].includes(j.kind));
@@ -356,18 +377,24 @@ function renderJobs(jobs){
       textBox.textContent='请查看下方失败原因；修复后重新构建即可。';
       failure.textContent='失败原因：'+shortError(failed.error);
       failure.classList.remove('hidden');
+      setBuildButtonText('重新构建');
+      setInlineBuildStatus('最近一次构建失败；修复原因后可重新构建。',true);
     }else if(succeeded){
       state.textContent='最近一次构建已完成。';
       state.className='notice ok';
       bar.style.width='100%';
       textBox.textContent='构建完成，可以查看“构建结果”或打开输出目录。';
       failure.classList.add('hidden');
+      setBuildButtonText('重新构建');
+      setInlineBuildStatus('构建已完成。');
     }else{
       state.textContent='当前没有运行中的构建。';
       state.className='notice';
       bar.style.width='0%';
       textBox.textContent='等待任务。';
       failure.classList.add('hidden');
+      setBuildButtonText('开始构建');
+      setInlineBuildStatus('准备就绪。');
     }
     setBuildButtonsDisabled(false);
   }
@@ -408,15 +435,15 @@ async function watchJob(id){
 document.getElementById('quickRefreshBtn').onclick=async()=>{quickPlanState=null;document.getElementById('quickBuildBtn').disabled=true;document.getElementById('quickPlan').textContent='正在扫描本机文件…';await loadQuickCandidates()};
 document.getElementById('quickScanBtn').onclick=async()=>{try{await quickScan()}catch(x){setLog(String(x));document.getElementById('quickBuildBtn').disabled=true}};
 document.getElementById('quickBuildBtn').onclick=async()=>{try{
-  setBuildButtonsDisabled(true);
+  beginBuildLaunch();
   if(!quickPlanState?.ready)await quickScan();
   const d=new FormData();d.set('english_source',document.getElementById('quickEnglish').value);
   const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
   d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
   d.set('translation_budget_usd',document.getElementById('quickUsdBudget').value||'0');
   const j=await api('/api/quick/build',{method:'POST',body:d});
-  fillProject(j.project);setLog('快速构建任务已启动：'+j.job);watchJob(j.job);
-}catch(x){setLog(String(x));setBuildButtonsDisabled(false)}};
+  fillProject(j.project);setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('快速构建任务已启动：'+j.job);watchJob(j.job);
+}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('openForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/open',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j)}catch(x){setLog(String(x))}};
 document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/create',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j)}catch(x){setLog(String(x))}};
 async function saveProject(){
@@ -427,7 +454,7 @@ async function saveProject(){
   return j.project;
 }
 document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
-document.getElementById('buildBtn').onclick=async()=>{try{setBuildButtonsDisabled(true);await saveProject();const j=await api('/api/project/build',{method:'POST'});setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonsDisabled(false)}};
+document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();d.set('character',document.getElementById('remoteCharacter').value);const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
 document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
