@@ -433,12 +433,6 @@ def quick_scan(
             "Duplicate WAV basenames were found in the primary source: "
             + ", ".join(english["duplicate_wav_names"][:5])
         )
-    if source_text_language != "en" and int(english.get("wav_lab_pairs", 0)) < int(english.get("wav_count", 0)):
-        blockers.append(
-            f"Source text language is {source_text_language}, but the primary package has "
-            f"LAB text for only {english.get('wav_lab_pairs', 0)} / {english.get('wav_count', 0)} WAV files"
-        )
-
     wav_names = {Path(name).name for name in english["wav_names"]}
     indexes = _index_candidates(Path(english["source"]), wav_names)
     selected_index = indexes[0] if indexes else None
@@ -685,11 +679,11 @@ def create_quick_project(
     assert selected_index is not None
     current_inventory = source_inventory(english_source)
     if current_inventory["fingerprint"] != plan["english"]["fingerprint"]:
-        raise RuntimeError("English source changed after Quick Scan; scan again before building")
+        raise RuntimeError("Primary audio source changed after Quick Scan; scan again before building")
     if chs_source is not None:
         current_chs = source_inventory(chs_source)
         if current_chs["fingerprint"] != plan["chinese"]["fingerprint"]:
-            raise RuntimeError("Chinese source changed after Quick Scan; scan again before building")
+            raise RuntimeError("Target-text source changed after Quick Scan; scan again before building")
     wanted = set(current_inventory["wav_names"])
     if selected_index.get("source") == "remote":
         remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
