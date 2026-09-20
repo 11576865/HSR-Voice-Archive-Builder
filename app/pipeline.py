@@ -982,6 +982,7 @@ def build_project_v02(
     source_text_language: str = "en",
     target_language: str = "zh-CN",
     reference_language: str = "auto",
+    reference_text_embedded: bool = False,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1032,6 +1033,7 @@ def build_project_v02(
         "source_text_language": source_text_language,
         "target_language": target_language,
         "reference_language": reference_language,
+        "reference_text_embedded": bool(reference_text_embedded),
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
@@ -1080,7 +1082,7 @@ def build_project_v02(
             )
             reference_root = (
                 ensure_dir_or_extract(reference_source, work, "reference")
-                if reference_source
+                if reference_source and not reference_text_embedded
                 else None
             )
             wav_root = ensure_dir_or_extract(wav_source, work, "wavs")
@@ -1188,6 +1190,7 @@ def build_project_v02(
         report["source_text_language"] = source_text_language
         report["target_language"] = target_language
         report["reference_language"] = reference_language
+        report["reference_text_embedded"] = bool(reference_text_embedded)
 
         progress("manifest", "4/6 正在生成字幕与清单", 4)
 
