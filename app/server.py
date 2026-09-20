@@ -182,6 +182,8 @@ def api_quick_build(
     chs_source: str = Form(""),
     project_root: str = Form(""),
     project_name: str = Form(""),
+    translation_token_budget: int = Form(0),
+    translation_budget_usd: float = Form(0.0),
 ):
     try:
         config, plan = create_quick_project(
@@ -189,6 +191,11 @@ def api_quick_build(
             chs_source=Path(chs_source) if chs_source.strip() else None,
             root=Path(project_root) if project_root.strip() else None,
             name=project_name,
+        )
+        update_project(
+            config,
+            translation_token_budget=max(0, translation_token_budget),
+            translation_budget_usd=max(0.0, translation_budget_usd),
         )
         _set_active(config)
         paths = _project_paths(config)
