@@ -66,9 +66,10 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <div>
             <label>翻译源文本</label>
             <select id="quickSourceTextLanguage">
-              <option value="en">English（自动 EN 索引）</option>
-              <option value="zh-CN">简体中文（读取主包 LAB）</option><option value="ja">日本語（读取主包 LAB）</option>
-              <option value="ko">한국어（读取主包 LAB）</option><option value="ru">Русский（读取主包 LAB）</option>
+              <option value="en">English（EN 索引）</option>
+              <option value="zh-CN">简体中文（CHS 索引）</option>
+              <option value="ja">日本語（JP 索引）</option>
+              <option value="ko">한국어（KR 索引）</option>
             </select>
           </div>
         </div>
@@ -81,7 +82,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
               <option value="ko">한국어</option><option value="ru">Русский</option>
             </select>
           </div>
-          <div><p class="small muted" style="margin-top:30px">若源文本不是 English，主音频包必须含与 WAV 同名的 LAB；否则预检会阻止构建。</p></div>
+          <div><p class="small muted" style="margin-top:30px">源文本与主音频相互独立；程序按所选语言读取 EN / CHS / JP / KR 远程索引，目标语言再由 AI 翻译生成。</p></div>
         </div>
         <div class="row">
           <div>
@@ -98,7 +99,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
             </select>
           </div>
         </div>
-        <p class="small muted">Quick Mode 默认用 EN 索引作为源文本；也可以改为从主音频包的同名 LAB 读取中/日/韩/俄源文本。第二语言包只作为额外逐条语义参考。</p>
+        <p class="small muted">Quick Mode 默认使用 EN 索引，也可直接切换 CHS / JP / KR。第二语言包只作为额外逐条语义参考，不会混入连续 FLAC。</p>
         <div class="actions">
           <button type="button" id="quickRefreshBtn">刷新本机文件</button>
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
@@ -184,7 +185,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
             <div><label>参考文本语言</label><select name="reference_language"><option value="auto">自动 / 未指定</option><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="ru">Русский</option></select></div>
           </div>
           <label>源文本语言</label><select name="source_text_language"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="ru">Русский</option></select>
-          <p class="small muted">Quick Mode 的自动 EN 索引应保持 English；手动索引如果本身是其他语言，再改这里。</p>
+          <p class="small muted">Quick Mode 会按 EN / CHS / JP / KR 自动选择索引；手动项目则按你的索引实际语言设置。</p>
           <label>术语覆盖层 CSV / JSON（可选）</label>
           <input name="glossary_path" placeholder="glossary.csv / glossary.json">
           <p class="small muted">这是用户自行提供的术语表，不会凭空生成。没有自定义术语时留空即可。</p>
@@ -203,7 +204,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           </div>
           <div class="row">
             <div><label>远程索引角色过滤词</label><input name="remote_character" placeholder="Evanescia"></div>
-            <div><label>远程 EN 索引 URL</label><input name="remote_index_url"></div>
+            <div><label>远程源文本索引 URL</label><input name="remote_index_url"></div>
           </div>
           <div class="actions"><button type="submit">保存高级设置</button></div>
         </details>
@@ -234,7 +235,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 
     <section class="card hidden" id="updateCard">
       <h2>增量更新</h2>
-      <p class="small muted">先比较身份，不改已有 manifest。远程检查目前读取 AI-Hobbyist EN.xlsx；音频下载仍作为后续独立步骤处理。</p>
+      <p class="small muted">先比较身份，不改已有 manifest。远程检查使用当前项目保存的源文本索引 URL；音频下载仍作为后续独立步骤处理。</p>
       <div class="row">
         <div>
           <h3>本地候选</h3>
@@ -400,7 +401,7 @@ function renderQuickPlan(plan){
   const lines=[
     '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
-    '顺序索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
+    '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '目标语言官方 LAB：'+(z?n(z.lab_count):'未提供'),
     '参考 LAB：'+(plan.reference?n(ref.lab_count):'未提供'),
     'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置'),
