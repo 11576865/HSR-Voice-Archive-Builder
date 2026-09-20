@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-F**.
+Current development version: **v0.9-G**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-F add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-G add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -75,7 +75,8 @@ v0.4-v0.9-F add failure-driven hardening based on upstream documentation, issue 
 - v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes;
 - v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts;
 - v0.9-E adds recent-project switching, project-scoped task history, explicit language roles, multilingual EN/CHS/JP/KR Quick indexes, and optional second-package reference text;
-- v0.9-F separates internal resumable state from user-facing output files through a project-local `.state` directory.
+- v0.9-F separates internal resumable state from user-facing output files through a project-local `.state` directory;
+- v0.9-G reports project-source health and can safely relink moved voice packages after content-fingerprint verification.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -290,6 +291,21 @@ output/semantic_qa.json
 ```
 
 If deterministic or semantic QA still has a hard failure after its one repair pass, the build stops before accepting the bad translation. Earlier paid batches and successfully verified semantic rows remain checkpointed, so a later restart does not force the whole character through the API again.
+
+## Moving source packages without rebuilding the project
+
+A project may outlive the original filesystem location of its voice packages. The dashboard therefore reports source health separately from build completion:
+
+- **primary**: the package whose WAV files feed the continuous FLAC;
+- **target**: the optional official target-language LAB package;
+- **reference**: the optional second-language reference package;
+- **index / bilingual / glossary**: supporting text/configuration inputs.
+
+For Quick Mode projects, the primary/target/reference package fingerprints are recorded when the project is created. If one of those packages is moved later, **Verify and relink** scans the candidate package and compares its content fingerprint with the stored identity. The project path is updated only on an exact match. A file with the same name but different bytes is rejected.
+
+Older Quick Mode projects can use the source fingerprints already stored in `.generated/quick_scan.json`. Manual projects created before this metadata existed may not have a verifiable identity; in that case automatic relink is intentionally refused and the Advanced source field remains the explicit content-replacement path.
+
+A verified relocation is different from replacing a package with new content. Manual source edits clear the old stored fingerprint so stale identity metadata cannot later approve the wrong package.
 
 ## Project state vs output
 

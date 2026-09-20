@@ -24,7 +24,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-F</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-G</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -171,6 +171,32 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           <button type="button" id="openOutputBtn">打开输出目录</button>
         </div>
         <div id="buildInlineStatus" class="small muted" style="margin-top:8px">准备就绪。</div>
+
+        <div class="divider"></div>
+        <details id="sourceHealthDetails" open>
+          <summary>数据源状态与重新定位</summary>
+          <p class="small muted">如果你只是把原始语音包移动到了别的位置，不需要重建项目。这里会先校验内容指纹；只有确认是同一个包才会自动重新绑定。</p>
+          <div id="sourceHealth" class="small muted">正在读取数据源状态…</div>
+          <div class="row" style="margin-top:12px">
+            <div>
+              <label>要重新定位的数据源</label>
+              <select id="relinkRole">
+                <option value="primary">主音频包</option>
+                <option value="target">目标语言官方文本包</option>
+                <option value="reference">参考语音 / 文本包</option>
+              </select>
+            </div>
+            <div>
+              <label>本机候选包</label>
+              <select id="relinkCandidate"><option value="">点击“扫描本机语音包”</option></select>
+            </div>
+          </div>
+          <div class="actions">
+            <button type="button" id="refreshRelinkCandidatesBtn">扫描本机语音包</button>
+            <button type="button" class="primary" id="relinkSourceBtn">验证并重新绑定</button>
+          </div>
+          <div id="relinkStatus" class="small muted" style="margin-top:8px">不会用文件名猜测；内容指纹不一致时会拒绝自动绑定。</div>
+        </details>
 
         <div class="divider"></div>
         <details id="advancedProjectSettings">
@@ -365,6 +391,55 @@ async function deleteSelectedProject(){
   setLog(j.result||'项目已删除。');
   await refresh();
 }
+function renderSourceHealth(p){
+  const box=document.getElementById('sourceHealth');if(!box)return;
+  if(!p){box.textContent='尚未打开项目。';return;}
+  const s=p.source_status||{};
+  const rows=[
+    ['主音频包',s.primary,true],
+    ['目标语言官方文本包',s.target,false],
+    ['参考语音 / 文本包',s.reference,false],
+    ['项目索引',s.index,true],
+  ];
+  box.innerHTML=rows.map(([label,item,required])=>{
+    item=item||{};
+    const configured=!!item.configured,exists=!!item.exists;
+    const state=!configured?(required?'未配置':'未使用'):(exists?'可用':'找不到');
+    const cls=configured&&!exists?'status-bad':'muted';
+    const path=item.path?'<br><span class="muted">'+item.path+'</span>':'';
+    return '<div style="padding:7px 0;border-bottom:1px solid #eee"><b>'+label+'</b> · <span class="'+cls+'">'+state+'</span>'+path+'</div>';
+  }).join('');
+}
+let relinkCandidates=[];
+async function loadRelinkCandidates(){
+  const select=document.getElementById('relinkCandidate');if(!select)return;
+  select.innerHTML='<option value="">正在扫描…</option>';
+  const j=await api('/api/quick/candidates');
+  relinkCandidates=j.candidates||[];
+  select.innerHTML='<option value="">请选择候选包…</option>';
+  for(const item of relinkCandidates){
+    const o=document.createElement('option');
+    o.value=item.path;
+    o.textContent=item.name+' · '+bytes(item.size_bytes);
+    select.appendChild(o);
+  }
+  if(!relinkCandidates.length)select.innerHTML='<option value="">Download 中未发现 .7z / .zip</option>';
+}
+async function relinkSelectedSource(){
+  if(!currentProject)throw new Error('请先打开项目');
+  const role=document.getElementById('relinkRole').value;
+  const replacement=document.getElementById('relinkCandidate').value;
+  if(!replacement)throw new Error('请先选择一个本机候选包');
+  const status=document.getElementById('relinkStatus');
+  status.textContent='正在校验内容指纹…';status.className='small muted';
+  const d=new FormData();d.set('role',role);d.set('replacement_path',replacement);
+  const j=await api('/api/project/relink',{method:'POST',body:d});
+  fillProject(j.project);
+  status.textContent='重新绑定完成：已确认候选包与原数据源内容一致。';
+  status.className='small';
+  await refresh();
+}
+
 function fillProject(p){
   currentProject=p;
   document.getElementById('noProject').classList.toggle('hidden',!!p);
@@ -372,6 +447,7 @@ function fillProject(p){
   document.getElementById('archiveCard').classList.toggle('hidden',!p);
   document.getElementById('updateCard').classList.toggle('hidden',!p);
   document.getElementById('projectName').textContent=p?p.name:'未打开';
+  renderSourceHealth(p);
   if(!p)return;
   const c=p.config,f=document.getElementById('projectForm');
   for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
@@ -615,6 +691,8 @@ document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();awa
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();d.set('character',document.getElementById('remoteCharacter').value);const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x))}};
 document.getElementById('openOutputBtn').onclick=async()=>{try{const j=await api('/api/output/open',{method:'POST'});setLog('已请求打开：'+j.path)}catch(x){setLog(String(x))}};
+document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
+document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSelectedSource()}catch(x){const s=document.getElementById('relinkStatus');s.textContent=shortError(x);s.className='small status-bad';setLog(String(x))}};
 document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
 document.getElementById('openSelectedProjectBtn').onclick=async()=>{try{await switchProject(document.getElementById('projectSwitcher').value)}catch(x){setLog(String(x))}};
 document.getElementById('newProjectBtn').onclick=async()=>{try{await startNewProject()}catch(x){setLog(String(x))}};
