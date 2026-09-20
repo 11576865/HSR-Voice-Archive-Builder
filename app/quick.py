@@ -434,7 +434,15 @@ def quick_scan(
             + ", ".join(english["duplicate_wav_names"][:5])
         )
     wav_names = {Path(name).name for name in english["wav_names"]}
-    indexes = _index_candidates(Path(english["source"]), wav_names)
+    # Existing local CSV discovery predates explicit language roles and its
+    # schema does not declare the text language. Keep that legacy shortcut only
+    # for English; non-English Quick Mode uses the selected CHS/JP/KR index
+    # instead of silently treating an arbitrary local CSV as the requested language.
+    indexes = (
+        _index_candidates(Path(english["source"]), wav_names)
+        if source_text_language == "en"
+        else []
+    )
     selected_index = indexes[0] if indexes else None
     if selected_index is not None:
         selected_index = {**selected_index, "source": "local"}
