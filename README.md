@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-H**.
+Current development version: **v0.9-K**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -78,6 +78,7 @@ v0.4-v0.9-H add failure-driven hardening based on upstream documentation, issue 
 - v0.9-F separates internal resumable state from user-facing output files through a project-local `.state` directory;
 - v0.9-G reports project-source health and can safely relink moved voice packages after content-fingerprint verification;
 - v0.9-H adds safe project cloning for branching one source archive into another language/parameter configuration without duplicating finished outputs or source audio.
+- v0.9-K resolves one sample-based Timeline for the FLAC, manifest and ASS subtitle, adds a configurable five-second opening gap, removes legacy SRT output, and renders Chinese-primary archives as one Chinese subtitle line.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -220,6 +221,7 @@ The bilingual CSV and Chinese LAB source are optional.
 Useful options:
 
 ```text
+--intro-gap 5.00
 --same-gap 0.40
 --group-gap 1.20
 --no-flac
@@ -506,7 +508,8 @@ output/
 ├── manifest.json
 ├── manifest.csv
 ├── bilingual_index_corrected.csv
-├── bilingual.srt
+├── timeline_resolved.json
+├── HSR_Voice_Archive.ass
 ├── build_report.json
 ├── translation_qa.json
 ├── semantic_qa.json
@@ -515,7 +518,7 @@ output/
 └── continuous.flac
 ```
 
-The manifest is the durable machine-readable result. PDF/ASS/LRC and other presentation formats should be derived from it rather than used as primary data.
+The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`; legacy `bilingual.srt` is no longer generated. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
 
 ## Data integrity
 
