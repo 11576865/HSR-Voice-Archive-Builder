@@ -359,6 +359,8 @@ class Handler(BaseHTTPRequestHandler):
                 config,
                 translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
                 translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),
+                same_group_gap=max(0.0, _float(data.get("same_group_gap"), 0.40)),
+                group_gap=max(0.0, _float(data.get("group_gap"), 1.20)),
             )
             _set_active(config)
             paths = _project_paths(config)
