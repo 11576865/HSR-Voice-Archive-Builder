@@ -581,6 +581,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "HSR_Voice_Archive.ass",
         "build_report.json",
         "continuous.flac",
+        "semantic_review_required.txt",
         "update_plan.json",
     ):
         p = output / name

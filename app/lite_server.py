@@ -18,6 +18,7 @@ from .builder import atomic_write_text, ensure_dir_or_extract
 from .diff import classify
 from .huggingface_audio import download_resolved_audio, download_result_json, resolve_targets
 from .identity import infer_group
+from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
@@ -291,6 +292,20 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
+            return
+        if path == "/api/review/file":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            review = output / "semantic_review_required.txt" if output else None
+            if review is None or not review.is_file():
+                self._json({"ok": False, "error": "No review file is pending"}, 404)
+                return
+            self._send_bytes(
+                200,
+                review.read_bytes(),
+                "text/plain; charset=utf-8",
+                extra_headers={"Content-Disposition": 'attachment; filename="semantic_review_required.txt"'},
+            )
             return
         if path.startswith("/api/jobs/"):
             job_id = path.rsplit("/", 1)[-1]
@@ -602,6 +617,21 @@ class Handler(BaseHTTPRequestHandler):
             project_root=config.root, project_name=config.name,
         )
             self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/review/import":
+            config = _active_config()
+            paths = _project_paths(config)
+            state, output = paths["state"], paths["output"]
+            if state is None or output is None:
+                raise ValueError("Project state or output directory is not configured")
+            result = import_review_txt(
+                data.get("review_text", ""),
+                state_dir=state,
+                output_path=output / "semantic_review_required.txt",
+                target_language=config.target_language,
+            )
+            self._json({"ok": True, "result": result, "project": project_summary(config)})
             return
 
         if path == "/api/update/scan":

@@ -10,13 +10,14 @@ import csv
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Request
-from fastapi.responses import HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .diff import classify
 from .huggingface_audio import download_resolved_audio, download_result_json, resolve_targets
 from .identity import infer_group
+from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .pipeline import build_project_v02
 from .preflight import dependency_status
@@ -551,6 +552,25 @@ def api_project_build():
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
+@app.post("/api/review/import")
+def api_review_import(review_text: str = Form(...)):
+    try:
+        config = _active_config()
+        paths = _project_paths(config)
+        state, output = paths["state"], paths["output"]
+        if state is None or output is None:
+            raise ValueError("Project state or output directory is not configured")
+        result = import_review_txt(
+            review_text,
+            state_dir=state,
+            output_path=output / "semantic_review_required.txt",
+            target_language=config.target_language,
+        )
+        return {"ok": True, "result": result, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.post("/api/update/scan")
 def api_update_scan(candidates_path: str = Form("")):
     try:
@@ -779,6 +799,18 @@ def api_job(job_id: str):
     if job is None:
         return JSONResponse({"ok": False, "error": "Job not found"}, status_code=404)
     return {"ok": True, "job": job}
+
+
+@app.get("/api/review/file")
+def api_review_file():
+    config = _active_config()
+    output = resolve_project_path(config, config.output_dir)
+    if output is None:
+        return JSONResponse({"ok": False, "error": "Output directory is not configured"}, status_code=400)
+    path = output / "semantic_review_required.txt"
+    if not path.is_file():
+        return JSONResponse({"ok": False, "error": "No review file is pending"}, status_code=404)
+    return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
 
 
 @app.post("/api/output/open")

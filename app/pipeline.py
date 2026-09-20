@@ -20,6 +20,7 @@ from .builder import (
     write_manifest,
 )
 from .identity import parse_voice_identity
+from .human_review import HumanReviewRequired, write_review_txt
 from .schema import write_legacy_inputs
 from .stages import build_fingerprint, load_stage, path_fingerprint, save_stage
 
@@ -381,6 +382,7 @@ def _translate_missing(
     progress_callback: Callable[[str, str, int, int], None] | None = None,
     source_language: str = "en",
     target_language: str = "zh-CN",
+    review_output_path: Path | None = None,
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
@@ -750,6 +752,7 @@ def _translate_missing(
             )
 
     semantic_rows: list[dict[str, object]] = []
+    semantic_hard_failures: list[dict[str, object]] = []
     semantic_reused = len(semantic_risky_ids & semantic_verified_ids)
     semantic_skipped_injected = 0
 
@@ -911,7 +914,6 @@ def _translate_missing(
                     str(row["id"]): row for row in reverified
                 }
 
-            hard_failures: list[dict[str, object]] = []
             for candidate in candidates:
                 row_id = str(candidate["id"])
                 initial = initial_by_id[row_id]
@@ -937,7 +939,7 @@ def _translate_missing(
                 }
                 semantic_rows.append(record)
                 if hard_failed:
-                    hard_failures.append(record)
+                    semantic_hard_failures.append(record)
                 else:
                     semantic_verified_ids.add(row_id)
                     saved = checkpoint.get(row_id)
@@ -970,13 +972,12 @@ def _translate_missing(
             )
             ledger.assert_observable()
 
-            if hard_failures:
-                first = hard_failures[0]
-                raise RuntimeError(
-                    f"Semantic QA still has {len(hard_failures)} hard failure(s) "
-                    f"after one targeted repair; first={first['id']}. "
-                    "See semantic_qa.json."
-                )
+    if semantic_hard_failures:
+        review_path = review_output_path or checkpoint_path.with_name(
+            "semantic_review_required.txt"
+        )
+        write_review_txt(review_path, semantic_hard_failures)
+        raise HumanReviewRequired(review_path, len(semantic_hard_failures))
 
     semantic_summary = _write_semantic_qa_report(
         checkpoint_path.with_name("semantic_qa.json"),
@@ -1228,6 +1229,7 @@ def build_project_v02(
                         progress_callback,
                         source_text_language,
                         target_language,
+                        out_dir / "semantic_review_required.txt",
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)

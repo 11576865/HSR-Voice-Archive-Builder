@@ -169,8 +169,11 @@ def create_job(
                 _persist_locked()
         except Exception as exc:
             with _LOCK:
-                job.state = "failed"
-                job.message = "构建失败" if kind in BUILD_KINDS else "失败"
+                waiting = getattr(exc, "job_state", "") == "awaiting_input"
+                job.state = "awaiting_input" if waiting else "failed"
+                job.message = "等待用户提交人工修订" if waiting else ("构建失败" if kind in BUILD_KINDS else "失败")
+                if waiting:
+                    job.result = getattr(exc, "job_result", None)
                 job.finished_at = now()
                 job.error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=8)}"
                 _persist_locked()

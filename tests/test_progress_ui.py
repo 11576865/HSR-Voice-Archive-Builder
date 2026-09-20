@@ -88,6 +88,9 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("already_applied_count", (
             Path(__file__).resolve().parents[1] / "app" / "remote_index.py"
         ).read_text(encoding="utf-8"))
+        self.assertIn('id="reviewPanel"', html)
+        self.assertIn('id="submitReviewBtn"', html)
+        self.assertIn("x.job.state==='awaiting_input'", html)
 
 
 class BuildProgressTests(unittest.TestCase):
