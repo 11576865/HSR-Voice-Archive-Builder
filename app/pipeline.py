@@ -262,6 +262,7 @@ def _translate_missing(
         records_fingerprint,
     )
     from .translator import (
+        OpenAIResponsesHTTPClient,
         ensure_translation_capability,
         make_client,
         translate_records,
@@ -330,7 +331,7 @@ def _translate_missing(
         "cached": True,
         "usage_supported": True,
     }
-    if remaining:
+    if remaining and isinstance(client, OpenAIResponsesHTTPClient):
         smoke = [{"id": "smoke-1", "english": "The story's not finished."}]
         smoke_estimate = estimate_request_tokens(smoke)
         capability = ensure_translation_capability(
@@ -357,13 +358,23 @@ def _translate_missing(
         request_estimate = estimate_request_tokens(batch, batch_glossary)
         phase = f"translation-batch-{start // batch_size + 1}"
         ledger.check_before_request(request_estimate, phase=phase)
-        translated = translate_records(
-            batch,
-            model=model,
-            glossary=batch_glossary,
-            client=client,
-            usage_callback=lambda usage, phase=phase: ledger.record(phase, usage),
-        )
+        if isinstance(client, OpenAIResponsesHTTPClient):
+            translated = translate_records(
+                batch,
+                model=model,
+                glossary=batch_glossary,
+                client=client,
+                usage_callback=lambda usage, phase=phase: ledger.record(phase, usage),
+            )
+        else:
+            # Test/injected clients predate usage callbacks. Production make_client()
+            # always returns OpenAIResponsesHTTPClient.
+            translated = translate_records(
+                batch,
+                model=model,
+                glossary=batch_glossary,
+                client=client,
+            )
 
         retry_records: list[dict[str, str]] = []
         first_results: dict[str, tuple[str, list[dict[str, str]]]] = {}
@@ -396,13 +407,21 @@ def _translate_missing(
                 estimate_request_tokens(retry_records, retry_glossary),
                 phase=repair_phase,
             )
-            retried_rows = translate_records(
-                retry_records,
-                model=model,
-                glossary=retry_glossary,
-                client=client,
-                usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
-            )
+            if isinstance(client, OpenAIResponsesHTTPClient):
+                retried_rows = translate_records(
+                    retry_records,
+                    model=model,
+                    glossary=retry_glossary,
+                    client=client,
+                    usage_callback=lambda usage, phase=repair_phase: ledger.record(phase, usage),
+                )
+            else:
+                retried_rows = translate_records(
+                    retry_records,
+                    model=model,
+                    glossary=retry_glossary,
+                    client=client,
+                )
             qa_retries += len(retry_records)
             repaired = {row["id"]: str(row["chinese"]).strip() for row in retried_rows}
 
