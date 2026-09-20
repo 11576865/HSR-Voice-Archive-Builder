@@ -175,12 +175,14 @@ def api_quick_scan(
     english_source: str = Form(...),
     chs_source: str = Form(""),
     reference_source: str = Form(""),
+    source_text_language: str = Form("en"),
 ):
     try:
         plan = quick_scan(
             Path(english_source),
             Path(chs_source) if chs_source.strip() else None,
             reference_source=Path(reference_source) if reference_source.strip() else None,
+            source_text_language=source_text_language,
         )
         return {"ok": True, "plan": plan}
     except Exception as exc:
@@ -197,6 +199,7 @@ def api_quick_build(
     translation_budget_usd: float = Form(0.0),
     reference_source: str = Form(""),
     audio_language: str = Form("auto"),
+    source_text_language: str = Form("en"),
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
 ):
@@ -209,6 +212,7 @@ def api_quick_build(
             root=Path(project_root) if project_root.strip() else None,
             name=project_name,
             audio_language=audio_language,
+            source_text_language=source_text_language,
             target_language=target_language,
             reference_language=reference_language,
         )
