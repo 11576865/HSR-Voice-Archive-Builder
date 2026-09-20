@@ -1090,6 +1090,7 @@ def build_project_v02(
                 group_gap=group_gap,
                 reference_lab_root=reference_root,
                 reference_language=reference_language,
+                source_text_language=source_text_language,
             )
             save_stage(
                 out_dir,
