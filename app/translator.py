@@ -1,12 +1,13 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import random
 import time
 import urllib.error
 import urllib.request
-from collections.abc import Iterable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any
@@ -18,6 +19,33 @@ DEFAULT_MAX_RETRIES = 5
 DEFAULT_TIMEOUT_SECONDS = 120.0
 RESPONSES_URL = "https://api.openai.com/v1/responses"
 RETRYABLE_HTTP = {408, 409, 429}
+
+TRANSLATION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "translations": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "chinese": {"type": "string"},
+                },
+                "required": ["id", "chinese"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["translations"],
+    "additionalProperties": False,
+}
+
+
+def translation_schema_fingerprint() -> str:
+    encoded = json.dumps(
+        TRANSLATION_SCHEMA, sort_keys=True, separators=(",", ":")
+    ).encode("utf-8")
+    return hashlib.sha256(encoded).hexdigest()
 
 
 def _chunks(records: list[dict[str, str]], size: int) -> Iterable[list[dict[str, str]]]:
@@ -98,13 +126,7 @@ class HTTPResponse:
 
 
 class OpenAIResponsesHTTPClient:
-    """Dependency-free OpenAI-compatible Responses API client.
-
-    The transport intentionally uses only Python standard-library modules so it
-    works on desktop and Termux/Android without jiter, pydantic-core, maturin,
-    or Rust. The default endpoint is OpenAI, but an HTTPS OpenAI-compatible
-    Base URL can be supplied for providers such as V-API.
-    """
+    """Dependency-free OpenAI-compatible Responses API client."""
 
     def __init__(
         self,
@@ -147,7 +169,7 @@ class OpenAIResponsesHTTPClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "HSR-Voice-Archive-Builder/0.7",
+                "User-Agent": "HSR-Voice-Archive-Builder/0.9-C",
             },
         )
 
@@ -204,48 +226,16 @@ def make_client() -> OpenAIResponsesHTTPClient:
     )
 
 
-def translate_records(
+def _translation_prompt(
     records: list[dict[str, str]],
-    model: str = DEFAULT_MODEL,
-    glossary: dict[str, str] | None = None,
-    *,
-    client: Any | None = None,
-) -> list[dict[str, str]]:
-    """Translate one batch through an OpenAI-compatible Responses REST API.
-
-    Each input must contain id and english. Structured Outputs are requested
-    with JSON Schema and IDs must round-trip exactly before any translation is
-    accepted.
-    """
-    if not records:
-        return []
-    client = client or make_client()
-
-    schema = {
-        "type": "object",
-        "properties": {
-            "translations": {
-                "type": "array",
-                "items": {
-                    "type": "object",
-                    "properties": {
-                        "id": {"type": "string"},
-                        "chinese": {"type": "string"},
-                    },
-                    "required": ["id", "chinese"],
-                    "additionalProperties": False,
-                },
-            }
-        },
-        "required": ["translations"],
-        "additionalProperties": False,
-    }
+    glossary: dict[str, str] | None,
+) -> str:
     glossary_text = ""
     if glossary:
         glossary_text = "\nOfficial/preferred terminology:\n" + "\n".join(
             f"- {src} => {dst}" for src, dst in glossary.items()
         )
-    prompt = (
+    return (
         "Translate the target field 'english' in each Honkai: Star Rail record into Simplified Chinese. "
         "Preserve meaning, character tone, punctuation intent, and one-to-one IDs. Do not add information. "
         "Records may include context_before/context_after; use them only to disambiguate the target and do not "
@@ -259,20 +249,41 @@ def translate_records(
         + "\n\nInput JSON:\n"
         + json.dumps(records, ensure_ascii=False)
     )
+
+
+def translate_records(
+    records: list[dict[str, str]],
+    model: str = DEFAULT_MODEL,
+    glossary: dict[str, str] | None = None,
+    *,
+    client: Any | None = None,
+    usage_callback: Callable[[dict[str, int] | None], None] | None = None,
+) -> list[dict[str, str]]:
+    """Translate one batch through an OpenAI-compatible Responses REST API."""
+    if not records:
+        return []
+    client = client or make_client()
+
     response = client.responses.create(
         model=model,
         reasoning={"effort": "low"},
         store=False,
-        input=prompt,
+        input=_translation_prompt(records, glossary),
         text={
             "format": {
                 "type": "json_schema",
                 "name": "voice_translation_batch",
                 "strict": True,
-                "schema": schema,
+                "schema": TRANSLATION_SCHEMA,
             }
         },
     )
+
+    if usage_callback is not None:
+        from .translation_runtime import parse_usage
+
+        usage_callback(parse_usage(getattr(response, "raw", None)))
+
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Translation API response contained no output_text")
     data = json.loads(response.output_text)
@@ -292,6 +303,76 @@ def translate_records(
         if not str(row.get("chinese", "")).strip():
             raise RuntimeError(f"Translation response contains empty Chinese text: {row['id']}")
     return ordered
+
+
+def ensure_translation_capability(
+    model: str = DEFAULT_MODEL,
+    *,
+    client: OpenAIResponsesHTTPClient | None = None,
+    force: bool = False,
+    usage_callback: Callable[[dict[str, int] | None], None] | None = None,
+) -> dict[str, object]:
+    """Verify the selected route can satisfy the structured translation schema.
+
+    A successful result is cached by provider + Base URL + model + schema
+    fingerprint. Cache reuse avoids repeating the paid smoke request.
+    """
+    from .translation_runtime import (
+        get_cached_capability,
+        invalidate_capability,
+        save_capability,
+    )
+
+    client = client or make_client()
+    schema_fingerprint = translation_schema_fingerprint()
+    identity = {
+        "provider": client.provider,
+        "base_url": client.base_url,
+        "model": model,
+        "schema_fingerprint": schema_fingerprint,
+    }
+
+    if not force:
+        cached = get_cached_capability(**identity)
+        if cached is not None:
+            return {
+                "ok": True,
+                "cached": True,
+                "usage_supported": bool(cached.get("usage_supported")),
+                **identity,
+            }
+
+    observed_usage: dict[str, int] | None = None
+
+    def capture(usage: dict[str, int] | None) -> None:
+        nonlocal observed_usage
+        observed_usage = usage
+        if usage_callback is not None:
+            usage_callback(usage)
+
+    try:
+        rows = translate_records(
+            [{"id": "smoke-1", "english": "The story's not finished."}],
+            model=model,
+            client=client,
+            usage_callback=capture,
+        )
+        if len(rows) != 1 or rows[0]["id"] != "smoke-1":
+            raise RuntimeError("Translation capability smoke test returned an invalid record")
+    except Exception:
+        invalidate_capability(**identity)
+        raise
+
+    save_capability(
+        **identity,
+        usage_supported=observed_usage is not None,
+    )
+    return {
+        "ok": True,
+        "cached": False,
+        "usage_supported": observed_usage is not None,
+        **identity,
+    }
 
 
 def translate_in_batches(
