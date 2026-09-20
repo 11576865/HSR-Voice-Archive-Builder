@@ -11,7 +11,7 @@ from unittest.mock import patch
 from app.builder import build_entries
 from app.jobs import create_job, get_job
 from app.pipeline import _load_translation_checkpoint, _write_translation_checkpoint
-from app.project import create_project, recent_projects
+from app.project import create_project, recent_projects, update_project
 from app.quick import _map_reference_records, create_quick_project, quick_scan
 from app.remote_index import ai_hobbyist_index_url
 from app.semantic_quality import semantic_risk_tags
@@ -354,6 +354,70 @@ class V09EProjectAndLanguageRoleTests(unittest.TestCase):
             )
             self.assertEqual(entries[0].english, "行くよ。")
             self.assertEqual(report["count_source_lab"], 1)
+
+    def test_non_english_source_can_fall_back_to_selected_index_text(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            wavs.mkdir()
+            write_wav(wavs / "a.wav")
+            target = root / "target"
+            target.mkdir()
+
+            index = root / "index.csv"
+            with index.open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(
+                    stream,
+                    fieldnames=[
+                        "序号", "分组", "文件名", "来源", "来源细分",
+                        "英文文本", "SHA-256",
+                    ],
+                )
+                writer.writeheader()
+                writer.writerow({
+                    "序号": "1",
+                    "分组": "g",
+                    "文件名": "a.wav",
+                    "来源": "AI-Hobbyist JP.xlsx",
+                    "来源细分": "",
+                    "英文文本": "行くよ。",
+                    "SHA-256": "",
+                })
+
+            bilingual = root / "bilingual.csv"
+            with bilingual.open("w", encoding="utf-8-sig", newline="") as stream:
+                writer = csv.DictWriter(
+                    stream, fieldnames=["文件名", "中文", "ENGLISH"]
+                )
+                writer.writeheader()
+                writer.writerow({"文件名": "a.wav", "中文": "", "ENGLISH": "行くよ。"})
+
+            entries, report = build_entries(
+                index,
+                bilingual,
+                target,
+                wavs,
+                source_text_language="ja",
+            )
+            self.assertEqual(entries[0].english, "行くよ。")
+            self.assertEqual(report["count_source_lab"], 0)
+
+    def test_embedded_reference_mapping_is_invalidated_by_reference_change(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config = create_project(
+                root / "project",
+                name="P",
+                index_csv="index.csv",
+                wav_source="voice.zip",
+                reference_source="reference.zip",
+                reference_text_embedded=True,
+                reference_language="ja",
+            )
+            update_project(config, translation_model="test-model")
+            self.assertTrue(config.reference_text_embedded)
+            update_project(config, reference_language="en")
+            self.assertFalse(config.reference_text_embedded)
 
     def test_checkpoint_is_invalidated_when_target_language_changes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
