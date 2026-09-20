@@ -493,9 +493,16 @@ function renderJobs(jobs){
   const box=document.getElementById('jobs');
   const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查'};
   const states={queued:'等待',running:'运行中',succeeded:'完成',failed:'失败',interrupted:'已中断'};
-  const row=j=>'<div style="padding:8px 0;border-bottom:1px solid #eee"><b>'+(labels[j.kind]||j.kind)+'</b> · '+(states[j.state]||j.state)+(j.finished_at?' · '+new Date(j.finished_at).toLocaleString():'')+'<br><span class="muted">'+(j.message||'')+'</span></div>';
-  let html=projectJobs.length?projectJobs.map(row).join(''):'<div class="muted">当前项目暂无任务历史。</div>';
-  if(otherJobs.length)html+='<details style="margin-top:10px"><summary>其他项目 / 旧版任务（'+otherJobs.length+'）</summary><div style="margin-top:6px">'+otherJobs.map(j=>row({...j,kind:(j.project_name?j.kind+' · '+j.project_name:j.kind)})).join('')+'</div></details>';
+  const row=j=>{
+    const when=j.finished_at||j.started_at||j.created_at||'';
+    const detail=j.state==='failed'?shortError(j.error):(j.message||'');
+    const project=j.project_name?'<span class="muted"> · '+j.project_name+'</span>':'';
+    return '<div style="padding:8px 0;border-bottom:1px solid #eee"><b>'+(labels[j.kind]||j.kind)+'</b> · '+(states[j.state]||j.state)+project+(when?' · '+new Date(when).toLocaleString():'')+'<br><span class="'+(j.state==='failed'?'status-bad':'muted')+'">'+detail+'</span></div>';
+  };
+  const recentCurrent=projectJobs.slice(0,5),olderCurrent=projectJobs.slice(5);
+  let html=recentCurrent.length?recentCurrent.map(row).join(''):'<div class="muted">当前项目暂无任务历史。</div>';
+  if(olderCurrent.length)html+='<details style="margin-top:10px"><summary>更早的当前项目任务（'+olderCurrent.length+'）</summary><div style="margin-top:6px">'+olderCurrent.map(row).join('')+'</div></details>';
+  if(otherJobs.length)html+='<details style="margin-top:10px"><summary>其他项目 / 旧版任务（'+otherJobs.length+'）</summary><div style="margin-top:6px">'+otherJobs.map(row).join('')+'</div></details>';
   box.innerHTML=html;
 }
 async function refresh(){
@@ -514,8 +521,13 @@ async function watchJob(id){
       const x=await api('/api/jobs/'+id);
       renderJobs([x.job]);
       if(x.job.state==='succeeded'){
-        clearInterval(pollTimer);setLog(x.job.result||x.job);
-        if(x.job.kind==='remote-update-check')showPlan(x.job.result);
+        clearInterval(pollTimer);
+        if(x.job.kind==='remote-update-check'){
+          showPlan(x.job.result);
+        }else{
+          setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
+          const d=document.getElementById('diagnosticLog');if(d)d.open=false;
+        }
         await refresh();
       }
       if(x.job.state==='failed'){
