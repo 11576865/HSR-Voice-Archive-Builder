@@ -10,7 +10,7 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        python-version: ["3.11", "3.12"]
+        python-version: ["3.11", "3.12", "3.13"]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -24,3 +24,26 @@ jobs:
         run: python -c "import app.server"
       - name: Run unit tests
         run: python -m unittest discover -s tests -v
+
+  termux-lite-surface:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - name: Create clean lightweight environment
+        run: python -m venv .venv-termux
+      - name: Install only Termux Python requirements
+        run: .venv-termux/bin/python -m pip install -r requirements-termux.txt
+      - name: Compile lite server path
+        run: .venv-termux/bin/python -m compileall -q app
+      - name: Prove lite server imports without FastAPI or Pydantic
+        run: |
+          .venv-termux/bin/python - <<'PY'
+          import importlib.util
+          for name in ("fastapi", "uvicorn", "pydantic", "pydantic_core", "openai", "py7zr"):
+              assert importlib.util.find_spec(name) is None, name
+          import app.lite_server
+          print("Termux lite dependency surface: OK")
+          PY
