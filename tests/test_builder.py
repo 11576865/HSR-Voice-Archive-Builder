@@ -26,6 +26,41 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> 
 
 
 class BuilderTests(unittest.TestCase):
+    def test_chinese_primary_labs_are_used_as_chinese_subtitles(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            labs = root / "official_chinese"
+            labs.mkdir()
+            write_wav(wavs / "a.wav", 8000)
+            (wavs / "a.lab").write_text("主音频包中文台词", encoding="utf-8")
+
+            index = root / "index.csv"
+            bilingual = root / "bilingual.csv"
+            write_csv(
+                index,
+                ["序号", "分组", "文件名", "来源", "来源细分", "英文文本", "SHA-256"],
+                [{"序号": "1", "分组": "g1", "文件名": "a.wav", "来源": "", "来源细分": "", "英文文本": "主音频包中文台词", "SHA-256": ""}],
+            )
+            write_csv(
+                bilingual,
+                ["文件名", "中文", "ENGLISH"],
+                [{"文件名": "a.wav", "中文": "", "ENGLISH": "主音频包中文台词"}],
+            )
+
+            entries, report = build_entries(
+                index,
+                bilingual,
+                labs,
+                wavs,
+                source_text_language="zh-CN",
+                target_language="zh-CN",
+            )
+            self.assertEqual(entries[0].chinese, "主音频包中文台词")
+            self.assertEqual(entries[0].chinese_source, "official_chs_lab")
+            self.assertEqual(report["count_official_chs_lab"], 1)
+            self.assertEqual(report["count_missing_chinese"], 0)
+
     def test_official_lab_precedence_and_timeline(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
