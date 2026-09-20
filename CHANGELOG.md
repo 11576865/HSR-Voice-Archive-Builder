@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6
+
+- Replaced the OpenAI Python SDK dependency with a small standard-library HTTPS client for the official Responses API.
+- Enabled GPT fallback translation on Termux/Android without `jiter`, `pydantic-core`, `maturin`, or Rust.
+- Kept Structured Outputs with JSON Schema, exact ID round-trip validation, non-empty translation validation, and per-batch checkpoints.
+- Added bounded retry handling for transient network errors and HTTP 408/409/429/5xx, including `Retry-After` support.
+- Removed the unused `openai` package from desktop requirements as well.
+- Added raw Responses payload parsing and REST transport regression tests.
+- Updated desktop and Termux servers to require only `OPENAI_API_KEY` when GPT translation is enabled.
+- Updated runtime status to report direct REST translation and whether an API key is configured.
+
 ## v0.5
 
 ### Termux hotfixes
