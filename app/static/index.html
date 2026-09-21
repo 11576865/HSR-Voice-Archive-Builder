@@ -628,7 +628,7 @@ function renderQuickPlan(plan){
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '官方中文字幕：'+(plan.chinese
-      ? (n(tr.official_chinese_matches)+' / '+n(e.wav_count)+' · 同名 '+n(tr.official_chinese_exact)+' · 跨语言唯一映射 '+n(tr.official_chinese_structural))
+      ? (n(tr.official_chinese_matches)+' / '+n(e.wav_count)+' · 精确匹配 '+n(tr.official_chinese_exact)+' · 跨语言 ID 匹配 '+n(tr.official_chinese_structural)+' · 无法匹配 '+n(tr.official_chinese_unmatched||0)+' · 冲突 '+n(tr.official_chinese_conflicts||0))
       : (tr.source_text_language==='zh-CN'?n(tr.official_chinese_matches)+'（来自主音频包）':'未提供')),
     '参考文本：'+(
       plan.reference

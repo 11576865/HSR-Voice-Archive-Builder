@@ -243,8 +243,34 @@ class QuickModeTests(unittest.TestCase):
 
             self.assertFalse(plan["ready"])
             self.assertEqual(plan["translation"]["official_chinese_matches"], 0)
+            self.assertEqual(plan["translation"]["official_chinese_unmatched"], 2)
             self.assertEqual(plan["translation"]["pending_translation_count"], 2)
             self.assertTrue(any("API fallback is blocked" in item for item in plan["blockers"]))
+
+    def test_quick_scan_blocks_conflicting_official_chinese_package(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            english = root / "English.zip"
+            chinese = root / "Chinese.zip"
+            names = ["chapter5_13_evanescia_103.wav", "chapter5_13_other_103.wav"]
+            make_voice_zip(english, names)
+            make_voice_zip(chinese, ["chapter5_13_绯英_103.wav"])
+            records = [
+                {"filename": name, "english": f"English {i}", "hash": "", "character": "绯英"}
+                for i, name in enumerate(names, 1)
+            ]
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": False, "stale": False}),
+            ), patch(
+                "app.quick.credentials_status",
+                return_value={"provider": "custom", "base_url": "https://example.invalid/v1", "configured": True},
+            ):
+                plan = quick_scan(english, chinese)
+
+            self.assertFalse(plan["ready"])
+            self.assertGreater(plan["translation"]["official_chinese_conflicts"], 0)
+            self.assertTrue(any("matching conflicts/collisions" in item for item in plan["blockers"]))
 
     def test_quick_scan_blocks_partial_index_coverage(self) -> None:
         with tempfile.TemporaryDirectory() as td:

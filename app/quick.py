@@ -695,6 +695,8 @@ def quick_scan(
     official_chinese_matches = 0
     official_chinese_exact = 0
     official_chinese_structural = 0
+    official_chinese_unmatched = 0
+    official_chinese_conflicts = 0
     if selected_complete and selected_index is not None:
         if selected_index.get("source") == "remote":
             index_rows = _remote_rows(
@@ -717,6 +719,9 @@ def quick_scan(
         official_chinese_matches = match_detail["total"]
         official_chinese_exact = match_detail["exact"]
         official_chinese_structural = match_detail["structural"]
+        official_chinese_unmatched = match_detail.get("unmatched", len(index_rows) - official_chinese_matches)
+        official_chinese_conflicts = match_detail.get("conflicts", 0)
+
         pending_records = [
             {
                 "id": Path(str(row.get("filename", ""))).name,
@@ -725,7 +730,12 @@ def quick_scan(
             for row in index_rows
             if Path(str(row.get("filename", ""))).name not in official_map
         ]
-        if chs_source is not None and chinese_stems and not official_chinese_matches:
+        if chs_source is not None and official_chinese_conflicts > 0:
+            blockers.append(
+                f"Official Chinese package has {official_chinese_conflicts} matching conflicts/collisions; "
+                "API fallback is blocked to prevent ambiguous subtitle assignment"
+            )
+        elif chs_source is not None and chinese_stems and not official_chinese_matches:
             blockers.append(
                 "Official Chinese package has LAB files but none can be safely matched "
                 "to the primary voices; API fallback is blocked to prevent an unintended full translation"
@@ -733,7 +743,8 @@ def quick_scan(
         elif chs_source is not None and official_chinese_matches < len(index_rows):
             warnings.append(
                 f"Official Chinese subtitles match {official_chinese_matches} / {len(index_rows)} "
-                f"voices ({official_chinese_exact} exact, {official_chinese_structural} cross-language); "
+                f"voices ({official_chinese_exact} exact, {official_chinese_structural} cross-language, "
+                f"{official_chinese_unmatched} unmatched); "
                 "only unmatched items may use AI translation"
             )
     translation_estimate = estimate_workload_tokens(pending_records, 80)
@@ -780,6 +791,8 @@ def quick_scan(
             "official_chinese_matches": official_chinese_matches,
             "official_chinese_exact": official_chinese_exact,
             "official_chinese_structural": official_chinese_structural,
+            "official_chinese_unmatched": official_chinese_unmatched,
+            "official_chinese_conflicts": official_chinese_conflicts,
             "pending_translation_count": len(pending_records),
             **translation_estimate,
         },
