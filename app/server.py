@@ -15,7 +15,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .diff import classify
-from .huggingface_audio import download_resolved_audio, download_result_json, resolve_targets
+from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
@@ -714,6 +714,28 @@ def api_update_apply_remote():
             successful = {Path(row["filename"]).name for row in downloaded["completed"]}
             if not successful:
                 raise RuntimeError("没有新增音频下载成功；未修改项目")
+            reference_plan = {
+                **resolved,
+                "targets": {
+                    name: row for name, row in resolved.get("reference_targets", {}).items()
+                    if Path(name).name in successful
+                },
+            }
+            reference_download = {"completed": [], "failed": [], "unresolved": []}
+            if reference_plan["targets"]:
+                reference_download = download_resolved_audio(
+                    reference_plan,
+                    generated / "incremental_reference_audio_zh-CN",
+                    lambda current, total, name: report_progress(
+                        "reference", f"正在同步下载中文对照语音：{current}/{total} · {name}", current, total
+                    ),
+                )
+                atomic_write_text(
+                    state / "incremental_reference_download.json",
+                    json.dumps(reference_download, ensure_ascii=False, indent=2),
+                )
+            confirmed_references = confirmed_reference_metadata(reference_plan, reference_download)
+            reference_successful = set(confirmed_references)
             report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
 
             generated.mkdir(parents=True, exist_ok=True)
@@ -743,12 +765,16 @@ def api_update_apply_remote():
                     "index", "group", "filename", "source", "source_detail", "english",
                     "reference_text", "reference_language", "sha256",
                 ]
+            for field in ("reference_text", "reference_language"):
+                if field not in fields:
+                    fields.append(field)
             known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
             details = {Path(str(row.get("filename", ""))).name: row for row in targets}
             for filename in sorted(successful):
                 if filename in known:
                     continue
                 metadata = details.get(filename, {})
+                reference = confirmed_references.get(filename, {})
                 existing_rows.append({
                     "index": str(len(existing_rows) + 1),
                     "group": infer_group(Path(filename).stem),
@@ -756,8 +782,8 @@ def api_update_apply_remote():
                     "source": "huggingface",
                     "source_detail": "simon3000/starrail-voice",
                     "english": str(metadata.get("english", "")),
-                    "reference_text": "",
-                    "reference_language": "",
+                    "reference_text": str(reference.get("reference_text", "")),
+                    "reference_language": str(reference.get("reference_language", "")),
                     "sha256": "",
                 })
             updated_index = generated / "quick_index_incremental.csv"
@@ -771,6 +797,12 @@ def api_update_apply_remote():
                 "unresolved": resolved["unresolved"],
                 "downloaded_or_existing": len(downloaded["completed"]),
                 "failed": downloaded["failed"],
+                "chinese_reference_matched": len(reference_plan["targets"]),
+                "chinese_reference_downloaded": len(reference_successful),
+                "chinese_reference_failed": reference_download["failed"],
+                "reference_guided_translation": len(reference_successful),
+                "unreferenced_api_translation": len(successful - reference_successful),
+                "api_translation_required": len(successful),
                 "project_updated": True,
                 "rebuild_required": True,
                 "applied_filenames": sorted(successful),

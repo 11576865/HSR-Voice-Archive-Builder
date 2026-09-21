@@ -429,6 +429,16 @@ Translation providers are configured locally and are not stored in project files
 
 Existing project files keep their saved `translation_model`; change the dashboard field once if an older project still says `gpt-5.6-sol`.
 
+During an incremental English-audio update, the builder also looks for a
+`Chinese(PRC)` dataset row with the same language-independent in-game voice
+path. If that Chinese audio can actually be downloaded, it is cached separately
+under `.generated/incremental_reference_audio_zh-CN/` and its official
+transcription is attached as `zh-CN` localization reference. It never enters
+the continuous English FLAC and is not treated as a gold translation. Missing
+or not-yet-published Chinese audio leaves the reference blank; the configured
+translation API still translates the English source. When a Chinese reference
+is available, the API may use it only for terminology and localization context.
+
 For V-API:
 
 ```bash

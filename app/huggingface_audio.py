@@ -43,6 +43,15 @@ def _normal_text(value: str) -> str:
     return re.sub(r"\s+", " ", value).strip()
 
 
+def _voice_relative_path(value: str) -> str:
+    """Return the language-independent path below a package's voice directory."""
+    normalized = str(value or "").replace("\\", "/").strip().casefold()
+    marker = "/voice/"
+    if marker in normalized:
+        return normalized.split(marker, 1)[1]
+    return ""
+
+
 def download_result_json(destination: Path, progress: Callable[[str], None] | None = None) -> Path:
     """Resume the dataset metadata download without replacing a valid local copy."""
     destination.parent.mkdir(parents=True, exist_ok=True)
@@ -77,7 +86,7 @@ def download_result_json(destination: Path, progress: Callable[[str], None] | No
 
 
 def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[str, Any]:
-    """Resolve AI-Hobbyist rows to exact Dataset Viewer row indices conservatively."""
+    """Resolve English rows and same-file Chinese reference rows conservatively."""
     by_name = {Path(str(t.get("filename", ""))).stem: t for t in targets}
     by_hash = {str(t.get("hash", "")).casefold(): t for t in targets if t.get("hash")}
     by_media = {}
@@ -88,6 +97,7 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
             by_media[match.group(1)] = target
     by_path = {f"english/voice/{name}.wem".casefold(): t for name, t in by_name.items()}
     resolved: dict[str, dict[str, Any]] = {}
+    chinese_by_path: dict[str, dict[str, Any]] = {}
     text_rows: dict[str, list[dict[str, Any]]] = {}
     total = 0
     with result_json.open("rb") as source, mmap.mmap(source.fileno(), 0, access=mmap.ACCESS_READ) as mm:
@@ -100,13 +110,26 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
             key = current.group(1).decode("utf-8", "replace")
             row_index = total
             total += 1
-            if key.casefold().startswith("english/"):
+            language_prefix = key.split("/", 1)[0].casefold()
+            if language_prefix in {"english", "chinese(prc)"}:
                 stem = Path(key).stem
                 ingame = _field(chunk, "inGameFilename")
                 transcription = _field(chunk, "transcription")
                 speaker = _field(chunk, "speaker")
                 voice_id = _field(chunk, "voiceID")
-                row = {"row_idx": row_index, "key": key, "speaker": speaker, "transcription": transcription}
+                row = {
+                    "row_idx": row_index,
+                    "key": key,
+                    "speaker": speaker,
+                    "transcription": transcription,
+                    "ingame_filename": ingame,
+                }
+                relative = _voice_relative_path(ingame)
+                if language_prefix == "chinese(prc)":
+                    if relative:
+                        chinese_by_path.setdefault(relative, row)
+                    current = following
+                    continue
                 target = by_path.get(ingame.casefold()) if ingame else None
                 method = "inGameFilename"
                 if target is None:
@@ -125,8 +148,26 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
         candidates = text_rows.get(_normal_text(str(target.get("english", ""))), [])
         if len(candidates) == 1:
             resolved[filename] = {**candidates[0], "method": "unique_transcription"}
+    reference_targets: dict[str, dict[str, Any]] = {}
+    for filename, english_row in resolved.items():
+        relative = _voice_relative_path(str(english_row.get("ingame_filename", "")))
+        if not relative:
+            relative = Path(filename).with_suffix(".wem").name.casefold()
+        chinese = chinese_by_path.get(relative)
+        if chinese is not None:
+            reference_targets[filename] = {
+                **chinese,
+                "method": "same_ingame_filename",
+                "reference_language": "zh-CN",
+            }
     unresolved = [str(t.get("filename", "")) for t in targets if str(t.get("filename", "")) not in resolved]
-    return {"dataset": DATASET, "total_rows": total, "targets": resolved, "unresolved": unresolved}
+    return {
+        "dataset": DATASET,
+        "total_rows": total,
+        "targets": resolved,
+        "reference_targets": reference_targets,
+        "unresolved": unresolved,
+    }
 
 
 def _json_get(url: str, params: dict[str, Any], attempts: int = 7) -> dict[str, Any]:
@@ -211,3 +252,25 @@ def download_resolved_audio(plan: dict[str, Any], destination: Path, progress: C
             if progress:
                 progress(len(completed) + len(failed), total, filename)
     return {"completed": completed, "failed": failed, "unresolved": plan.get("unresolved", [])}
+
+
+def confirmed_reference_metadata(
+    plan: dict[str, Any],
+    download: dict[str, Any],
+) -> dict[str, dict[str, str]]:
+    """Return Chinese reference text only for rows whose audio was obtained."""
+    completed = {
+        Path(str(row.get("filename", ""))).name
+        for row in download.get("completed", [])
+        if isinstance(row, dict)
+    }
+    result: dict[str, dict[str, str]] = {}
+    for name, row in plan.get("targets", {}).items():
+        filename = Path(str(name)).name
+        transcription = str(row.get("transcription", "") or "").strip()
+        if filename in completed and transcription:
+            result[filename] = {
+                "reference_text": transcription,
+                "reference_language": str(row.get("reference_language", "zh-CN") or "zh-CN"),
+            }
+    return result

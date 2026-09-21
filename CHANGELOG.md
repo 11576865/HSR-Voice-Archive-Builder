@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Incremental English updates now pair and separately download same-file Chinese audio when available, attach its official transcription only as localization reference, and fall back to API translation when the Chinese audio is absent or unavailable.
 - Changed the default translation model to `gpt-5.6-luna`; existing projects continue to use their saved model until changed in the dashboard.
 
 - Renamed the optional semantic-only source to “extra-language reference package”, clarified that it never enters finished audio, and hides the manual AI-translation control when source and target text languages are both Simplified Chinese.

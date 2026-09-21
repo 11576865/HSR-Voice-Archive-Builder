@@ -748,7 +748,7 @@ async function watchJob(id){
           showPlan(x.job.result);
         }else if(x.job.kind==='remote-update-apply'){
           const r=x.job.result||{};
-          document.getElementById('updateActionHint').textContent='已取得 '+n(r.downloaded_or_existing)+' 条音频，无法定位 '+n((r.unresolved||[]).length)+' 条。项目来源已更新；请点击“应用设置并构建”生成新版成品。';
+          document.getElementById('updateActionHint').textContent='已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。项目来源已更新，请重新构建成品。';
           setLog(r);
         }else{
           setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
