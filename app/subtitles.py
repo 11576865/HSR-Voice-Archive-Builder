@@ -45,7 +45,10 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
         return None, None
 
     raw = time_range_str.strip()
-    parts = [p.strip() for p in raw.split("-")]
+    for sep in ("--", "—", "–", "~"):
+        raw = raw.replace(sep, "-")
+
+    parts = [p.strip() for p in raw.split("-") if p.strip()]
     if len(parts) != 2:
         return None, None
 
