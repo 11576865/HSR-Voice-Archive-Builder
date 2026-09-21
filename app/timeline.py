@@ -227,42 +227,12 @@ def render_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
 ) -> str:
-    header = """[Script Info]
-Title: HSR Voice Archive
-ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
-WrapStyle: 0
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Archive,Noto Sans,52,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,40,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-"""
-    dialogues: list[str] = []
-    same_chinese = source_language == target_language == "zh-CN"
-    for entry in entries:
-        source = _ass_text(getattr(entry, "english", ""))
-        target = _ass_text(getattr(entry, "chinese", ""))
-        if same_chinese:
-            text = r"{\fn汉仪旗黑}" + (target or source)
-        elif source and target:
-            text = r"{\fnNoto Sans}" + source + r"\N{\fn汉仪旗黑}" + target
-        else:
-            text = (r"{\fn汉仪旗黑}" + target) if target else source
-        if not text:
-            continue
-        start = _ass_time(float(getattr(entry, "start_seconds")))
-        end = _ass_time(float(getattr(entry, "display_end_seconds")))
-        dialogues.append(
-            f"Dialogue: 0,{start},{end},Archive,,0,0,0,,{text}"
-        )
-    if not dialogues:
-        raise ValueError("ASS rendering produced no dialogue lines")
-    return header + "\n".join(dialogues) + "\n"
+    from subtitle_layout import render_ass as _layout_render_ass
+    return _layout_render_ass(
+        entries,
+        source_language=source_language,
+        target_language=target_language,
+    )
 
 
 def write_ass(
@@ -272,14 +242,12 @@ def write_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
 ) -> None:
-    _atomic_write(
+    from subtitle_layout import write_ass as _layout_write_ass
+    _layout_write_ass(
+        entries,
         path,
-        render_ass(
-            entries,
-            source_language=source_language,
-            target_language=target_language,
-        ),
-        encoding="utf-8-sig",
+        source_language=source_language,
+        target_language=target_language,
     )
 
 
