@@ -730,9 +730,11 @@ function renderJobs(jobs){
       setRunReport('操作失败','失败原因：'+shortError(latest.error),true);
       if(isBuildFailure){setBuildButtonText('继续构建');setInlineBuildStatus('最近一次构建失败；修复后会复用仍然有效的检查点。',true);}
     }else if(succeeded){
-      state.textContent='当前项目最近一次构建已完成。';state.className='notice ok';bar.style.width='100%';
-      textBox.textContent='构建完成，可以查看“构建结果”。';failure.classList.add('hidden');
-      setRunReport('已完成',completedReport(latest?.state==='succeeded'?latest:succeeded),false);
+      const completed=latest?.state==='succeeded'?latest:succeeded;
+      const completedLabel=completed.kind==='remote-update-check'?'新增语音检查':completed.kind==='remote-update-apply'?'增量更新':completed.kind==='black-video-export'?'黑屏 MKV':'构建';
+      state.textContent='当前项目最近一次'+completedLabel+'已完成。';state.className='notice ok';bar.style.width='100%';
+      textBox.textContent=completed.kind==='black-video-export'?'黑屏 MKV 已生成；请外挂 ASS / SRT。':completed.kind==='remote-update-apply'?'新增语音已应用，请重新构建成品。':'操作已完成。';failure.classList.add('hidden');
+      setRunReport('已完成',completedReport(completed),false);
       setBuildButtonText('应用设置并构建');setInlineBuildStatus('构建已完成；修改设置后再次构建时，只重跑受影响的阶段。');
     }else{
       state.textContent=root?'当前项目暂无新版任务记录。':'尚未打开项目。';state.className='notice';bar.style.width='0%';
