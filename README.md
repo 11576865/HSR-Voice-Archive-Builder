@@ -79,6 +79,7 @@ v0.4-v0.9-I add failure-driven hardening based on upstream documentation, issue 
 - v0.9-G reports project-source health and can safely relink moved voice packages after content-fingerprint verification;
 - v0.9-H adds safe project cloning for branching one source archive into another language/parameter configuration without duplicating finished outputs or source audio.
 - v0.9-I adds Alibaba Model Studio Chat Completions compatibility, fail-fast credential tests, provider-safe batch sizing, and runtime revision display.
+- The launcher now automatically falls back to the built-in lite server when the optional FastAPI/uvicorn stack is incomplete.
 - v0.9-K resolves one sample-based Timeline for the FLAC, manifest and ASS subtitle, adds a configurable five-second opening gap, removes legacy SRT output, and renders Chinese-primary archives as one Chinese subtitle line.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.

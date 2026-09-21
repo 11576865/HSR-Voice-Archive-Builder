@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import ipaddress
 import os
 import re
@@ -8,6 +9,14 @@ import secrets
 import socket
 import threading
 import webbrowser
+
+
+def full_server_available() -> bool:
+    """Return whether the optional FastAPI server stack is importable."""
+    return all(
+        importlib.util.find_spec(name) is not None
+        for name in ("fastapi", "uvicorn", "pydantic")
+    )
 
 
 def _route_local_ip() -> str:
@@ -119,7 +128,10 @@ def main() -> None:
     if not args.no_browser and not args.lan:
         threading.Timer(1.2, lambda: webbrowser.open(url)).start()
 
-    if args.lite:
+    use_lite = args.lite or not full_server_available()
+    if use_lite:
+        if not args.lite:
+            print("FastAPI/uvicorn is incomplete; using the built-in Termux lite server.")
         from .lite_server import serve
         serve(host, args.port)
     else:
