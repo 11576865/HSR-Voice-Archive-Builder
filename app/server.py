@@ -11,6 +11,8 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .timeline import write_ass, write_srt
+from types import SimpleNamespace
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -299,6 +301,143 @@ def api_get_project_subtitles(
             subtitles = [sub for sub in subtitles if sub["start"] <= end_time]
 
         return {"ok": True, "subtitles": subtitles}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/{project_id}/subtitles/update")
+async def api_update_project_subtitles(
+    project_id: str,
+    request: Request,
+):
+    try:
+        config = _resolve_project(project_id)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if not output_dir:
+            raise ValueError("Output directory is not configured")
+
+        # Parse request body (JSON or Form)
+        body_data = {}
+        content_type = request.headers.get("content-type", "")
+        if "application/json" in content_type:
+            body_data = await request.json()
+        else:
+            form = await request.form()
+            raw_sub = form.get("subtitles")
+            if raw_sub:
+                body_data = {"subtitles": json.loads(str(raw_sub))}
+
+        items = body_data.get("subtitles")
+        if items is None and isinstance(body_data, list):
+            items = body_data
+
+        if not isinstance(items, list):
+            raise ValueError("Request body must contain a list of subtitle updates")
+
+        manifest_file = output_dir / "manifest.json"
+        manifest_entries = []
+        if manifest_file.is_file():
+            data = json.loads(manifest_file.read_text(encoding="utf-8"))
+            manifest_entries = data.get("entries", [])
+
+        # Map existing entries by string ID for validation
+        baseline_map = {}
+        for entry in manifest_entries:
+            item_id = str(entry.get("index") or entry.get("id") or entry.get("filename"))
+            baseline_map[item_id] = {
+                "start": float(entry.get("start_seconds", 0.0)),
+                "end": float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0))),
+                "source_text": str(entry.get("source_text") or entry.get("english", "")),
+            }
+
+        overrides_file = output_dir / "subtitles_overrides.json"
+        existing_overrides = {}
+        if overrides_file.is_file():
+            try:
+                existing_overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+            except Exception:
+                existing_overrides = {}
+
+        updated_count = 0
+        for item in items:
+            if not isinstance(item, dict):
+                continue
+            item_id = str(item.get("id"))
+            if not item_id or item_id == "None":
+                continue
+
+            # Validate immutability of start, end, and source_text
+            if item_id in baseline_map:
+                base = baseline_map[item_id]
+                if "start" in item and abs(float(item["start"]) - base["start"]) > 1e-4:
+                    return JSONResponse(
+                        {"ok": False, "error": f"Mutation of 'start' time is not allowed for item {item_id}"},
+                        status_code=400,
+                    )
+                if "end" in item and abs(float(item["end"]) - base["end"]) > 1e-4:
+                    return JSONResponse(
+                        {"ok": False, "error": f"Mutation of 'end' time is not allowed for item {item_id}"},
+                        status_code=400,
+                    )
+                if "source_text" in item and str(item["source_text"]) != base["source_text"]:
+                    return JSONResponse(
+                        {"ok": False, "error": f"Mutation of 'source_text' is not allowed for item {item_id}"},
+                        status_code=400,
+                    )
+            elif "start" in item or "end" in item or "source_text" in item:
+                # If mock/non-manifest item provided unexpected changes
+                pass
+
+            if "final_chs" in item:
+                new_final = str(item["final_chs"])
+                existing_overrides[item_id] = {
+                    "final_chs": new_final,
+                    "modified": True,
+                }
+                updated_count += 1
+
+        # Persist overrides
+        atomic_write_text(
+            overrides_file,
+            json.dumps(existing_overrides, ensure_ascii=False, indent=2),
+        )
+
+        # Regenerate ASS and SRT files if manifest exists
+        if manifest_file.is_file():
+            sub_objects = []
+            for entry in manifest_entries:
+                item_id = str(entry.get("index") or entry.get("id") or entry.get("filename"))
+                chs_text = str(entry.get("target_text") or entry.get("chinese", ""))
+                if item_id in existing_overrides:
+                    chs_text = existing_overrides[item_id].get("final_chs", chs_text)
+
+                sub_objects.append(
+                    SimpleNamespace(
+                        english=str(entry.get("source_text") or entry.get("english", "")),
+                        chinese=chs_text,
+                        start_seconds=float(entry.get("start_seconds", 0.0)),
+                        display_end_seconds=float(
+                            entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0))
+                        ),
+                    )
+                )
+
+            if sub_objects:
+                write_ass(
+                    sub_objects,
+                    output_dir / "HSR_Voice_Archive.ass",
+                    source_language=config.source_text_language or "en",
+                    target_language=config.target_language or "zh-CN",
+                )
+                write_srt(
+                    sub_objects,
+                    output_dir / "HSR_Voice_Archive.srt",
+                    source_language=config.source_text_language or "en",
+                    target_language=config.target_language or "zh-CN",
+                )
+
+        return {"ok": True, "updated_count": updated_count}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 

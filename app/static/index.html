@@ -284,6 +284,38 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <p class="small muted">断点、QA、usage 与 stages 已放在项目 .state 目录，不再混入 output 成品目录。它们用于恢复和排错，不代表构建已经成功。</p>
         <table><tbody id="diagnosticOutputTable"></tbody></table>
       </details>
+
+      <details id="subtitleEditorDetails" style="margin-top:14px">
+        <summary>字幕审核与编辑器</summary>
+        <p class="small muted">在项目输出完成后审核、检阅、修改和覆盖输出字幕文件。修改保存后将自动重写 ASS 和 SRT 字幕。</p>
+        <div class="row3" style="margin-top:10px">
+          <div><label>文本搜索 (q)</label><input id="subSearchQuery" placeholder="搜索原文或中文字幕..."></div>
+          <div><label>开始时间 (秒)</label><input id="subStartTime" type="number" step="0.1" placeholder="例如 0"></div>
+          <div><label>结束时间 (秒)</label><input id="subEndTime" type="number" step="0.1" placeholder="例如 100"></div>
+        </div>
+        <div class="actions" style="margin-top:8px">
+          <button type="button" class="primary" id="subSearchBtn">搜索 / 刷新字幕</button>
+          <button type="button" class="success" id="subSaveBtn">保存修改并更新字幕</button>
+        </div>
+        <div id="subEditorStatus" class="small muted" style="margin-top:8px"></div>
+        <div style="overflow-x:auto;margin-top:10px">
+          <table>
+            <thead>
+              <tr>
+                <th style="width:60px">ID</th>
+                <th style="width:110px">时间 (秒)</th>
+                <th>原文</th>
+                <th>官方中文</th>
+                <th>API 翻译</th>
+                <th>最终中文字幕 (可编辑)</th>
+              </tr>
+            </thead>
+            <tbody id="subtitleTableBody">
+              <tr><td colspan="6" class="muted">点击“搜索 / 刷新字幕”读取字幕数据。</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </details>
     </section>
 
     <section class="card hidden" id="updateCard">
@@ -889,6 +921,70 @@ document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElem
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('blackVideoStatus');try{if(button)button.disabled=true;status.textContent='正在创建黑屏 MKV 任务…';setRunReport('正在生成黑屏 MKV','准备生成黑色视频轨并封装连续 FLAC；字幕不会被内嵌或烧录。',true);const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;status.textContent='启动失败：'+shortError(x);setRunReport('启动失败',shortError(x),true);setLog(String(x))}}
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('submitReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus'),input=document.getElementById('reviewFileInput'),button=document.getElementById('submitReviewBtn');try{const file=input.files?.[0];if(!file)throw new Error('请先选择修改后的 TXT 文件');button.disabled=true;s.textContent='正在校验并导入人工修订…';const d=new FormData();d.set('review_text',await file.text());const j=await api('/api/review/import',{method:'POST',body:d});fillProject(j.project);const r=j.result||{};if(r.remaining>0){s.textContent='已导入 '+n(r.imported)+' 条，仍有 '+n(r.remaining)+' 条未填写；请下载更新后的 TXT 继续修订。';button.disabled=false;return;}s.textContent='人工修订已导入，正在从检查点继续构建…';beginBuildLaunch();const build=await api('/api/project/build',{method:'POST'});watchJob(build.job);}catch(x){button.disabled=false;s.textContent='导入失败：'+shortError(x);setLog(String(x))}};
+async function loadSubtitles(){
+  const status=document.getElementById('subEditorStatus');
+  const tbody=document.getElementById('subtitleTableBody');
+  status.textContent='正在读取字幕数据…';
+  try{
+    const q=encodeURIComponent(document.getElementById('subSearchQuery').value.trim());
+    const start=document.getElementById('subStartTime').value;
+    const end=document.getElementById('subEndTime').value;
+    let url='/api/project/active/subtitles?';
+    if(q)url+='q='+q+'&';
+    if(start)url+='start_time='+start+'&';
+    if(end)url+='end_time='+end+'&';
+    const res=await api(url);
+    const subs=res.subtitles||[];
+    status.textContent='已加载 '+subs.length+' 条字幕记录。';
+    if(!subs.length){
+      tbody.innerHTML='<tr><td colspan="6" class="muted">未找到匹配的字幕记录。</td></tr>';
+      return;
+    }
+    tbody.innerHTML=subs.map(item=>{
+      const timeStr=item.start.toFixed(2)+' - '+item.end.toFixed(2);
+      const modBadge=item.modified?' <span class="badge" style="color:var(--warn)">已修改</span>':'';
+      return '<tr>'
+        +'<td>'+item.id+modBadge+'</td>'
+        +'<td>'+timeStr+'</td>'
+        +'<td>'+(item.source_text||'')+'</td>'
+        +'<td>'+(item.official_chs||'')+'</td>'
+        +'<td>'+(item.api_chs||'')+'</td>'
+        +'<td><input class="sub-final-input" data-id="'+item.id+'" value="'+(item.final_chs||'').replace(/"/g, '&quot;')+'"></td>'
+        +'</tr>';
+    }).join('');
+  }catch(x){
+    status.textContent='读取失败：'+shortError(x);
+    status.className='small status-bad';
+  }
+}
+async function saveSubtitles(){
+  const status=document.getElementById('subEditorStatus');
+  status.textContent='正在保存字幕修改…';
+  try{
+    const inputs=document.querySelectorAll('.sub-final-input');
+    const items=[];
+    inputs.forEach(input=>{
+      items.push({
+        id: input.dataset.id,
+        final_chs: input.value
+      });
+    });
+    const res=await api('/api/project/active/subtitles/update',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subtitles:items})
+    });
+    status.textContent='已成功保存 '+res.updated_count+' 条字幕修改，ASS/SRT 文件已同步更新。';
+    status.className='small status-ok';
+    await loadSubtitles();
+    await refresh();
+  }catch(x){
+    status.textContent='保存失败：'+shortError(x);
+    status.className='small status-bad';
+  }
+}
+document.getElementById('subSearchBtn').onclick=loadSubtitles;
+document.getElementById('subSaveBtn').onclick=saveSubtitles;
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
 document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSelectedSource()}catch(x){const s=document.getElementById('relinkStatus');s.textContent=shortError(x);s.className='small status-bad';setLog(String(x))}};
 document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;

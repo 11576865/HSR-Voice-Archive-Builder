@@ -154,6 +154,112 @@ class TestSubtitleAPI(unittest.TestCase):
             self.assertEqual(len(subs_time), 1)
             self.assertEqual(subs_time[0]["id"], 2)
 
+    def test_update_subtitles_valid_and_persistence(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "output"
+            out.mkdir(parents=True, exist_ok=True)
+            manifest = {
+                "entries": [
+                    {
+                        "index": 1,
+                        "start_seconds": 1.0,
+                        "display_end_seconds": 4.0,
+                        "source_text": "May this journey lead us starward.",
+                        "target_text": "愿此行，终抵群星。",
+                    }
+                ]
+            }
+            (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+            cfg = create_project(
+                root,
+                name="test_proj_update",
+                index_csv="index.csv",
+                wav_source="wavs",
+                output_dir="output",
+            )
+            _set_active(cfg)
+
+            payload = {
+                "subtitles": [
+                    {
+                        "id": 1,
+                        "final_chs": "愿这场旅程带我们走向群星（已审核修改）。",
+                    }
+                ]
+            }
+            resp = self.client.post("/api/project/active/subtitles/update", json=payload, headers=self.headers)
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(resp.json()["ok"])
+            self.assertEqual(resp.json()["updated_count"], 1)
+
+            # Check overrides file created
+            overrides_file = out / "subtitles_overrides.json"
+            self.assertTrue(overrides_file.is_file())
+            overrides_data = json.loads(overrides_file.read_text(encoding="utf-8"))
+            self.assertIn("1", overrides_data)
+            self.assertEqual(overrides_data["1"]["final_chs"], "愿这场旅程带我们走向群星（已审核修改）。")
+
+            # Check ASS and SRT files regenerated
+            ass_file = out / "HSR_Voice_Archive.ass"
+            srt_file = out / "HSR_Voice_Archive.srt"
+            self.assertTrue(ass_file.is_file())
+            self.assertTrue(srt_file.is_file())
+            self.assertIn("愿这场旅程带我们走向群星（已审核修改）。", ass_file.read_text(encoding="utf-8"))
+
+            # Check GET reflects modification
+            get_resp = self.client.get("/api/project/active/subtitles", headers=self.headers)
+            self.assertEqual(get_resp.status_code, 200)
+            sub = get_resp.json()["subtitles"][0]
+            self.assertEqual(sub["final_chs"], "愿这场旅程带我们走向群星（已审核修改）。")
+            self.assertTrue(sub["modified"])
+
+    def test_update_subtitles_rejects_immutable_fields(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "output"
+            out.mkdir(parents=True, exist_ok=True)
+            manifest = {
+                "entries": [
+                    {
+                        "index": 1,
+                        "start_seconds": 1.0,
+                        "display_end_seconds": 4.0,
+                        "source_text": "Original English",
+                        "target_text": "原始中文",
+                    }
+                ]
+            }
+            (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+
+            cfg = create_project(
+                root,
+                name="test_proj_immutable",
+                index_csv="index.csv",
+                wav_source="wavs",
+                output_dir="output",
+            )
+            _set_active(cfg)
+
+            # Mutation of start
+            resp_start = self.client.post(
+                "/api/project/active/subtitles/update",
+                json={"subtitles": [{"id": 1, "start": 99.0, "final_chs": "修改中文"}]},
+                headers=self.headers,
+            )
+            self.assertEqual(resp_start.status_code, 400)
+            self.assertIn("Mutation of 'start'", resp_start.json()["error"])
+
+            # Mutation of source_text
+            resp_src = self.client.post(
+                "/api/project/active/subtitles/update",
+                json={"subtitles": [{"id": 1, "source_text": "Changed English", "final_chs": "修改中文"}]},
+                headers=self.headers,
+            )
+            self.assertEqual(resp_src.status_code, 400)
+            self.assertIn("Mutation of 'source_text'", resp_src.json()["error"])
+
 
 if __name__ == "__main__":
     unittest.main()
