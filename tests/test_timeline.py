@@ -50,7 +50,7 @@ class TimelineTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "at least one"):
             resolve_timeline([], 48000)
 
-    def test_ass_uses_one_chinese_line_for_chinese_primary_audio(self) -> None:
+    def test_ass_uses_one_centered_chinese_dialogue_for_chinese_primary_audio(self) -> None:
         entry = SimpleNamespace(
             english="你好。",
             chinese="你好。",
@@ -62,11 +62,15 @@ class TimelineTests(unittest.TestCase):
             source_language="zh-CN",
             target_language="zh-CN",
         )
-        dialogue = next(line for line in text.splitlines() if line.startswith("Dialogue:"))
-        self.assertIn(r"{\fn汉仪旗黑}你好。", dialogue)
-        self.assertNotIn(r"\N", dialogue)
+        dialogues = [
+            line for line in text.splitlines() if line.startswith("Dialogue:")
+        ]
+        self.assertEqual(len(dialogues), 1)
+        self.assertIn(",ArchiveChinese,", dialogues[0])
+        self.assertIn("你好。", dialogues[0])
+        self.assertNotIn(r"\N", dialogues[0])
 
-    def test_ass_uses_source_and_chinese_fonts_for_bilingual_audio(self) -> None:
+    def test_ass_separates_bilingual_source_and_target_regions(self) -> None:
         entry = SimpleNamespace(
             english="Hello.",
             chinese="你好。",
@@ -74,7 +78,54 @@ class TimelineTests(unittest.TestCase):
             display_end_seconds=6.0,
         )
         text = render_ass([entry], source_language="en", target_language="zh-CN")
-        self.assertIn(r"{\fnNoto Sans}Hello.\N{\fn汉仪旗黑}你好。", text)
+        dialogues = [
+            line for line in text.splitlines() if line.startswith("Dialogue:")
+        ]
+
+        self.assertEqual(len(dialogues), 2)
+        self.assertIn(",ArchiveSource,", dialogues[0])
+        self.assertIn("Hello.", dialogues[0])
+        self.assertNotIn("你好。", dialogues[0])
+        self.assertIn(",ArchiveTarget,", dialogues[1])
+        self.assertIn("你好。", dialogues[1])
+        self.assertNotIn("Hello.", dialogues[1])
+
+    def test_ass_bilingual_styles_use_top_and_bottom_anchors(self) -> None:
+        entry = SimpleNamespace(
+            english="Hello.",
+            chinese="你好。",
+            start_seconds=5.0,
+            display_end_seconds=6.0,
+        )
+        text = render_ass([entry], source_language="en", target_language="zh-CN")
+
+        self.assertIn(
+            "Style: ArchiveSource,Noto Sans,60,"
+            "&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,"
+            "0,0,0,0,100,100,0,0,1,2,0,8,96,96,110,1",
+            text,
+        )
+        self.assertIn(
+            "Style: ArchiveTarget,汉仪旗黑,68,"
+            "&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,"
+            "0,0,0,0,100,100,0,0,1,2,0,2,96,96,110,1",
+            text,
+        )
+
+    def test_ass_long_bilingual_text_uses_adaptive_font_size(self) -> None:
+        entry = SimpleNamespace(
+            english=("A long line of dialogue with several clauses and details. " * 10),
+            chinese=("这是一段用于验证长字幕自适应字号的中文文本。" * 12),
+            start_seconds=5.0,
+            display_end_seconds=20.0,
+        )
+        text = render_ass([entry], source_language="en", target_language="zh-CN")
+        dialogues = [
+            line for line in text.splitlines() if line.startswith("Dialogue:")
+        ]
+
+        self.assertIn(r"{\fs40}", dialogues[0])
+        self.assertRegex(dialogues[1], r"\{\\fs(?:48|50|52|54|56|58|60|62|64|66)\}")
 
 
 if __name__ == "__main__":
