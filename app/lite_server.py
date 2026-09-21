@@ -20,6 +20,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .subtitles import get_project_subtitles, parse_time_range_str, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import (
@@ -294,6 +295,33 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
             return
+        if "/subtitles" in path and path.startswith("/api/project/"):
+            query = parse_qs(urlsplit(self.path).query)
+            q = (query.get("q") or [None])[-1]
+            start_time_raw = (query.get("start_time") or [None])[-1]
+            end_time_raw = (query.get("end_time") or [None])[-1]
+            selector = (query.get("selector") or [None])[-1]
+            time_range = (query.get("time_range") or [None])[-1]
+
+            start_time = float(start_time_raw) if start_time_raw is not None else None
+            end_time = float(end_time_raw) if end_time_raw is not None else None
+
+            parsed_start, parsed_end = parse_time_range_str(time_range) if time_range else (None, None)
+            effective_start = start_time if start_time is not None else parsed_start
+            effective_end = end_time if end_time is not None else parsed_end
+
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            subtitles = get_project_subtitles(
+                config,
+                output,
+                q=q,
+                start_time=effective_start,
+                end_time=effective_end,
+                selector=selector,
+            )
+            self._json({"ok": True, "subtitles": subtitles})
+            return
         if path == "/api/review/file":
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
@@ -336,6 +364,27 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if "/subtitles" in path and path.startswith("/api/project/"):
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+
+            raw_subs = data.get("subtitles") or data.get("updates")
+            if isinstance(raw_subs, str):
+                try:
+                    updates = json.loads(raw_subs)
+                except Exception:
+                    updates = []
+            elif isinstance(raw_subs, list):
+                updates = raw_subs
+            else:
+                updates = []
+
+            result = update_project_subtitles(config, output, updates)
+            self._json({"ok": True, "result": result})
+            return
+
         if path == "/api/quick/scan":
             english_source = data.get("english_source", "").strip()
             if not english_source:
