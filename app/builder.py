@@ -27,11 +27,16 @@ DEFAULT_MAX_EXTRACT_BYTES = 32 * 1024**3
 MAX_ARCHIVE_MEMBERS = 100_000
 
 # Voice packages for different localizations often differ only in the
-# character-name component: e.g. chapter5_13_evanescia_103 versus
-# chapter5_13_绯英_103. Group plus numeric tail is usable only when it is
+# character-name component or optional prefixes/suffixes: e.g. chapter5_13_evanescia_103 versus
+# chapter5_13_绯英_103, or vo_chapter5_13_evanescia_103 versus vo_chapter5_13_绯英_103,
+# or vo_100101_01 versus 100101_01. Group plus numeric tail is usable only when it is
 # unique on both sides; ordering is never a safe subtitle-matching fallback.
 _CROSS_LANGUAGE_KEY_RE = re.compile(
-    r"^(?P<group>(?:archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?))_.+?_(?P<tail>\d+(?:_[fm])?)$",
+    r"^(?:vo_)?(?P<group>(?:archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?))_.+?_(?P<tail>\d+(?:_[fm])?)$",
+    re.IGNORECASE,
+)
+_NUMERIC_VOICE_KEY_RE = re.compile(
+    r"^(?:vo_)?(?P<id>\d+(?:_\d+)*(?:_[fm])?)$",
     re.IGNORECASE,
 )
 
@@ -41,6 +46,12 @@ def cross_language_voice_key(filename: str) -> str:
     match = _CROSS_LANGUAGE_KEY_RE.match(stem)
     if match:
         return f"{match.group('group').casefold()}::{match.group('tail').casefold()}"
+    num_match = _NUMERIC_VOICE_KEY_RE.match(stem)
+    if num_match:
+        return f"id::{num_match.group('id').casefold()}"
+    # Strip optional vo_ prefix for fallback stem comparison
+    if stem.startswith("vo_"):
+        return stem[3:]
     return stem
 
 
@@ -70,16 +81,21 @@ def map_labs_to_voice_filenames(
         labs_by_key.setdefault(cross_language_voice_key(stem), []).append((stem, text))
 
     structural = 0
+    conflicts = 0
     for key, matches in names_by_key.items():
         candidates = labs_by_key.get(key, [])
         if len(matches) == 1 and len(candidates) == 1:
             mapped[matches[0]] = candidates[0][1]
             structural += 1
+        elif len(candidates) > 1 or (len(matches) > 1 and len(candidates) > 0):
+            conflicts += 1
+
     return mapped, {
         "exact": exact,
         "structural": structural,
         "total": len(mapped),
         "unmatched": len(names) - len(mapped),
+        "conflicts": conflicts,
     }
 
 
