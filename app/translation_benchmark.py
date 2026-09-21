@@ -328,7 +328,7 @@ def run_benchmark(
         if not provider["configured"]:
             raise RuntimeError(
                 "Translation API key is not configured. Run "
-                "'python -m app.credentials configure --provider vapi' first."
+                "'python -m app.credentials configure --provider custom --base-url <OpenAI-compatible-Base-URL>' first."
             )
         client = make_client()
         for start in range(0, len(sample), batch_size):

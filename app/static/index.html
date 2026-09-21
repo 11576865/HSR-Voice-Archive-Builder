@@ -338,7 +338,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <details>
         <summary>本地优先与局域网控制</summary>
         <p class="small muted">默认地址仅绑定 127.0.0.1。使用 <code>python -m app.launch --lan</code> 时，后端会绑定局域网并生成临时控制 token。手机或平板可以控制电脑处理，但原始音频仍留在电脑。</p>
-        <p class="small muted">AI 翻译凭据只保存在处理设备本地。首次配置可运行 <code>python -m app.credentials configure --provider vapi</code>；之后启动器会自动读取，无需每次 export。</p>
+        <p class="small muted">AI 翻译凭据只保存在处理设备本地。首次配置请使用所选服务的 OpenAI-compatible Base URL，例如 <code>python -m app.credentials configure --provider custom --base-url https://你的工作空间.cn-beijing.maas.aliyuncs.com/compatible-mode/v1</code>；之后启动器会自动读取，无需每次 export。</p>
       </details>
     </section>
   </div>
@@ -627,7 +627,9 @@ function renderQuickPlan(plan){
     '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
-    '官方中文字幕：'+(z?n(z.lab_count):(tr.source_text_language==='zh-CN'?n(tr.official_chinese_matches)+'（来自主音频包）':'未提供')),
+    '官方中文字幕：'+(plan.chinese
+      ? (n(tr.official_chinese_matches)+' / '+n(e.wav_count)+' · 同名 '+n(tr.official_chinese_exact)+' · 跨语言唯一映射 '+n(tr.official_chinese_structural))
+      : (tr.source_text_language==='zh-CN'?n(tr.official_chinese_matches)+'（来自主音频包）':'未提供')),
     '参考文本：'+(
       plan.reference
         ? (n(plan.reference_text_match?.total)+' / '+n(e.wav_count)
@@ -679,7 +681,7 @@ function beginBuildLaunch(){
 }
 function shortError(raw){
   const first=String(raw||'').split('\n').find(x=>x.trim())||'未知错误';
-  if(first.includes('Translation API key is not configured'))return '尚未配置翻译 API Key。请先运行 python -m app.credentials configure --provider vapi，或取消 AI 翻译。';
+  if(first.includes('Translation API key is not configured'))return '尚未配置翻译 API Key。请先按所用服务的 OpenAI-compatible Base URL 运行 python -m app.credentials configure --provider custom --base-url <URL>，或取消 AI 翻译。';
   if(first.includes('HTTP 401'))return '翻译 API 鉴权失败：请检查 API Key。';
   if(first.includes('HTTP 403'))return '翻译 API 拒绝访问：请检查账号、模型权限或中转配置。';
   if(first.includes('HTTP 429'))return '翻译 API 请求过多或额度受限；已完成的检查点会保留。';

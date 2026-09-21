@@ -12,6 +12,7 @@ import tempfile
 import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
+from typing import Iterable, Mapping
 
 from .timeline import (
     resolve_timeline,
@@ -24,6 +25,62 @@ from .wavpcm import iter_pcm_chunks, parse_wav_pcm
 SRT_TS = re.compile(r"^(\d+):(\d+):(\d+),(\d+)$")
 DEFAULT_MAX_EXTRACT_BYTES = 32 * 1024**3
 MAX_ARCHIVE_MEMBERS = 100_000
+
+# Voice packages for different localizations often differ only in the
+# character-name component: e.g. chapter5_13_evanescia_103 versus
+# chapter5_13_绯英_103. Group plus numeric tail is usable only when it is
+# unique on both sides; ordering is never a safe subtitle-matching fallback.
+_CROSS_LANGUAGE_KEY_RE = re.compile(
+    r"^(?P<group>(?:archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?))_.+?_(?P<tail>\d+(?:_[fm])?)$",
+    re.IGNORECASE,
+)
+
+
+def cross_language_voice_key(filename: str) -> str:
+    stem = Path(filename).stem.casefold()
+    match = _CROSS_LANGUAGE_KEY_RE.match(stem)
+    if match:
+        return f"{match.group('group').casefold()}::{match.group('tail').casefold()}"
+    return stem
+
+
+def map_labs_to_voice_filenames(
+    voice_filenames: Iterable[str], labs: Mapping[str, str]
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Map official LAB text without ever pairing records by position."""
+    names = [Path(name).name for name in voice_filenames]
+    mapped: dict[str, str] = {}
+    exact = 0
+    for name in names:
+        text = str(labs.get(Path(name).stem, "") or "").strip()
+        if text:
+            mapped[name] = text
+            exact += 1
+
+    mapped_stems = {Path(name).stem for name in mapped}
+    names_by_key: dict[str, list[str]] = {}
+    for name in names:
+        if name not in mapped:
+            names_by_key.setdefault(cross_language_voice_key(name), []).append(name)
+    labs_by_key: dict[str, list[tuple[str, str]]] = {}
+    for stem, raw_text in labs.items():
+        text = str(raw_text or "").strip()
+        if stem in mapped_stems or not text:
+            continue
+        labs_by_key.setdefault(cross_language_voice_key(stem), []).append((stem, text))
+
+    structural = 0
+    for key, matches in names_by_key.items():
+        candidates = labs_by_key.get(key, [])
+        if len(matches) == 1 and len(candidates) == 1:
+            mapped[matches[0]] = candidates[0][1]
+            structural += 1
+    return mapped, {
+        "exact": exact,
+        "structural": structural,
+        "total": len(mapped),
+        "unmatched": len(names) - len(mapped),
+    }
 
 
 def read_csv_rows(path: Path) -> list[dict[str, str]]:
@@ -354,6 +411,7 @@ def build_entries(
     if source_text_language == target_language == "zh-CN":
         labs = {**primary_labs, **labs}
     wavs = collect_wavs(wav_root)
+    official_labs, official_match = map_labs_to_voice_filenames(wavs.keys(), labs)
 
     sample_rate: int | None = None
     channels: int | None = None
@@ -398,8 +456,8 @@ def build_entries(
             mismatched_hashes.append(filename)
 
         stem = stem_of(filename)
-        if stem in labs:
-            chinese = labs[stem]
+        if filename in official_labs:
+            chinese = official_labs[filename]
             chinese_source = "official_chs_lab"
             official_count += 1
         else:
@@ -501,6 +559,9 @@ def build_entries(
     report = {
         "count_total": len(entries),
         "count_official_chs_lab": official_count,
+        "count_official_chs_exact": official_match["exact"],
+        "count_official_chs_structural": official_match["structural"],
+        "count_official_chs_unmatched": official_match["unmatched"],
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
         "count_official_target_lab": official_count,

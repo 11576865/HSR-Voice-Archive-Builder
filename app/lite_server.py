@@ -588,7 +588,7 @@ class Handler(BaseHTTPRequestHandler):
             ) and not runtime.get("translation_api_key_configured"):
                 raise RuntimeError(
                     "Translation API key is not configured; run "
-                    "'python -m app.credentials configure --provider vapi'"
+                    "'python -m app.credentials configure --provider custom --base-url <OpenAI-compatible-Base-URL>'"
                 )
 
             def run(report_progress):

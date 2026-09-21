@@ -220,7 +220,7 @@ def _test(args: argparse.Namespace) -> None:
     if not status["configured"]:
         raise SystemExit(
             "Translation API key is not configured. "
-            "Run: python -m app.credentials configure --provider vapi"
+            "Run: python -m app.credentials configure --provider custom --base-url <OpenAI-compatible-Base-URL>"
         )
     result = ensure_translation_capability(
         model=args.model,

@@ -225,6 +225,8 @@ def api_quick_build(
     source_text_language: str = Form("en"),
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
+    translate_missing: bool = Form(True),
+    review_official_target: bool = Form(True),
 ):
     try:
         assert_no_active_build()
@@ -518,11 +520,11 @@ def api_project_build():
         if (
             config.translate_missing or config.review_official_target
         ) and not dependency_status().get("translation_api_key_configured"):
-            raise RuntimeError(
-                "Translation API key is not configured; run "
-                "'python -m app.credentials configure --provider vapi' "
-                "or disable AI fallback translation"
-            )
+                raise RuntimeError(
+                    "Translation API key is not configured; run "
+                    "'python -m app.credentials configure --provider custom --base-url <OpenAI-compatible-Base-URL>' "
+                    "or disable AI fallback translation"
+                )
 
         def run(report_progress):
             return build_project_v02(

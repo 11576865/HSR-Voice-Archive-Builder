@@ -12,7 +12,13 @@ from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
 
-from .builder import MAX_ARCHIVE_MEMBERS, atomic_write_text, sha256_file
+from .builder import (
+    MAX_ARCHIVE_MEMBERS,
+    atomic_write_text,
+    cross_language_voice_key,
+    map_labs_to_voice_filenames,
+    sha256_file,
+)
 from .credentials import credentials_status
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
@@ -417,18 +423,8 @@ def _remote_rows(
     return result
 
 
-_CROSS_LANGUAGE_KEY_RE = re.compile(
-    r"^(?P<group>(?:archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?))_.+?_(?P<tail>\d+(?:_[fm])?)$",
-    re.IGNORECASE,
-)
-
-
 def _cross_language_voice_key(filename: str) -> str:
-    stem = Path(filename).stem.casefold()
-    match = _CROSS_LANGUAGE_KEY_RE.match(stem)
-    if match:
-        return f"{match.group('group').casefold()}::{match.group('tail').casefold()}"
-    return stem
+    return cross_language_voice_key(filename)
 
 
 def _map_reference_records(
@@ -697,6 +693,8 @@ def quick_scan(
 
     pending_records: list[dict[str, str]] = []
     official_chinese_matches = 0
+    official_chinese_exact = 0
+    official_chinese_structural = 0
     if selected_complete and selected_index is not None:
         if selected_index.get("source") == "remote":
             index_rows = _remote_rows(
@@ -712,18 +710,32 @@ def quick_scan(
         chinese_stems = set(chs.get("lab_names", [])) if chs else set()
         if source_text_language == target_language == "zh-CN":
             chinese_stems.update(english.get("lab_names", []))
-        official_chinese_matches = sum(
-            Path(str(row.get("filename", ""))).stem in chinese_stems
-            for row in index_rows
+        official_map, match_detail = map_labs_to_voice_filenames(
+            [str(row.get("filename", "")) for row in index_rows],
+            {stem: "present" for stem in chinese_stems},
         )
+        official_chinese_matches = match_detail["total"]
+        official_chinese_exact = match_detail["exact"]
+        official_chinese_structural = match_detail["structural"]
         pending_records = [
             {
                 "id": Path(str(row.get("filename", ""))).name,
                 "english": str(row.get("english", "")).strip(),
             }
             for row in index_rows
-            if Path(str(row.get("filename", ""))).stem not in chinese_stems
+            if Path(str(row.get("filename", ""))).name not in official_map
         ]
+        if chs_source is not None and chinese_stems and not official_chinese_matches:
+            blockers.append(
+                "Official Chinese package has LAB files but none can be safely matched "
+                "to the primary voices; API fallback is blocked to prevent an unintended full translation"
+            )
+        elif chs_source is not None and official_chinese_matches < len(index_rows):
+            warnings.append(
+                f"Official Chinese subtitles match {official_chinese_matches} / {len(index_rows)} "
+                f"voices ({official_chinese_exact} exact, {official_chinese_structural} cross-language); "
+                "only unmatched items may use AI translation"
+            )
     translation_estimate = estimate_workload_tokens(pending_records, 80)
 
     return {
@@ -766,6 +778,8 @@ def quick_scan(
             "target_language": target_language,
             "remote_index_url": remote_index_url,
             "official_chinese_matches": official_chinese_matches,
+            "official_chinese_exact": official_chinese_exact,
+            "official_chinese_structural": official_chinese_structural,
             "pending_translation_count": len(pending_records),
             **translation_estimate,
         },

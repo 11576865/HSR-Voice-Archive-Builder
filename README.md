@@ -449,24 +449,18 @@ or not-yet-published Chinese audio leaves the reference blank; the configured
 translation API still translates the English source. When a Chinese reference
 is available, the API may use it only for terminology and localization context.
 
-For V-API:
-
-```bash
-python -m app.credentials configure --provider vapi
-```
-
-The command asks for the key with hidden input, stores it under `~/.hsr-voice-archive-builder/`, and reuses it on later starts. The configured Base URL is `https://api.gpt.ge/v1`.
-
-For the official OpenAI API:
-
-```bash
-python -m app.credentials configure --provider openai
-```
-
-A custom OpenAI-compatible HTTPS endpoint is also supported:
+Credentials are entered once with hidden input and stored locally under
+`~/.hsr-voice-archive-builder/`. For an OpenAI-compatible HTTPS endpoint:
 
 ```bash
 python -m app.credentials configure --provider custom --base-url https://example.com/v1
+```
+
+For Alibaba Cloud Model Studio / official Qwen in the Beijing region, substitute
+your workspace ID in the compatible-mode endpoint:
+
+```bash
+python -m app.credentials configure --provider custom --base-url https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
 ```
 
 Check the local configuration without revealing the key:

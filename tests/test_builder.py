@@ -26,6 +26,26 @@ def write_csv(path: Path, fieldnames: list[str], rows: list[dict[str, str]]) -> 
 
 
 class BuilderTests(unittest.TestCase):
+    def test_cross_language_official_labs_are_mapped_by_unique_voice_key(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            labs = root / "official_chinese"
+            labs.mkdir()
+            english_name = "chapter5_13_evanescia_103.wav"
+            write_wav(wavs / english_name, 8000)
+            (labs / "chapter5_13_绯英_103.lab").write_text("官方中文", encoding="utf-8")
+            index = root / "index.csv"
+            bilingual = root / "bilingual.csv"
+            write_csv(index, ["序号", "分组", "文件名", "来源", "来源细分", "英文文本", "SHA-256"], [{"序号": "1", "分组": "g", "文件名": english_name, "来源": "", "来源细分": "", "英文文本": "English", "SHA-256": ""}])
+            write_csv(bilingual, ["文件名", "中文", "ENGLISH"], [{"文件名": english_name, "中文": "", "ENGLISH": "English"}])
+
+            entries, report = build_entries(index, bilingual, labs, wavs)
+            self.assertEqual(entries[0].chinese, "官方中文")
+            self.assertEqual(entries[0].chinese_source, "official_chs_lab")
+            self.assertEqual(report["count_official_chs_exact"], 0)
+            self.assertEqual(report["count_official_chs_structural"], 1)
+
     def test_chinese_primary_labs_are_used_as_chinese_subtitles(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

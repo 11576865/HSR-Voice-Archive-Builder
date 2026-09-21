@@ -1528,6 +1528,22 @@ def build_project_v02(
             )
             rebuilt_stages.append("metadata")
 
+        # A selected official Chinese package must identify at least one
+        # primary voice before it can trigger AI fallback. This prevents a
+        # filename mismatch from silently translating the entire archive.
+        if (
+            chs_source is not None
+            and source_text_language != target_language
+            and int(report.get("count_official_chs_lab", 0) or 0) == 0
+            and int(report.get("count_missing_chinese", 0) or 0) > 0
+            and translate_missing
+        ):
+            raise RuntimeError(
+                "The selected official Chinese package matched 0 primary voices. "
+                "API fallback was stopped to avoid translating every line. "
+                "Run Quick Scan and choose the corresponding Chinese package."
+            )
+
         progress(
             "translation",
             f"3/6 正在处理 {target_language} 翻译与质量检查" if translate_missing
