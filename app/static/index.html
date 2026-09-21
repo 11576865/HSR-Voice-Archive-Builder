@@ -179,6 +179,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         </div>
         <div id="projectActionStatus" class="small muted action-status"></div>
         <div id="buildInlineStatus" class="small muted" style="margin-top:8px">准备就绪。</div>
+        <p class="small muted" style="margin-top:8px">重新构建不会预先清空 output：未受影响的成品直接复用；需要更新的文件先写入临时文件，成功并校验后才原子替换同名旧文件。若成品已被移走，程序会把它视为缺失并重新生成，不会自动追踪或搬回。</p>
 
         <div class="divider"></div>
         <details id="sourceHealthDetails">
@@ -264,15 +265,14 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <div id="archiveStats" class="stats hidden" style="margin-top:12px">
         <div class="stat"><b id="statTotal">—</b><span>已归档语音</span></div>
         <div class="stat"><b id="statOfficial">—</b><span>官方中文字幕</span></div>
-        <div class="stat"><b id="statTranslated">—</b><span>已有 / API 目标文本</span></div>
-        <div class="stat"><b id="statMissing">—</b><span>缺失目标文本</span></div>
+        <div class="stat"><b id="statIncrementalOfficial">—</b><span>增量官方中文参考</span></div>
+        <div class="stat"><b id="statApiOnly">—</b><span>无官方参考的 API 译文</span></div>
       </div>
       <div id="translationUsage" class="small muted" style="margin-top:10px"></div>
       <div id="finishedOutputs" class="hidden">
         <div class="divider"></div>
         <h3>成品文件</h3>
         <table><tbody id="outputTable"></tbody></table>
-        <div class="actions"><button type="button" class="success" id="blackVideoBtn">生成黑屏 MKV</button></div>
         <div id="blackVideoStatus" class="small muted" style="margin-top:8px">只封装黑色视频轨与连续 FLAC，不内嵌或烧录字幕；播放时外挂 ASS / SRT。</div>
         <p class="small muted">ASS 是独立字幕文件。许多播放器把 FLAC 当作纯音频时不会加载 ASS，这不代表字幕损坏；请使用支持“音频 + 外挂 ASS”的播放器，或之后封装进带黑色视频轨的 MKV。SRT 能显示而 ASS 不显示，通常是播放器对纯音频容器的字幕支持差异。</p>
       </div>
@@ -498,6 +498,11 @@ const outputDescriptions={
   'build_report.json':'本次构建的统计、校验结果与资源使用记录',
   'semantic_review_required.txt':'语义偏离条目的人工修订往返文件'
 };
+const primaryOutputOrder=[
+  'manifest.json','manifest.csv','bilingual_index_corrected.csv','timeline_resolved.json',
+  'build_report.json','update_plan.json'
+];
+const finalOutputOrder=['HSR_Voice_Archive.srt','HSR_Voice_Archive.ass','continuous.flac'];
 function outputDescription(name){
   return outputDescriptions[name]||'构建生成的项目成品文件';
 }
@@ -531,8 +536,8 @@ function fillProject(p){
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
   document.getElementById('statTotal').textContent=n(r.count_total);
   document.getElementById('statOfficial').textContent=n(r.count_official_chs_lab);
-  document.getElementById('statTranslated').textContent=n((r.count_translated_existing||0)+(r.count_api_translated??r.count_gpt_translated??0));
-  document.getElementById('statMissing').textContent=n(r.count_missing_chinese);
+  document.getElementById('statIncrementalOfficial').textContent=n(r.count_incremental_official_reference);
+  document.getElementById('statApiOnly').textContent=n(r.count_unreferenced_api_target_text);
   const usage=[];
   if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
   if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
@@ -544,11 +549,25 @@ function fillProject(p){
   if(has&&p.output_path){actionStatus.textContent='成品文件已放至：'+p.output_path;actionStatus.className='small status-ok action-status';}
   const main=document.getElementById('outputTable'),diag=document.getElementById('diagnosticOutputTable');
   main.innerHTML='';diag.innerHTML='';
-  for(const [name,o] of Object.entries(p.outputs||{})){
+  const outputEntries=Object.entries(p.outputs||{}),outputMap=Object.fromEntries(outputEntries);
+  const orderedNames=[...primaryOutputOrder,...outputEntries.map(([name])=>name).filter(name=>!primaryOutputOrder.includes(name)&&!finalOutputOrder.includes(name)&&name!=='HSR_Voice_Archive_Black.mkv'),...finalOutputOrder];
+  for(const name of orderedNames){
+    const o=outputMap[name];
+    if(!o)continue;
     if(!o.exists)continue;
     const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':/\.(ass|srt)$/i.test(name)?'file-subtitle':'';
     tr.innerHTML='<td><span class="'+fileClass+'">'+name+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
     (has?main:diag).appendChild(tr);
+  }
+  if(has){
+    const mkv=outputMap['HSR_Voice_Archive_Black.mkv'],tr=document.createElement('tr');
+    if(mkv?.exists){
+      tr.innerHTML='<td><span class="file-audio">HSR_Voice_Archive_Black.mkv</span><div class="small muted" style="margin-top:3px">'+outputDescription('HSR_Voice_Archive_Black.mkv')+'</div></td><td>'+bytes(mkv.size_bytes)+'</td>';
+    }else{
+      tr.innerHTML='<td><button type="button" class="success" id="blackVideoBtn">生成黑屏 MKV</button><div class="small muted" style="margin-top:6px">生成黑色视频轨与连续 FLAC 的播放容器；不内嵌字幕。</div></td><td>可选</td>';
+      tr.querySelector('#blackVideoBtn').onclick=startBlackVideo;
+    }
+    main.appendChild(tr);
   }
   for(const [name,o] of Object.entries(p.state_outputs||{})){
     if(!o.exists)continue;
@@ -783,7 +802,7 @@ async function watchJob(id){
           setRunReport('增量更新已应用',completedReport(x.job),false);
           setLog(r);
         }else if(x.job.kind==='black-video-export'){
-          document.getElementById('blackVideoBtn').disabled=false;
+          const button=document.getElementById('blackVideoBtn');if(button)button.disabled=false;
           document.getElementById('blackVideoStatus').textContent='黑屏 MKV 已生成；播放时请外挂 ASS / SRT。';
           setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
           setLog(x.job.result||x.job);
@@ -795,7 +814,7 @@ async function watchJob(id){
       }
       if(x.job.state==='failed'){
         clearInterval(pollTimer);setLog(x.job.error||x.job);
-        if(x.job.kind==='black-video-export'){document.getElementById('blackVideoBtn').disabled=false;document.getElementById('blackVideoStatus').textContent='生成失败：'+shortError(x.job.error||x.job);}
+        if(x.job.kind==='black-video-export'){const button=document.getElementById('blackVideoBtn');if(button)button.disabled=false;document.getElementById('blackVideoStatus').textContent='生成失败：'+shortError(x.job.error||x.job);}
         if(x.job.kind==='remote-update-check'){
           const result=document.getElementById('updateResult');
           if(result)result.textContent='远程检查失败：'+shortError(x.job.error||x.job);
@@ -859,7 +878,7 @@ document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();awa
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;setRunReport('正在应用新增语音','正在准备 Hugging Face 定位索引并下载新增音频；首次运行需要下载约 188 MiB 的定位文件。',true);const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
-document.getElementById('blackVideoBtn').onclick=async()=>{const button=document.getElementById('blackVideoBtn'),status=document.getElementById('blackVideoStatus');try{button.disabled=true;status.textContent='正在创建黑屏 MKV 任务…';setRunReport('正在生成黑屏 MKV','准备生成黑色视频轨并封装连续 FLAC；字幕不会被内嵌或烧录。',true);const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){button.disabled=false;status.textContent='启动失败：'+shortError(x);setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
+async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('blackVideoStatus');try{if(button)button.disabled=true;status.textContent='正在创建黑屏 MKV 任务…';setRunReport('正在生成黑屏 MKV','准备生成黑色视频轨并封装连续 FLAC；字幕不会被内嵌或烧录。',true);const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;status.textContent='启动失败：'+shortError(x);setRunReport('启动失败',shortError(x),true);setLog(String(x))}}
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('submitReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus'),input=document.getElementById('reviewFileInput'),button=document.getElementById('submitReviewBtn');try{const file=input.files?.[0];if(!file)throw new Error('请先选择修改后的 TXT 文件');button.disabled=true;s.textContent='正在校验并导入人工修订…';const d=new FormData();d.set('review_text',await file.text());const j=await api('/api/review/import',{method:'POST',body:d});fillProject(j.project);const r=j.result||{};if(r.remaining>0){s.textContent='已导入 '+n(r.imported)+' 条，仍有 '+n(r.remaining)+' 条未填写；请下载更新后的 TXT 继续修订。';button.disabled=false;return;}s.textContent='人工修订已导入，正在从检查点继续构建…';beginBuildLaunch();const build=await api('/api/project/build',{method:'POST'});watchJob(build.job);}catch(x){button.disabled=false;s.textContent='导入失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};

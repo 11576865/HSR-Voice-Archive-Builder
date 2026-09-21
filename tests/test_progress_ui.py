@@ -98,6 +98,12 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("'/api/output/black-video'", html)
         self.assertNotIn('id="openOutputBtn"', html)
         self.assertIn("自行或交给智能体编辑", html)
+        self.assertIn("重新构建不会预先清空 output", html)
+        self.assertIn("const primaryOutputOrder=", html)
+        self.assertIn("const finalOutputOrder=['HSR_Voice_Archive.srt','HSR_Voice_Archive.ass','continuous.flac']", html)
+        self.assertIn("增量官方中文参考", html)
+        self.assertIn("无官方参考的 API 译文", html)
+        self.assertNotIn("缺失目标文本</span>", html)
 
 
 class BuildProgressTests(unittest.TestCase):

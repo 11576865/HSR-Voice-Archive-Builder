@@ -533,6 +533,8 @@ output/
 
 The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`, and `HSR_Voice_Archive.srt` carries the same resolved timings for players and tools that only accept SRT; legacy `bilingual.srt` is no longer generated. The optional `HSR_Voice_Archive_Black.mkv` contains only a lightweight black video track and a stream copy of `continuous.flac`; subtitles stay external and are neither embedded nor burned in. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
 
+Rebuilding does not clear `output/` in advance. Completed stages whose input fingerprint and artifact hashes still match are reused. Files that need updating are written to temporary siblings and atomically replace the same-named result only after writing succeeds; FLAC is additionally decoded and PCM-verified before promotion. If a finished file was moved away, it is treated as missing and regenerated in `output/`; the builder does not locate or move the external copy back. A black MKV is tied to the FLAC from which it was made, so a successful FLAC rebuild removes the stale MKV and restores the dashboard export action. A failed FLAC rebuild leaves both the prior FLAC and prior MKV untouched.
+
 ## Official Chinese cross-check
 
 `--review-official-target` compares each official Chinese line against its source line before the archive is written. Local checks first sort every line into one of three zones, and only the last two cost anything:

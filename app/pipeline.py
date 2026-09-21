@@ -1651,6 +1651,17 @@ def build_project_v02(
         report["target_language"] = target_language
         report["reference_language"] = reference_language
         report["reference_text_embedded"] = bool(reference_text_embedded)
+        report["count_incremental_official_reference"] = sum(
+            bool(str(getattr(entry, "reference_text", "") or "").strip())
+            and str(getattr(entry, "reference_language", "") or "").lower()
+            in {"zh", "zh-cn", "chs", "cn"}
+            for entry in entries
+        )
+        report["count_unreferenced_api_target_text"] = sum(
+            str(getattr(entry, "chinese_source", "") or "").startswith("api:")
+            and not str(getattr(entry, "reference_text", "") or "").strip()
+            for entry in entries
+        )
 
         progress("manifest", "4/6 正在生成字幕与清单", 4)
 
@@ -1707,6 +1718,9 @@ def build_project_v02(
                 audio_report = build_continuous_flac(
                     entries, wav_root, out_dir / "continuous.flac"
                 )
+                # A previous black MKV contains the old FLAC. Invalidate it
+                # only after the replacement FLAC has encoded and verified.
+                (out_dir / "HSR_Voice_Archive_Black.mkv").unlink(missing_ok=True)
                 report.update(audio_report)
                 save_stage(
                     state_dir,

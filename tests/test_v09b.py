@@ -136,10 +136,13 @@ class V09BStageRecoveryTests(unittest.TestCase):
             self.assertIn("audio", resumed["stage_resume"]["resumed"])
 
             (output / "continuous.flac").write_bytes(b"tampered")
+            stale_mkv = output / "HSR_Voice_Archive_Black.mkv"
+            stale_mkv.write_bytes(b"old-flac-container")
             with patch("app.pipeline.build_continuous_flac", side_effect=fake_encode) as encode:
                 rebuilt = build_project_v02(index, wavs, output, make_flac=True)
                 self.assertEqual(encode.call_count, 1)
             self.assertIn("audio", rebuilt["stage_resume"]["rebuilt"])
+            self.assertFalse(stale_mkv.exists())
 
 
 if __name__ == "__main__":
