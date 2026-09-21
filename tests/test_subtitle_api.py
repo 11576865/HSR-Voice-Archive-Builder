@@ -22,12 +22,12 @@ class TestSubtitleAPI(unittest.TestCase):
     def tearDown(self) -> None:
         _clear_active()
 
-    def test_get_subtitles_mock_fallback(self) -> None:
+    def test_get_subtitles_no_manifest_returns_empty(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             cfg = create_project(
                 root,
-                name="test_proj_mock",
+                name="test_proj_empty",
                 index_csv="index.csv",
                 wav_source="wavs",
                 output_dir="output",
@@ -39,9 +39,7 @@ class TestSubtitleAPI(unittest.TestCase):
             data = resp.json()
             self.assertTrue(data["ok"])
             subs = data["subtitles"]
-            self.assertEqual(len(subs), 2)
-            self.assertEqual(subs[0]["id"], 1)
-            self.assertIn("May this journey", subs[0]["source_text"])
+            self.assertEqual(len(subs), 0)
 
     def test_get_subtitles_manifest_parsing(self) -> None:
         with tempfile.TemporaryDirectory() as td:

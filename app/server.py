@@ -257,31 +257,7 @@ def api_get_project_subtitles(
                     "modified": modified,
                 })
         else:
-            # Fallback mock data when output manifest is not yet built
-            subtitles = [
-                {
-                    "id": 1,
-                    "start": 5.0,
-                    "end": 7.5,
-                    "source_language": config.source_text_language or "en",
-                    "source_text": "May this journey lead us starward.",
-                    "official_chs": "愿此行，终抵群星。",
-                    "api_chs": "愿这场旅程带我们走向群星。",
-                    "final_chs": "愿此行，终抵群星。",
-                    "modified": False,
-                },
-                {
-                    "id": 2,
-                    "start": 8.0,
-                    "end": 11.2,
-                    "source_language": config.source_text_language or "en",
-                    "source_text": "Rules are made to be broken!",
-                    "official_chs": "规则，就是用来打破的！",
-                    "api_chs": "规矩就是用来打破的！",
-                    "final_chs": "规则，就是用来打破的！",
-                    "modified": False,
-                },
-            ]
+            subtitles = []
 
         # Apply search string filter (q)
         if q and q.strip():

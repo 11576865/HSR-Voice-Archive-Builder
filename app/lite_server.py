@@ -13,6 +13,8 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .timeline import write_ass, write_srt
+from types import SimpleNamespace
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -80,6 +82,214 @@ def _set_active(config: ProjectConfig) -> None:
 def _clear_active() -> None:
     global _active_root
     _active_root = None
+
+
+def _resolve_project(project_id: str) -> ProjectConfig:
+    if _active_root is not None:
+        try:
+            active_cfg = _active_config()
+            if project_id in ("active", "current", active_cfg.name, str(_active_root)):
+                return active_cfg
+        except Exception:
+            pass
+
+    for p in recent_projects(50):
+        if p.get("name") == project_id or p.get("root") == project_id:
+            try:
+                return load_project(Path(p["root"]))
+            except Exception:
+                pass
+
+    try:
+        candidate_path = Path(project_id).expanduser()
+        if candidate_path.exists():
+            return load_project(candidate_path)
+    except Exception:
+        pass
+
+    if _active_root is not None:
+        return _active_config()
+
+    raise RuntimeError(f"Project not found: {project_id}")
+
+
+def _get_subtitles(project_id: str, q: str = "", start_time: float | None = None, end_time: float | None = None) -> dict:
+    config = _resolve_project(project_id)
+    paths = _project_paths(config)
+    output_dir = paths.get("output")
+
+    subtitles = []
+    manifest_file = output_dir / "manifest.json" if output_dir else None
+
+    if manifest_file and manifest_file.is_file():
+        data = json.loads(manifest_file.read_text(encoding="utf-8"))
+        entries = data.get("entries", [])
+        overrides_file = output_dir / "subtitles_overrides.json"
+        overrides = {}
+        if overrides_file.is_file():
+            try:
+                overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+            except Exception:
+                overrides = {}
+
+        for entry in entries:
+            item_id = entry.get("index") or entry.get("id") or entry.get("filename")
+            src_type = str(entry.get("target_text_source") or entry.get("chinese_source", ""))
+            target_text = str(entry.get("target_text") or entry.get("chinese", ""))
+
+            official_chs = ""
+            api_chs = ""
+
+            if src_type in ("official_chs_lab", "official_target_lab"):
+                official_chs = target_text
+            elif src_type.startswith("api:") or src_type in ("translated_existing", "api_translation"):
+                api_chs = target_text
+                ref_text = str(entry.get("reference_text", ""))
+                if entry.get("reference_language") in ("zh-CN", "zh") or config.reference_language in ("zh-CN", "zh"):
+                    official_chs = ref_text
+            else:
+                official_chs = target_text
+
+            final_chs = target_text
+            modified = bool(entry.get("modified", False))
+
+            str_id = str(item_id)
+            if str_id in overrides:
+                ov = overrides[str_id]
+                if isinstance(ov, dict):
+                    final_chs = ov.get("final_chs", final_chs)
+                    modified = ov.get("modified", True)
+
+            start = float(entry.get("start_seconds", 0.0))
+            end = float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0)))
+
+            subtitles.append({
+                "id": item_id,
+                "start": start,
+                "end": end,
+                "source_language": config.source_text_language or "en",
+                "source_text": str(entry.get("source_text") or entry.get("english", "")),
+                "official_chs": official_chs,
+                "api_chs": api_chs,
+                "final_chs": final_chs,
+                "modified": modified,
+            })
+
+    if q and q.strip():
+        query = q.strip().casefold()
+        subtitles = [
+            sub for sub in subtitles
+            if query in sub["source_text"].casefold()
+            or query in sub["official_chs"].casefold()
+            or query in sub["api_chs"].casefold()
+            or query in sub["final_chs"].casefold()
+        ]
+
+    if start_time is not None:
+        subtitles = [sub for sub in subtitles if sub["end"] >= start_time]
+    if end_time is not None:
+        subtitles = [sub for sub in subtitles if sub["start"] <= end_time]
+
+    return {"ok": True, "subtitles": subtitles}
+
+
+def _update_subtitles(project_id: str, items: list) -> dict:
+    if not isinstance(items, list):
+        raise ValueError("Subtitles update payload must be a list")
+
+    config = _resolve_project(project_id)
+    paths = _project_paths(config)
+    output_dir = paths.get("output")
+    if not output_dir:
+        raise ValueError("Output directory is not configured")
+
+    manifest_file = output_dir / "manifest.json"
+    manifest_entries = []
+    if manifest_file.is_file():
+        data = json.loads(manifest_file.read_text(encoding="utf-8"))
+        manifest_entries = data.get("entries", [])
+
+    baseline_map = {}
+    for entry in manifest_entries:
+        item_id = str(entry.get("index") or entry.get("id") or entry.get("filename"))
+        baseline_map[item_id] = {
+            "start": float(entry.get("start_seconds", 0.0)),
+            "end": float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0))),
+            "source_text": str(entry.get("source_text") or entry.get("english", "")),
+        }
+
+    overrides_file = output_dir / "subtitles_overrides.json"
+    existing_overrides = {}
+    if overrides_file.is_file():
+        try:
+            existing_overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+        except Exception:
+            existing_overrides = {}
+
+    updated_count = 0
+    for item in items:
+        if not isinstance(item, dict):
+            continue
+        item_id = str(item.get("id"))
+        if not item_id or item_id == "None":
+            continue
+
+        if item_id in baseline_map:
+            base = baseline_map[item_id]
+            if "start" in item and abs(float(item["start"]) - base["start"]) > 1e-4:
+                raise ValueError(f"Mutation of 'start' time is not allowed for item {item_id}")
+            if "end" in item and abs(float(item["end"]) - base["end"]) > 1e-4:
+                raise ValueError(f"Mutation of 'end' time is not allowed for item {item_id}")
+            if "source_text" in item and str(item["source_text"]) != base["source_text"]:
+                raise ValueError(f"Mutation of 'source_text' is not allowed for item {item_id}")
+
+        if "final_chs" in item:
+            new_final = str(item["final_chs"])
+            existing_overrides[item_id] = {
+                "final_chs": new_final,
+                "modified": True,
+            }
+            updated_count += 1
+
+    atomic_write_text(
+        overrides_file,
+        json.dumps(existing_overrides, ensure_ascii=False, indent=2),
+    )
+
+    if manifest_file.is_file():
+        sub_objects = []
+        for entry in manifest_entries:
+            item_id = str(entry.get("index") or entry.get("id") or entry.get("filename"))
+            chs_text = str(entry.get("target_text") or entry.get("chinese", ""))
+            if item_id in existing_overrides:
+                chs_text = existing_overrides[item_id].get("final_chs", chs_text)
+
+            sub_objects.append(
+                SimpleNamespace(
+                    english=str(entry.get("source_text") or entry.get("english", "")),
+                    chinese=chs_text,
+                    start_seconds=float(entry.get("start_seconds", 0.0)),
+                    display_end_seconds=float(
+                        entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0))
+                    ),
+                )
+            )
+
+        if sub_objects:
+            write_ass(
+                sub_objects,
+                output_dir / "HSR_Voice_Archive.ass",
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+            )
+            write_srt(
+                sub_objects,
+                output_dir / "HSR_Voice_Archive.srt",
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+            )
+
+    return {"ok": True, "updated_count": updated_count}
 
 
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
@@ -315,6 +525,18 @@ class Handler(BaseHTTPRequestHandler):
                 self._json({"ok": False, "error": "Job not found"}, 404)
             else:
                 self._json({"ok": True, "job": job})
+            return
+        if path.startswith("/api/project/") and path.endswith("/subtitles"):
+            parts = path.split("/")
+            project_id = parts[3]
+            query = parse_qs(urlsplit(self.path).query)
+            q = (query.get("q") or [""])[-1]
+            st_raw = (query.get("start_time") or [""])[-1]
+            et_raw = (query.get("end_time") or [""])[-1]
+            start_time = float(st_raw) if st_raw else None
+            end_time = float(et_raw) if et_raw else None
+            res = _get_subtitles(project_id, q=q, start_time=start_time, end_time=end_time)
+            self._json(res)
             return
         self._json({"ok": False, "error": "Not found"}, 404)
 
@@ -827,6 +1049,23 @@ class Handler(BaseHTTPRequestHandler):
 
             job = create_job("remote-update-apply", run, with_progress=True, project_root=config.root, project_name=config.name)
             self._json({"ok": True, "job": job.id})
+            return
+
+        if path.startswith("/api/project/") and path.endswith("/subtitles/update"):
+            parts = path.split("/")
+            project_id = parts[3]
+            raw_items = data.get("subtitles")
+            if raw_items and isinstance(raw_items, str):
+                try:
+                    items = json.loads(raw_items)
+                except Exception:
+                    items = []
+            elif isinstance(data, dict) and "subtitles" not in data:
+                items = []
+            else:
+                items = data.get("subtitles", [])
+            res = _update_subtitles(project_id, items)
+            self._json(res)
             return
 
         if path == "/api/output/black-video":
