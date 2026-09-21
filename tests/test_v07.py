@@ -26,7 +26,7 @@ class V07ProviderTests(unittest.TestCase):
             index_csv="index.csv",
             wav_source="wavs",
         )
-        self.assertEqual(config.translation_model, "qwen-mt-plus")
+        self.assertEqual(config.translation_model, "qwen3.7-plus")
 
     def test_vapi_base_url_targets_responses_endpoint(self) -> None:
         client = OpenAIResponsesHTTPClient(

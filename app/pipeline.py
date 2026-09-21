@@ -1383,7 +1383,7 @@ def build_project_v02(
     intro_gap: float = 5.0,
     make_flac: bool = True,
     translate_missing: bool = False,
-    translation_model: str = "qwen-mt-plus",
+    translation_model: str = "qwen3.7-plus",
     translation_batch_size: int = 80,
     translation_token_budget: int = 0,
     translation_budget_usd: float = 0.0,
@@ -1802,7 +1802,7 @@ if __name__ == "__main__":
     p.add_argument("--no-flac", action="store_true")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
-    p.add_argument("--translation-model", default="qwen-mt-plus")
+    p.add_argument("--translation-model", default="qwen3.7-plus")
     p.add_argument("--translation-batch-size", type=int, default=80)
     p.add_argument("--translation-token-budget", type=int, default=0)
     p.add_argument("--translation-budget-usd", type=float, default=0.0)

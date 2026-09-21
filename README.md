@@ -227,7 +227,7 @@ Useful options:
 --no-flac
 --translate-missing
 --review-official-target
---translation-model qwen-mt-plus
+--translation-model qwen3.7-plus
 --translation-batch-size 80
 --translation-token-budget 0
 --translation-budget-usd 0
@@ -254,7 +254,7 @@ If no recent project is available, pass an index explicitly:
 python -m app.translation_benchmark \
   --index "/path/to/index.csv" \
   --sample-size 50 \
-  --model qwen-mt-plus
+  --model qwen3.7-plus
 ```
 
 The default 50-line benchmark is deterministic and deliberately spreads samples across terminology-heavy, long/complex, short/context-sensitive, expressive, tag/placeholder and general dialogue. It uses one 50-line API batch by default; batching is internal and requires no manual "continue" interaction.
@@ -409,7 +409,7 @@ Otherwise use a token budget. If a USD limit is requested while pricing is unkno
 Structured-output smoke results are cached for seven days by provider + Base URL + model + schema fingerprint. Re-running:
 
 ```bash
-python -m app.credentials test --model qwen-mt-plus
+python -m app.credentials test --model qwen3.7-plus
 ```
 
 reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
@@ -469,7 +469,7 @@ python -m app.credentials status
 Run a tiny paid/usage-bearing structured-output smoke test before a real batch:
 
 ```bash
-python -m app.credentials test --model qwen-mt-plus
+python -m app.credentials test --model qwen3.7-plus
 ```
 
 Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.
