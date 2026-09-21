@@ -62,11 +62,12 @@ class TimelineTests(unittest.TestCase):
             source_language="zh-CN",
             target_language="zh-CN",
         )
-        dialogue = next(line for line in text.splitlines() if line.startswith("Dialogue:"))
-        self.assertIn(r"{\fn汉仪旗黑}你好。", dialogue)
-        self.assertNotIn(r"\N", dialogue)
+        dialogues = [line for line in text.splitlines() if line.startswith("Dialogue:")]
+        self.assertEqual(len(dialogues), 1)
+        self.assertIn("你好。", dialogues[0])
+        self.assertNotIn(r"\N", dialogues[0])
 
-    def test_ass_uses_source_and_chinese_fonts_for_bilingual_audio(self) -> None:
+    def test_ass_uses_independent_dialogue_events_for_bilingual_audio(self) -> None:
         entry = SimpleNamespace(
             english="Hello.",
             chinese="你好。",
@@ -74,7 +75,13 @@ class TimelineTests(unittest.TestCase):
             display_end_seconds=6.0,
         )
         text = render_ass([entry], source_language="en", target_language="zh-CN")
-        self.assertIn(r"{\fnNoto Sans}Hello.\N{\fn汉仪旗黑}你好。", text)
+        dialogues = [line for line in text.splitlines() if line.startswith("Dialogue:")]
+        self.assertEqual(len(dialogues), 2)
+        chs_line = next(d for d in dialogues if "CHS" in d)
+        pri_line = next(d for d in dialogues if "Primary" in d)
+        self.assertIn("你好。", chs_line)
+        self.assertIn("Hello.", pri_line)
+        self.assertNotIn(r"\N", text)
 
 
 if __name__ == "__main__":
