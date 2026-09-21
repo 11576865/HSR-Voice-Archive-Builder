@@ -11,6 +11,7 @@ from unittest.mock import patch
 from app.translator import (
     OpenAIResponsesHTTPClient,
     _extract_output_text,
+    _parse_json_output,
     make_client,
     translate_records,
 )
@@ -64,7 +65,51 @@ def completed_response(text: str) -> dict:
     }
 
 
+def chat_completion_response(text: str) -> dict:
+    return {
+        "id": "chatcmpl_test",
+        "choices": [{
+            "index": 0,
+            "finish_reason": "stop",
+            "message": {"role": "assistant", "content": text},
+        }],
+        "usage": {"prompt_tokens": 10, "completion_tokens": 5, "total_tokens": 15},
+    }
+
+
 class V06RestTranslationTests(unittest.TestCase):
+    def test_json_parser_accepts_provider_markdown_fence(self) -> None:
+        parsed = _parse_json_output(
+            '```json\n{"translations": []}\n```', context="test"
+        )
+        self.assertEqual(parsed, {"translations": []})
+
+    def test_model_studio_workspace_uses_chat_completions_adapter(self) -> None:
+        output = {"translations": [{"id": "a.wav", "chinese": "第一句"}]}
+        opener = SequenceOpener([
+            FakeHTTPResponse(chat_completion_response(json.dumps(output, ensure_ascii=False)))
+        ])
+        client = OpenAIResponsesHTTPClient(
+            "secret-test-key",
+            base_url="https://ws-example.cn-beijing.maas.aliyuncs.com/compatible-mode/v1",
+            provider="custom",
+            opener=opener,
+        )
+
+        rows = translate_records(
+            [{"id": "a.wav", "english": "First."}], client=client
+        )
+
+        self.assertEqual(rows[0]["chinese"], "第一句")
+        request = opener.requests[0][0]
+        self.assertEqual(
+            request.full_url,
+            "https://ws-example.cn-beijing.maas.aliyuncs.com/compatible-mode/v1/chat/completions",
+        )
+        sent = json.loads(request.data.decode("utf-8"))
+        self.assertEqual(sent["response_format"], {"type": "json_object"})
+        self.assertEqual(sent["messages"][1]["role"], "user")
+
     def test_extract_output_text_from_raw_responses_payload(self) -> None:
         payload = completed_response('{"translations":[]}')
         self.assertEqual(_extract_output_text(payload), '{"translations":[]}')

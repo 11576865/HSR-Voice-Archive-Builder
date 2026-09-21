@@ -11,6 +11,7 @@ from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from email.utils import parsedate_to_datetime
 from typing import Any
+from urllib.parse import urlsplit
 
 from .credentials import load_translation_credentials, normalize_base_url, translation_default_model
 
@@ -190,6 +191,53 @@ def _extract_output_text(payload: dict[str, Any]) -> str:
     return text
 
 
+def _extract_chat_completion_text(payload: dict[str, Any]) -> str:
+    choices = payload.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        raise RuntimeError("Translation Chat Completions response contained no choice")
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        raise RuntimeError("Translation Chat Completions response contained no message")
+    content = message.get("content")
+    if isinstance(content, str) and content.strip():
+        return content
+    if isinstance(content, list):
+        pieces = [
+            str(part.get("text", ""))
+            for part in content
+            if isinstance(part, dict) and part.get("type") in {"text", "output_text"}
+        ]
+        text = "".join(pieces)
+        if text.strip():
+            return text
+    raise RuntimeError(
+        "Translation Chat Completions response contained no output text "
+        f"(finish_reason={choices[0].get('finish_reason')!r})"
+    )
+
+
+def _parse_json_output(text: str, *, context: str) -> Any:
+    """Parse strict JSON while tolerating a single Markdown JSON fence.
+
+    Some OpenAI-compatible providers ignore structured-output controls and
+    wrap an otherwise valid response in ```json.  No free-form prose or
+    partial-object recovery is attempted, so ID/count validation remains the
+    authority after parsing.
+    """
+    value = str(text or "").strip()
+    if value.startswith("```") and value.endswith("```"):
+        lines = value.splitlines()
+        if len(lines) >= 3 and lines[0].strip().lower() in {"```", "```json"}:
+            value = "\n".join(lines[1:-1]).strip()
+    try:
+        return json.loads(value)
+    except json.JSONDecodeError as exc:
+        preview = value[:160].replace("\n", " ")
+        raise RuntimeError(
+            f"{context} returned text that is not valid JSON; preview={preview!r}"
+        ) from exc
+
+
 @dataclass
 class HTTPResponse:
     output_text: str
@@ -229,6 +277,14 @@ class OpenAIResponsesHTTPClient:
         self.base_url = normalize_base_url(base_url)
         self.provider = str(provider or "custom").strip() or "custom"
         self.responses_url = self.base_url.rstrip("/") + "/responses"
+        self.chat_completions_url = self.base_url.rstrip("/") + "/chat/completions"
+        hostname = (urlsplit(self.base_url).hostname or "").casefold()
+        self.api_mode = (
+            "chat_completions"
+            if hostname.endswith(".maas.aliyuncs.com")
+            or hostname.endswith(".dashscope.aliyuncs.com")
+            else "responses"
+        )
         self.timeout = float(timeout)
         self.max_retries = max(0, int(max_retries))
         self.opener = opener or urllib.request.build_opener()
@@ -244,9 +300,31 @@ class OpenAIResponsesHTTPClient:
         return base + (self.random_fn() * min(0.25, base * 0.25))
 
     def create(self, **payload: Any) -> HTTPResponse:
-        body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        endpoint = self.responses_url
+        request_payload = payload
+        if self.api_mode == "chat_completions":
+            endpoint = self.chat_completions_url
+            format_spec = payload.get("text", {}).get("format", {})
+            schema = format_spec.get("schema") if isinstance(format_spec, dict) else None
+            schema_instruction = (
+                " Return only a valid JSON object matching this JSON Schema, with no Markdown fence: "
+                + json.dumps(schema, ensure_ascii=False, separators=(",", ":"))
+                if isinstance(schema, dict)
+                else " Return only valid JSON, with no Markdown fence."
+            )
+            request_payload = {
+                "model": payload.get("model"),
+                "messages": [
+                    {"role": "system", "content": schema_instruction.strip()},
+                    {"role": "user", "content": str(payload.get("input", ""))},
+                ],
+                # json_object has wider compatibility across Model Studio
+                # models than OpenAI's provider-specific json_schema wrapper.
+                "response_format": {"type": "json_object"},
+            }
+        body = json.dumps(request_payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(
-            self.responses_url,
+            endpoint,
             data=body,
             method="POST",
             headers={
@@ -264,6 +342,10 @@ class OpenAIResponsesHTTPClient:
                 data = json.loads(raw.decode("utf-8"))
                 if not isinstance(data, dict):
                     raise RuntimeError("Translation API returned a non-object JSON response")
+                if self.api_mode == "chat_completions":
+                    return HTTPResponse(
+                        output_text=_extract_chat_completion_text(data), raw=data
+                    )
                 status = data.get("status")
                 if status not in (None, "completed"):
                     raise RuntimeError(
@@ -381,7 +463,7 @@ def translate_records(
 
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Translation API response contained no output_text")
-    data = json.loads(response.output_text)
+    data = _parse_json_output(response.output_text, context="Translation API")
     got = _structured_rows(data, "translations", context="Translation")
     wanted_list = [r["id"] for r in records]
     got_ids = [r["id"] for r in got]
@@ -452,7 +534,7 @@ def verify_semantic_records(
 
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Semantic verifier response contained no output_text")
-    data = json.loads(response.output_text)
+    data = _parse_json_output(response.output_text, context="Semantic verifier")
     verdicts = _structured_rows(data, "verdicts", context="Semantic verifier")
     wanted = [str(row["id"]) for row in records]
     got_ids = [str(row.get("id", "")) for row in verdicts]
@@ -563,7 +645,7 @@ def review_official_records(
 
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Official review response contained no output_text")
-    data = json.loads(response.output_text)
+    data = _parse_json_output(response.output_text, context="Official review")
     reviews = _structured_rows(data, "reviews", context="Official review")
     wanted = [str(row["id"]) for row in records]
     got_ids = [str(row.get("id", "")) for row in reviews]
