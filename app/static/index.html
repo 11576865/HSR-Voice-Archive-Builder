@@ -286,6 +286,57 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       </details>
     </section>
 
+    <section class="card hidden" id="subtitleReviewCard">
+      <div class="topline">
+        <h2>字幕审查编辑器 (Subtitle Review Editor)</h2>
+        <div class="actions">
+          <button type="button" id="loadSubtitlesBtn">刷新列表</button>
+          <button type="button" class="success" id="saveSubtitlesBtn">保存并重新生成字幕</button>
+        </div>
+      </div>
+      <p class="small muted">在导出 ASS/SRT 前对中文字幕进行微调。只有“最终中文”可编辑，时间轴与原文不可修改。</p>
+
+      <div class="row3" style="margin-bottom:12px">
+        <div>
+          <label>关键词 / 角色搜索</label>
+          <input id="subSearchQuery" placeholder="搜索台词、角色、中英文…">
+        </div>
+        <div>
+          <label>时间范围 (MM:SS - MM:SS)</label>
+          <input id="subTimeRange" placeholder="例: 00:05 - 02:30">
+        </div>
+        <div>
+          <label>筛选分类</label>
+          <select id="subSelector">
+            <option value="all">全部字幕</option>
+            <option value="modified">已修改字幕</option>
+            <option value="official">官方中文字幕</option>
+            <option value="api">API 翻译中文字幕</option>
+          </select>
+        </div>
+      </div>
+
+      <div id="subtitleSaveStatus" class="small muted" style="margin-bottom:8px"></div>
+
+      <div style="overflow-x:auto;max-height:480px;overflow-y:auto;border:1px solid var(--line);border-radius:8px">
+        <table>
+          <thead>
+            <tr>
+              <th style="width:60px">ID</th>
+              <th style="width:110px">时间</th>
+              <th style="width:25%">原文 (Source)</th>
+              <th style="width:20%">官方中文</th>
+              <th style="width:20%">API 翻译</th>
+              <th>最终中文 (可编辑)</th>
+            </tr>
+          </thead>
+          <tbody id="subtitleTableBody">
+            <tr><td colspan="6" class="muted" style="text-align:center">点击“刷新列表”或选择项目加载字幕…</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
     <section class="card hidden" id="updateCard">
       <h2>增量更新</h2>
       <p class="small muted">先检查索引中是否出现新的语音记录，再从 Hugging Face 精确定位并下载可确认的音频。下载不会覆盖旧 WAV；角色身份由快速扫描自动保存。</p>
@@ -576,6 +627,11 @@ function fillProject(p){
     if(!o.exists)continue;
     const tr=document.createElement('tr');tr.innerHTML='<td>.state/'+name+'</td><td>'+bytes(o.size_bytes)+'</td>';
     diag.appendChild(tr);
+  }
+  const subCard=document.getElementById('subtitleReviewCard');
+  if(subCard){
+    subCard.classList.toggle('hidden',!p);
+    if(p)fetchSubtitles();
   }
 }
 function showPlan(plan){
@@ -897,6 +953,130 @@ document.getElementById('newProjectBtn').onclick=async()=>{const s=document.getE
 document.getElementById('cloneProjectBtn').onclick=async()=>{try{await cloneSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('forgetProjectBtn').onclick=async()=>{try{await forgetSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('deleteProjectBtn').onclick=async()=>{try{await deleteSelectedProject()}catch(x){setLog(String(x))}};
+function escapeHtml(str){
+  if(!str)return '';
+  return String(str).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function formatClockTime(sec){
+  if(sec===undefined||sec===null)return '00:00.0';
+  const totalMs=Math.round(sec*1000);
+  const m=Math.floor(totalMs/60000);
+  const remMs=totalMs%60000;
+  const s=Math.floor(remMs/1000);
+  const ms=Math.floor((remMs%1000)/100);
+  return String(m).padStart(2,'0')+':'+String(s).padStart(2,'0')+'.'+ms;
+}
+function parseMMSS(part){
+  if(!part)return null;
+  const p=part.trim().split(':');
+  if(p.length===2){
+    const m=parseFloat(p[0]),s=parseFloat(p[1]);
+    if(!isNaN(m)&&!isNaN(s))return m*60+s;
+  }else if(p.length===3){
+    const h=parseFloat(p[0]),m=parseFloat(p[1]),s=parseFloat(p[2]);
+    if(!isNaN(h)&&!isNaN(m)&&!isNaN(s))return h*3600+m*60+s;
+  }else{
+    const v=parseFloat(part);
+    if(!isNaN(v))return v;
+  }
+  return null;
+}
+function parseTimeRangeInput(str){
+  if(!str||!str.includes('-'))return {start:null,end:null};
+  const parts=str.split('-');
+  return {start:parseMMSS(parts[0]),end:parseMMSS(parts[1])};
+}
+
+let loadedSubtitles=[];
+async function fetchSubtitles(){
+  if(!currentProject)return;
+  const status=document.getElementById('subtitleSaveStatus');
+  const q=document.getElementById('subSearchQuery').value;
+  const timeRangeStr=document.getElementById('subTimeRange').value;
+  const selector=document.getElementById('subSelector').value;
+  const timeRange=parseTimeRangeInput(timeRangeStr);
+
+  let url='/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?';
+  const params=new URLSearchParams();
+  if(q)params.set('q',q);
+  if(timeRange.start!==null)params.set('start_time',timeRange.start);
+  if(timeRange.end!==null)params.set('end_time',timeRange.end);
+  if(selector)params.set('selector',selector);
+
+  try{
+    status.textContent='正在加载字幕数据…';
+    const j=await api(url+params.toString());
+    loadedSubtitles=j.subtitles||[];
+    renderSubtitleTable(loadedSubtitles);
+    status.textContent='已加载 '+loadedSubtitles.length+' 条字幕记录。';
+    status.className='small muted';
+  }catch(x){
+    status.textContent='加载字幕失败：'+shortError(x);
+    status.className='small status-bad';
+  }
+}
+
+function renderSubtitleTable(subtitles){
+  const tbody=document.getElementById('subtitleTableBody');
+  if(!subtitles||!subtitles.length){
+    tbody.innerHTML='<tr><td colspan="6" class="muted" style="text-align:center">无匹配字幕记录。</td></tr>';
+    return;
+  }
+  tbody.innerHTML=subtitles.map(sub=>{
+    const timeStr=formatClockTime(sub.start)+' - '+formatClockTime(sub.end);
+    const modTag=sub.modified?' <span class="badge" style="color:var(--ok)">已修改</span>':'';
+    return '<tr>'+
+      '<td><b>'+escapeHtml(sub.id)+'</b>'+modTag+'</td>'+
+      '<td><span class="small muted">'+timeStr+'</span></td>'+
+      '<td>'+escapeHtml(sub.source_text)+'</td>'+
+      '<td>'+escapeHtml(sub.official_chs||'—')+'</td>'+
+      '<td>'+escapeHtml(sub.api_chs||'—')+'</td>'+
+      '<td><input class="sub-final-input" data-id="'+escapeHtml(sub.id)+'" value="'+escapeHtml(sub.final_chs)+'" style="width:100%"></td>'+
+    '</tr>';
+  }).join('');
+}
+
+async function saveSubtitles(){
+  if(!currentProject)return;
+  const status=document.getElementById('subtitleSaveStatus');
+  const inputs=document.querySelectorAll('.sub-final-input');
+  const updates=[];
+  inputs.forEach(input=>{
+    updates.push({
+      id:input.dataset.id,
+      final_chs:input.value
+    });
+  });
+
+  if(!updates.length){
+    status.textContent='无字幕更改可保存。';
+    return;
+  }
+
+  try{
+    status.textContent='正在保存并重新生成 ASS / SRT 字幕…';
+    status.className='small muted';
+    const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({subtitles:updates})
+    });
+    status.textContent='字幕保存成功！已更新重写 ASS 和 SRT 成品文件。';
+    status.className='small status-ok';
+    await fetchSubtitles();
+    await refresh();
+  }catch(x){
+    status.textContent='保存字幕失败：'+shortError(x);
+    status.className='small status-bad';
+  }
+}
+
+document.getElementById('loadSubtitlesBtn').onclick=fetchSubtitles;
+document.getElementById('saveSubtitlesBtn').onclick=saveSubtitles;
+document.getElementById('subSearchQuery').oninput=fetchSubtitles;
+document.getElementById('subTimeRange').onchange=fetchSubtitles;
+document.getElementById('subSelector').onchange=fetchSubtitles;
+
 document.getElementById('refreshBtn').onclick=refresh;
 refresh();loadQuickCandidates();
 </script>
