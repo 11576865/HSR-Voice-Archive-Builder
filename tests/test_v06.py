@@ -148,6 +148,27 @@ class V06RestTranslationTests(unittest.TestCase):
         )
 
         self.assertEqual([x["id"] for x in rows], ["a.wav", "b.wav"])
+
+    def test_translate_records_accepts_relay_bare_array(self) -> None:
+        output = [
+            {"id": "a.wav", "chinese": "第一句"},
+            {"id": "b.wav", "chinese": "第二句"},
+        ]
+        opener = SequenceOpener(
+            [FakeHTTPResponse(completed_response(json.dumps(output, ensure_ascii=False)))]
+        )
+        client = OpenAIResponsesHTTPClient("secret-test-key", opener=opener)
+
+        rows = translate_records(
+            [
+                {"id": "a.wav", "english": "First."},
+                {"id": "b.wav", "english": "Second."},
+            ],
+            client=client,
+        )
+
+        self.assertEqual([x["id"] for x in rows], ["a.wav", "b.wav"])
+        self.assertEqual([x["chinese"] for x in rows], ["第一句", "第二句"])
         self.assertEqual(rows[1]["chinese"], "第二句")
         sent = json.loads(opener.requests[0][0].data.decode("utf-8"))
         self.assertEqual(sent["text"]["format"]["type"], "json_schema")

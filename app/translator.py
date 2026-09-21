@@ -196,6 +196,18 @@ class HTTPResponse:
     raw: dict[str, Any]
 
 
+def _structured_rows(data: Any, field: str, *, context: str) -> list[dict[str, Any]]:
+    """Accept the schema wrapper or an equivalent bare array from relays."""
+    rows = data.get(field) if isinstance(data, dict) else data if isinstance(data, list) else None
+    if not isinstance(rows, list):
+        raise RuntimeError(
+            f"{context} response must be an object containing '{field}' or a bare array"
+        )
+    if any(not isinstance(row, dict) for row in rows):
+        raise RuntimeError(f"{context} response contains a non-object row")
+    return rows
+
+
 class OpenAIResponsesHTTPClient:
     """Dependency-free OpenAI-compatible Responses API client."""
 
@@ -370,7 +382,7 @@ def translate_records(
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Translation API response contained no output_text")
     data = json.loads(response.output_text)
-    got = data["translations"]
+    got = _structured_rows(data, "translations", context="Translation")
     wanted_list = [r["id"] for r in records]
     got_ids = [r["id"] for r in got]
     if len(got_ids) != len(set(got_ids)):
@@ -441,7 +453,7 @@ def verify_semantic_records(
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Semantic verifier response contained no output_text")
     data = json.loads(response.output_text)
-    verdicts = data["verdicts"]
+    verdicts = _structured_rows(data, "verdicts", context="Semantic verifier")
     wanted = [str(row["id"]) for row in records]
     got_ids = [str(row.get("id", "")) for row in verdicts]
     if len(got_ids) != len(set(got_ids)):
@@ -552,7 +564,7 @@ def review_official_records(
     if not getattr(response, "output_text", ""):
         raise RuntimeError("Official review response contained no output_text")
     data = json.loads(response.output_text)
-    reviews = data["reviews"]
+    reviews = _structured_rows(data, "reviews", context="Official review")
     wanted = [str(row["id"]) for row in records]
     got_ids = [str(row.get("id", "")) for row in reviews]
     if len(got_ids) != len(set(got_ids)):
