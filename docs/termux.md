@@ -59,7 +59,7 @@ The key is stored only in the local Termux home state directory with best-effort
 Before a real character batch, verify the configured Responses endpoint and Structured Outputs with one tiny request:
 
 ```bash
-python -m app.credentials test --model qwen3.7-plus
+python -m app.credentials test --model gpt-5.6-terra
 ```
 
 Translation keeps batch checkpoints, exact ID validation and bounded retry behavior. Checkpoints are bound to provider + Base URL + model.

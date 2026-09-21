@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-- Changed the default translation model to `qwen3.7-plus`; existing projects keep their saved model until it is changed in the dashboard.
+- Changed the default translation model to `gpt-5.6-terra`; existing projects keep their saved model until it is changed in the dashboard.
 - Clarified atomic rebuild behavior in the dashboard, invalidated stale black-video exports only after a replacement FLAC succeeds, reordered finished outputs so SRT/ASS/FLAC/black MKV form the final four rows, and split the combined target-text statistic into incremental official Chinese references and API translations without an official reference.
 - Changed the default translation model to `qwen-mt-plus`; existing projects keep their saved model until it is changed in the dashboard.
 - Expanded semantic QA from sparse risk-tagged lines to every API-produced translation. The alignment audit now explicitly rejects one-row shifts, swaps and repeated neighboring translations, and semantic-QA version 2 invalidates older approvals so affected checkpoints are rechecked and repaired on the next build.

@@ -563,7 +563,7 @@ class Handler(BaseHTTPRequestHandler):
                 make_flac=_bool(data.get("make_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
                 review_official_target=_bool(data.get("review_official_target")),
-                translation_model=data.get("translation_model", "qwen3.7-plus").strip() or "qwen3.7-plus",
+                translation_model=data.get("translation_model", "gpt-5.6-terra").strip() or "gpt-5.6-terra",
                 translation_batch_size=max(1, _int(data.get("translation_batch_size"), 80)),
                 translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
                 translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),

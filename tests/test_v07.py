@@ -18,7 +18,7 @@ from app.translator import OpenAIResponsesHTTPClient
 
 
 class V07ProviderTests(unittest.TestCase):
-    def test_new_projects_default_to_qwen_mt_plus(self) -> None:
+    def test_new_projects_default_to_gpt_5_6_terra(self) -> None:
         config = ProjectConfig(
             schema_version=1,
             name="test",
@@ -26,7 +26,7 @@ class V07ProviderTests(unittest.TestCase):
             index_csv="index.csv",
             wav_source="wavs",
         )
-        self.assertEqual(config.translation_model, "qwen3.7-plus")
+        self.assertEqual(config.translation_model, "gpt-5.6-terra")
 
     def test_vapi_base_url_targets_responses_endpoint(self) -> None:
         client = OpenAIResponsesHTTPClient(

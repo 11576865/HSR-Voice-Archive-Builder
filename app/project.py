@@ -45,7 +45,7 @@ class ProjectConfig:
     make_flac: bool = True
     translate_missing: bool = True
     review_official_target: bool = False
-    translation_model: str = "qwen3.7-plus"
+    translation_model: str = "gpt-5.6-terra"
     translation_batch_size: int = 80
     translation_token_budget: int = 0
     translation_budget_usd: float = 0.0
