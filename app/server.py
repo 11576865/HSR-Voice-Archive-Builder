@@ -191,6 +191,8 @@ def api_quick_scan(
     source_text_language: str = Form("en"),
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
+    translate_missing: bool = Form(True),
+    review_official_target: bool = Form(True),
 ):
     try:
         plan = quick_scan(
@@ -243,6 +245,8 @@ def api_quick_build(
             intro_gap=max(0.0, intro_gap),
             same_group_gap=max(0.0, same_group_gap),
             group_gap=max(0.0, group_gap),
+            translate_missing=translate_missing,
+            review_official_target=review_official_target,
         )
         _set_active(config)
         paths = _project_paths(config)

@@ -101,6 +101,9 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           </div>
         </div>
         <p class="small muted">Quick Mode 固定生成简体中文字幕；源文本可使用 EN / CHS / JP / KR。第二语言包只作为额外逐条语义参考，不会混入连续 FLAC。</p>
+        <label class="check"><input id="quickTranslateMissing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
+        <label class="check"><input id="quickReviewOfficial" type="checkbox" checked> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
+        <p class="small muted">这两项会随快速构建一起保存。关闭“官方中文对照复核”仍会采用官方中文文本；只是跳过英文与官方中文的快速语义比对，以及只针对高风险条目的 API 复核/重译。</p>
         <div class="actions">
           <button type="button" id="quickRefreshBtn">刷新本机文件</button>
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
@@ -842,6 +845,8 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
   d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
   d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
+  d.set('translate_missing',document.getElementById('quickTranslateMissing').checked?'true':'false');
+  d.set('review_official_target',document.getElementById('quickReviewOfficial').checked?'true':'false');
   d.set('intro_gap',document.getElementById('quickIntroGap').value||'5.00');
   d.set('same_group_gap',document.getElementById('quickSameGroupGap').value||'0.40');
   d.set('group_gap',document.getElementById('quickGroupGap').value||'1.20');

@@ -380,6 +380,8 @@ class Handler(BaseHTTPRequestHandler):
                 intro_gap=max(0.0, _float(data.get("intro_gap"), 5.0)),
                 same_group_gap=max(0.0, _float(data.get("same_group_gap"), 0.40)),
                 group_gap=max(0.0, _float(data.get("group_gap"), 1.20)),
+                translate_missing=_bool(data.get("translate_missing")),
+                review_official_target=_bool(data.get("review_official_target")),
             )
             _set_active(config)
             paths = _project_paths(config)
