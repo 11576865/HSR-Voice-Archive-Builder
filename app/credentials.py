@@ -214,18 +214,37 @@ def _status() -> None:
 
 
 def _test(args: argparse.Namespace) -> None:
-    from .translator import ensure_translation_capability
+    from .translator import OpenAIResponsesHTTPClient, ensure_translation_capability
 
+    if args.timeout <= 0:
+        raise SystemExit("--timeout must be greater than zero")
     status = credentials_status()
     if not status["configured"]:
         raise SystemExit(
             "Translation API key is not configured. "
             "Run: python -m app.credentials configure --provider custom --base-url <OpenAI-compatible-Base-URL>"
         )
-    result = ensure_translation_capability(
-        model=args.model,
-        force=args.force,
+    creds = load_translation_credentials()
+    print(
+        f"Testing {args.model} via {creds.base_url} "
+        f"(timeout={args.timeout:g}s, retries=0)...",
+        flush=True,
     )
+    client = OpenAIResponsesHTTPClient(
+        creds.api_key,
+        base_url=creds.base_url,
+        provider=creds.provider,
+        timeout=args.timeout,
+        max_retries=0,
+    )
+    try:
+        result = ensure_translation_capability(
+            model=args.model,
+            client=client,
+            force=args.force,
+        )
+    except Exception as exc:
+        raise SystemExit(f"Translation capability test failed: {exc}") from exc
     print(json.dumps(
         {
             "ok": True,
@@ -269,6 +288,12 @@ def main() -> None:
     t = sub.add_parser("test", help="Verify structured translation capability; reuse a fresh cached success")
     t.add_argument("--model", default=translation_default_model())
     t.add_argument("--force", action="store_true", help="Ignore the capability cache and send a fresh smoke request")
+    t.add_argument(
+        "--timeout",
+        type=float,
+        default=30.0,
+        help="Per-request timeout in seconds (default: 30; no retries during credential tests)",
+    )
     t.set_defaults(func=_test)
 
     x = sub.add_parser("clear", help="Delete the locally saved translation credentials")
