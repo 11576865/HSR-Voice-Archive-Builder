@@ -28,6 +28,14 @@ class TestSubtitleEditor(unittest.TestCase):
         self.assertEqual(s, 5.0)
         self.assertEqual(e, 150.0)
 
+        s_dash, e_dash = parse_time_range_str("03:20 -- 05:40")
+        self.assertEqual(s_dash, 200.0)
+        self.assertEqual(e_dash, 340.0)
+
+        s_tilde, e_tilde = parse_time_range_str("01:00 ~ 02:00")
+        self.assertEqual(s_tilde, 60.0)
+        self.assertEqual(e_tilde, 120.0)
+
         s_invalid, e_invalid = parse_time_range_str("invalid")
         self.assertIsNone(s_invalid)
         self.assertIsNone(e_invalid)
