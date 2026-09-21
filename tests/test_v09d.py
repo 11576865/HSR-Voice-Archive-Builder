@@ -16,7 +16,7 @@ from app.glossary import (
     merge_glossary,
 )
 from app.pipeline import _target_records, _translate_missing, build_project_v02
-from app.semantic_quality import semantic_risk_tags
+from app.semantic_quality import SEMANTIC_QA_VERSION, semantic_risk_tags
 from app.translator import (
     HTTPResponse,
     OpenAIResponsesHTTPClient,
@@ -138,7 +138,67 @@ class InvalidSemanticClient(ScriptedSemanticClient):
         )
 
 
+class AlignmentShiftClient(ScriptedSemanticClient):
+    def create(self, **payload):
+        schema_name = payload["text"]["format"]["name"]
+        requested = json.loads(payload["input"].split("\n\nInput JSON:\n", 1)[1])
+        if schema_name == "voice_translation_batch":
+            self.translation_calls += 1
+            translations = []
+            for row in requested:
+                if row["id"] == "smoke-1":
+                    chinese = "故事还没结束。"
+                elif "Semantic verifier:" in row.get("qa_issues", ""):
+                    chinese = "高树招风……"
+                else:
+                    chinese = "还没玩够吗？"
+                translations.append({"id": row["id"], "chinese": chinese})
+            return HTTPResponse(
+                output_text=json.dumps({"translations": translations}, ensure_ascii=False),
+                raw=self._usage(),
+            )
+        if schema_name == "voice_translation_semantic_audit":
+            self.audit_calls += 1
+            verdicts = []
+            for row in requested:
+                ok = row["chinese"] == "高树招风……"
+                verdicts.append({
+                    "id": row["id"],
+                    "ok": ok,
+                    "issues": [] if ok else ["omission", "addition"],
+                    "note": "meaning preserved" if ok else "target belongs to another source record",
+                })
+            return HTTPResponse(
+                output_text=json.dumps({"verdicts": verdicts}, ensure_ascii=False),
+                raw=self._usage(),
+            )
+        raise AssertionError(f"unexpected schema: {schema_name}")
+
+
 class V09DGlossaryAndSemanticQATests(unittest.TestCase):
+    def test_unmarked_line_is_audited_and_neighbor_translation_is_repaired(self) -> None:
+        client = AlignmentShiftClient()
+        entry = SimpleNamespace(
+            filename="a.wav", english="Tall trees attract the wind...", chinese="",
+            chinese_source="missing", group="scene", source_detail="archive",
+        )
+        self.assertEqual(semantic_risk_tags(entry.english), [])
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            with (
+                patch("app.credentials.translation_identity", return_value=("custom", "https://example.invalid/v1")),
+                patch("app.translator.make_client", return_value=client),
+                patch("app.translation_runtime.CAPABILITY_CACHE_FILE", root / "capabilities.json"),
+            ):
+                report = _translate_missing(
+                    [entry], "test-model", 20, root / ".translation_checkpoint.json",
+                    translation_glossary={},
+                )
+        self.assertEqual(entry.chinese, "高树招风……")
+        self.assertEqual(report["count_semantic_qa_candidates"], 1)
+        self.assertEqual(report["count_semantic_qa_repaired"], 1)
+        self.assertEqual(client.audit_calls, 2)
+
     def test_glossary_overlay_csv_json_and_precedence(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -352,7 +412,10 @@ class V09DGlossaryAndSemanticQATests(unittest.TestCase):
             self.assertTrue((root / "semantic_qa.json").is_file())
 
             saved = json.loads(checkpoint.read_text(encoding="utf-8"))
-            self.assertEqual(saved["records"]["a.wav"]["semantic_qa_version"], 1)
+            self.assertEqual(
+                saved["records"]["a.wav"]["semantic_qa_version"],
+                SEMANTIC_QA_VERSION,
+            )
 
             reused_entry = SimpleNamespace(
                 filename="a.wav",

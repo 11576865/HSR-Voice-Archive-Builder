@@ -3,7 +3,10 @@ from __future__ import annotations
 import re
 from typing import Any
 
-SEMANTIC_QA_VERSION = 1
+# Version 2 audits every API-produced translation, not only lines selected by
+# sparse English risk markers. Versioning deliberately invalidates v1 semantic
+# approvals because v1 could miss a fluent translation belonging to a nearby ID.
+SEMANTIC_QA_VERSION = 2
 
 _NEGATION_RE = re.compile(
     r"\b(?:not|never|no|none|nothing|nobody|neither|nor|without|cannot|can't|won't|"
@@ -117,9 +120,10 @@ def semantic_candidate(
     english: str,
     chinese: str,
     source_language: str = "en",
+    include_without_risk: bool = False,
 ) -> dict[str, Any] | None:
     tags = semantic_risk_tags(english, source_language)
-    if not tags:
+    if not tags and not include_without_risk:
         return None
     return {
         "id": row_id,

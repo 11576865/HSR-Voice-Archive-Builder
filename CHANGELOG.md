@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- Expanded semantic QA from sparse risk-tagged lines to every API-produced translation. The alignment audit now explicitly rejects one-row shifts, swaps and repeated neighboring translations, and semantic-QA version 2 invalidates older approvals so affected checkpoints are rechecked and repaired on the next build.
 - Connected the black-video exporter to both dashboard backends as a progress-reporting task. The optional MKV contains a lightweight black H.264 track plus a stream copy of the continuous FLAC; ASS/SRT remain external and are not burned in.
 - Added a focused runtime report that opens during work or failures and collapses after success, moved incremental download summaries into it, and retained the finished output path as the persistent project status.
 - Clarified the semantic-review TXT protocol for people and editing agents: only `CORRECTION` bodies may change, protected identity/fingerprint/structure fields must remain intact, and the complete TXT must be returned.

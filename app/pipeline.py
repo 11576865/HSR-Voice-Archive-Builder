@@ -21,6 +21,7 @@ from .builder import (
 )
 from .identity import parse_voice_identity
 from .human_review import HumanReviewRequired, write_review_txt
+from .semantic_quality import SEMANTIC_QA_VERSION
 from .schema import write_legacy_inputs
 from .stages import build_fingerprint, load_stage, path_fingerprint, save_stage
 
@@ -349,7 +350,7 @@ def _write_semantic_qa_report(
     records: list[dict[str, object]],
     reused: int = 0,
 ) -> dict[str, int]:
-    from .semantic_quality import summarize_semantic_qa
+    from .semantic_quality import SEMANTIC_QA_VERSION, summarize_semantic_qa
 
     summary = summarize_semantic_qa(records)
     summary["count_semantic_qa_checkpoint_reused"] = int(reused)
@@ -358,6 +359,7 @@ def _write_semantic_qa_report(
         json.dumps(
             {
                 "schema_version": 1,
+                "semantic_qa_version": SEMANTIC_QA_VERSION,
                 "provider": provider,
                 "base_url": base_url,
                 "model": model,
@@ -519,10 +521,11 @@ def _translate_missing(
         })
 
     remaining = [row for row in targets if row["id"] not in completed]
-    semantic_risky_ids = {
-        row["id"] for row in targets if semantic_risk_tags(row["english"], source_language)
-    }
-    semantic_pending_ids = semantic_risky_ids - semantic_verified_ids
+    # Every API-produced target needs a semantic/alignment audit. Deterministic
+    # QA catches tags, placeholders and glossary errors, but cannot tell that a
+    # fluent Chinese line actually belongs to the next English record.
+    semantic_audit_ids = {row["id"] for row in targets}
+    semantic_pending_ids = semantic_audit_ids - semantic_verified_ids
     api_translated = 0
     qa_retries = 0
     client = make_client() if (remaining or semantic_pending_ids) else None
@@ -753,7 +756,7 @@ def _translate_missing(
 
     semantic_rows: list[dict[str, object]] = []
     semantic_hard_failures: list[dict[str, object]] = []
-    semantic_reused = len(semantic_risky_ids & semantic_verified_ids)
+    semantic_reused = len(semantic_audit_ids & semantic_verified_ids)
     semantic_skipped_injected = 0
 
     if semantic_pending_ids and not isinstance(client, OpenAIResponsesHTTPClient):
@@ -782,6 +785,7 @@ def _translate_missing(
                     english=row["english"],
                     chinese=completed[row["id"]],
                     source_language=source_language,
+                    include_without_risk=True,
                 )
                 for row in batch_targets
             ]
@@ -885,6 +889,7 @@ def _translate_missing(
                     english=source["english"],
                     chinese=completed[source["id"]],
                     source_language=source_language,
+                    include_without_risk=True,
                 )
                 for source in repair_records
                 if source["id"] not in deterministic_failures
@@ -1537,6 +1542,19 @@ def build_project_v02(
             "translation_qa",
             input_fingerprint,
         )
+        translation_rebuilt = False
+        if translate_missing and qa_stage is not None:
+            semantic_stage = qa_stage.get("semantic_qa")
+            if (
+                not isinstance(semantic_stage, dict)
+                or int(semantic_stage.get("semantic_qa_version", 0) or 0)
+                != SEMANTIC_QA_VERSION
+            ):
+                # Keep metadata/audio recovery points, but invalidate the old
+                # translated entry set. Row checkpoints will be audited and
+                # only mismatched translations will incur a repair call.
+                translated = None
+                qa_stage = None
         if (translate_missing or review_official_target) and qa_stage is None:
             # A translated entry set without its validated QA stage is not a
             # complete translation result. Re-run from metadata; row-level
@@ -1557,6 +1575,7 @@ def build_project_v02(
                 )
                 rebuilt_stages.append("translation_qa")
         else:
+            translation_rebuilt = True
             if translate_missing:
                 report.update(
                     _translate_missing(
@@ -1643,7 +1662,7 @@ def build_project_v02(
             out_dir / "HSR_Voice_Archive.ass",
             out_dir / "HSR_Voice_Archive.srt",
         ]
-        if load_stage(
+        if not translation_rebuilt and load_stage(
             state_dir,
             STAGE_FILES["manifest"],
             "manifest",

@@ -403,7 +403,12 @@ def verify_semantic_records(
     client = client or make_client()
     prompt = (
         f"Audit each {target_language} translation against its {source_language} source. "
-        "This is a narrow semantic verification pass, not a style review. "
+        "This is a semantic and record-alignment verification pass, not a style review. "
+        "Check every record independently even when risk_tags is empty. A fluent target that "
+        "translates another record in the same batch is wrong: set ok=false and report omission "
+        "and/or addition. Detect one-row shifts, swapped targets, and repeated near-duplicate "
+        "targets used for different sources. Compare the central action, subject, object, intent, "
+        "question/statement function, and distinctive concepts before accepting a row. "
         "Use risk_tags as attention hints, but also flag a major omission or addition if it changes meaning. "
         "Check negation polarity, quantities/comparatives, grammatical person/reference, and conditional logic. "
         "Set ok=true when the target translation preserves the source meaning even if wording is not literal. "
