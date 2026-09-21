@@ -24,11 +24,18 @@ class SubtitleLinePos:
     alignment: int  # ASS alignment tag value, e.g. 8 for top-center
 
 
+from dataclasses import field
+from .collision import LayoutBlock, check_bilingual_collision_with_reason
+
+
 @dataclass
 class SolvedLayout:
     scale_factor: float
     chs_lines: list[SubtitleLinePos]
     primary_lines: list[SubtitleLinePos]
+    failed: bool = False
+    failed_condition: str | None = None
+    scale_attempts: list[int] = field(default_factory=list)
 
 
 def solve_subtitle_layout(
@@ -39,12 +46,18 @@ def solve_subtitle_layout(
     base_chs_size: int = DEFAULT_BASE_FONT_SIZE_CHS,
     base_primary_size: int = DEFAULT_BASE_FONT_SIZE_PRIMARY,
     safe_area: SafeArea = DEFAULT_SAFE_AREA,
-    min_central_gap: float = 40.0,
+    min_central_gap: float = 20.0,
 ) -> SolvedLayout:
     same_chinese = source_language == target_language == "zh-CN"
     center_x = safe_area.canvas_width // 2
 
+    scale_attempts: list[int] = []
+    last_failure_condition: str | None = None
+
     for scale in SCALE_FACTORS:
+        scale_percent = round(scale * 100)
+        scale_attempts.append(scale_percent)
+
         chs_size = get_scaled_font_size(base_chs_size, scale)
         primary_size = get_scaled_font_size(base_primary_size, scale)
 
@@ -85,11 +98,11 @@ def solve_subtitle_layout(
             max_width=safe_area.max_printable_width,
         )
 
-        has_collision = check_bilingual_collision(
+        has_collision, failure_condition = check_bilingual_collision_with_reason(
             chs_block, pri_block, safe_area=safe_area, min_central_gap=min_central_gap
         )
 
-        if not has_collision or scale == SCALE_FACTORS[-1]:
+        if not has_collision:
             chs_positions: list[SubtitleLinePos] = []
             for i, line in enumerate(chs_broken):
                 line_y = round(chs_top + i * chs_lh)
@@ -120,10 +133,19 @@ def solve_subtitle_layout(
                 scale_factor=scale,
                 chs_lines=chs_positions,
                 primary_lines=pri_positions,
+                failed=False,
+                failed_condition=None,
+                scale_attempts=scale_attempts,
             )
 
+        last_failure_condition = failure_condition
+
+    # At 85% scale, invalid layouts are rejected rather than accepted silently
     return SolvedLayout(
         scale_factor=SCALE_FACTORS[-1],
         chs_lines=[],
         primary_lines=[],
+        failed=True,
+        failed_condition=last_failure_condition or "OVERFLOW",
+        scale_attempts=scale_attempts,
     )

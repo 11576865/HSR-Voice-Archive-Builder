@@ -46,6 +46,14 @@ class SubtitleLayoutTests(unittest.TestCase):
         has_phrase = any("as soon as" in line for line in lines)
         self.assertTrue(has_phrase, "Protected phrase 'as soon as' should be kept intact on a single line")
 
+    def test_punctuation_preferred_over_whitespace(self) -> None:
+        # Text with punctuation boundary vs earlier whitespace boundary
+        text = "Hello world, this is a test sentence."
+        # Width where splitting after comma vs splitting after world
+        width = measure_text_width("Hello world, ", 42)
+        lines = break_line(text, max_width=width, font_size=42)
+        self.assertEqual(lines[0], "Hello world,")
+
     def test_short_text_layout(self) -> None:
         english = "Hello world!"
         chinese = "你好，世界！"
@@ -104,6 +112,41 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertIn("愿此行，终抵群星。", ass_output)
         self.assertIn("May this journey lead us starward.", ass_output)
         self.assertNotIn(r"\N", ass_output)
+
+    def test_verify_ass_render_script_helper(self) -> None:
+        from scripts.verify_ass_render import _get_png_bbox_stdlib
+        from pathlib import Path
+        import tempfile, struct, zlib
+
+        with tempfile.TemporaryDirectory() as td:
+            png_path = Path(td) / "test.png"
+            width, height = 100, 100
+            # Construct a raw RGB PNG in memory
+            raw_rows = []
+            for y in range(height):
+                row = bytearray([0])  # filter byte
+                for x in range(width):
+                    if x == 10 and y == 20:
+                        row.extend([255, 255, 255])
+                    else:
+                        row.extend([0, 0, 0])
+                raw_rows.append(bytes(row))
+            decompressed = b"".join(raw_rows)
+            compressed = zlib.compress(decompressed)
+
+            def make_chunk(chunk_type, data):
+                return struct.pack(">I", len(data)) + chunk_type + data + struct.pack(">I", zlib.crc32(chunk_type + data))
+
+            png_data = b"\x89PNG\r\n\x1a\n"
+            png_data += make_chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+            png_data += make_chunk(b"IDAT", compressed)
+            png_data += make_chunk(b"IEND", b"")
+
+            png_path.write_bytes(png_data)
+
+            bbox = _get_png_bbox_stdlib(png_path)
+            self.assertIsNotNone(bbox)
+            self.assertEqual(bbox, (10, 20, 11, 21))
 
     def test_no_english_backslash_N_in_dialogue(self) -> None:
         entry = SimpleNamespace(

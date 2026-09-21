@@ -149,6 +149,18 @@ def get_project_subtitles(
         except Exception:
             overrides = {}
 
+    overflow_file = output_dir / "ass_layout_overflow_report.json"
+    overflow_map: dict[str, dict[str, Any]] = {}
+    if overflow_file.is_file():
+        try:
+            reports = json.loads(overflow_file.read_text(encoding="utf-8"))
+            if isinstance(reports, list):
+                for rep in reports:
+                    if isinstance(rep, dict) and "subtitle_id" in rep:
+                        overflow_map[str(rep["subtitle_id"])] = rep
+        except Exception:
+            overflow_map = {}
+
     subtitles: list[dict[str, Any]] = []
     source_lang = config.source_text_language or "en"
     ref_lang = config.reference_language or "auto"
@@ -188,6 +200,7 @@ def get_project_subtitles(
         start = float(entry.get("start_seconds", 0.0))
         end = float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0)))
 
+        overflow_info = overflow_map.get(str_id)
         item = {
             "id": item_id,
             "start": start,
@@ -198,6 +211,8 @@ def get_project_subtitles(
             "api_chs": api_chs,
             "final_chs": final_chs,
             "modified": modified,
+            "layout_overflow": overflow_info is not None,
+            "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
         }
         subtitles.append(item)
 
@@ -210,6 +225,8 @@ def get_project_subtitles(
             subtitles = [s for s in subtitles if bool(s["official_chs"])]
         elif sel in ("api", "api_translated", "api_chs"):
             subtitles = [s for s in subtitles if bool(s["api_chs"])]
+        elif sel in ("overflow", "layout_overflow"):
+            subtitles = [s for s in subtitles if s.get("layout_overflow")]
 
     # Filtering by search query (q)
     if q and q.strip():
@@ -330,13 +347,18 @@ def update_project_subtitles(
     ass_file = output_dir / "HSR_Voice_Archive.ass"
     srt_file = output_dir / "HSR_Voice_Archive.srt"
 
-    write_ass(adapter_entries, ass_file, source_language=src_lang, target_language=target_lang)
+    generate_ass = getattr(config, "generate_ass", False)
+    if generate_ass:
+        write_ass(adapter_entries, ass_file, source_language=src_lang, target_language=target_lang)
+    else:
+        ass_file.unlink(missing_ok=True)
+
     write_srt(adapter_entries, srt_file, source_language=src_lang, target_language=target_lang)
 
     return {
         "ok": True,
         "updated_count": updated_count,
         "total_count": len(entries),
-        "ass_file": str(ass_file),
+        "ass_file": str(ass_file) if generate_ass else "",
         "srt_file": str(srt_file),
     }

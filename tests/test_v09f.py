@@ -56,6 +56,7 @@ class V09FStateLayoutTests(unittest.TestCase):
                 wavs,
                 out,
                 make_flac=False,
+                generate_ass=True,
                 state_dir=state,
             )
 
@@ -93,6 +94,7 @@ class V09FStateLayoutTests(unittest.TestCase):
                 wavs,
                 out,
                 make_flac=False,
+                generate_ass=True,
                 state_dir=state,
             )
             resumed = set(second["stage_resume"]["resumed"])

@@ -198,6 +198,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
           </select></div>
         </div>
         <label class="check"><input name="make_flac" type="checkbox"> 生成连续 FLAC 并验证音频完整性</label>
+        <label class="check"><input name="generate_ass" type="checkbox"> 生成 ASS 特效字幕文件 (默认关闭)</label>
         <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check" id="advancedReviewRow"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <div class="actions">
@@ -643,7 +644,7 @@ function fillProject(p){
   for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','intro_gap','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
-  f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
+  f.elements.make_flac.checked=!!c.make_flac;f.elements.generate_ass.checked=!!c.generate_ass;f.elements.translate_missing.checked=!!c.translate_missing;
   if(f.elements.review_official_target)f.elements.review_official_target.checked=!!c.review_official_target;
   syncAdvancedTranslationVisibility();
   document.getElementById('candidatePath').value=c.update_candidates||'';
@@ -1001,7 +1002,7 @@ for(const name of ['source_text_language','target_language']){
 }
 async function saveProject(){
   const form=document.getElementById('projectForm'),data=fd(form);
-  for(const k of ['make_flac','translate_missing'])if(!form.elements[k].checked)data.delete(k);
+  for(const k of ['make_flac','generate_ass','translate_missing'])if(!form.elements[k].checked)data.delete(k);
   const j=await api('/api/project/save',{method:'POST',body:data});
   fillProject(j.project);
   return j.project;

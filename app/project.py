@@ -45,6 +45,7 @@ class ProjectConfig:
     same_group_gap: float = 0.40
     group_gap: float = 1.20
     make_flac: bool = True
+    generate_ass: bool = False
     translate_missing: bool = True
     review_official_target: bool = False
     translation_model: str = field(default_factory=translation_default_model)
@@ -584,6 +585,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "HSR_Voice_Archive.ass",
         "HSR_Voice_Archive.srt",
         "HSR_Voice_Archive_Black.mkv",
+        "ass_layout_overflow_report.json",
         "build_report.json",
         "continuous.flac",
         "semantic_review_required.txt",
