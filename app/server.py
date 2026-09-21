@@ -6,7 +6,7 @@ import tempfile
 import csv
 from pathlib import Path
 
-from fastapi import FastAPI, Form, Request
+from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -143,6 +143,35 @@ def _clear_active() -> None:
     _active_root = None
 
 
+def _resolve_project(project_id: str) -> ProjectConfig:
+    if _active_root is not None:
+        try:
+            active_cfg = _active_config()
+            if project_id in ("active", "current", active_cfg.name, str(_active_root)):
+                return active_cfg
+        except Exception:
+            pass
+
+    for p in recent_projects(50):
+        if p.get("name") == project_id or p.get("root") == project_id:
+            try:
+                return load_project(Path(p["root"]))
+            except Exception:
+                pass
+
+    try:
+        candidate_path = Path(project_id).expanduser()
+        if candidate_path.exists():
+            return load_project(candidate_path)
+    except Exception:
+        pass
+
+    if _active_root is not None:
+        return _active_config()
+
+    raise RuntimeError(f"Project not found: {project_id}")
+
+
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
     return {
         "index": resolve_project_path(config, config.index_csv),
@@ -155,6 +184,123 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
+
+
+@app.get("/api/project/{project_id}/subtitles")
+def api_get_project_subtitles(
+    project_id: str,
+    q: str = Query(None),
+    start_time: float = Query(None),
+    end_time: float = Query(None),
+):
+    try:
+        config = _resolve_project(project_id)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+
+        subtitles = []
+        manifest_file = output_dir / "manifest.json" if output_dir else None
+
+        if manifest_file and manifest_file.is_file():
+            data = json.loads(manifest_file.read_text(encoding="utf-8"))
+            entries = data.get("entries", [])
+            overrides_file = output_dir / "subtitles_overrides.json"
+            overrides = {}
+            if overrides_file.is_file():
+                try:
+                    overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+                except Exception:
+                    overrides = {}
+
+            for entry in entries:
+                item_id = entry.get("index") or entry.get("id") or entry.get("filename")
+                src_type = str(entry.get("target_text_source") or entry.get("chinese_source", ""))
+                target_text = str(entry.get("target_text") or entry.get("chinese", ""))
+
+                official_chs = ""
+                api_chs = ""
+
+                if src_type in ("official_chs_lab", "official_target_lab"):
+                    official_chs = target_text
+                elif src_type.startswith("api:") or src_type in ("translated_existing", "api_translation"):
+                    api_chs = target_text
+                    ref_text = str(entry.get("reference_text", ""))
+                    if entry.get("reference_language") in ("zh-CN", "zh") or config.reference_language in ("zh-CN", "zh"):
+                        official_chs = ref_text
+                else:
+                    official_chs = target_text
+
+                final_chs = target_text
+                modified = bool(entry.get("modified", False))
+
+                str_id = str(item_id)
+                if str_id in overrides:
+                    ov = overrides[str_id]
+                    if isinstance(ov, dict):
+                        final_chs = ov.get("final_chs", final_chs)
+                        modified = ov.get("modified", True)
+
+                start = float(entry.get("start_seconds", 0.0))
+                end = float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0)))
+
+                subtitles.append({
+                    "id": item_id,
+                    "start": start,
+                    "end": end,
+                    "source_language": config.source_text_language or "en",
+                    "source_text": str(entry.get("source_text") or entry.get("english", "")),
+                    "official_chs": official_chs,
+                    "api_chs": api_chs,
+                    "final_chs": final_chs,
+                    "modified": modified,
+                })
+        else:
+            # Fallback mock data when output manifest is not yet built
+            subtitles = [
+                {
+                    "id": 1,
+                    "start": 5.0,
+                    "end": 7.5,
+                    "source_language": config.source_text_language or "en",
+                    "source_text": "May this journey lead us starward.",
+                    "official_chs": "愿此行，终抵群星。",
+                    "api_chs": "愿这场旅程带我们走向群星。",
+                    "final_chs": "愿此行，终抵群星。",
+                    "modified": False,
+                },
+                {
+                    "id": 2,
+                    "start": 8.0,
+                    "end": 11.2,
+                    "source_language": config.source_text_language or "en",
+                    "source_text": "Rules are made to be broken!",
+                    "official_chs": "规则，就是用来打破的！",
+                    "api_chs": "规矩就是用来打破的！",
+                    "final_chs": "规则，就是用来打破的！",
+                    "modified": False,
+                },
+            ]
+
+        # Apply search string filter (q)
+        if q and q.strip():
+            query = q.strip().casefold()
+            subtitles = [
+                sub for sub in subtitles
+                if query in sub["source_text"].casefold()
+                or query in sub["official_chs"].casefold()
+                or query in sub["api_chs"].casefold()
+                or query in sub["final_chs"].casefold()
+            ]
+
+        # Apply time range filters
+        if start_time is not None:
+            subtitles = [sub for sub in subtitles if sub["end"] >= start_time]
+        if end_time is not None:
+            subtitles = [sub for sub in subtitles if sub["start"] <= end_time]
+
+        return {"ok": True, "subtitles": subtitles}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.get("/api/status")
