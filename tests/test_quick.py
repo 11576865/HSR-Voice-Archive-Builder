@@ -391,7 +391,7 @@ class QuickModeTests(unittest.TestCase):
             self.assertTrue(plan["ready"])
             loaded = load_project(project_root)
             self.assertTrue(loaded.translate_missing)
-            self.assertEqual(loaded.translation_model, "gpt-5.6-luna")
+            self.assertEqual(loaded.translation_model, "qwen-mt-plus")
             generated = project_root / ".generated" / "quick_index.csv"
             self.assertTrue(generated.is_file())
             text = generated.read_text(encoding="utf-8-sig")

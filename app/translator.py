@@ -14,7 +14,7 @@ from typing import Any
 
 from .credentials import load_translation_credentials, normalize_base_url
 
-DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "gpt-5.6-luna")
+DEFAULT_MODEL = os.environ.get("OPENAI_MODEL", "qwen-mt-plus")
 DEFAULT_MAX_RETRIES = 5
 DEFAULT_TIMEOUT_SECONDS = 120.0
 RESPONSES_URL = "https://api.openai.com/v1/responses"
