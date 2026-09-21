@@ -75,6 +75,42 @@ SEMANTIC_VERIFIER_SCHEMA = {
     "additionalProperties": False,
 }
 
+OFFICIAL_REVIEW_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "reviews": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "decision": {
+                        "type": "string",
+                        "enum": ["accept_official", "revise"],
+                    },
+                    "reason": {
+                        "type": "string",
+                        "enum": [
+                            "acceptable_localization",
+                            "material_omission",
+                            "material_addition",
+                            "contradiction",
+                            "numeric_mismatch",
+                            "placeholder_mismatch",
+                            "role_or_tone_shift",
+                        ],
+                    },
+                    "translation": {"type": "string"},
+                },
+                "required": ["id", "decision", "reason", "translation"],
+                "additionalProperties": False,
+            },
+        }
+    },
+    "required": ["reviews"],
+    "additionalProperties": False,
+}
+
 
 def translation_schema_fingerprint() -> str:
     encoded = json.dumps(
@@ -425,6 +461,113 @@ def verify_semantic_records(
             raise RuntimeError(
                 f"Semantic verifier returned ok=false without issues for {row_id}"
             )
+        ordered.append(row)
+    return ordered
+
+
+def _official_review_prompt(
+    records: list[dict[str, Any]],
+    glossary: dict[str, str] | None,
+    source_language: str,
+    target_language: str,
+) -> str:
+    glossary_text = ""
+    if glossary:
+        glossary_text = "\nOfficial/preferred terminology:\n" + "\n".join(
+            f"- {src} => {dst}" for src, dst in glossary.items()
+        )
+    return (
+        f"Each record pairs a {source_language} line with its official {target_language} "
+        "subtitle from the game. Judge subtitle adequacy, not literal equivalence, and "
+        "decide in one pass whether the official text can stay.\n"
+        "Tolerate: reordering, dropping English filler/interjections, rewritten idioms and "
+        "jokes, changed forms of address, compression for dubbing rhythm, and ordinary "
+        "localization of tone.\n"
+        "Do not tolerate: a change in who does what, flipped or weakened negation/affirmation, "
+        "changed modality (can/must/will/already), inconsistent numbers, names, places or "
+        "proper nouns, lost conditions, causes or comparisons, information present in the "
+        "source and fully absent in the target, new facts absent from the source, clearly "
+        "changed character attitude or intent, and an answer rewritten as unrelated dialogue.\n"
+        "Every record carries 'zone' and 'signals' from a local pre-check. Treat red as strong "
+        "evidence of a real conflict and yellow as unresolved weak evidence; the signals are "
+        "hints, not verdicts, so overrule them when the official line still conveys the "
+        "source meaning.\n"
+        "Return decision='accept_official' with translation='' when the official text is "
+        "adequate. Return decision='revise' only for intolerable deviation, and then put a "
+        f"corrected {target_language} line in 'translation' that keeps the official wording "
+        "and terminology wherever it is already correct and repairs only the deviation. "
+        "Preserve HTML-like tags and the structural form of brace control tokens such as "
+        "{NICKNAME}, {M#...}{F#...}, and RUBY markers. Return every input ID exactly once."
+        + glossary_text
+        + "\n\nInput JSON:\n"
+        + json.dumps(records, ensure_ascii=False)
+    )
+
+
+def review_official_records(
+    records: list[dict[str, Any]],
+    model: str = DEFAULT_MODEL,
+    glossary: dict[str, str] | None = None,
+    *,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
+    client: Any | None = None,
+    usage_callback: Callable[[dict[str, int] | None], None] | None = None,
+) -> list[dict[str, Any]]:
+    """Judge and, when required, retranslate official target lines in one call."""
+    if not records:
+        return []
+    client = client or make_client()
+
+    response = client.responses.create(
+        model=model,
+        reasoning={"effort": "low"},
+        store=False,
+        input=_official_review_prompt(
+            records,
+            glossary,
+            source_language,
+            target_language,
+        ),
+        text={
+            "format": {
+                "type": "json_schema",
+                "name": "official_target_review",
+                "strict": True,
+                "schema": OFFICIAL_REVIEW_SCHEMA,
+            }
+        },
+    )
+
+    if usage_callback is not None:
+        from .translation_runtime import parse_usage
+
+        usage_callback(parse_usage(getattr(response, "raw", None)))
+
+    if not getattr(response, "output_text", ""):
+        raise RuntimeError("Official review response contained no output_text")
+    data = json.loads(response.output_text)
+    reviews = data["reviews"]
+    wanted = [str(row["id"]) for row in records]
+    got_ids = [str(row.get("id", "")) for row in reviews]
+    if len(got_ids) != len(set(got_ids)):
+        raise RuntimeError("Official review response contains duplicate IDs")
+    if set(got_ids) != set(wanted) or len(reviews) != len(records):
+        raise RuntimeError(
+            f"Official review ID mismatch: missing={set(wanted)-set(got_ids)}, "
+            f"extra={set(got_ids)-set(wanted)}"
+        )
+    by_id = {str(row["id"]): row for row in reviews}
+    ordered: list[dict[str, Any]] = []
+    for row_id in wanted:
+        row = dict(by_id[row_id])
+        decision = str(row.get("decision", ""))
+        translation = str(row.get("translation", "")).strip()
+        if decision == "revise" and not translation:
+            raise RuntimeError(
+                f"Official review returned decision=revise without a translation: {row_id}"
+            )
+        row["translation"] = translation if decision == "revise" else ""
         ordered.append(row)
     return ordered
 

@@ -965,6 +965,7 @@ def create_quick_project(
         config,
         make_flac=True,
         translate_missing=bool(plan["translation"]["configured"]),
+        review_official_target=bool(plan["translation"]["configured"]),
         translation_model=DEFAULT_MODEL,
         remote_index_url=str(
             selected_index.get("url")

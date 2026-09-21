@@ -44,6 +44,7 @@ class ProjectConfig:
     group_gap: float = 1.20
     make_flac: bool = True
     translate_missing: bool = True
+    review_official_target: bool = False
     translation_model: str = "gpt-5.6-luna"
     translation_batch_size: int = 80
     translation_token_budget: int = 0
@@ -579,6 +580,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "bilingual_index_corrected.csv",
         "timeline_resolved.json",
         "HSR_Voice_Archive.ass",
+        "HSR_Voice_Archive.srt",
         "build_report.json",
         "continuous.flac",
         "semantic_review_required.txt",

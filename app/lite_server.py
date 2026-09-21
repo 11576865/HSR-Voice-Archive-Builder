@@ -415,6 +415,7 @@ class Handler(BaseHTTPRequestHandler):
                     reference_language=config.reference_language,
                     reference_text_embedded=config.reference_text_embedded,
                     state_dir=paths["state"],
+                    review_official_target=config.review_official_target,
                 )
 
             job = create_job(
@@ -562,6 +563,7 @@ class Handler(BaseHTTPRequestHandler):
                 group_gap=_float(data.get("group_gap"), 1.20),
                 make_flac=_bool(data.get("make_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
+                review_official_target=_bool(data.get("review_official_target")),
                 translation_model=data.get("translation_model", "gpt-5.6-luna").strip() or "gpt-5.6-luna",
                 translation_batch_size=max(1, _int(data.get("translation_batch_size"), 80)),
                 translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
@@ -579,7 +581,9 @@ class Handler(BaseHTTPRequestHandler):
             runtime = dependency_status()
             if config.make_flac and not runtime.get("ffmpeg"):
                 raise RuntimeError("FFmpeg is not installed or is not available on PATH")
-            if config.translate_missing and not runtime.get("translation_api_key_configured"):
+            if (
+                config.translate_missing or config.review_official_target
+            ) and not runtime.get("translation_api_key_configured"):
                 raise RuntimeError(
                     "Translation API key is not configured; run "
                     "'python -m app.credentials configure --provider vapi'"
@@ -610,6 +614,7 @@ class Handler(BaseHTTPRequestHandler):
                     reference_language=config.reference_language,
                     reference_text_embedded=config.reference_text_embedded,
                     state_dir=paths["state"],
+                    review_official_target=config.review_official_target,
                 )
 
             job = create_job(

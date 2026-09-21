@@ -173,6 +173,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         </div>
         <label class="check"><input name="make_flac" type="checkbox"> 生成连续 FLAC 并验证音频完整性</label>
         <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
+        <label class="check" id="advancedReviewRow"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <div class="actions">
           <button type="button" class="primary" id="buildBtn">开始构建</button>
           <button type="button" id="openOutputBtn">打开输出目录</button>
@@ -484,6 +485,7 @@ async function relinkSelectedSource(){
 const outputDescriptions={
   'continuous.flac':'连续播放的无损语音音频',
   'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
+  'HSR_Voice_Archive.srt':'与 ASS 同一时间轴的通用 SRT 字幕',
   'timeline_resolved.json':'按 PCM 采样位置解析后的统一时间轴',
   'manifest.json':'完整的机器可读档案，保存语音、文本、来源与时间',
   'manifest.csv':'便于在表格软件中查看和整理的档案清单',
@@ -509,6 +511,7 @@ function fillProject(p){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
   f.elements.make_flac.checked=!!c.make_flac;f.elements.translate_missing.checked=!!c.translate_missing;
+  if(f.elements.review_official_target)f.elements.review_official_target.checked=!!c.review_official_target;
   syncAdvancedTranslationVisibility();
   document.getElementById('candidatePath').value=c.update_candidates||'';
   document.getElementById('remoteCharacter').value=c.remote_character||'';
@@ -801,6 +804,9 @@ function syncAdvancedTranslationVisibility(){
   const row=document.getElementById('advancedTranslateRow');
   if(row)row.classList.toggle('hidden',sameLanguage);
   if(sameLanguage&&form.elements.translate_missing)form.elements.translate_missing.checked=false;
+  const reviewRow=document.getElementById('advancedReviewRow');
+  if(reviewRow)reviewRow.classList.toggle('hidden',sameLanguage);
+  if(sameLanguage&&form.elements.review_official_target)form.elements.review_official_target.checked=false;
 }
 for(const name of ['source_text_language','target_language']){
   const element=document.getElementById('projectForm').elements[name];

@@ -13,7 +13,12 @@ import zipfile
 from dataclasses import asdict, dataclass
 from pathlib import Path
 
-from .timeline import resolve_timeline, write_ass, write_resolved_timeline
+from .timeline import (
+    resolve_timeline,
+    write_ass,
+    write_resolved_timeline,
+    write_srt,
+)
 from .wavpcm import iter_pcm_chunks, parse_wav_pcm
 
 SRT_TS = re.compile(r"^(\d+):(\d+):(\d+),(\d+)$")
@@ -539,13 +544,19 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
     fields = list(asdict(entries[0]).keys()) if entries else []
     write_csv_rows(out_dir / "manifest.csv", js, fields)
 
-    # SRT was an interim output. Timeline and ASS are now generated from the
-    # same sample positions used by the FLAC builder.
+    # The legacy interim SRT is superseded by outputs rendered from the same
+    # sample positions used by the FLAC builder.
     (out_dir / "bilingual.srt").unlink(missing_ok=True)
     write_resolved_timeline(entries, report, out_dir / "timeline_resolved.json")
     write_ass(
         entries,
         out_dir / "HSR_Voice_Archive.ass",
+        source_language=str(report.get("source_text_language", "en")),
+        target_language=str(report.get("target_language", "zh-CN")),
+    )
+    write_srt(
+        entries,
+        out_dir / "HSR_Voice_Archive.srt",
         source_language=str(report.get("source_text_language", "en")),
         target_language=str(report.get("target_language", "zh-CN")),
     )

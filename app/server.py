@@ -279,6 +279,7 @@ def api_quick_build(
                 reference_language=config.reference_language,
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
+                review_official_target=config.review_official_target,
             )
 
         job = create_job(
@@ -460,6 +461,7 @@ def api_project_save(
     group_gap: float = Form(1.20),
     make_flac: bool = Form(False),
     translate_missing: bool = Form(False),
+    review_official_target: bool = Form(False),
     translation_model: str = Form("gpt-5.6-luna"),
     translation_batch_size: int = Form(80),
     translation_token_budget: int = Form(0),
@@ -489,6 +491,7 @@ def api_project_save(
             group_gap=group_gap,
             make_flac=make_flac,
             translate_missing=translate_missing,
+            review_official_target=review_official_target,
             translation_model=translation_model.strip() or "gpt-5.6-luna",
             translation_batch_size=max(1, translation_batch_size),
             translation_token_budget=max(0, translation_token_budget),
@@ -509,7 +512,9 @@ def api_project_build():
             raise ValueError("Project index, WAV source, and output directory are required")
         if config.make_flac and not shutil.which("ffmpeg"):
             raise RuntimeError("FFmpeg is not installed or is not available on PATH")
-        if config.translate_missing and not dependency_status().get("translation_api_key_configured"):
+        if (
+            config.translate_missing or config.review_official_target
+        ) and not dependency_status().get("translation_api_key_configured"):
             raise RuntimeError(
                 "Translation API key is not configured; run "
                 "'python -m app.credentials configure --provider vapi' "
@@ -541,6 +546,7 @@ def api_project_build():
                 reference_language=config.reference_language,
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
+                review_official_target=config.review_official_target,
             )
 
         job = create_job(

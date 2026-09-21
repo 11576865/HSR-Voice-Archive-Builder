@@ -109,6 +109,7 @@ class BuilderTests(unittest.TestCase):
             self.assertTrue((out / "manifest.json").is_file())
             self.assertTrue((out / "timeline_resolved.json").is_file())
             self.assertTrue((out / "HSR_Voice_Archive.ass").is_file())
+            self.assertTrue((out / "HSR_Voice_Archive.srt").is_file())
             self.assertFalse((out / "bilingual.srt").exists())
 
 
