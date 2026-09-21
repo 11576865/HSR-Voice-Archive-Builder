@@ -991,6 +991,7 @@ def create_quick_project(
     update_project(
         config,
         make_flac=True,
+        generate_ass=False,
         translate_missing=bool(plan["translation"]["configured"]),
         review_official_target=bool(plan["translation"]["configured"]),
         translation_model=DEFAULT_MODEL,

@@ -67,6 +67,8 @@ class TestSubtitleEditor(unittest.TestCase):
                 wav_source="wavs",
                 output_dir="output",
             )
+            from app.project import update_project
+            update_project(cfg, generate_ass=True)
             _set_active(cfg)
 
             resp = self.client.get("/api/project/active/subtitles", headers=self.headers)
@@ -134,6 +136,8 @@ class TestSubtitleEditor(unittest.TestCase):
                 wav_source="wavs",
                 output_dir="output",
             )
+            from app.project import update_project
+            update_project(cfg, generate_ass=True)
             _set_active(cfg)
 
             # Filter by character / text 'q'
@@ -192,6 +196,8 @@ class TestSubtitleEditor(unittest.TestCase):
                 wav_source="wavs",
                 output_dir="output",
             )
+            from app.project import update_project
+            update_project(cfg, generate_ass=True)
             _set_active(cfg)
 
             # Post update editing final_chs

@@ -1392,6 +1392,7 @@ def build_project_v02(
     group_gap: float = 1.20,
     intro_gap: float = 5.0,
     make_flac: bool = True,
+    generate_ass: bool = False,
     translate_missing: bool = False,
     translation_model: str = translation_default_model(),
     translation_batch_size: int = 80,
@@ -1465,6 +1466,7 @@ def build_project_v02(
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
+        "generate_ass": generate_ass,
         "translate_missing": translate_missing,
         "review_official_target": bool(review_official_target),
         "translation_route": translation_route,
@@ -1696,9 +1698,11 @@ def build_project_v02(
             out_dir / "manifest.csv",
             out_dir / "bilingual_index_corrected.csv",
             out_dir / "timeline_resolved.json",
-            out_dir / "HSR_Voice_Archive.ass",
             out_dir / "HSR_Voice_Archive.srt",
         ]
+        if generate_ass:
+            manifest_artifacts.append(out_dir / "HSR_Voice_Archive.ass")
+
         if not translation_rebuilt and load_stage(
             state_dir,
             STAGE_FILES["manifest"],
@@ -1708,7 +1712,7 @@ def build_project_v02(
         ) is not None:
             resumed_stages.append("manifest")
         else:
-            write_manifest(entries, report, out_dir)
+            write_manifest(entries, report, out_dir, generate_ass=generate_ass)
             _augment_outputs(entries, report, out_dir)
             save_stage(
                 state_dir,
@@ -1758,7 +1762,7 @@ def build_project_v02(
                     artifact_root=out_dir,
                 )
                 rebuilt_stages.append("audio")
-            write_manifest(entries, report, out_dir)
+            write_manifest(entries, report, out_dir, generate_ass=generate_ass)
             _augment_outputs(entries, report, out_dir)
             save_stage(
                 state_dir,
@@ -1826,6 +1830,7 @@ if __name__ == "__main__":
     p.add_argument("--same-gap", type=float, default=0.40)
     p.add_argument("--group-gap", type=float, default=1.20)
     p.add_argument("--no-flac", action="store_true")
+    p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
     p.add_argument("--translation-model", default=translation_default_model())
@@ -1847,6 +1852,7 @@ if __name__ == "__main__":
         group_gap=a.group_gap,
         intro_gap=a.intro_gap,
         make_flac=not a.no_flac,
+        generate_ass=a.generate_ass,
         translate_missing=a.translate_missing,
         review_official_target=a.review_official_target,
         translation_model=a.translation_model,

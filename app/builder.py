@@ -602,7 +602,7 @@ def build_entries(
     return entries, report
 
 
-def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path) -> None:
+def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path, *, generate_ass: bool = False) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     js = [asdict(e) for e in entries]
     for row in js:
@@ -625,12 +625,18 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
     # sample positions used by the FLAC builder.
     (out_dir / "bilingual.srt").unlink(missing_ok=True)
     write_resolved_timeline(entries, report, out_dir / "timeline_resolved.json")
-    write_ass(
-        entries,
-        out_dir / "HSR_Voice_Archive.ass",
-        source_language=str(report.get("source_text_language", "en")),
-        target_language=str(report.get("target_language", "zh-CN")),
-    )
+
+    ass_file = out_dir / "HSR_Voice_Archive.ass"
+    if generate_ass:
+        write_ass(
+            entries,
+            ass_file,
+            source_language=str(report.get("source_text_language", "en")),
+            target_language=str(report.get("target_language", "zh-CN")),
+        )
+    else:
+        ass_file.unlink(missing_ok=True)
+
     write_srt(
         entries,
         out_dir / "HSR_Voice_Archive.srt",

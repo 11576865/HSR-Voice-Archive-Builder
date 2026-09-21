@@ -165,7 +165,7 @@ class BuilderTests(unittest.TestCase):
             )
             self.assertEqual(report["count_missing_chinese"], 0)
 
-            write_manifest(entries, report, out)
+            write_manifest(entries, report, out, generate_ass=True)
             self.assertTrue((out / "manifest.json").is_file())
             self.assertTrue((out / "timeline_resolved.json").is_file())
             self.assertTrue((out / "HSR_Voice_Archive.ass").is_file())

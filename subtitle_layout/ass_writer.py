@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import os
 import tempfile
 from pathlib import Path
@@ -48,6 +49,7 @@ def render_ass(
     *,
     source_language: str = "en",
     target_language: str = "zh-CN",
+    overflow_report_path: Path | None = None,
 ) -> str:
     header = """[Script Info]
 Title: HSR Voice Archive
@@ -66,18 +68,21 @@ Style: Primary,Noto Sans,42,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     dialogues: list[str] = []
+    overflow_records: list[dict[str, object]] = []
 
     for entry in entries:
-        raw_source = getattr(entry, "english", "")
-        raw_target = getattr(entry, "chinese", "")
+        raw_source = getattr(entry, "english", getattr(entry, "source_text", ""))
+        raw_target = getattr(entry, "chinese", getattr(entry, "target_text", ""))
         clean_source = _clean_ass_text(raw_source)
         clean_target = _clean_ass_text(raw_target)
 
         if not clean_source and not clean_target:
             continue
 
-        start_time = _ass_time(float(getattr(entry, "start_seconds", 0.0)))
-        end_time = _ass_time(float(getattr(entry, "display_end_seconds", 0.0)))
+        start_sec = float(getattr(entry, "start_seconds", getattr(entry, "start", 0.0)))
+        end_sec = float(getattr(entry, "display_end_seconds", getattr(entry, "end", 0.0)))
+        start_time = _ass_time(start_sec)
+        end_time = _ass_time(end_sec)
 
         layout = solve_subtitle_layout(
             english_text=clean_source,
@@ -85,6 +90,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             source_language=source_language,
             target_language=target_language,
         )
+
+        if layout.failed:
+            subtitle_id = str(getattr(entry, "index", getattr(entry, "id", getattr(entry, "filename", ""))))
+            overflow_records.append({
+                "subtitle_id": subtitle_id,
+                "time_range": {
+                    "start": start_time,
+                    "end": end_time,
+                },
+                "source_text": clean_source,
+                "final_chs": clean_target,
+                "scale_attempts": layout.scale_attempts,
+                "failed_condition": layout.failed_condition,
+            })
+            continue
 
         for pos in layout.chs_lines:
             dialogue_text = f"{{\\an{pos.alignment}\\pos({pos.x},{pos.y})\\fs{pos.font_size}}}{pos.text}"
@@ -98,7 +118,19 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
             )
 
+    if overflow_report_path is not None:
+        _atomic_write(
+            overflow_report_path,
+            json.dumps(overflow_records, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
+
     if not dialogues:
+        if overflow_records:
+            raise ValueError(
+                f"ASS rendering failed for all entries ({len(overflow_records)} overflow errors). "
+                f"See {overflow_report_path} for details."
+            )
         raise ValueError("ASS rendering produced no dialogue lines")
 
     return header + "\n".join(dialogues) + "\n"
@@ -110,13 +142,16 @@ def write_ass(
     *,
     source_language: str = "en",
     target_language: str = "zh-CN",
+    overflow_report_path: Path | None = None,
 ) -> None:
+    report_path = overflow_report_path or (path.parent / "ass_layout_overflow_report.json")
     _atomic_write(
         path,
         render_ass(
             entries,
             source_language=source_language,
             target_language=target_language,
+            overflow_report_path=report_path,
         ),
         encoding="utf-8-sig",
     )
