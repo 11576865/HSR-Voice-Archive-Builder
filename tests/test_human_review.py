@@ -11,6 +11,16 @@ from app.jobs import create_job, get_job
 
 
 class HumanReviewTests(unittest.TestCase):
+    def test_review_txt_gives_agent_safe_editing_instructions(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "review.txt"
+            write_review_txt(path, [{"id": "a.wav", "english": "Hello", "chinese": "你好"}])
+            text = path.read_text(encoding="utf-8-sig")
+            self.assertIn("自行或交给智能体编辑", text)
+            self.assertIn("只替换每个 [[CORRECTION]] 与 [[/CORRECTION]] 之间的内容", text)
+            self.assertIn("禁止修改 ID、SOURCE_SHA256、[[ENTRY]]、[[/ENTRY]]", text)
+            self.assertIn("不要重新组织文档结构", text)
+
     def test_review_txt_round_trip_updates_checkpoint_and_clears_pending_file(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

@@ -41,7 +41,9 @@ def write_review_txt(path: Path, records: list[dict[str, Any]]) -> Path:
         "HSR Voice Archive Builder · 语义偏离人工修订文件",
         "格式版本：1",
         f"待修订条目：{len(records)}",
-        "说明：只修改每个 [[CORRECTION]] 与 [[/CORRECTION]] 之间的内容；不要修改 ID。",
+        "编辑方式：请自行或交给智能体编辑，并返回完整的修改后 TXT。",
+        "说明：只替换每个 [[CORRECTION]] 与 [[/CORRECTION]] 之间的内容。",
+        "禁止修改 ID、SOURCE_SHA256、[[ENTRY]]、[[/ENTRY]] 等字段，也不要重新组织文档结构。",
         "",
     ]
     for row in records:

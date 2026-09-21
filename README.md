@@ -522,6 +522,7 @@ output/
 ├── timeline_resolved.json
 ├── HSR_Voice_Archive.ass
 ├── HSR_Voice_Archive.srt
+├── HSR_Voice_Archive_Black.mkv  # optional, generated from the dashboard
 ├── build_report.json
 ├── translation_qa.json
 ├── semantic_qa.json
@@ -530,7 +531,7 @@ output/
 └── continuous.flac
 ```
 
-The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`, and `HSR_Voice_Archive.srt` carries the same resolved timings for players and tools that only accept SRT; legacy `bilingual.srt` is no longer generated. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
+The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`, and `HSR_Voice_Archive.srt` carries the same resolved timings for players and tools that only accept SRT; legacy `bilingual.srt` is no longer generated. The optional `HSR_Voice_Archive_Black.mkv` contains only a lightweight black video track and a stream copy of `continuous.flac`; subtitles stay external and are neither embedded nor burned in. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
 
 ## Official Chinese cross-check
 

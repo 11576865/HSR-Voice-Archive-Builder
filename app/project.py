@@ -581,6 +581,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "timeline_resolved.json",
         "HSR_Voice_Archive.ass",
         "HSR_Voice_Archive.srt",
+        "HSR_Voice_Archive_Black.mkv",
         "build_report.json",
         "continuous.flac",
         "semantic_review_required.txt",
@@ -624,6 +625,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     return {
         "name": config.name,
         "root": config.root,
+        "output_path": str(output),
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
         "build_complete": report_file.is_file() and (

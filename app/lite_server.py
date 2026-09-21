@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import subprocess
 import sys
 import csv
 import tempfile
@@ -15,6 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .black_video_exporter import BlackVideoExporter
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .identity import infer_group
@@ -826,19 +825,27 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "job": job.id})
             return
 
-        if path == "/api/output/open":
+        if path == "/api/output/black-video":
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Output directory is not configured")
-            output.mkdir(parents=True, exist_ok=True)
-            if shutil.which("termux-open"):
-                subprocess.Popen(["termux-open", str(output)])
-            elif shutil.which("xdg-open"):
-                subprocess.Popen(["xdg-open", str(output)])
-            else:
-                raise RuntimeError("No supported file-manager opener found")
-            self._json({"ok": True, "path": str(output)})
+            source = output / "continuous.flac"
+            if not source.is_file():
+                raise FileNotFoundError("请先完成连续 FLAC 构建")
+            target = output / "HSR_Voice_Archive_Black.mkv"
+
+            def run(report_progress):
+                return BlackVideoExporter().export(
+                    source, target,
+                    lambda current, total, message: report_progress("encode", message, current, total),
+                )
+
+            job = create_job(
+                "black-video-export", run, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
             return
 
         self._json({"ok": False, "error": "Not found"}, 404)

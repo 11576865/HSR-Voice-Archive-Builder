@@ -73,6 +73,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("'continuous.flac':'连续播放的无损语音音频'", html)
         self.assertIn("'manifest.json':'完整的机器可读档案", html)
         self.assertIn("'build_report.json':'本次构建的统计", html)
+        self.assertIn("'HSR_Voice_Archive_Black.mkv':'黑色视频轨", html)
+        self.assertIn("/\\.(ass|srt)$/i.test(name)", html)
 
     def test_workflow_actions_and_incremental_progress_are_visible(self) -> None:
         html = (
@@ -91,6 +93,11 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="reviewPanel"', html)
         self.assertIn('id="submitReviewBtn"', html)
         self.assertIn("x.job.state==='awaiting_input'", html)
+        self.assertIn('id="runReportDetails"', html)
+        self.assertIn('id="blackVideoBtn"', html)
+        self.assertIn("'/api/output/black-video'", html)
+        self.assertNotIn('id="openOutputBtn"', html)
+        self.assertIn("自行或交给智能体编辑", html)
 
 
 class BuildProgressTests(unittest.TestCase):

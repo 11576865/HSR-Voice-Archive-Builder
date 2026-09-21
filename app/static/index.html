@@ -176,7 +176,6 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <label class="check" id="advancedReviewRow"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <div class="actions">
           <button type="button" class="primary" id="buildBtn">开始构建</button>
-          <button type="button" id="openOutputBtn">打开输出目录</button>
         </div>
         <div id="projectActionStatus" class="small muted action-status"></div>
         <div id="buildInlineStatus" class="small muted" style="margin-top:8px">准备就绪。</div>
@@ -254,7 +253,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <div id="archiveHint" class="notice">尚无完整成品。</div>
       <div id="reviewPanel" class="notice warn hidden" style="margin-top:12px">
         <b>需要人工修订语义偏离条目</b>
-        <p class="small" style="margin:7px 0 0">下载 TXT，在每个 <code>[[CORRECTION]]</code> 区域填写中文字幕，然后上传修改后的文件。导入成功后会自动继续构建，不会重新下载音频。</p>
+        <p class="small" style="margin:7px 0 0">下载 TXT，自行或交给智能体编辑：只替换每个 <code>[[CORRECTION]]</code> 与 <code>[[/CORRECTION]]</code> 之间的中文字幕，不要修改 ID、SOURCE_SHA256、ENTRY 字段或文档结构；请上传完整的修改后 TXT。导入成功后会自动继续构建，不会重新下载音频。</p>
         <div class="actions">
           <button type="button" id="downloadReviewBtn">下载待修订 TXT</button>
           <input type="file" id="reviewFileInput" accept=".txt,text/plain" style="max-width:320px">
@@ -273,6 +272,8 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="divider"></div>
         <h3>成品文件</h3>
         <table><tbody id="outputTable"></tbody></table>
+        <div class="actions"><button type="button" class="success" id="blackVideoBtn">生成黑屏 MKV</button></div>
+        <div id="blackVideoStatus" class="small muted" style="margin-top:8px">只封装黑色视频轨与连续 FLAC，不内嵌或烧录字幕；播放时外挂 ASS / SRT。</div>
         <p class="small muted">ASS 是独立字幕文件。许多播放器把 FLAC 当作纯音频时不会加载 ASS，这不代表字幕损坏；请使用支持“音频 + 外挂 ASS”的播放器，或之后封装进带黑色视频轨的 MKV。SRT 能显示而 ASS 不显示，通常是播放器对纯音频容器的字幕支持差异。</p>
       </div>
       <details id="diagnosticOutputs" style="margin-top:14px">
@@ -292,7 +293,6 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
         <div class="actions"><button id="scanRemoteBtn">检查新增语音</button><button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button></div>
       </div>
       <div id="updateResult" class="small muted" style="margin-top:10px">尚未检查。</div>
-      <div id="updateActionHint" class="notice" style="margin-top:12px">先检查新增语音。</div>
       <details style="margin-top:14px">
         <summary>手动导入候选清单（高级）</summary>
         <p class="small muted">只在你已经有额外的 TXT、JSON 或 CSV 文件时使用。普通的远程更新不需要填写。</p>
@@ -315,6 +315,10 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
       <div id="progressText" class="small muted">等待任务。</div>
       <div id="failureSummary" class="notice bad hidden" style="margin-top:12px"></div>
+      <details id="runReportDetails" open style="margin-top:14px">
+        <summary>运行报告</summary>
+        <pre id="runReport" style="margin-top:8px">等待任务。</pre>
+      </details>
       <details style="margin-top:14px">
         <summary>任务历史</summary>
         <div id="jobs" class="muted small" style="margin-top:8px">暂无任务。</div>
@@ -486,6 +490,7 @@ const outputDescriptions={
   'continuous.flac':'连续播放的无损语音音频',
   'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
   'HSR_Voice_Archive.srt':'与 ASS 同一时间轴的通用 SRT 字幕',
+  'HSR_Voice_Archive_Black.mkv':'黑色视频轨与连续 FLAC 的播放容器（不含字幕）',
   'timeline_resolved.json':'按 PCM 采样位置解析后的统一时间轴',
   'manifest.json':'完整的机器可读档案，保存语音、文本、来源与时间',
   'manifest.csv':'便于在表格软件中查看和整理的档案清单',
@@ -535,11 +540,13 @@ function fillProject(p){
   if(r.translation_estimated_cost_usd!==undefined&&r.translation_estimated_cost_usd!==null)usage.push('按已知单价估算 USD '+Number(r.translation_estimated_cost_usd).toFixed(6));
   if(r.translation_usage_missing)usage.push('Provider 未返回完整 usage');
   document.getElementById('translationUsage').textContent=usage.join(' · ');
+  const actionStatus=document.getElementById('projectActionStatus');
+  if(has&&p.output_path){actionStatus.textContent='成品文件已放至：'+p.output_path;actionStatus.className='small status-ok action-status';}
   const main=document.getElementById('outputTable'),diag=document.getElementById('diagnosticOutputTable');
   main.innerHTML='';diag.innerHTML='';
   for(const [name,o] of Object.entries(p.outputs||{})){
     if(!o.exists)continue;
-    const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':name.endsWith('.ass')?'file-subtitle':'';
+    const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':/\.(ass|srt)$/i.test(name)?'file-subtitle':'';
     tr.innerHTML='<td><span class="'+fileClass+'">'+name+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
     (has?main:diag).appendChild(tr);
   }
@@ -564,9 +571,9 @@ function showPlan(plan){
       result.textContent='本地候选清单已扫描；发现真正新增 '+n(c.new_logical)+' 条。';
     }
   }
-  const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn'),hint=document.getElementById('updateActionHint');
+  const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn');
   button.disabled=additions<1||!!plan.applied;
-  hint.textContent=plan.applied?'这批新增语音已经应用到项目，下一步请重新构建成品。':additions>0?'发现 '+additions+' 条新增记录。点击“下载并应用新增语音”后，程序会定位并下载可确认的音频；无法可靠定位的条目会单独报告。':'没有发现需要下载的新增语音。';
+  setRunReport(plan.applied?'增量更新已应用':additions>0?'检查到新增语音':'没有新增语音',result?.textContent||'',false);
   setLog(plan);
 }
 let quickPlanState=null;
@@ -675,7 +682,22 @@ function jobProgressPercent(job){
     if(job.phase==='audio')return 88;
     if(job.phase==='final'||job.phase==='done')return 100;
   }
+  if(job.kind==='black-video-export')return tot>0?Math.round(ratio*100):5;
   return tot>0?Math.round(ratio*100):5;
+}
+function setRunReport(title,body,open=true){
+  const details=document.getElementById('runReportDetails'),report=document.getElementById('runReport');
+  if(!details||!report)return;
+  details.querySelector('summary').textContent='运行报告 · '+title;
+  report.textContent=body||'暂无详细信息。';
+  details.open=!!open;
+}
+function completedReport(job){
+  const r=job?.result||{};
+  if(job?.kind==='remote-update-apply')return '已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。\n项目来源已更新，请重新构建成品。';
+  if(job?.kind==='black-video-export')return '黑屏 MKV 已生成：'+(r.output||'')+'\n未内嵌或烧录字幕；请外挂 ASS / SRT。';
+  if(['build','quick-build'].includes(job?.kind))return '构建完成。\n成品文件已放至：'+(currentProject?.output_path||'项目 output 目录');
+  return job?.message||'任务已完成。';
 }
 function renderJobs(jobs){
   const all=jobs||[],root=currentProject?.root||'';
@@ -687,10 +709,11 @@ function renderJobs(jobs){
   if(active){
     const cur=Number(active.progress_current||0),tot=Number(active.progress_total||0);
     const pct=jobProgressPercent(active);
-    const isBuild=['build','quick-build'].includes(active.kind),label=active.kind==='remote-update-check'?'检查新增语音':active.kind==='remote-update-apply'?'下载并应用新增语音':'构建';
+    const isBuild=['build','quick-build'].includes(active.kind),label=active.kind==='remote-update-check'?'检查新增语音':active.kind==='remote-update-apply'?'下载并应用新增语音':active.kind==='black-video-export'?'生成黑屏 MKV':'构建';
     state.textContent=(activeForCurrent?'正在':'另一项目正在')+label+(active.project_name?'「'+active.project_name+'」':'')+'。';
     const count=tot>0?' · '+cur+'/'+tot:'';
     state.className='notice';bar.style.width=pct+'%';textBox.textContent=(active.message||'正在处理')+count;failure.classList.add('hidden');
+    setRunReport(label+'进行中',(active.message||'正在处理')+count+'\n阶段：'+(active.phase||'准备'),true);
     if(isBuild){setBuildButtonsDisabled(true);setBuildButtonText('构建中…');setInlineBuildStatus(active.message||'构建已经启动。');}
   }else{
     const latest=projectJobs[0];
@@ -698,25 +721,29 @@ function renderJobs(jobs){
     if(latest?.state==='awaiting_input'){
       state.textContent='构建已暂停，等待人工修订。';state.className='notice warn';bar.style.width='70%';
       textBox.textContent=latest.message||'请下载待修订 TXT，填写后上传。';failure.classList.add('hidden');
+      setRunReport('等待人工修订',(latest.message||'语义偏离条目需要人工修订')+'\n请下载完整 TXT，自行或交给智能体编辑后上传。',true);
       setBuildButtonText('等待人工修订');setInlineBuildStatus('语义偏离条目已汇总；上传修订 TXT 后会继续构建。');
     }else if(latest?.state==='failed'){
       const isBuildFailure=['build','quick-build'].includes(latest.kind);
       state.textContent='当前项目最近一次'+(isBuildFailure?'构建':'操作')+'失败。';state.className='notice bad';bar.style.width='0%';
       textBox.textContent=isBuildFailure?'修复原因后可以重新构建；已完成检查点通常仍会复用。':'失败原因已显示在下方；修复后可重新执行该操作。';failure.textContent='失败原因：'+shortError(latest.error);failure.classList.remove('hidden');
+      setRunReport('操作失败','失败原因：'+shortError(latest.error),true);
       if(isBuildFailure){setBuildButtonText('继续构建');setInlineBuildStatus('最近一次构建失败；修复后会复用仍然有效的检查点。',true);}
     }else if(succeeded){
       state.textContent='当前项目最近一次构建已完成。';state.className='notice ok';bar.style.width='100%';
-      textBox.textContent='构建完成，可以查看“构建结果”或打开输出目录。';failure.classList.add('hidden');
+      textBox.textContent='构建完成，可以查看“构建结果”。';failure.classList.add('hidden');
+      setRunReport('已完成',completedReport(latest?.state==='succeeded'?latest:succeeded),false);
       setBuildButtonText('应用设置并构建');setInlineBuildStatus('构建已完成；修改设置后再次构建时，只重跑受影响的阶段。');
     }else{
       state.textContent=root?'当前项目暂无新版任务记录。':'尚未打开项目。';state.className='notice';bar.style.width='0%';
       textBox.textContent=root?'旧版本任务记录已归入下方“其他项目 / 旧版任务”。':'请选择或新建项目。';failure.classList.add('hidden');
+      setRunReport('等待任务',root?'当前项目尚无任务结果。':'请先选择或新建项目。',false);
       setBuildButtonText('开始构建');setInlineBuildStatus('准备就绪。');
     }
     setBuildButtonsDisabled(latest?.state==='awaiting_input');
   }
   const box=document.getElementById('jobs');
-  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音'};
+  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','black-video-export':'生成黑屏 MKV'};
   const states={queued:'等待',running:'运行中',succeeded:'完成',failed:'失败',interrupted:'已中断',awaiting_input:'等待人工修订'};
   const row=j=>{
     const when=j.finished_at||j.started_at||j.created_at||'';
@@ -751,8 +778,13 @@ async function watchJob(id){
           showPlan(x.job.result);
         }else if(x.job.kind==='remote-update-apply'){
           const r=x.job.result||{};
-          document.getElementById('updateActionHint').textContent='已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。项目来源已更新，请重新构建成品。';
+          setRunReport('增量更新已应用',completedReport(x.job),false);
           setLog(r);
+        }else if(x.job.kind==='black-video-export'){
+          document.getElementById('blackVideoBtn').disabled=false;
+          document.getElementById('blackVideoStatus').textContent='黑屏 MKV 已生成；播放时请外挂 ASS / SRT。';
+          setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
+          setLog(x.job.result||x.job);
         }else{
           setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
           const d=document.getElementById('diagnosticLog');if(d)d.open=false;
@@ -761,6 +793,7 @@ async function watchJob(id){
       }
       if(x.job.state==='failed'){
         clearInterval(pollTimer);setLog(x.job.error||x.job);
+        if(x.job.kind==='black-video-export'){document.getElementById('blackVideoBtn').disabled=false;document.getElementById('blackVideoStatus').textContent='生成失败：'+shortError(x.job.error||x.job);}
         if(x.job.kind==='remote-update-check'){
           const result=document.getElementById('updateResult');
           if(result)result.textContent='远程检查失败：'+shortError(x.job.error||x.job);
@@ -823,8 +856,8 @@ document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
-document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;document.getElementById('updateActionHint').textContent='正在准备 Hugging Face 定位索引并下载新增音频；首次运行需要下载约 188 MiB 的定位文件。';const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setLog(String(x))}};
-document.getElementById('openOutputBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{const j=await api('/api/output/open',{method:'POST'});s.textContent='已交给系统文件管理器：'+j.path;s.className='small status-ok action-status';setLog('已请求打开：'+j.path)}catch(x){s.textContent='无法自动打开。请在文件管理器中打开项目的 output 目录。原因：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
+document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;setRunReport('正在应用新增语音','正在准备 Hugging Face 定位索引并下载新增音频；首次运行需要下载约 188 MiB 的定位文件。',true);const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
+document.getElementById('blackVideoBtn').onclick=async()=>{const button=document.getElementById('blackVideoBtn'),status=document.getElementById('blackVideoStatus');try{button.disabled=true;status.textContent='正在创建黑屏 MKV 任务…';setRunReport('正在生成黑屏 MKV','准备生成黑色视频轨并封装连续 FLAC；字幕不会被内嵌或烧录。',true);const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){button.disabled=false;status.textContent='启动失败：'+shortError(x);setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('submitReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus'),input=document.getElementById('reviewFileInput'),button=document.getElementById('submitReviewBtn');try{const file=input.files?.[0];if(!file)throw new Error('请先选择修改后的 TXT 文件');button.disabled=true;s.textContent='正在校验并导入人工修订…';const d=new FormData();d.set('review_text',await file.text());const j=await api('/api/review/import',{method:'POST',body:d});fillProject(j.project);const r=j.result||{};if(r.remaining>0){s.textContent='已导入 '+n(r.imported)+' 条，仍有 '+n(r.remaining)+' 条未填写；请下载更新后的 TXT 继续修订。';button.disabled=false;return;}s.textContent='人工修订已导入，正在从检查点继续构建…';beginBuildLaunch();const build=await api('/api/project/build',{method:'POST'});watchJob(build.job);}catch(x){button.disabled=false;s.textContent='导入失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};

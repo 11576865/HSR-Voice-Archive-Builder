@@ -1,10 +1,7 @@
 from __future__ import annotations
 
 import json
-import os
 import shutil
-import subprocess
-import sys
 import tempfile
 import csv
 from pathlib import Path
@@ -14,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .black_video_exporter import BlackVideoExporter
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .identity import infer_group
@@ -851,25 +849,29 @@ def api_review_file():
     return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
 
 
-@app.post("/api/output/open")
-def api_output_open():
+@app.post("/api/output/black-video")
+def api_output_black_video():
     try:
         config = _active_config()
         output = resolve_project_path(config, config.output_dir)
         if output is None:
             raise ValueError("Output directory is not configured")
-        output.mkdir(parents=True, exist_ok=True)
-        if sys.platform.startswith("win"):
-            os.startfile(str(output))  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            subprocess.Popen(["open", str(output)])
-        elif shutil.which("termux-open"):
-            subprocess.Popen(["termux-open", str(output)])
-        elif shutil.which("xdg-open"):
-            subprocess.Popen(["xdg-open", str(output)])
-        else:
-            raise RuntimeError("No supported file-manager opener found")
-        return {"ok": True, "path": str(output)}
+        source = output / "continuous.flac"
+        if not source.is_file():
+            raise FileNotFoundError("请先完成连续 FLAC 构建")
+        target = output / "HSR_Voice_Archive_Black.mkv"
+
+        def run(report_progress):
+            return BlackVideoExporter().export(
+                source, target,
+                lambda current, total, message: report_progress("encode", message, current, total),
+            )
+
+        job = create_job(
+            "black-video-export", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
