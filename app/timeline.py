@@ -1,8 +1,10 @@
 from __future__ import annotations
 
 import json
+import math
 import os
 import tempfile
+import unicodedata
 from pathlib import Path
 from typing import Any, Iterable
 
@@ -210,6 +212,14 @@ def _ass_time(seconds: float) -> str:
     return f"{hours}:{minutes:02d}:{secs:02d}.{fraction:02d}"
 
 
+ASS_PLAYRES_X = 1920
+ASS_HORIZONTAL_MARGIN = 96
+ASS_SOURCE_BASE_SIZE = 60
+ASS_SOURCE_MIN_SIZE = 40
+ASS_TARGET_BASE_SIZE = 68
+ASS_TARGET_MIN_SIZE = 48
+
+
 def _ass_text(value: object) -> str:
     return (
         str(value or "")
@@ -221,12 +231,84 @@ def _ass_text(value: object) -> str:
     )
 
 
+def _ass_em_width(character: str) -> float:
+    """Estimate glyph width in em without adding a font-metrics dependency."""
+
+    if character.isspace():
+        return 0.32
+    if unicodedata.east_asian_width(character) in {"W", "F"}:
+        return 1.0
+    if character in "ilI.,'\`!|:;":
+        return 0.30
+    if character in "MW@#%&":
+        return 0.90
+    if character.isupper():
+        return 0.64
+    if character.isdigit():
+        return 0.56
+    return 0.54
+
+
+def _estimated_ass_lines(value: object, font_size: int) -> int:
+    """Estimate wrapped lines inside the fixed 1920x1080 ASS safe width."""
+
+    text = (
+        str(value or "")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+    )
+    if not text:
+        return 1
+
+    usable_pixels = ASS_PLAYRES_X - 2 * ASS_HORIZONTAL_MARGIN
+    em_per_line = usable_pixels / max(1, font_size)
+    lines = 0
+    for explicit_line in text.split("\n"):
+        width = sum(_ass_em_width(character) for character in explicit_line)
+        lines += max(1, math.ceil(width / em_per_line))
+    return lines
+
+
+def _fit_ass_font_size(
+    value: object,
+    *,
+    base_size: int,
+    minimum_size: int,
+    max_lines: int,
+) -> int:
+    """Shrink only long entries; short dialogue keeps the larger archive style."""
+
+    for size in range(base_size, minimum_size - 1, -2):
+        if _estimated_ass_lines(value, size) <= max_lines:
+            return size
+    return minimum_size
+
+
+def _ass_dialogue(
+    *,
+    layer: int,
+    start: str,
+    end: str,
+    style: str,
+    text: str,
+    font_size: int,
+) -> str:
+    return (
+        f"Dialogue: {layer},{start},{end},{style},,0,0,0,,"
+        f"{{\\fs{font_size}}}{text}"
+    )
+
+
 def render_ass(
     entries: Iterable[object],
     *,
     source_language: str = "en",
     target_language: str = "zh-CN",
 ) -> str:
+    # Bilingual archives deliberately use two independent regions:
+    # source text is anchored at the top and grows downward, while Chinese is
+    # anchored at the bottom and grows upward. This keeps long passages from
+    # colliding around the screen centre and uses the black-video canvas.
     header = """[Script Info]
 Title: HSR Voice Archive
 ScriptType: v4.00+
@@ -237,7 +319,10 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: Archive,Noto Sans,52,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,0,5,80,80,40,1
+Style: ArchiveSource,Noto Sans,60,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,8,96,96,110,1
+Style: ArchiveTarget,汉仪旗黑,68,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,2,96,96,110,1
+Style: ArchiveSourceOnly,Noto Sans,60,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,5,96,96,40,1
+Style: ArchiveChinese,汉仪旗黑,68,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,2,0,5,96,96,40,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -245,21 +330,96 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     dialogues: list[str] = []
     same_chinese = source_language == target_language == "zh-CN"
     for entry in entries:
-        source = _ass_text(getattr(entry, "english", ""))
-        target = _ass_text(getattr(entry, "chinese", ""))
-        if same_chinese:
-            text = r"{\fn汉仪旗黑}" + (target or source)
-        elif source and target:
-            text = r"{\fnNoto Sans}" + source + r"\N{\fn汉仪旗黑}" + target
-        else:
-            text = (r"{\fn汉仪旗黑}" + target) if target else source
-        if not text:
-            continue
+        source_raw = str(getattr(entry, "english", "") or "").strip()
+        target_raw = str(getattr(entry, "chinese", "") or "").strip()
         start = _ass_time(float(getattr(entry, "start_seconds")))
         end = _ass_time(float(getattr(entry, "display_end_seconds")))
-        dialogues.append(
-            f"Dialogue: 0,{start},{end},Archive,,0,0,0,,{text}"
-        )
+
+        if same_chinese:
+            single_raw = target_raw or source_raw
+            if not single_raw:
+                continue
+            dialogues.append(
+                _ass_dialogue(
+                    layer=0,
+                    start=start,
+                    end=end,
+                    style="ArchiveChinese",
+                    text=_ass_text(single_raw),
+                    font_size=_fit_ass_font_size(
+                        single_raw,
+                        base_size=ASS_TARGET_BASE_SIZE,
+                        minimum_size=ASS_TARGET_MIN_SIZE,
+                        max_lines=5,
+                    ),
+                )
+            )
+            continue
+
+        if source_raw and target_raw:
+            dialogues.append(
+                _ass_dialogue(
+                    layer=0,
+                    start=start,
+                    end=end,
+                    style="ArchiveSource",
+                    text=_ass_text(source_raw),
+                    font_size=_fit_ass_font_size(
+                        source_raw,
+                        base_size=ASS_SOURCE_BASE_SIZE,
+                        minimum_size=ASS_SOURCE_MIN_SIZE,
+                        max_lines=5,
+                    ),
+                )
+            )
+            dialogues.append(
+                _ass_dialogue(
+                    layer=1,
+                    start=start,
+                    end=end,
+                    style="ArchiveTarget",
+                    text=_ass_text(target_raw),
+                    font_size=_fit_ass_font_size(
+                        target_raw,
+                        base_size=ASS_TARGET_BASE_SIZE,
+                        minimum_size=ASS_TARGET_MIN_SIZE,
+                        max_lines=4,
+                    ),
+                )
+            )
+        elif target_raw:
+            dialogues.append(
+                _ass_dialogue(
+                    layer=0,
+                    start=start,
+                    end=end,
+                    style="ArchiveChinese",
+                    text=_ass_text(target_raw),
+                    font_size=_fit_ass_font_size(
+                        target_raw,
+                        base_size=ASS_TARGET_BASE_SIZE,
+                        minimum_size=ASS_TARGET_MIN_SIZE,
+                        max_lines=5,
+                    ),
+                )
+            )
+        elif source_raw:
+            dialogues.append(
+                _ass_dialogue(
+                    layer=0,
+                    start=start,
+                    end=end,
+                    style="ArchiveSourceOnly",
+                    text=_ass_text(source_raw),
+                    font_size=_fit_ass_font_size(
+                        source_raw,
+                        base_size=ASS_SOURCE_BASE_SIZE,
+                        minimum_size=ASS_SOURCE_MIN_SIZE,
+                        max_lines=6,
+                    ),
+                )
+            )
+
     if not dialogues:
         raise ValueError("ASS rendering produced no dialogue lines")
     return header + "\n".join(dialogues) + "\n"
