@@ -1028,6 +1028,345 @@ def _translate_missing(
     }
 
 
+def _official_records(entries) -> list[dict[str, str]]:
+    """Official target lines that were not produced by our own translator."""
+    records: list[dict[str, str]] = []
+    for entry in entries:
+        official = str(entry.chinese or "").strip()
+        english = str(entry.english or "").strip()
+        origin = str(getattr(entry, "chinese_source", "") or "")
+        if not official or not english or origin.startswith("api:"):
+            continue
+        records.append({
+            "id": entry.filename,
+            "english": english,
+            "official_chinese": official,
+        })
+    return records
+
+
+def _official_zero_counts() -> dict[str, object]:
+    return {
+        "count_official_reviewed": 0,
+        "count_official_zone_green": 0,
+        "count_official_zone_yellow": 0,
+        "count_official_zone_red": 0,
+        "count_official_api_reviewed": 0,
+        "count_official_checkpoint_reused": 0,
+        "count_official_revised": 0,
+        "count_official_revision_rejected": 0,
+        "official_review_api_call_count": 0,
+        "official_review_actual_total_tokens": 0,
+        "official_review_estimated_cost_usd": 0.0,
+    }
+
+
+def _load_official_checkpoint(
+    path: Path,
+    model: str,
+    provider: str,
+    base_url: str,
+    target_language: str,
+) -> dict[str, dict[str, object]]:
+    from .official_alignment import OFFICIAL_ALIGNMENT_VERSION
+
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return {}
+    if not isinstance(payload, dict) or not isinstance(payload.get("rows"), dict):
+        return {}
+    identity = payload.get("identity")
+    if identity != {
+        "model": model,
+        "provider": provider,
+        "base_url": base_url,
+        "target_language": target_language,
+        "alignment_version": OFFICIAL_ALIGNMENT_VERSION,
+    }:
+        return {}
+    return {
+        str(key): value
+        for key, value in payload["rows"].items()
+        if isinstance(value, dict)
+    }
+
+
+def _write_official_checkpoint(
+    path: Path,
+    model: str,
+    provider: str,
+    base_url: str,
+    target_language: str,
+    rows: dict[str, dict[str, object]],
+) -> None:
+    from .official_alignment import OFFICIAL_ALIGNMENT_VERSION
+
+    atomic_write_text(
+        path,
+        json.dumps(
+            {
+                "schema_version": 1,
+                "identity": {
+                    "model": model,
+                    "provider": provider,
+                    "base_url": base_url,
+                    "target_language": target_language,
+                    "alignment_version": OFFICIAL_ALIGNMENT_VERSION,
+                },
+                "rows": rows,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+
+
+def _review_official_targets(
+    entries,
+    *,
+    model: str,
+    batch_size: int,
+    state_dir: Path,
+    token_budget: int = 0,
+    usd_budget: float = 0.0,
+    translation_glossary: dict[str, str] | None = None,
+    progress_callback: Callable[[str, str, int, int], None] | None = None,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
+) -> dict[str, object]:
+    """Compare official target text against the source and revise only deviations.
+
+    Green rows keep the official text without any API call. Yellow and red rows
+    go to a single call that returns the accept/revise decision together with a
+    replacement line when one is needed.
+    """
+    if batch_size < 1:
+        raise ValueError("translation_batch_size must be >= 1")
+
+    def review_progress(message: str, current: int = 0, total: int = 0) -> None:
+        if progress_callback is not None:
+            progress_callback("official_review", message, current, total)
+
+    rows = (
+        [] if source_language == target_language else _official_records(entries)
+    )
+    if not rows:
+        return _official_zero_counts()
+
+    from .credentials import translation_identity
+    from .glossary import CORE_GLOSSARY, glossary_fingerprint, relevant_glossary
+    from .official_alignment import (
+        OFFICIAL_ALIGNMENT_VERSION,
+        ZONE_GREEN,
+        official_candidate,
+        summarize_official_alignment,
+    )
+    from .translation_quality import has_hard_issue, translation_qa
+    from .translation_runtime import (
+        TranslationUsageLedger,
+        estimate_request_tokens,
+        estimate_workload_tokens,
+        records_fingerprint,
+    )
+    from .translator import make_client, review_official_records
+
+    active_glossary = dict(
+        (CORE_GLOSSARY if target_language == "zh-CN" else {})
+        if translation_glossary is None
+        else translation_glossary
+    )
+    provider, base_url = translation_identity()
+    checkpoint_path = state_dir / ".official_review_checkpoint.json"
+    checkpoint = _load_official_checkpoint(
+        checkpoint_path, model, provider, base_url, target_language
+    )
+
+    entry_by_id = {entry.filename: entry for entry in entries}
+    records: list[dict[str, object]] = []
+    pending: list[dict[str, object]] = []
+    for row in rows:
+        candidate = official_candidate(
+            row_id=row["id"],
+            source_text=row["english"],
+            official_text=row["official_chinese"],
+            glossary=relevant_glossary(active_glossary, [row["english"]]),
+            source_language=source_language,
+            target_language=target_language,
+        )
+        record: dict[str, object] = {
+            **candidate,
+            "decision": "accept_official",
+            "reason": "acceptable_localization",
+            "translation": "",
+            "api_reviewed": False,
+            "checkpoint_reused": False,
+            "revision_rejected": False,
+        }
+        if candidate["zone"] == ZONE_GREEN:
+            records.append(record)
+            continue
+        saved = checkpoint.get(row["id"])
+        fingerprint = _text_fingerprint(
+            row["english"] + "\u0000" + row["official_chinese"]
+        )
+        if (
+            isinstance(saved, dict)
+            and str(saved.get("input_sha256", "")) == fingerprint
+            and str(saved.get("decision", "")) in {"accept_official", "revise"}
+        ):
+            record["decision"] = str(saved["decision"])
+            record["reason"] = str(saved.get("reason", ""))
+            record["translation"] = str(saved.get("translation", ""))
+            record["checkpoint_reused"] = True
+            records.append(record)
+            continue
+        record["input_sha256"] = fingerprint
+        records.append(record)
+        pending.append(record)
+
+    client = make_client() if pending else None
+    review_batch_size = max(1, min(batch_size, 40))
+    estimate_rows = [
+        {
+            "id": str(row["id"]),
+            "english": str(row["english"]),
+            "chinese": str(row["official_chinese"]),
+        }
+        for row in pending
+    ]
+    usage_estimate = estimate_workload_tokens(estimate_rows, review_batch_size)
+    ledger = TranslationUsageLedger(
+        state_dir / "official_review_usage.json",
+        identity={
+            "provider": provider,
+            "base_url": base_url,
+            "model": model,
+            "target_fingerprint": records_fingerprint(rows),
+            "glossary_fingerprint": glossary_fingerprint(active_glossary),
+            "source_language": source_language,
+            "target_language": target_language,
+            "phase": "official-review",
+        },
+        estimate=usage_estimate,
+        token_budget=token_budget,
+        usd_budget=usd_budget,
+    )
+
+    batch_count = (len(pending) + review_batch_size - 1) // review_batch_size
+    for start in range(0, len(pending), review_batch_size):
+        batch = pending[start:start + review_batch_size]
+        review_progress(
+            f"官方中文对照：已复核 {start}/{len(pending)} 条 · 批次 "
+            f"{start // review_batch_size + 1}/{batch_count}",
+            start,
+            len(pending),
+        )
+        payload = [
+            {
+                "id": str(row["id"]),
+                "english": str(row["english"]),
+                "official_chinese": str(row["official_chinese"]),
+                "zone": str(row["zone"]),
+                "signals": [
+                    f"{item['code']}: {item['message']}"
+                    for item in row["signals"]  # type: ignore[union-attr]
+                ],
+            }
+            for row in batch
+        ]
+        batch_glossary = relevant_glossary(
+            active_glossary,
+            [str(row["english"]) for row in batch],
+        )
+        phase = f"official-review-{start // review_batch_size + 1}"
+        ledger.check_before_request(
+            estimate_request_tokens(payload, batch_glossary),
+            phase=phase,
+        )
+        reviews = review_official_records(
+            payload,
+            model=model,
+            glossary=batch_glossary,
+            source_language=source_language,
+            target_language=target_language,
+            client=client,
+            usage_callback=lambda usage, phase=phase: ledger.record(phase, usage),
+        )
+        for row, review in zip(batch, reviews, strict=True):
+            row["api_reviewed"] = True
+            row["decision"] = str(review.get("decision", "accept_official"))
+            row["reason"] = str(review.get("reason", ""))
+            row["translation"] = str(review.get("translation", "")).strip()
+            checkpoint[str(row["id"])] = {
+                "input_sha256": str(row.get("input_sha256", "")),
+                "zone": str(row["zone"]),
+                "decision": row["decision"],
+                "reason": row["reason"],
+                "translation": row["translation"],
+                "alignment_version": OFFICIAL_ALIGNMENT_VERSION,
+            }
+        _write_official_checkpoint(
+            checkpoint_path, model, provider, base_url, target_language, checkpoint
+        )
+        ledger.assert_observable()
+
+    for record in records:
+        if record["decision"] != "revise":
+            continue
+        translation = str(record["translation"]).strip()
+        english = str(record["english"])
+        issues = translation_qa(
+            english,
+            translation,
+            relevant_glossary(active_glossary, [english]),
+            target_language,
+        )
+        if not translation or has_hard_issue(issues):
+            # A retranslation that fails deterministic QA is worse than the
+            # official line it would replace.
+            record["revision_rejected"] = True
+            record["qa_issues"] = issues
+            continue
+        entry = entry_by_id.get(str(record["id"]))
+        if entry is None:
+            continue
+        entry.chinese = translation
+        entry.chinese_source = (
+            f"official-review:{provider}:{model}:{record['reason'] or 'revise'}"
+        )
+
+    summary = summarize_official_alignment(records)
+    atomic_write_text(
+        state_dir / "official_review.json",
+        json.dumps(
+            {
+                "schema_version": 1,
+                "alignment_version": OFFICIAL_ALIGNMENT_VERSION,
+                "provider": provider,
+                "base_url": base_url,
+                "model": model,
+                "summary": summary,
+                "records": records,
+            },
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    ledger_report = ledger.report()
+    return {
+        **summary,
+        "official_review_api_call_count": ledger_report["translation_api_call_count"],
+        "official_review_actual_total_tokens": ledger_report[
+            "translation_actual_total_tokens"
+        ],
+        "official_review_estimated_cost_usd": ledger_report[
+            "translation_estimated_cost_usd"
+        ],
+        "official_review_model": model,
+    }
+
+
 def build_project_v02(
     index_csv: Path,
     wav_source: Path,
@@ -1052,6 +1391,7 @@ def build_project_v02(
     reference_language: str = "auto",
     reference_text_embedded: bool = False,
     state_dir: Path | None = None,
+    review_official_target: bool = False,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1084,7 +1424,7 @@ def build_project_v02(
     active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
     translation_route: dict[str, str] | None = None
-    if translate_missing:
+    if translate_missing or review_official_target:
         from .credentials import translation_identity
 
         provider, base_url = translation_identity()
@@ -1111,6 +1451,7 @@ def build_project_v02(
         "group_gap": group_gap,
         "make_flac": make_flac,
         "translate_missing": translate_missing,
+        "review_official_target": bool(review_official_target),
         "translation_route": translation_route,
         "translation_qa_version": 2,
     })
@@ -1196,7 +1537,7 @@ def build_project_v02(
             "translation_qa",
             input_fingerprint,
         )
-        if translate_missing and qa_stage is None:
+        if (translate_missing or review_official_target) and qa_stage is None:
             # A translated entry set without its validated QA stage is not a
             # complete translation result. Re-run from metadata; row-level
             # translation checkpoints still prevent duplicate paid calls.
@@ -1234,6 +1575,21 @@ def build_project_v02(
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
                 report["count_missing_target_text"] = report["count_missing_chinese"]
+            if review_official_target:
+                report.update(
+                    _review_official_targets(
+                        entries,
+                        model=translation_model,
+                        batch_size=translation_batch_size,
+                        state_dir=state_dir,
+                        token_budget=translation_token_budget,
+                        usd_budget=translation_budget_usd,
+                        translation_glossary=active_glossary,
+                        progress_callback=progress_callback,
+                        source_language=source_text_language,
+                        target_language=target_language,
+                    )
+                )
             save_stage(
                 state_dir,
                 STAGE_FILES["translation"],
@@ -1243,7 +1599,10 @@ def build_project_v02(
             )
             qa_path = state_dir / "translation_qa.json"
             semantic_qa_path = state_dir / "semantic_qa.json"
-            qa_payload: dict[str, object] = {"skipped": not translate_missing}
+            official_review_path = state_dir / "official_review.json"
+            qa_payload: dict[str, object] = {
+                "skipped": not (translate_missing or review_official_target)
+            }
             qa_artifacts: list[Path] = []
             if qa_path.is_file():
                 qa_payload = json.loads(qa_path.read_text(encoding="utf-8"))
@@ -1253,6 +1612,11 @@ def build_project_v02(
                     semantic_qa_path.read_text(encoding="utf-8")
                 )
                 qa_artifacts.append(semantic_qa_path)
+            if official_review_path.is_file():
+                qa_payload["official_review"] = json.loads(
+                    official_review_path.read_text(encoding="utf-8")
+                )
+                qa_artifacts.append(official_review_path)
             save_stage(
                 state_dir,
                 STAGE_FILES["translation_qa"],
@@ -1277,6 +1641,7 @@ def build_project_v02(
             out_dir / "bilingual_index_corrected.csv",
             out_dir / "timeline_resolved.json",
             out_dir / "HSR_Voice_Archive.ass",
+            out_dir / "HSR_Voice_Archive.srt",
         ]
         if load_stage(
             state_dir,
@@ -1403,6 +1768,7 @@ if __name__ == "__main__":
     p.add_argument("--group-gap", type=float, default=1.20)
     p.add_argument("--no-flac", action="store_true")
     p.add_argument("--translate-missing", action="store_true")
+    p.add_argument("--review-official-target", action="store_true")
     p.add_argument("--translation-model", default="gpt-5.6-luna")
     p.add_argument("--translation-batch-size", type=int, default=80)
     p.add_argument("--translation-token-budget", type=int, default=0)
@@ -1423,6 +1789,7 @@ if __name__ == "__main__":
         intro_gap=a.intro_gap,
         make_flac=not a.no_flac,
         translate_missing=a.translate_missing,
+        review_official_target=a.review_official_target,
         translation_model=a.translation_model,
         translation_batch_size=a.translation_batch_size,
         translation_token_budget=a.translation_token_budget,

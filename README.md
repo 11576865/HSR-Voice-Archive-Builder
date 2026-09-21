@@ -226,6 +226,7 @@ Useful options:
 --group-gap 1.20
 --no-flac
 --translate-missing
+--review-official-target
 --translation-model gpt-5.6-luna
 --translation-batch-size 80
 --translation-token-budget 0
@@ -520,6 +521,7 @@ output/
 ├── bilingual_index_corrected.csv
 ├── timeline_resolved.json
 ├── HSR_Voice_Archive.ass
+├── HSR_Voice_Archive.srt
 ├── build_report.json
 ├── translation_qa.json
 ├── semantic_qa.json
@@ -528,7 +530,17 @@ output/
 └── continuous.flac
 ```
 
-The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`; legacy `bilingual.srt` is no longer generated. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
+The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`, and `HSR_Voice_Archive.srt` carries the same resolved timings for players and tools that only accept SRT; legacy `bilingual.srt` is no longer generated. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
+
+## Official Chinese cross-check
+
+`--review-official-target` compares each official Chinese line against its source line before the archive is written. Local checks first sort every line into one of three zones, and only the last two cost anything:
+
+- green: reordering, compression, dropped filler, rewritten idioms and localized tone; the official line is kept and no request is made;
+- yellow: weak evidence such as a question rendered as a statement, a missing glossary term or an extreme length gap;
+- red: conflicting numbers, flipped negation, or mismatched control tokens and placeholders.
+
+Yellow and red lines go to one structured request per batch that returns the accept/revise decision together with the replacement line, so a judgment and a retranslation never cost two calls. A replacement is only adopted when it passes the same deterministic translation QA as normal translation output; otherwise the official line is kept. Decisions are checkpointed in `.state/.official_review_checkpoint.json` and reported in `official_review.json`.
 
 ## Data integrity
 

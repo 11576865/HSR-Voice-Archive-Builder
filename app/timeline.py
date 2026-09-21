@@ -281,3 +281,66 @@ def write_ass(
         ),
         encoding="utf-8-sig",
     )
+
+
+def _srt_time(seconds: float) -> str:
+    milliseconds = max(0, round(seconds * 1000))
+    hours, remainder = divmod(milliseconds, 3_600_000)
+    minutes, remainder = divmod(remainder, 60_000)
+    secs, fraction = divmod(remainder, 1000)
+    return f"{hours:02d}:{minutes:02d}:{secs:02d},{fraction:03d}"
+
+
+def _srt_text(value: object) -> str:
+    return (
+        str(value or "")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .strip()
+    )
+
+
+def render_srt(
+    entries: Iterable[object],
+    *,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
+) -> str:
+    """Render SRT from the same resolved sample positions used by ASS and FLAC."""
+    same_chinese = source_language == target_language == "zh-CN"
+    blocks: list[str] = []
+    for entry in entries:
+        source = _srt_text(getattr(entry, "english", ""))
+        target = _srt_text(getattr(entry, "chinese", ""))
+        if same_chinese:
+            text = target or source
+        elif source and target:
+            text = f"{source}\n{target}"
+        else:
+            text = target or source
+        if not text:
+            continue
+        start = _srt_time(float(getattr(entry, "start_seconds")))
+        end = _srt_time(float(getattr(entry, "display_end_seconds")))
+        blocks.append(f"{len(blocks) + 1}\n{start} --> {end}\n{text}\n")
+    if not blocks:
+        raise ValueError("SRT rendering produced no subtitle lines")
+    return "\n".join(blocks)
+
+
+def write_srt(
+    entries: Iterable[object],
+    path: Path,
+    *,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
+) -> None:
+    _atomic_write(
+        path,
+        render_srt(
+            entries,
+            source_language=source_language,
+            target_language=target_language,
+        ),
+        encoding="utf-8-sig",
+    )

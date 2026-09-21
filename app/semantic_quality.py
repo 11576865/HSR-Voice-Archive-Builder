@@ -40,6 +40,23 @@ _PERSON_GROUPS = {
 }
 
 
+_TARGET_NEGATION = {
+    "zh": re.compile(r"(?:不|没|無|无|未|别|別|非|勿|莫|甭|缺乏|免得)"),
+    "ja": re.compile(r"(?:ない|ません|ぬ|ず|なく|できない)"),
+    "ko": re.compile(r"(?:않|없|못|아니|말고)"),
+}
+
+
+def has_negation(text: str, language: str = "en") -> bool:
+    """Report whether a line carries an explicit negation marker."""
+    value = str(text or "")
+    lang = str(language or "en").lower()
+    if lang.startswith("en"):
+        return bool(_NEGATION_RE.search(value))
+    key = next((k for k in _TARGET_NEGATION if lang.startswith(k)), "")
+    return bool(key and _TARGET_NEGATION[key].search(value))
+
+
 def semantic_risk_tags(english: str, source_language: str = "en") -> list[str]:
     """Return sparse semantic-risk tags for lines worth a verifier call.
 

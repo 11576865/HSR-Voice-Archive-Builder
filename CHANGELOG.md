@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added `HSR_Voice_Archive.srt` alongside the ASS subtitle. Both are rendered from the same sample-resolved Timeline as `continuous.flac`, so the SRT is a real output rather than the removed legacy `bilingual.srt`.
+- Added an official-Chinese cross-check (`--review-official-target`, also a dashboard option and on by default in Quick Mode when translation is configured). Local checks sort every official line into green/yellow/red: natural localization is accepted without any API call, while lines with conflicting numbers, flipped negation, mismatched control tokens or other deviation evidence go to one structured call that returns the accept/revise decision and the replacement line together. Replacements must pass the existing deterministic translation QA, otherwise the official line is kept. Decisions are checkpointed and reported in `official_review.json`.
 - Incremental English updates now pair and separately download same-file Chinese audio when available, attach its official transcription only as localization reference, and fall back to API translation when the Chinese audio is absent or unavailable.
 - Changed the default translation model to `gpt-5.6-luna`; existing projects continue to use their saved model until changed in the dashboard.
 
