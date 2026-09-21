@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Reworked bilingual ASS rendering for black-video playback: source and Chinese text now use independent top/bottom regions, nearly full-width safe margins, larger default fonts, and per-entry adaptive font sizing so long dialogue no longer collides around the screen centre.
+
 - Translation provider settings now store a local default model; change it with `python -m app.credentials model <model>` without re-entering the API key or editing source code. New projects inherit it, while existing projects keep their explicit model.
 
 - Changed the default translation model to `gpt-5.6-terra`; existing projects keep their saved model until it is changed in the dashboard.
