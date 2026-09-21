@@ -25,7 +25,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
 </head>
 <body>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge">v0.9-H</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
+  <div><h1>HSR Voice Archive Builder <span class="badge" id="versionBadge">正在读取版本…</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
 <main>
@@ -786,6 +786,7 @@ function renderJobs(jobs){
 async function refresh(){
   try{
     const s=await api('/api/status');
+    document.getElementById('versionBadge').textContent='v'+(s.version||'未知版本');
     const rt=s.runtime||{}, base=s.lan_control?'局域网控制 · 本机处理':'本机控制 · 本机处理';
     document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失')+(rt.translation_api_key_configured?' · '+(rt.translation_provider||'AI')+' API ✓':'');
     if(rt.warnings?.length && !currentProject){setLog(rt.warnings.join('\n'))}

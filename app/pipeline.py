@@ -531,8 +531,15 @@ def _translate_missing(
     qa_retries = 0
     client = make_client() if (remaining or semantic_pending_ids) else None
 
-    usage_estimate = estimate_workload_tokens(remaining, batch_size)
-    semantic_batch_size = max(1, min(batch_size, 40))
+    # Alibaba Model Studio's OpenAI-compatible route is more reliable with
+    # smaller structured-output batches.  Preserve the configured value for
+    # other providers, while applying a safe per-request ceiling here.
+    effective_batch_size = batch_size
+    if isinstance(client, OpenAIResponsesHTTPClient) and client.api_mode == "chat_completions":
+        effective_batch_size = min(batch_size, 20)
+
+    usage_estimate = estimate_workload_tokens(remaining, effective_batch_size)
+    semantic_batch_size = max(1, min(effective_batch_size, 40))
     semantic_estimate_rows = [
         {
             "id": row["id"],
@@ -600,22 +607,24 @@ def _translate_missing(
             )
 
     translation_batch_count = (
-        (len(remaining) + batch_size - 1) // batch_size if remaining else 0
+        (len(remaining) + effective_batch_size - 1) // effective_batch_size
+        if remaining else 0
     )
-    for start in range(0, len(remaining), batch_size):
-        batch_number = start // batch_size + 1
+    for start in range(0, len(remaining), effective_batch_size):
+        batch_number = start // effective_batch_size + 1
+        batch = remaining[start:start + effective_batch_size]
         translation_progress(
-            f"AI 翻译：已完成 {start}/{len(remaining)} 条 · 批次 {batch_number}/{translation_batch_count} · 已复用 {reused} 条",
+            f"AI 翻译：正在等待批次 {batch_number}/{translation_batch_count} 返回"
+            f"（本批 {len(batch)} 条）· 已完成 {start}/{len(remaining)} 条 · 已复用 {reused} 条",
             start,
             len(remaining),
         )
-        batch = remaining[start:start + batch_size]
         batch_glossary = relevant_glossary(
             active_glossary,
             [row["english"] for row in batch],
         )
         request_estimate = estimate_request_tokens(batch, batch_glossary)
-        phase = f"translation-batch-{start // batch_size + 1}"
+        phase = f"translation-batch-{start // effective_batch_size + 1}"
         ledger.check_before_request(request_estimate, phase=phase)
         if isinstance(client, OpenAIResponsesHTTPClient):
             translated = translate_records(
@@ -1806,7 +1815,7 @@ def build_project_v02(
 
 
 if __name__ == "__main__":
-    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-H pipeline")
+    p = argparse.ArgumentParser(description="HSR Voice Archive Builder v0.9-I pipeline")
     p.add_argument("--index", type=Path, required=True)
     p.add_argument("--wavs", type=Path, required=True)
     p.add_argument("--out", type=Path, required=True)

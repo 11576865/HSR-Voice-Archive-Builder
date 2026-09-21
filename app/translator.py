@@ -14,6 +14,7 @@ from typing import Any
 from urllib.parse import urlsplit
 
 from .credentials import load_translation_credentials, normalize_base_url, translation_default_model
+from .version import APP_VERSION
 
 DEFAULT_MODEL = translation_default_model()
 DEFAULT_MAX_RETRIES = 5
@@ -330,7 +331,7 @@ class OpenAIResponsesHTTPClient:
             headers={
                 "Authorization": f"Bearer {self.api_key}",
                 "Content-Type": "application/json",
-                "User-Agent": "HSR-Voice-Archive-Builder/0.9-H",
+                "User-Agent": f"HSR-Voice-Archive-Builder/{APP_VERSION}",
             },
         )
 
@@ -466,15 +467,21 @@ def translate_records(
     data = _parse_json_output(response.output_text, context="Translation API")
     got = _structured_rows(data, "translations", context="Translation")
     wanted_list = [r["id"] for r in records]
-    got_ids = [r["id"] for r in got]
-    if len(got_ids) != len(set(got_ids)):
+    wanted_set = set(wanted_list)
+    relevant = [row for row in got if row.get("id") in wanted_set]
+    relevant_ids = [row["id"] for row in relevant]
+    if len(relevant_ids) != len(set(relevant_ids)):
         raise RuntimeError("Translation response contains duplicate IDs")
-    if set(wanted_list) != set(got_ids) or len(got) != len(records):
+    missing = wanted_set - set(relevant_ids)
+    if missing:
         raise RuntimeError(
-            f"Translation ID mismatch: missing={set(wanted_list)-set(got_ids)}, "
-            f"extra={set(got_ids)-set(wanted_list)}"
+            f"Translation ID mismatch: missing={missing}, "
+            f"extra={set(row.get('id') for row in got)-wanted_set}"
         )
-    by_id = {r["id"]: r for r in got}
+    # Some compatible providers append a guessed or explanatory row despite
+    # the schema.  It is safe to discard it only after every requested ID is
+    # present exactly once; requested rows are still joined strictly by ID.
+    by_id = {r["id"]: r for r in relevant}
     ordered = [by_id[i] for i in wanted_list]
     for row in ordered:
         if not str(row.get("chinese", "")).strip():

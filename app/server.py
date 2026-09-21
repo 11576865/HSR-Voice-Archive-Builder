@@ -40,6 +40,7 @@ from .project import (
     resolve_project_path,
     update_project,
 )
+from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
 
@@ -166,7 +167,7 @@ def api_status():
             project = None
     return {
         "ok": True,
-        "version": "0.9-H",
+        "version": runtime_version(),
         "processing_mode": "local-first",
         "lan_control": lan_mode(),
         "project": project,

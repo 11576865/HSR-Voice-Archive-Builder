@@ -220,6 +220,30 @@ class V06RestTranslationTests(unittest.TestCase):
         self.assertTrue(sent["text"]["format"]["strict"])
         self.assertEqual(sent["reasoning"]["effort"], "low")
 
+    def test_translate_records_discards_extra_provider_row_without_positional_pairing(self) -> None:
+        output = {
+            "translations": [
+                {"id": "a.wav", "chinese": "第一句"},
+                {"id": "provider-guessed.wav", "chinese": "不应采用"},
+                {"id": "b.wav", "chinese": "第二句"},
+            ]
+        }
+        opener = SequenceOpener(
+            [FakeHTTPResponse(completed_response(json.dumps(output, ensure_ascii=False)))]
+        )
+        client = OpenAIResponsesHTTPClient("secret-test-key", opener=opener)
+
+        rows = translate_records(
+            [
+                {"id": "a.wav", "english": "First."},
+                {"id": "b.wav", "english": "Second."},
+            ],
+            client=client,
+        )
+
+        self.assertEqual([row["id"] for row in rows], ["a.wav", "b.wav"])
+        self.assertEqual([row["chinese"] for row in rows], ["第一句", "第二句"])
+
     def test_make_client_needs_only_environment_key(self) -> None:
         with patch.dict(os.environ, {"OPENAI_API_KEY": "env-key"}, clear=False):
             client = make_client()
