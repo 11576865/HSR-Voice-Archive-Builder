@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Translation provider settings now store a local default model; change it with `python -m app.credentials model <model>` without re-entering the API key or editing source code. New projects inherit it, while existing projects keep their explicit model.
+
 - Changed the default translation model to `gpt-5.6-terra`; existing projects keep their saved model until it is changed in the dashboard.
 - Clarified atomic rebuild behavior in the dashboard, invalidated stale black-video exports only after a replacement FLAC succeeds, reordered finished outputs so SRT/ASS/FLAC/black MKV form the final four rows, and split the combined target-text statistic into incremental official Chinese references and API translations without an official reference.
 - Changed the default translation model to `qwen-mt-plus`; existing projects keep their saved model until it is changed in the dashboard.

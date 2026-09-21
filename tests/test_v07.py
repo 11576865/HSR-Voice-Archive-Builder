@@ -77,10 +77,25 @@ class V07ProviderTests(unittest.TestCase):
             self.assertEqual(loaded.provider, "vapi")
             self.assertEqual(loaded.base_url, "https://api.gpt.ge/v1")
             self.assertEqual(loaded.api_key, "vapi-secret")
+            self.assertEqual(loaded.default_model, "gpt-5.6-terra")
             self.assertTrue(status["configured"])
             self.assertNotIn("api_key", status)
             if os.name != "nt":
                 self.assertEqual(cred_file.stat().st_mode & 0o777, 0o600)
+
+    def test_saved_default_model_is_runtime_configuration(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            cred_file = Path(td) / "translation_credentials.json"
+            with (
+                patch.object(credentials, "STATE_DIR", Path(td)),
+                patch.object(credentials, "CREDENTIALS_FILE", cred_file),
+                patch.dict(os.environ, {"HSR_TRANSLATION_MODEL": "", "OPENAI_MODEL": ""}, clear=False),
+            ):
+                credentials.save_translation_credentials(
+                    "vapi", "https://api.gpt.ge/v1", "vapi-secret", "qwen3.7-plus"
+                )
+                self.assertEqual(credentials.translation_default_model(), "qwen3.7-plus")
+                self.assertEqual(credentials.credentials_status()["default_model"], "qwen3.7-plus")
 
     def test_environment_provider_does_not_reuse_mismatched_saved_base_url(self) -> None:
         with tempfile.TemporaryDirectory() as td:

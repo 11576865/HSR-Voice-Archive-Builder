@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -464,7 +465,7 @@ def api_project_save(
     make_flac: bool = Form(False),
     translate_missing: bool = Form(False),
     review_official_target: bool = Form(False),
-    translation_model: str = Form("gpt-5.6-terra"),
+    translation_model: str = Form(""),
     translation_batch_size: int = Form(80),
     translation_token_budget: int = Form(0),
     translation_budget_usd: float = Form(0.0),
@@ -494,7 +495,7 @@ def api_project_save(
             make_flac=make_flac,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
-            translation_model=translation_model.strip() or "gpt-5.6-terra",
+            translation_model=translation_model.strip() or translation_default_model(),
             translation_batch_size=max(1, translation_batch_size),
             translation_token_budget=max(0, translation_token_budget),
             translation_budget_usd=max(0.0, translation_budget_usd),
@@ -892,7 +893,7 @@ def legacy_build(
     group_gap: float = Form(1.20),
     make_flac: bool = Form(False),
     translate_missing: bool = Form(False),
-    translation_model: str = Form("gpt-5.6-terra"),
+    translation_model: str = Form(""),
     translation_batch_size: int = Form(80),
     translation_token_budget: int = Form(0),
     translation_budget_usd: float = Form(0.0),

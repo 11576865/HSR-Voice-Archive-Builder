@@ -4,10 +4,12 @@ import json
 import os
 import shutil
 import tempfile
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+
+from .credentials import translation_default_model
 
 PROJECT_FILENAME = ".hsr-voice-project.json"
 STATE_DIR = Path.home() / ".hsr-voice-archive-builder"
@@ -45,7 +47,7 @@ class ProjectConfig:
     make_flac: bool = True
     translate_missing: bool = True
     review_official_target: bool = False
-    translation_model: str = "gpt-5.6-terra"
+    translation_model: str = field(default_factory=translation_default_model)
     translation_batch_size: int = 80
     translation_token_budget: int = 0
     translation_budget_usd: float = 0.0

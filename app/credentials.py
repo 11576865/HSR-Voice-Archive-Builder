@@ -16,6 +16,7 @@ PROVIDER_BASE_URLS = {
     "openai": "https://api.openai.com/v1",
     "vapi": "https://api.gpt.ge/v1",
 }
+FALLBACK_TRANSLATION_MODEL = "gpt-5.6-terra"
 
 
 def normalize_base_url(value: str) -> str:
@@ -42,6 +43,7 @@ class TranslationCredentials:
     provider: str
     base_url: str
     api_key: str
+    default_model: str
     source: str
 
     @property
@@ -63,6 +65,17 @@ def _read_file() -> dict[str, str]:
 
 def _default_base_url(provider: str) -> str:
     return PROVIDER_BASE_URLS.get(provider, "")
+
+
+def translation_default_model() -> str:
+    """Return the local default model without coupling it to a provider preset."""
+    saved = _read_file()
+    return (
+        os.environ.get("HSR_TRANSLATION_MODEL", "").strip()
+        or os.environ.get("OPENAI_MODEL", "").strip()
+        or saved.get("default_model", "").strip()
+        or FALLBACK_TRANSLATION_MODEL
+    )
 
 
 def translation_identity() -> tuple[str, str]:
@@ -112,6 +125,7 @@ def load_translation_credentials() -> TranslationCredentials:
         provider=provider,
         base_url=base_url,
         api_key=key,
+        default_model=translation_default_model(),
         source=source,
     )
 
@@ -123,10 +137,13 @@ def credentials_status() -> dict[str, object]:
         "base_url": creds.base_url,
         "configured": bool(creds.api_key),
         "source": creds.source if creds.api_key else "not-configured",
+        "default_model": creds.default_model,
     }
 
 
-def save_translation_credentials(provider: str, base_url: str, api_key: str) -> Path:
+def save_translation_credentials(
+    provider: str, base_url: str, api_key: str, default_model: str | None = None
+) -> Path:
     provider = str(provider or "").strip().lower()
     if not provider:
         raise ValueError("Provider is required")
@@ -136,6 +153,7 @@ def save_translation_credentials(provider: str, base_url: str, api_key: str) -> 
     api_key = str(api_key or "").strip()
     if not api_key:
         raise ValueError("API key is required")
+    model = str(default_model or "").strip() or translation_default_model()
 
     STATE_DIR.mkdir(parents=True, exist_ok=True)
     try:
@@ -144,10 +162,11 @@ def save_translation_credentials(provider: str, base_url: str, api_key: str) -> 
         pass
 
     payload = {
-        "schema_version": 1,
+        "schema_version": 2,
         "provider": provider,
         "base_url": base_url,
         "api_key": api_key,
+        "default_model": model,
     }
     fd, temp_name = tempfile.mkstemp(prefix=".translation_credentials.", suffix=".tmp", dir=STATE_DIR)
     temp = Path(temp_name)
@@ -180,11 +199,12 @@ def _configure(args: argparse.Namespace) -> None:
     if not base_url:
         base_url = input("Base URL: ").strip()
     api_key = getpass.getpass("API key (input hidden): ").strip()
-    path = save_translation_credentials(provider, base_url, api_key)
+    path = save_translation_credentials(provider, base_url, api_key, args.model)
     status = credentials_status()
     print(f"Saved translation credentials to {path}")
     print(f"Provider: {status['provider']}")
     print(f"Base URL: {status['base_url']}")
+    print(f"Default model: {status['default_model']}")
     print("API key: configured (hidden)")
 
 
@@ -219,6 +239,20 @@ def _test(args: argparse.Namespace) -> None:
     ))
 
 
+def _set_model(args: argparse.Namespace) -> None:
+    saved = _read_file()
+    api_key = saved.get("api_key", "").strip()
+    provider = saved.get("provider", "").strip()
+    base_url = saved.get("base_url", "").strip()
+    if not (api_key and provider and base_url):
+        raise SystemExit(
+            "No locally saved translation credentials. Run: "
+            "python -m app.credentials configure --provider custom --base-url https://example.com/v1"
+        )
+    path = save_translation_credentials(provider, base_url, api_key, args.model)
+    print(f"Saved default translation model to {path}: {args.model}")
+
+
 def main() -> None:
     p = argparse.ArgumentParser(description="Manage local translation API credentials")
     sub = p.add_subparsers(dest="command", required=True)
@@ -226,18 +260,23 @@ def main() -> None:
     c = sub.add_parser("configure", help="Save a translation API key locally with hidden input")
     c.add_argument("--provider", choices=["openai", "vapi", "custom"], default="vapi")
     c.add_argument("--base-url", default="")
+    c.add_argument("--model", default="", help="Default model for new projects")
     c.set_defaults(func=_configure)
 
     s = sub.add_parser("status", help="Show provider/Base URL without revealing the key")
     s.set_defaults(func=lambda args: _status())
 
     t = sub.add_parser("test", help="Verify structured translation capability; reuse a fresh cached success")
-    t.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.6-terra"))
+    t.add_argument("--model", default=translation_default_model())
     t.add_argument("--force", action="store_true", help="Ignore the capability cache and send a fresh smoke request")
     t.set_defaults(func=_test)
 
     x = sub.add_parser("clear", help="Delete the locally saved translation credentials")
     x.set_defaults(func=lambda args: (clear_translation_credentials(), print("Translation credentials cleared.")))
+
+    m = sub.add_parser("model", help="Change the locally saved default model without re-entering the API key")
+    m.add_argument("model")
+    m.set_defaults(func=_set_model)
 
     args = p.parse_args()
     args.func(args)

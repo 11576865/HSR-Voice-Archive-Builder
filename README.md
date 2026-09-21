@@ -409,7 +409,7 @@ Otherwise use a token budget. If a USD limit is requested while pricing is unkno
 Structured-output smoke results are cached for seven days by provider + Base URL + model + schema fingerprint. Re-running:
 
 ```bash
-python -m app.credentials test --model gpt-5.6-terra
+python -m app.credentials test
 ```
 
 reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
@@ -429,6 +429,15 @@ missing
 Translation providers are configured locally and are not stored in project files or the browser UI.
 
 Existing project files keep their saved `translation_model`; change the dashboard field once if an older project still shows another model.
+
+The default model is saved as local runtime configuration, not in source code. To change the model inherited by future projects without re-entering the API key:
+
+```bash
+python -m app.credentials model qwen3.7-plus
+python -m app.credentials test --model qwen3.7-plus
+```
+
+Existing projects deliberately keep their own saved model until it is changed in the dashboard, so a global change cannot silently alter an existing archive.
 
 During an incremental English-audio update, the builder also looks for a
 `Chinese(PRC)` dataset row with the same language-independent in-game voice
@@ -469,7 +478,7 @@ python -m app.credentials status
 Run a tiny paid/usage-bearing structured-output smoke test before a real batch:
 
 ```bash
-python -m app.credentials test --model gpt-5.6-terra
+python -m app.credentials test
 ```
 
 Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.
