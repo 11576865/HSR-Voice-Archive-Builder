@@ -562,7 +562,7 @@ class Handler(BaseHTTPRequestHandler):
                 group_gap=_float(data.get("group_gap"), 1.20),
                 make_flac=_bool(data.get("make_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
-                translation_model=data.get("translation_model", "gpt-5.6-sol").strip() or "gpt-5.6-sol",
+                translation_model=data.get("translation_model", "gpt-5.6-luna").strip() or "gpt-5.6-luna",
                 translation_batch_size=max(1, _int(data.get("translation_batch_size"), 80)),
                 translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
                 translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),

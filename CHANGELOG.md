@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Changed the default translation model to `gpt-5.6-luna`; existing projects continue to use their saved model until changed in the dashboard.
+
 - Renamed the optional semantic-only source to “extra-language reference package”, clarified that it never enters finished audio, and hides the manual AI-translation control when source and target text languages are both Simplified Chinese.
 - Added a single sample-based Timeline shared by continuous FLAC generation, manifests, corrected indexes and ASS subtitles.
 - Added a configurable `intro_gap` (5.00 seconds by default) alongside the existing same-group and cross-group gaps; the FLAC now contains the corresponding initial silence.

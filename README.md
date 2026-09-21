@@ -226,7 +226,7 @@ Useful options:
 --group-gap 1.20
 --no-flac
 --translate-missing
---translation-model gpt-5.6-sol
+--translation-model gpt-5.6-luna
 --translation-batch-size 80
 --translation-token-budget 0
 --translation-budget-usd 0
@@ -253,7 +253,7 @@ If no recent project is available, pass an index explicitly:
 python -m app.translation_benchmark \
   --index "/path/to/index.csv" \
   --sample-size 50 \
-  --model gpt-5.6-sol
+  --model gpt-5.6-luna
 ```
 
 The default 50-line benchmark is deterministic and deliberately spreads samples across terminology-heavy, long/complex, short/context-sensitive, expressive, tag/placeholder and general dialogue. It uses one 50-line API batch by default; batching is internal and requires no manual "continue" interaction.
@@ -408,7 +408,7 @@ Otherwise use a token budget. If a USD limit is requested while pricing is unkno
 Structured-output smoke results are cached for seven days by provider + Base URL + model + schema fingerprint. Re-running:
 
 ```bash
-python -m app.credentials test --model gpt-5.6-sol
+python -m app.credentials test --model gpt-5.6-luna
 ```
 
 reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
@@ -427,7 +427,7 @@ missing
 
 Translation providers are configured locally and are not stored in project files or the browser UI.
 
-Existing project files keep their saved `translation_model`; change the dashboard field once if an older project still says `gpt-5.6-luna`.
+Existing project files keep their saved `translation_model`; change the dashboard field once if an older project still says `gpt-5.6-sol`.
 
 For V-API:
 
@@ -458,7 +458,7 @@ python -m app.credentials status
 Run a tiny paid/usage-bearing structured-output smoke test before a real batch:
 
 ```bash
-python -m app.credentials test --model gpt-5.6-sol
+python -m app.credentials test --model gpt-5.6-luna
 ```
 
 Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.

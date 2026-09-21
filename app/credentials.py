@@ -232,7 +232,7 @@ def main() -> None:
     s.set_defaults(func=lambda args: _status())
 
     t = sub.add_parser("test", help="Verify structured translation capability; reuse a fresh cached success")
-    t.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.6-sol"))
+    t.add_argument("--model", default=os.environ.get("OPENAI_MODEL", "gpt-5.6-luna"))
     t.add_argument("--force", action="store_true", help="Ignore the capability cache and send a fresh smoke request")
     t.set_defaults(func=_test)
 
