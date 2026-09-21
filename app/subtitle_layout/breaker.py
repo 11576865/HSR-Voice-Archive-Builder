@@ -1,27 +1,56 @@
-PROTECTED_PHRASES = {
+from __future__ import annotations
+
+
+PROTECTED_PHRASES = (
     "let alone",
     "as soon as",
     "in order to",
     "even though",
     "right now",
     "at least",
-}
+    "kind of",
+    "a lot of",
+)
 
 
-def split_text(text: str, max_chars: int = 32) -> list[str]:
-    """Basic word-aware splitter. Detailed phrase scoring will follow."""
+def tokenize_phrases(text: str) -> list[str]:
+    """Keep common multi-word expressions together during wrapping."""
     words = text.split()
-    lines = []
-    current = []
-    size = 0
-    for word in words:
-        if current and size + len(word) + 1 > max_chars:
-            lines.append(" ".join(current))
-            current = [word]
-            size = len(word)
+    result: list[str] = []
+    index = 0
+
+    while index < len(words):
+        matched = None
+        for phrase in PROTECTED_PHRASES:
+            parts = phrase.split()
+            if words[index:index + len(parts)] == parts:
+                matched = phrase
+                break
+        if matched:
+            result.append(matched)
+            index += len(matched.split())
         else:
-            current.append(word)
-            size += len(word) + 1
+            result.append(words[index])
+            index += 1
+
+    return result
+
+
+def split_text(text: str, max_width: int, measure) -> list[str]:
+    """Break English at word boundaries and avoid splitting protected phrases."""
+    lines: list[str] = []
+    current = ""
+
+    for token in tokenize_phrases(text):
+        candidate = token if not current else f"{current} {token}"
+        if measure(candidate) <= max_width:
+            current = candidate
+        else:
+            if current:
+                lines.append(current)
+            current = token
+
     if current:
-        lines.append(" ".join(current))
+        lines.append(current)
+
     return lines
