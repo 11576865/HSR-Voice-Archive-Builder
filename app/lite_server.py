@@ -23,7 +23,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
-from .recovery import build_text_recovery, import_text_recovery, try_write_auto_text_recovery
+from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -306,6 +306,16 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
             return
+        if path == "/api/recovery/status":
+            raw = data.get("project_path", "").strip()
+            config = (
+                load_project(Path(raw).expanduser().resolve())
+                if raw
+                else _active_config()
+            )
+            self._json({"ok": True, "automatic": auto_recovery_status(config)})
+            return
+
         if path == "/api/recovery/import":
             config = _active_config()
             result = import_text_recovery(config, data.get("recovery_text", ""))
