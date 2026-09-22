@@ -17,6 +17,7 @@ RECOVERY_SCHEMA_VERSION = 1
 MAX_RECOVERY_BYTES = 32 * 1024 * 1024
 AUTO_RECOVERY_STATUS_FILE = "recovery_status.json"
 AUTO_RECOVERY_LATEST_FILE = "latest.hsrbackup"
+AUTO_RECOVERY_PREVIOUS_FILE = "previous.hsrbackup"
 
 _STATE_FILES = (
     ".translation_checkpoint.json",
@@ -126,6 +127,54 @@ def _read_json_bytes(data: bytes, logical_name: str) -> dict[str, Any]:
     return payload
 
 
+def _validate_recovery_package_bytes(
+    data: bytes,
+    *,
+    require_checkpoint: bool = True,
+) -> tuple[dict[str, Any], dict[str, bytes]]:
+    if not data:
+        raise ValueError("Recovery package is empty")
+    if len(data) > MAX_RECOVERY_BYTES:
+        raise ValueError(f"Recovery package exceeds {MAX_RECOVERY_BYTES} bytes")
+
+    package = _read_json_bytes(data, "package")
+    if package.get("format") != RECOVERY_FORMAT:
+        raise ValueError("Not an HSR Voice text recovery package")
+    if package.get("schema_version") != RECOVERY_SCHEMA_VERSION:
+        raise ValueError(
+            f"Unsupported recovery schema: {package.get('schema_version')}"
+        )
+
+    raw_files = package.get("files", {})
+    if not isinstance(raw_files, dict):
+        raise ValueError("Recovery package files must be an object")
+
+    decoded: dict[str, bytes] = {}
+    total = 0
+    for logical_name, entry in raw_files.items():
+        name = str(logical_name)
+        if name.startswith("/") or ".." in Path(name).parts:
+            raise ValueError(f"Unsafe recovery path: {name}")
+        payload = _decode_file(entry, name)
+        total += len(payload)
+        if total > MAX_RECOVERY_BYTES:
+            raise ValueError("Recovery payload is too large")
+        decoded[name] = payload
+
+    checkpoint_data = decoded.get("state/.translation_checkpoint.json")
+    if require_checkpoint and checkpoint_data is None:
+        raise ValueError("Recovery package contains no translation checkpoint")
+    if checkpoint_data is not None:
+        checkpoint = _read_json_bytes(
+            checkpoint_data, "state/.translation_checkpoint.json"
+        )
+        if _checkpoint_identity(checkpoint) is None:
+            raise ValueError("Unsupported translation checkpoint schema")
+        if not isinstance(checkpoint.get("records", {}), dict):
+            raise ValueError("Translation checkpoint records must be an object")
+    return package, decoded
+
+
 def build_text_recovery(config: ProjectConfig) -> tuple[bytes, str, dict[str, Any]]:
     root = Path(config.root).expanduser().resolve()
     state = resolve_project_path(config, config.state_dir)
@@ -219,6 +268,7 @@ def _auto_recovery_dir(config: ProjectConfig) -> Path:
 def auto_recovery_status(config: ProjectConfig) -> dict[str, Any]:
     directory = _auto_recovery_dir(config)
     latest = directory / AUTO_RECOVERY_LATEST_FILE
+    previous = directory / AUTO_RECOVERY_PREVIOUS_FILE
     status_file = directory / AUTO_RECOVERY_STATUS_FILE
     status: dict[str, Any] = {}
     if status_file.is_file():
@@ -228,21 +278,53 @@ def auto_recovery_status(config: ProjectConfig) -> dict[str, Any]:
                 status = loaded
         except (OSError, ValueError, TypeError):
             status = {}
+
     has_backup = latest.is_file()
+    valid_backup = False
+    validation_error = ""
+    package_sha256 = ""
+    if has_backup:
+        try:
+            latest_data = latest.read_bytes()
+            _validate_recovery_package_bytes(latest_data)
+            package_sha256 = _sha256(latest_data)
+            expected_sha256 = str(status.get("package_sha256", "") or "")
+            if expected_sha256 and expected_sha256 != package_sha256:
+                raise ValueError("Recovery package SHA-256 mismatch")
+            valid_backup = True
+        except (OSError, ValueError, TypeError) as exc:
+            validation_error = f"{type(exc).__name__}: {exc}"
+
+    previous_exists = previous.is_file()
+    previous_valid = False
+    if previous_exists:
+        try:
+            _validate_recovery_package_bytes(previous.read_bytes())
+            previous_valid = True
+        except (OSError, ValueError, TypeError):
+            previous_valid = False
+
+    recorded_error = str(status.get("error", "") or "")
+    error = validation_error or recorded_error
     return {
         "enabled": True,
         "has_backup": has_backup,
-        "healthy": bool(status.get("healthy", has_backup)),
+        "valid_backup": valid_backup,
+        "healthy": valid_backup and not bool(error),
         "last_backup": str(status.get("last_backup", "")),
         "reason": str(status.get("reason", "")),
+        "last_attempt_reason": str(status.get("last_attempt_reason", "")),
         "translation_records": int(status.get("translation_records", 0) or 0),
         "size_bytes": latest.stat().st_size if has_backup else 0,
         "path": str(latest),
+        "package_sha256": package_sha256,
         "directory": str(directory),
-        "error": str(status.get("error", "")),
+        "previous_exists": previous_exists,
+        "previous_valid": previous_valid,
+        "previous_path": str(previous),
+        "error": error,
         "contains_audio": False,
     }
-
 
 def write_auto_text_recovery(
     config: ProjectConfig,
@@ -261,19 +343,46 @@ def write_auto_text_recovery(
         return status
 
     data, _filename, summary = build_text_recovery(config)
+    _validate_recovery_package_bytes(data)
+    expected_sha256 = _sha256(data)
+
     directory = _auto_recovery_dir(config)
     directory.mkdir(parents=True, exist_ok=True)
     latest = directory / AUTO_RECOVERY_LATEST_FILE
+    previous = directory / AUTO_RECOVERY_PREVIOUS_FILE
     status_file = directory / AUTO_RECOVERY_STATUS_FILE
+
+    # Keep one last-known-good generation before replacing latest. Recovery
+    # packages are intentionally text-only, so this costs little disk space.
+    if latest.is_file():
+        try:
+            old_data = latest.read_bytes()
+            _validate_recovery_package_bytes(old_data)
+            atomic_write_text(previous, old_data.decode("utf-8"))
+        except (OSError, UnicodeDecodeError, ValueError, TypeError):
+            # Never promote a known-bad latest package into previous.
+            pass
+
     atomic_write_text(latest, data.decode("utf-8"))
+
+    # Read after write and validate the exact bytes on disk before reporting
+    # success. This catches truncation/corruption rather than trusting the write.
+    written = latest.read_bytes()
+    _validate_recovery_package_bytes(written)
+    actual_sha256 = _sha256(written)
+    if actual_sha256 != expected_sha256:
+        raise ValueError("Recovery package SHA-256 mismatch after write")
+
     now = datetime.now(timezone.utc).isoformat()
     status = {
-        "schema_version": 1,
+        "schema_version": 2,
         "healthy": True,
         "last_backup": now,
         "reason": str(reason or "unspecified"),
+        "last_attempt_reason": str(reason or "unspecified"),
         "translation_records": int(summary.get("translation_records", 0) or 0),
         "size_bytes": latest.stat().st_size,
+        "package_sha256": actual_sha256,
         "path": str(latest),
         "project_name": config.name,
         "project_root": str(Path(config.root).expanduser().resolve()),
@@ -286,7 +395,6 @@ def write_auto_text_recovery(
     )
     return auto_recovery_status(config)
 
-
 def try_write_auto_text_recovery(
     config: ProjectConfig,
     *,
@@ -296,13 +404,16 @@ def try_write_auto_text_recovery(
         return write_auto_text_recovery(config, reason=reason)
     except Exception as exc:
         directory = _auto_recovery_dir(config)
+        prior = auto_recovery_status(config)
         failure = {
-            "schema_version": 1,
+            "schema_version": 2,
             "healthy": False,
-            "last_backup": "",
-            "reason": str(reason or "unspecified"),
-            "translation_records": 0,
-            "size_bytes": 0,
+            "last_backup": prior.get("last_backup", ""),
+            "reason": prior.get("reason", ""),
+            "last_attempt_reason": str(reason or "unspecified"),
+            "translation_records": int(prior.get("translation_records", 0) or 0),
+            "size_bytes": int(prior.get("size_bytes", 0) or 0),
+            "package_sha256": str(prior.get("package_sha256", "") or ""),
             "path": str(directory / AUTO_RECOVERY_LATEST_FILE),
             "project_name": config.name,
             "project_root": str(Path(config.root).expanduser().resolve()),
@@ -315,52 +426,18 @@ def try_write_auto_text_recovery(
                 directory / AUTO_RECOVERY_STATUS_FILE,
                 json.dumps(failure, ensure_ascii=False, indent=2),
             )
+            return auto_recovery_status(config)
         except Exception:
-            pass
-        return {
-            "enabled": True,
-            "has_backup": (directory / AUTO_RECOVERY_LATEST_FILE).is_file(),
-            "healthy": False,
-            "last_backup": "",
-            "reason": failure["reason"],
-            "translation_records": 0,
-            "size_bytes": 0,
-            "path": failure["path"],
-            "directory": str(directory),
-            "error": failure["error"],
-            "contains_audio": False,
-        }
-
+            prior.update({
+                "healthy": False,
+                "error": failure["error"],
+                "last_attempt_reason": failure["last_attempt_reason"],
+            })
+            return prior
 
 def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str, Any]:
     raw = str(recovery_text or "").encode("utf-8")
-    if not raw:
-        raise ValueError("Recovery package is empty")
-    if len(raw) > MAX_RECOVERY_BYTES:
-        raise ValueError(f"Recovery package exceeds {MAX_RECOVERY_BYTES} bytes")
-
-    package = _read_json_bytes(raw, "package")
-    if package.get("format") != RECOVERY_FORMAT:
-        raise ValueError("Not an HSR Voice text recovery package")
-    if package.get("schema_version") != RECOVERY_SCHEMA_VERSION:
-        raise ValueError(
-            f"Unsupported recovery schema: {package.get('schema_version')}"
-        )
-    raw_files = package.get("files", {})
-    if not isinstance(raw_files, dict):
-        raise ValueError("Recovery package files must be an object")
-
-    decoded: dict[str, bytes] = {}
-    total = 0
-    for logical_name, entry in raw_files.items():
-        name = str(logical_name)
-        if name.startswith("/") or ".." in Path(name).parts:
-            raise ValueError(f"Unsafe recovery path: {name}")
-        data = _decode_file(entry, name)
-        total += len(data)
-        if total > MAX_RECOVERY_BYTES:
-            raise ValueError("Recovery payload is too large")
-        decoded[name] = data
+    package, decoded = _validate_recovery_package_bytes(raw)
 
     checkpoint_data = decoded.get("state/.translation_checkpoint.json")
     if checkpoint_data is None:
