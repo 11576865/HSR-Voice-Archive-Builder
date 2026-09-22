@@ -257,7 +257,7 @@ class QuickModeTests(unittest.TestCase):
             make_voice_zip(chinese, ["chapter5_13_绯英_103.wav"])
             records = [
                 {"filename": name, "english": f"English {i}", "hash": "", "character": "绯英"}
-                for i, name in enumerate(names, 1)
+                for i, name in enumerate(names)
             ]
             with patch(
                 "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
@@ -579,6 +579,152 @@ class QuickModeTests(unittest.TestCase):
             self.assertNotIn("not-in-package.wav", text)
             scan = json.loads((project_root / ".generated" / "quick_scan.json").read_text(encoding="utf-8"))
             self.assertTrue(scan["ready"])
+
+
+class MixedLanguageFolderTests(unittest.TestCase):
+    """Cross-folder duplicate basenames split into primary audio / reference text."""
+
+    shared_name = "chapter4_54_player_101_f.wav"
+    unique_name = "chapter4_54_player_102_f.wav"
+
+    def make_mixed_zip(self, path: Path, en_folder: str = "English", cn_folder: str = "Chinese") -> None:
+        with zipfile.ZipFile(path, "w") as z:
+            z.writestr(f"{en_folder}/{self.shared_name}", b"not-real-wav")
+            z.writestr(f"{en_folder}/{self.shared_name.replace('.wav', '.lab')}", "Where am I?")
+            z.writestr(f"{en_folder}/{self.unique_name}", b"not-real-wav")
+            z.writestr(f"{en_folder}/{self.unique_name.replace('.wav', '.lab')}", "Who's there?")
+            z.writestr(f"{cn_folder}/{self.shared_name}", b"not-real-wav")
+            z.writestr(f"{cn_folder}/{self.shared_name.replace('.wav', '.lab')}", "我这是在哪儿？")
+            z.writestr(f"{cn_folder}/{self.unique_name}", b"not-real-wav")
+            z.writestr(f"{cn_folder}/{self.unique_name.replace('.wav', '.lab')}", "谁在那儿？")
+
+    def remote_records(self) -> list[dict[str, str]]:
+        return [
+            {"filename": self.shared_name, "english": "Where am I?", "hash": "", "character": "开拓者"},
+            {"filename": self.unique_name, "english": "Who's there?", "hash": "", "character": "开拓者"},
+        ]
+
+    def scan_mixed_zip(self, archive: Path, **kwargs):
+        with patch(
+            "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+            return_value=(self.remote_records(), {"cache_hit": True, "stale": False}),
+        ), patch(
+            "app.quick.credentials_status",
+            return_value={
+                "provider": "vapi", "base_url": "https://api.gpt.ge/v1",
+                "configured": False, "source": "test",
+            },
+        ):
+            return quick_scan(archive, **kwargs)
+
+    def test_mixed_language_zip_scans_with_folder_split(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "player.zip"
+            self.make_mixed_zip(archive)
+            plan = self.scan_mixed_zip(archive)
+
+            self.assertTrue(plan["ready"])
+            folders = plan["language_folders"]
+            self.assertIsNotNone(folders)
+            self.assertEqual(folders["primary"], "English")
+            self.assertEqual(folders["reference"], ["Chinese"])
+            self.assertEqual(folders["primary_wav_count"], 2)
+            self.assertEqual(folders["reference_lab_count"], 2)
+            self.assertTrue(any("Mixed-language package" in w for w in plan["warnings"]))
+            # The colliding basename is matched once, from the primary folder.
+            self.assertEqual(plan["index"]["matched_wavs"], 2)
+            self.assertEqual(plan["translation"]["official_chinese_matches"], 2)
+            self.assertEqual(plan["translation"]["official_chinese_conflicts"], 0)
+            self.assertEqual(plan["translation"]["pending_translation_count"], 0)
+
+    def test_mixed_language_zip_create_materializes_split(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "player.zip"
+            self.make_mixed_zip(archive)
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(self.remote_records(), {"cache_hit": True, "stale": False}),
+            ), patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "vapi", "base_url": "https://api.gpt.ge/v1",
+                    "configured": False, "source": "test",
+                },
+            ):
+                config, plan = create_quick_project(archive, root=Path(td) / "project")
+
+            self.assertTrue(plan["ready"])
+
+            def resolved(value: str) -> Path:
+                path = Path(value)
+                return path if path.is_absolute() else Path(config.root) / path
+
+            wav_source = resolved(config.wav_source)
+            self.assertTrue(wav_source.is_dir())
+            self.assertEqual(wav_source.name, "English")
+            self.assertEqual(wav_source.parent.name, "language_folders")
+            # Reference audio was pruned; LAB text survived.
+            chs_source = resolved(config.chs_source)
+            self.assertTrue(chs_source.is_dir())
+            self.assertEqual(chs_source.name, "Chinese")
+            self.assertEqual(list(chs_source.rglob("*.wav")), [])
+            lab = chs_source / self.shared_name.replace(".wav", ".lab")
+            self.assertIn("我这是在哪儿", lab.read_text(encoding="utf-8-sig"))
+            # Only primary audio feeds the archive index.
+            generated = wav_source.parent.parent / "quick_index.csv"
+            with generated.open("r", encoding="utf-8-sig", newline="") as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual(
+                sorted(row["filename"] for row in rows),
+                sorted([self.shared_name, self.unique_name]),
+            )
+            scan = json.loads(
+                (Path(config.root) / ".generated" / "quick_scan.json").read_text(encoding="utf-8")
+            )
+            self.assertEqual(scan["language_folders"]["primary"], "English")
+            self.assertTrue(config.wav_source_fingerprint)
+            self.assertTrue(config.chs_source_fingerprint)
+
+    def test_folder_language_detected_from_lab_content(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "player.zip"
+            self.make_mixed_zip(archive, en_folder="vo_a", cn_folder="vo_b")
+            plan = self.scan_mixed_zip(archive)
+            self.assertTrue(plan["ready"])
+            self.assertEqual(plan["language_folders"]["primary"], "vo_a")
+            self.assertEqual(plan["language_folders"]["reference"], ["vo_b"])
+
+    def test_cross_folder_duplicates_without_language_evidence_still_block(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            archive = Path(td) / "ambiguous.zip"
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr("one/dup_player_1.wav", b"a")
+                z.writestr("one/dup_player_1.lab", "Same text")
+                z.writestr("two/dup_player_1.wav", b"b")
+                z.writestr("two/dup_player_1.lab", "Same text")
+            plan = self.scan_mixed_zip(archive)
+            self.assertFalse(plan["ready"])
+            self.assertIsNone(plan["language_folders"])
+            self.assertTrue(
+                any(
+                    "Duplicate WAV basenames" in b and "language-folder split failed" in b
+                    for b in plan["blockers"]
+                )
+            )
+
+    def test_mixed_language_dir_source_scans_without_pruning(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "pack"
+            (root / "English").mkdir(parents=True)
+            (root / "Chinese").mkdir(parents=True)
+            for folder, text in (("English", "Where am I?"), ("Chinese", "我这是在哪儿？")):
+                (root / folder / self.shared_name).write_bytes(b"x")
+                (root / folder / self.shared_name.replace(".wav", ".lab")).write_text(
+                    text, encoding="utf-8"
+                )
+            plan = self.scan_mixed_zip(root)
+            self.assertTrue(plan["ready"])
+            self.assertEqual(plan["language_folders"]["primary"], "English")
 
 
 if __name__ == "__main__":
