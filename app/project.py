@@ -41,9 +41,9 @@ class ProjectConfig:
     update_candidates: str = ""
     remote_character: str = ""
     remote_index_url: str = "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx"
-    intro_gap: float = 5.0
-    same_group_gap: float = 0.40
-    group_gap: float = 1.20
+    intro_gap: float = 9.0
+    same_group_gap: float = 1.50
+    group_gap: float = 3.00
     make_flac: bool = True
     generate_ass: bool = False
     translate_missing: bool = True
