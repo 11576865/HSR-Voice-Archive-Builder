@@ -892,21 +892,30 @@ def api_update_apply_remote():
             combined = generated / "combined_audio"
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
+                staging = temporary_root / "combined"
+                staging.mkdir()
+                # Preserve package-relative member paths so same-basename WAVs
+                # in different directories keep their identity instead of
+                # overwriting each other in one flat directory.
                 for wav in extracted.rglob("*.wav"):
-                    target = temporary_root / wav.name
-                    if wav.resolve() != target.resolve():
-                        shutil.copy2(wav, target)
+                    target = staging / wav.relative_to(extracted)
+                    target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(wav, target)
                 if extracted.parent == temporary_root and extracted != temporary_root:
                     shutil.rmtree(extracted)
                 for audio in incoming.iterdir():
                     if audio.is_file() and not audio.name.endswith(".part"):
-                        shutil.copy2(audio, temporary_root / audio.name)
+                        staging_target = staging / audio.name
+                        staging_target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(audio, staging_target)
                 if combined.exists():
                     shutil.rmtree(combined)
-                temporary_root.replace(combined)
+                staging.replace(combined)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
                 raise
+            else:
+                shutil.rmtree(temporary_root, ignore_errors=True)
 
             with index.open("r", encoding="utf-8-sig", newline="") as handle:
                 existing_rows = list(csv.DictReader(handle))
@@ -914,18 +923,24 @@ def api_update_apply_remote():
                     "index", "group", "filename", "source", "source_detail", "english",
                     "reference_text", "reference_language",
                     "official_target_text", "official_target_language", "official_target_source",
-                    "sha256",
+                    "sha256", "source_member_id",
                 ]
             for field in (
                 "reference_text", "reference_language",
                 "official_target_text", "official_target_language", "official_target_source",
+                "source_member_id",
             ):
                 if field not in fields:
                     fields.append(field)
             known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
+            known_members = {
+                str(row.get("source_member_id", "")).strip()
+                or Path(str(row.get("filename", ""))).name
+                for row in existing_rows
+            }
             details = {Path(str(row.get("filename", ""))).name: row for row in targets}
             for filename in sorted(successful):
-                if filename in known:
+                if filename in known or filename in known_members:
                     continue
                 metadata = details.get(filename, {})
                 reference = confirmed_references.get(filename, {})
@@ -933,6 +948,9 @@ def api_update_apply_remote():
                     "index": str(len(existing_rows) + 1),
                     "group": infer_group(Path(filename).stem),
                     "filename": filename,
+                    # Incremental downloads land flat at the combined root, so
+                    # the member id is the bare filename by construction.
+                    "source_member_id": filename,
                     "source": "huggingface",
                     "source_detail": "simon3000/starrail-voice",
                     "english": str(metadata.get("english", "")),
