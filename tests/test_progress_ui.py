@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import json
 import tempfile
 import threading
 import time
@@ -9,7 +10,13 @@ import wave
 from pathlib import Path
 
 from app.jobs import create_job, get_job
+from app.launch import (
+    _build_mobile_progress_bar_template,
+    _build_progress_card_template,
+    _extract_progress_card_markup,
+)
 from app.pipeline import build_project_v02
+from app.server import _INDEX_HTML_TEMPLATE, _progress_event_sse
 
 
 def write_wav(path: Path, frames: int = 80) -> None:
@@ -165,7 +172,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("scheduleSubtitleAutosave", html)
         self.assertIn("compositionstart", html)
         self.assertIn("compositionend", html)
-        self.assertIn("保存并下一条", html)
+        self.assertNotIn("保存并下一条", html)
         self.assertIn("停止输入约 1 秒后会自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn("body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})", html)
@@ -254,6 +261,112 @@ class BuildProgressTests(unittest.TestCase):
             )
             self.assertEqual(events[-1][2:], (6, 6))
             self.assertEqual(report["count_total"], 1)
+
+
+class TestProgressUI(unittest.TestCase):
+    def test_progress_card_markup_extraction(self) -> None:
+        extracted = _extract_progress_card_markup(_INDEX_HTML_TEMPLATE)
+
+        self.assertIn('id="progressCard"', extracted)
+        self.assertIn('id="progressTrack"', extracted)
+        self.assertIn('id="mobileProgressSlot"', extracted)
+
+    def test_progress_card_template_uses_canonical_ids(self) -> None:
+        card = _build_progress_card_template()
+
+        self.assertIn('id="progressCard"', card)
+        self.assertIn('id="progressTrack"', card)
+        self.assertIn('id="progressTitle"', card)
+        self.assertIn('id="progressDesc"', card)
+        self.assertIn('id="progressMeta"', card)
+        self.assertIn('id="progressLog"', card)
+        self.assertIn('id="mobileProgressSlot"', card)
+
+    def test_mobile_progress_bar_template_uses_canonical_ids(self) -> None:
+        bar = _build_mobile_progress_bar_template()
+
+        self.assertIn('id="mobileProgressBar"', bar)
+        self.assertIn('id="mobileProgressTrack"', bar)
+        self.assertIn('id="mobileProgressTitle"', bar)
+        self.assertIn('id="mobileProgressDesc"', bar)
+        self.assertIn('id="mobileProgressMeta"', bar)
+
+    def test_progress_event_sse_formatting(self) -> None:
+        job = {
+            "title": "测试任务",
+            "progress_percent": 42.5,
+            "status_text": "处理中",
+            "message": "正在处理第 3/10 条语音",
+            "log": "2026-03-31 00:00:00 [INFO] 测试日志",
+        }
+
+        normal_sse = _progress_event_sse(job, full_payload=True)
+        self.assertTrue(normal_sse.startswith("event: progress\ndata: "))
+        normal_data = json.loads(normal_sse.split("data: ", 1)[1].strip())
+        self.assertEqual(normal_data["progress_percent"], 42.5)
+        self.assertEqual(normal_data["log"], job["log"])
+
+        heartbeat_sse = _progress_event_sse(job, heartbeat_log=True)
+        self.assertTrue(heartbeat_sse.startswith("event: progress\ndata: "))
+        heartbeat_data = json.loads(heartbeat_sse.split("data: ", 1)[1].strip())
+        self.assertEqual(heartbeat_data["progress_percent"], 42.5)
+        self.assertNotIn("log", heartbeat_data)
+
+    def test_index_html_contains_progress_ui(self) -> None:
+        html = _INDEX_HTML_TEMPLATE
+
+        self.assertIn('id="progressCard" class="card" role="region" aria-label="处理进度"', html)
+        self.assertIn('@media(prefers-reduced-motion:reduce)', html)
+        self.assertIn('id="progressTrack" class="progress-track" role="progressbar"', html)
+        self.assertIn('role="status" aria-live="polite"', html)
+        self.assertIn('id="mobileProgressSlot"', html)
+        self.assertIn("syncProgressPlacement", html)
+        self.assertIn('type="search" autocomplete="off"', html)
+        self.assertNotIn('id="loadSubtitlesBtn"', html)
+        self.assertNotIn('id="saveSubtitlesBtn"', html)
+        self.assertIn('type="button" class="sub-item ', html)
+        self.assertIn("activeSubId", html)
+        self.assertIn("highlightText", html)
+        self.assertIn("scheduleSubtitleFetch", html)
+        self.assertIn("scheduleSubtitleAutosave", html)
+        self.assertIn("compositionstart", html)
+        self.assertIn("compositionend", html)
+        self.assertNotIn("保存并下一条", html)
+        self.assertIn("停止输入约 1 秒后会自动保存", html)
+        self.assertIn("源文件：", html)
+        self.assertIn(
+            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})",
+            html,
+        )
+        self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
+        self.assertIn('id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"', html)
+        self.assertIn('id="quickGroupGap" type="number" min="0" step="0.01" value="3.00"', html)
+        self.assertNotIn('id="subWarningBox"', html)
+        self.assertNotIn('updateCharCounterAndWarnings', html)
+        self.assertIn(
+            '.sub-item-tags{display:flex;align-items:center;gap:4px;min-height:18px;overflow:hidden}',
+            html,
+        )
+        self.assertIn('class="actions project-actions"', html)
+        self.assertIn('.project-actions>button{flex:0 0 auto;font-size:13px}', html)
+        desktop_pos = html.index(
+            '.sub-workspace{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr)'
+        )
+        mobile_pos = html.index(
+            '.sub-workspace{grid-template-columns:minmax(0,1fr);min-height:0}'
+        )
+        self.assertGreater(mobile_pos, desktop_pos)
+        self.assertNotIn(
+            '.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}',
+            html,
+        )
+
+    def test_job_polling_retries_and_bypasses_get_cache(self) -> None:
+        html = _INDEX_HTML_TEMPLATE
+
+        self.assertIn("cache:'no-store'", html)
+        self.assertIn("let attempts=0;while(attempts<5)", html)
+        self.assertIn("await new Promise(r=>setTimeout(r,1000*(attempts+1)));", html)
 
 
 if __name__ == "__main__":

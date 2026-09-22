@@ -47,6 +47,11 @@ from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetc
 from .security import api_token, host_allowed, lan_mode, token_matches
 
 BASE = Path(__file__).resolve().parent
+
+# Cached dashboard template. The file ships with the package, so reading it at
+# import time lets tests and SSE progress rendering share the exact markup.
+_INDEX_HTML_TEMPLATE = (BASE / "static" / "index.html").read_text(encoding="utf-8")
+
 app = FastAPI(title="HSR Voice Archive Builder", docs_url=None, redoc_url=None, openapi_url=None)
 app.mount("/static", StaticFiles(directory=BASE / "static"), name="static")
 
@@ -97,6 +102,24 @@ async def control_surface_guard(request: Request, call_next):
     return response
 
 
+def _progress_event_sse(job: dict, full_payload: bool = True, heartbeat_log: bool = False) -> str:
+    """Format one Server-Sent Events frame carrying job progress.
+
+    Heartbeat frames keep percent/status fresh for lightweight consumers while
+    omitting the (potentially large) log tail.
+    """
+    payload = {
+        "title": job.get("title", ""),
+        "progress_percent": job.get("progress_percent", 0),
+        "status_text": job.get("status_text", ""),
+        "message": job.get("message", ""),
+    }
+    if full_payload and not heartbeat_log:
+        payload["log"] = job.get("log", "")
+    data = json.dumps(payload, ensure_ascii=False)
+    return f"event: progress\ndata: {data}\n\n"
+
+
 @app.get("/", response_class=HTMLResponse)
 def home(request: Request):
     token = api_token()
@@ -108,7 +131,7 @@ def home(request: Request):
                 status_code=401,
             )
 
-    template = (BASE / "static" / "index.html").read_text(encoding="utf-8")
+    template = _INDEX_HTML_TEMPLATE
     page = template.replace("__HSR_API_TOKEN_JSON__", json.dumps(token))
     response = HTMLResponse(page)
     if lan_mode():

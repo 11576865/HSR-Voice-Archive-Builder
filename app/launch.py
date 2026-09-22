@@ -139,5 +139,48 @@ def main() -> None:
         uvicorn.run("app.server:app", host=host, port=args.port, log_level="info")
 
 
+_PROGRESS_CARD_RE = re.compile(
+    r'<section\b[^>]*id="progressCard"[\s\S]*?</section>'
+)
+_MOBILE_SLOT_RE = re.compile(r'<div\s+id="mobileProgressSlot"[^>]*></div>')
+
+
+def _extract_progress_card_markup(html: str) -> str:
+    """Extract the desktop progress card plus the mobile progress slot markup."""
+    card = _PROGRESS_CARD_RE.search(html)
+    if not card:
+        raise ValueError('index.html is missing the <section id="progressCard"> markup')
+    slot = _MOBILE_SLOT_RE.search(html)
+    if not slot:
+        raise ValueError('index.html is missing the <div id="mobileProgressSlot"> markup')
+    return card.group(0) + "\n" + slot.group(0)
+
+
+def _build_progress_card_template() -> str:
+    """Build a standalone progress card fragment with canonical element ids."""
+    return (
+        '<section id="progressCard" class="card" role="region" aria-label="处理进度">\n'
+        '  <div class="topline"><h2>当前进度</h2><span id="progressTitle" class="muted"></span></div>\n'
+        '  <div id="progressTrack" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar" class="progress-bar"></div></div>\n'
+        '  <p id="progressDesc" class="small muted"></p>\n'
+        '  <div id="progressMeta" class="small muted"></div>\n'
+        '  <pre id="progressLog" style="margin-top:8px"></pre>\n'
+        '  <div id="mobileProgressSlot"></div>\n'
+        '</section>'
+    )
+
+
+def _build_mobile_progress_bar_template() -> str:
+    """Build a compact mobile progress bar fragment with canonical element ids."""
+    return (
+        '<div id="mobileProgressBar" class="mobile-progress-bar">\n'
+        '  <div id="mobileProgressTrack" class="mobile-progress-track"><div class="mobile-progress-fill"></div></div>\n'
+        '  <div id="mobileProgressTitle"></div>\n'
+        '  <div id="mobileProgressDesc" class="small muted"></div>\n'
+        '  <div id="mobileProgressMeta" class="small muted"></div>\n'
+        '</div>'
+    )
+
+
 if __name__ == "__main__":
     main()

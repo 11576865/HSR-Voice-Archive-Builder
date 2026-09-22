@@ -31,6 +31,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
 .sub-item-top{display:flex;justify-content:space-between;align-items:center;gap:8px;min-width:0;font-size:12px}
 .sub-item-preview{display:block;min-width:0;font-size:12px;line-height:1.4;color:var(--muted);white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word}
 .sub-item-tags{display:flex;align-items:center;gap:4px;min-height:18px;overflow:hidden}
+mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;padding:0 1px}
 .sub-main{border:1px solid var(--line);border-radius:10px;background:var(--card);padding:16px;display:flex;flex-direction:column;gap:14px}
 .sub-ref-card{padding:10px 12px;border-radius:8px;background:var(--soft);border:1px solid var(--line)}
 .sub-ref-label{font-size:11px;font-weight:700;color:var(--muted);letter-spacing:.3px;margin-bottom:4px;display:flex;align-items:center;justify-content:space-between}
@@ -381,7 +382,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
       <div class="topline">
         <h2>字幕审查编辑器 (Subtitle Review Editor)</h2>
       </div>
-      <p class="small muted">专为人类校对与中文修正设计的单条校对工作台。只有“最终中文”可编辑，时间轴与原文不可修改。停止输入约 1 秒后会自动保存；“保存并下一条”会确认写入成功后再切换。</p>
+      <p class="small muted">专为人类校对与中文修正设计的单条校对工作台。只有“最终中文”可编辑，时间轴与原文不可修改。停止输入约 1 秒后会自动保存；切换条目时未保存的修改会在后台自动保存。</p>
 
       <div class="row3" style="margin-bottom:12px">
         <div>
@@ -461,7 +462,6 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
           <!-- Navigation controls -->
           <div class="sub-nav-bar">
             <button type="button" id="subPrevBtn">上一条</button>
-            <button type="button" class="success" id="subSaveCurrentBtn">保存并下一条</button>
             <button type="button" id="subNextBtn">下一条</button>
           </div>
         </div>
@@ -494,7 +494,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
   </div>
 
   <div class="stack" id="sideStack">
-    <section class="card" id="progressCard">
+    <section id="progressCard" class="card" role="region" aria-label="处理进度">
       <div class="topline"><h2>当前进度</h2><button id="refreshBtn">刷新</button></div>
       <div id="activeJobState" class="notice" role="status" aria-live="polite">当前没有运行中的构建。</div>
       <div id="progressTrack" class="progress-track" role="progressbar" aria-label="任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar" class="progress-bar"></div></div>
@@ -1072,56 +1072,75 @@ async function watchJob(id){
   let failures=0;
   const poll=async()=>{
     let terminal=false;
-    try{
-      const x=await api('/api/jobs/'+id+'?_='+Date.now(),{cache:'no-store'});
-      failures=0;
-      renderJobs([x.job]);
-      if(x.job.state==='succeeded'){
-        terminal=true;
-        if(x.job.kind==='remote-update-check'){
-          showPlan(x.job.result);
-        }else if(x.job.kind==='remote-update-apply'){
-          const r=x.job.result||{};
-          setRunReport('增量更新已应用',completedReport(x.job),false);
-          setLog(r);
-        }else if(x.job.kind==='ass-export'){
-          const status=document.getElementById('optionalOutputStatus');
-          if(status)status.textContent='ASS 字幕已生成。';
-          setRunReport('ASS 字幕已生成',completedReport(x.job),false);
-        }else if(x.job.kind==='black-video-export'){
-          const status=document.getElementById('optionalOutputStatus');
-          if(status)status.textContent='黑屏 MKV 已生成。';
-          setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
-          setLog(x.job.result||x.job);
-        }else{
-          setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
-          const d=document.getElementById('diagnosticLog');if(d)d.open=false;
-        }
-        await refresh();
-      }else if(x.job.state==='failed'){
-        terminal=true;
-        setLog(x.job.error||x.job);
-        if(['ass-export','black-video-export'].includes(x.job.kind)){
-          const status=document.getElementById('optionalOutputStatus');
-          if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
-        }
-        if(x.job.kind==='remote-update-check'){
-          const result=document.getElementById('updateResult');
-          if(result)result.textContent='远程检查失败：'+shortError(x.job.error||x.job);
-        }
-        const d=document.getElementById('diagnosticLog');if(d)d.open=true;
-        await refresh();
-      }else if(x.job.state==='awaiting_input'){
-        terminal=true;
-        setLog(x.job.result||x.job);
-        const d=document.getElementById('diagnosticLog');if(d)d.open=false;
-        await refresh();
+    let x=null;
+    let lastError=null;
+    let attempts=0;while(attempts<5){
+      try{
+        x=await api('/api/jobs/'+id+'?_='+Date.now(),{cache:'no-store'});
+        lastError=null;
+        break;
+      }catch(e){
+        lastError=e;
+        attempts+=1;
+        if(attempts<5)await new Promise(r=>setTimeout(r,1000*(attempts+1)));
       }
-    }catch(e){
+    }
+    if(!x){
       failures+=1;
       const textBox=document.getElementById('progressText');
       if(textBox)textBox.textContent='进度连接暂时中断，正在自动重试…';
-      if(failures>=3)setLog('进度轮询暂时失败：'+shortError(e)+'\n程序仍会自动重试。');
+      if(failures>=3)setLog('进度轮询暂时失败：'+shortError(lastError)+'\n程序仍会自动重试。');
+    }else{
+      failures=0;
+      try{
+        renderJobs([x.job]);
+        if(x.job.state==='succeeded'){
+          terminal=true;
+          if(x.job.kind==='remote-update-check'){
+            showPlan(x.job.result);
+          }else if(x.job.kind==='remote-update-apply'){
+            const r=x.job.result||{};
+            setRunReport('增量更新已应用',completedReport(x.job),false);
+            setLog(r);
+          }else if(x.job.kind==='ass-export'){
+            const status=document.getElementById('optionalOutputStatus');
+            if(status)status.textContent='ASS 字幕已生成。';
+            setRunReport('ASS 字幕已生成',completedReport(x.job),false);
+          }else if(x.job.kind==='black-video-export'){
+            const status=document.getElementById('optionalOutputStatus');
+            if(status)status.textContent='黑屏 MKV 已生成。';
+            setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
+            setLog(x.job.result||x.job);
+          }else{
+            setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
+            const d=document.getElementById('diagnosticLog');if(d)d.open=false;
+          }
+          await refresh();
+        }else if(x.job.state==='failed'){
+          terminal=true;
+          setLog(x.job.error||x.job);
+          if(['ass-export','black-video-export'].includes(x.job.kind)){
+            const status=document.getElementById('optionalOutputStatus');
+            if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
+          }
+          if(x.job.kind==='remote-update-check'){
+            const result=document.getElementById('updateResult');
+            if(result)result.textContent='远程检查失败：'+shortError(x.job.error||x.job);
+          }
+          const d=document.getElementById('diagnosticLog');if(d)d.open=true;
+          await refresh();
+        }else if(x.job.state==='awaiting_input'){
+          terminal=true;
+          setLog(x.job.result||x.job);
+          const d=document.getElementById('diagnosticLog');if(d)d.open=false;
+          await refresh();
+        }
+      }catch(e){
+        failures+=1;
+        const textBox=document.getElementById('progressText');
+        if(textBox)textBox.textContent='进度连接暂时中断，正在自动重试…';
+        if(failures>=3)setLog('进度轮询暂时失败：'+shortError(e)+'\n程序仍会自动重试。');
+      }
     }
     if(!terminal){
       const delay=failures?Math.min(4000,700*Math.pow(2,Math.min(failures,3))):700;
@@ -1271,40 +1290,46 @@ function parseTimeRangeInput(str){
 
 let loadedSubtitles=[];
 let activeSubIndex=0;
+let activeSubId=null;
 let subtitleSearchTimer=null;
 let subtitleAutosaveTimer=null;
 let subtitleSavePromise=null;
 let subtitleEditorComposing=false;
-let subtitleSavedFlashTimer=null;
 
 function subtitleKey(sub){return String(sub?.id??'');}
+
 function currentSubtitle(){
-  return loadedSubtitles.length&&activeSubIndex>=0&&activeSubIndex<loadedSubtitles.length
-    ? loadedSubtitles[activeSubIndex]
-    : null;
+  if(!loadedSubtitles.length)return null;
+  if(activeSubId!==null&&activeSubId!==undefined){
+    const foundIdx=loadedSubtitles.findIndex(s=>String(s.id)===String(activeSubId));
+    if(foundIdx>=0){
+      activeSubIndex=foundIdx;
+      return loadedSubtitles[foundIdx];
+    }
+  }
+  if(activeSubIndex>=0&&activeSubIndex<loadedSubtitles.length){
+    const sub=loadedSubtitles[activeSubIndex];
+    if(sub)activeSubId=sub.id;
+    return sub;
+  }
+  return null;
 }
+
 function setSubtitleSaveUi(mode,message=''){
   const status=document.getElementById('subtitleSaveStatus');
-  const button=document.getElementById('subSaveCurrentBtn');
-  clearTimeout(subtitleSavedFlashTimer);
   if(status&&message){
     status.textContent=message;
     status.className='small '+(mode==='error'?'status-bad':mode==='saved'?'status-ok':'muted');
   }
-  if(!button)return;
-  button.disabled=mode==='saving';
-  if(mode==='saving')button.textContent='保存中…';
-  else if(mode==='saved'){
-    button.textContent='已保存 ✓';
-    subtitleSavedFlashTimer=setTimeout(()=>{button.textContent='保存并下一条';button.disabled=false},800);
-  }else if(mode==='error')button.textContent='重试保存';
-  else button.textContent='保存并下一条';
 }
+
 function markServerSubtitle(sub){
   sub._savedFinal=String(sub.final_chs??'');
   sub._dirty=false;
+  sub._saving=false;
   return sub;
 }
+
 function dirtyDrafts(){
   const drafts=new Map();
   for(const sub of loadedSubtitles){
@@ -1313,17 +1338,30 @@ function dirtyDrafts(){
   return drafts;
 }
 
+function highlightText(str,query){
+  if(str===null||str===undefined)return '';
+  const plainText=String(str);
+  if(!query||!query.trim())return escapeHtml(plainText);
+  const q=query.trim();
+  const escapedQuery=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const regex=new RegExp('('+escapedQuery+')','gi');
+  const parts=plainText.split(regex);
+  return parts.map((part,i)=>{
+    if(i%2===1)return '<mark class="search-hl">'+escapeHtml(part)+'</mark>';
+    return escapeHtml(part);
+  }).join('');
+}
+
 async function fetchSubtitles(){
   if(!currentProject)return;
-  if(subtitleSavePromise){
-    try{await subtitleSavePromise}catch(e){}
-  }
   const status=document.getElementById('subtitleSaveStatus');
-  const q=document.getElementById('subSearchQuery').value;
-  const timeRangeStr=document.getElementById('subTimeRange').value;
-  const selector=document.getElementById('subSelector').value;
+  const q=document.getElementById('subSearchQuery')?.value||'';
+  const timeRangeStr=document.getElementById('subTimeRange')?.value||'';
+  const selector=document.getElementById('subSelector')?.value||'';
   const timeRange=parseTimeRangeInput(timeRangeStr);
+  syncEditorToMemory();
   const drafts=dirtyDrafts();
+  const targetId=currentSubtitle()?.id??activeSubId;
 
   let url='/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?';
   const params=new URLSearchParams();
@@ -1333,11 +1371,13 @@ async function fetchSubtitles(){
   if(selector)params.set('selector',selector);
 
   try{
-    if(!drafts.size)status.textContent='正在加载字幕数据…';
-    const oldActiveId=currentSubtitle()?.id;
+    if(!drafts.size&&status)status.textContent='正在加载字幕数据…';
+    if(subtitleSavePromise){
+      try{await subtitleSavePromise}catch(e){}
+    }
     const j=await api(url+params.toString());
-    loadedSubtitles=(j.subtitles||[]).map(markServerSubtitle);
-    for(const sub of loadedSubtitles){
+    const newSubs=(j.subtitles||[]).map(markServerSubtitle);
+    for(const sub of newSubs){
       const draft=drafts.get(subtitleKey(sub));
       if(!draft)continue;
       sub.final_chs=draft.final_chs;
@@ -1345,21 +1385,31 @@ async function fetchSubtitles(){
       sub._savedFinal=draft._savedFinal;
       sub._dirty=true;
     }
+    loadedSubtitles=newSubs;
     let newIdx=0;
-    if(oldActiveId!==undefined){
-      const foundIdx=loadedSubtitles.findIndex(s=>String(s.id)===String(oldActiveId));
-      if(foundIdx>=0)newIdx=foundIdx;
+    if(targetId!==null&&targetId!==undefined){
+      const foundIdx=loadedSubtitles.findIndex(s=>String(s.id)===String(targetId));
+      if(foundIdx>=0){
+        newIdx=foundIdx;
+      }else if(loadedSubtitles.length>0){
+        newIdx=Math.max(0,Math.min(activeSubIndex,loadedSubtitles.length-1));
+      }
     }
     activeSubIndex=newIdx;
+    activeSubId=loadedSubtitles.length>0?loadedSubtitles[activeSubIndex]?.id:null;
     renderSubtitleList();
     renderActiveSubtitle();
-    status.textContent=drafts.size
-      ? '字幕列表已刷新；未保存编辑已保留，并会自动保存。'
-      : '已加载 '+loadedSubtitles.length+' 条字幕记录。';
-    status.className='small muted';
+    if(status){
+      status.textContent=drafts.size
+        ? '字幕列表已刷新；未保存编辑已保留，并会自动保存。'
+        : '已加载 '+loadedSubtitles.length+' 条字幕记录。';
+      status.className='small muted';
+    }
   }catch(x){
-    status.textContent='加载字幕失败：'+shortError(x);
-    status.className='small status-bad';
+    if(status){
+      status.textContent='加载字幕失败：'+shortError(x);
+      status.className='small status-bad';
+    }
   }
 }
 
@@ -1374,31 +1424,41 @@ function renderSubtitleList(){
     return;
   }
 
+  const q=document.getElementById('subSearchQuery')?.value||'';
   listView.innerHTML=loadedSubtitles.map((sub,idx)=>{
     const timeStr=formatClockTime(sub.start)+' - '+formatClockTime(sub.end);
     const isActive=idx===activeSubIndex;
-    const editTag=sub._dirty
-      ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
-      : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
+    const editTag=sub._saving
+      ? '<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">保存中</span>'
+      : sub._dirty
+        ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
+        : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
+    const rawPreview=sub.final_chs||sub.source_text||'—';
+    const highlightedPreview=highlightText(rawPreview,q);
+    const highlightedId=highlightText(sub.id,q);
     return '<button type="button" class="sub-item '+(isActive?'active':'')+'"'+(isActive?' aria-current="true"':'')+' onclick="selectSubtitleIndex('+idx+')">'+
       '<div class="sub-item-top">'+
-        '<b>#'+escapeHtml(sub.id)+'</b>'+
+        '<b>#'+highlightedId+'</b>'+
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
-      '<div class="sub-item-preview">'+escapeHtml(sub.final_chs||sub.source_text||'—')+'</div>'+
+      '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
       '<div class="sub-item-tags">'+editTag+srcTag+'</div>'+
     '</button>';
   }).join('');
 }
 
-async function selectSubtitleIndex(idx){
-  if(idx<0||idx>=loadedSubtitles.length||idx===activeSubIndex)return;
-  const ok=await saveCurrentSubtitle({quiet:true});
-  if(!ok)return;
+function selectSubtitleIndex(idx){
+  if(idx<0||idx>=loadedSubtitles.length)return;
+  syncEditorToMemory();
+  const prevSub=currentSubtitle();
   activeSubIndex=idx;
+  activeSubId=loadedSubtitles[idx]?.id??null;
   renderSubtitleList();
   renderActiveSubtitle();
+  if(prevSub&&prevSub._dirty){
+    saveSubtitleItemInBackground(prevSub);
+  }
 }
 
 function syncEditorToMemory(){
@@ -1417,9 +1477,15 @@ function renderSubtitleEditState(){
   const badge=document.getElementById('subStatusBadge');
   if(!badge)return;
   if(!sub){badge.innerHTML='';return;}
-  badge.innerHTML=sub._dirty
-    ? '<span class="badge" style="color:var(--warn)">未保存</span>'
-    : sub.modified?'<span class="badge" style="color:var(--ok)">已人工修改</span>':'<span class="badge" style="color:var(--muted)">未修改</span>';
+  if(sub._saving){
+    badge.innerHTML='<span class="badge" style="color:var(--blue)">保存中…</span>';
+  }else if(sub._dirty){
+    badge.innerHTML='<span class="badge" style="color:var(--warn)">未保存</span>';
+  }else if(sub.modified){
+    badge.innerHTML='<span class="badge" style="color:var(--ok)">已人工修改</span>';
+  }else{
+    badge.innerHTML='<span class="badge" style="color:var(--muted)">未修改</span>';
+  }
 }
 
 function renderActiveSubtitle(){
@@ -1463,7 +1529,11 @@ function renderActiveSubtitle(){
 
   const editor=document.getElementById('subFinalEditor');
   editor.disabled=false;
-  editor.value=sub.final_chs||'';
+  if(document.activeElement!==editor){
+    editor.value=sub.final_chs||'';
+  }else if(editor.value!==sub.final_chs){
+    editor.value=sub.final_chs||'';
+  }
 
   document.getElementById('subPrevBtn').disabled=activeSubIndex<=0;
   document.getElementById('subNextBtn').disabled=activeSubIndex>=loadedSubtitles.length-1;
@@ -1484,92 +1554,89 @@ function scheduleSubtitleAutosave(){
   subtitleAutosaveTimer=setTimeout(()=>saveCurrentSubtitle({quiet:true}),1000);
 }
 
-async function saveCurrentSubtitle({advance=false,quiet=false}={}){
+async function saveSubtitleItemInBackground(targetSub){
+  if(!currentProject||!targetSub||!targetSub._dirty)return true;
+
+  const sentId=targetSub.id;
+  const sentText=String(targetSub.final_chs??'');
+  const sentKey=subtitleKey(targetSub);
+
+  targetSub._saving=true;
+  renderSubtitleEditState();
+  renderSubtitleList();
+  setSubtitleSaveUi('saving','正在保存条目 #'+sentId+'，并更新 SRT / ASS…');
+
+  const saveOp=(async()=>{
+    try{
+      const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
+      });
+      if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
+      const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
+      if(target){
+        target._savedFinal=sentText;
+        if(String(target.final_chs??'')===sentText){
+          target._dirty=false;
+        }
+        const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
+        target.modified=modifiedIds.has(sentKey);
+      }
+      setSubtitleSaveUi('saved','条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。');
+      return true;
+    }catch(x){
+      setSubtitleSaveUi('error','保存字幕失败：'+shortError(x)+'；当前输入仍保留在页面中。');
+      setLog(String(x));
+      return false;
+    }finally{
+      if(targetSub)targetSub._saving=false;
+      renderSubtitleEditState();
+      renderSubtitleList();
+    }
+  })();
+
+  const prevPromise=subtitleSavePromise;
+  subtitleSavePromise=(async()=>{
+    if(prevPromise){try{await prevPromise}catch(e){}}
+    return await saveOp;
+  })();
+
+  return subtitleSavePromise;
+}
+
+async function saveCurrentSubtitle({quiet=false}={}){
   if(!currentProject)return false;
   syncEditorToMemory();
-  let sub=currentSubtitle();
+  const sub=currentSubtitle();
   if(!sub)return false;
 
   clearTimeout(subtitleAutosaveTimer);
-  if(subtitleSavePromise){
-    try{await subtitleSavePromise}catch(e){}
-    syncEditorToMemory();
-    sub=currentSubtitle();
-    if(!sub)return false;
-  }
 
   if(!sub._dirty){
     if(!quiet)setSubtitleSaveUi('saved','当前条目已经保存。');
-    if(advance&&activeSubIndex<loadedSubtitles.length-1){
-      activeSubIndex+=1;renderSubtitleList();renderActiveSubtitle();
-    }
     return true;
   }
 
-  const sentId=sub.id;
-  const sentText=String(sub.final_chs??'');
-  const sentKey=subtitleKey(sub);
-  setSubtitleSaveUi('saving','正在保存条目 #'+sentId+'，并更新 SRT / ASS…');
-
-  subtitleSavePromise=(async()=>{
-    const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
-    });
-    if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
-    const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
-    if(target&&String(target.final_chs??'')===sentText){
-      target._savedFinal=sentText;
-      target._dirty=false;
-      const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
-      target.modified=modifiedIds.has(sentKey);
-    }
-    renderSubtitleList();
-    renderActiveSubtitle();
-    setSubtitleSaveUi('saved','条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。');
-    return true;
-  })();
-
-  try{
-    await subtitleSavePromise;
-    const active=currentSubtitle();
-    if(advance&&active&&subtitleKey(active)===sentKey&&!active._dirty&&activeSubIndex<loadedSubtitles.length-1){
-      activeSubIndex+=1;
-      renderSubtitleList();
-      renderActiveSubtitle();
-    }
-    return true;
-  }catch(x){
-    setSubtitleSaveUi('error','保存字幕失败：'+shortError(x)+'；当前输入仍保留在页面中。');
-    setLog(String(x));
-    return false;
-  }finally{
-    subtitleSavePromise=null;
-    if(currentSubtitle()?._dirty&&!subtitleEditorComposing)scheduleSubtitleAutosave();
-  }
+  return await saveSubtitleItemInBackground(sub);
 }
 
-async function goToPrevSubtitle(){
+function goToPrevSubtitle(){
   if(activeSubIndex<=0)return;
-  if(await saveCurrentSubtitle({quiet:true})){
-    activeSubIndex-=1;renderSubtitleList();renderActiveSubtitle();
-  }
+  selectSubtitleIndex(activeSubIndex-1);
 }
 
-async function goToNextSubtitle(){
+function goToNextSubtitle(){
   if(activeSubIndex>=loadedSubtitles.length-1)return;
-  if(await saveCurrentSubtitle({quiet:true})){
-    activeSubIndex+=1;renderSubtitleList();renderActiveSubtitle();
-  }
-}
-
-async function saveAndNextSubtitle(){
-  await saveCurrentSubtitle({advance:true});
+  selectSubtitleIndex(activeSubIndex+1);
 }
 
 async function fetchSubtitlesAfterSaving(){
-  if(!(await saveCurrentSubtitle({quiet:true})))return;
+  syncEditorToMemory();
+  const sub=currentSubtitle();
+  if(sub&&sub._dirty){
+    saveSubtitleItemInBackground(sub);
+  }
   await fetchSubtitles();
 }
 
@@ -1580,7 +1647,6 @@ function scheduleSubtitleFetch(){
 
 document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
-document.getElementById('subSaveCurrentBtn').onclick=saveAndNextSubtitle;
 const subtitleEditor=document.getElementById('subFinalEditor');
 subtitleEditor.oninput=()=>{
   syncEditorToMemory();
