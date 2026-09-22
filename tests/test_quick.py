@@ -443,6 +443,7 @@ class QuickModeTests(unittest.TestCase):
             self.assertTrue(plan["ready"])
             loaded = load_project(project_root)
             self.assertTrue(loaded.translate_missing)
+            self.assertFalse(loaded.review_official_target)
             self.assertEqual(loaded.translation_model, "gpt-5.6-terra")
             generated = project_root / ".generated" / "quick_index.csv"
             self.assertTrue(generated.is_file())
