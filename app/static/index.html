@@ -1312,6 +1312,9 @@ function dirtyDrafts(){
 
 async function fetchSubtitles(){
   if(!currentProject)return;
+  if(subtitleSavePromise){
+    try{await subtitleSavePromise}catch(e){}
+  }
   const status=document.getElementById('subtitleSaveStatus');
   const q=document.getElementById('subSearchQuery').value;
   const timeRangeStr=document.getElementById('subTimeRange').value;
@@ -1516,7 +1519,8 @@ async function saveCurrentSubtitle({advance=false,quiet=false}={}){
     if(target&&String(target.final_chs??'')===sentText){
       target._savedFinal=sentText;
       target._dirty=false;
-      target.modified=true;
+      const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
+      target.modified=modifiedIds.has(sentKey);
     }
     renderSubtitleList();
     renderActiveSubtitle();
