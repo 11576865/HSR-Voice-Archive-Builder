@@ -272,7 +272,7 @@ class QuickModeTests(unittest.TestCase):
             self.assertGreater(plan["translation"]["official_chinese_conflicts"], 0)
             self.assertTrue(any("matching conflicts/collisions" in item for item in plan["blockers"]))
 
-    def test_quick_scan_blocks_partial_index_coverage(self) -> None:
+    def test_quick_scan_allows_partial_index_coverage_with_appendix_report(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             archive = root / "English.zip"
@@ -295,8 +295,37 @@ class QuickModeTests(unittest.TestCase):
                 side_effect=OSError("offline test"),
             ):
                 plan = quick_scan(archive)
+            self.assertTrue(plan["ready"])
+            self.assertEqual(plan["index"]["matched_wavs"], 1)
+            self.assertEqual(plan["index_coverage"]["total_wavs"], 2)
+            self.assertEqual(plan["index_coverage"]["uncovered_wavs"], 1)
+            self.assertTrue(any("appended at the end" in x for x in plan["warnings"]))
+
+    def test_quick_scan_blocks_index_coverage_below_floor(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "English.zip"
+            names = ["a_evanescia_1.wav", "a_evanescia_2.wav", "a_evanescia_3.wav"]
+            make_voice_zip(archive, names)
+            write_index(
+                root / "index.csv",
+                [{"index": "1", "group": "a", "filename": names[0], "english": "First.", "sha256": ""}],
+            )
+            with patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "vapi",
+                    "base_url": "https://api.gpt.ge/v1",
+                    "configured": False,
+                    "source": "test",
+                },
+            ), patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                side_effect=OSError("offline test"),
+            ):
+                plan = quick_scan(archive)
             self.assertFalse(plan["ready"])
-            self.assertTrue(any("1 / 2" in x for x in plan["blockers"]))
+            self.assertTrue(any("below the 50% minimum" in x for x in plan["blockers"]))
 
     def test_quick_scan_uses_complete_remote_index_when_local_is_missing(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -329,7 +358,32 @@ class QuickModeTests(unittest.TestCase):
             self.assertEqual(plan["english"]["fingerprint"]["algorithm"], "sha256")
             self.assertEqual(len(plan["english"]["fingerprint"]["digest"]), 64)
 
-    def test_quick_scan_blocks_incomplete_remote_index(self) -> None:
+    def test_quick_scan_blocks_zero_coverage_remote_index(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "English.zip"
+            names = [
+                "chapter5_27_evanescia_101.wav",
+                "chapter5_27_evanescia_102.wav",
+            ]
+            make_voice_zip(archive, names)
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=([], {"cache_hit": True, "stale": False}),
+            ), patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "vapi", "base_url": "https://api.gpt.ge/v1",
+                    "configured": False, "source": "test",
+                },
+            ):
+                plan = quick_scan(archive)
+
+            self.assertFalse(plan["ready"])
+            self.assertEqual(plan["remote_index_attempt"]["matched_wavs"], 0)
+            self.assertTrue(any("reliable local or remote index" in x for x in plan["blockers"]))
+
+    def test_quick_scan_allows_partial_remote_index_with_report(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             archive = root / "English.zip"
@@ -353,9 +407,81 @@ class QuickModeTests(unittest.TestCase):
             ):
                 plan = quick_scan(archive)
 
-            self.assertFalse(plan["ready"])
-            self.assertEqual(plan["remote_index_attempt"]["matched_wavs"], 1)
-            self.assertTrue(any("reliable local or remote index" in x for x in plan["blockers"]))
+            self.assertTrue(plan["ready"])
+            self.assertEqual(plan["index"]["source"], "remote")
+            self.assertEqual(plan["index"]["matched_wavs"], 1)
+            self.assertEqual(plan["index_coverage"]["uncovered_wavs"], 1)
+            self.assertTrue(any("appended at the end" in x for x in plan["warnings"]))
+
+    def test_quick_create_appends_uncovered_wavs_without_text(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "English.zip"
+            names = [
+                "chapter5_27_evanescia_101.wav",
+                "chapter5_27_evanescia_102.wav",
+            ]
+            make_voice_zip(archive, names)
+            records = [
+                {"filename": names[0], "english": "First.", "hash": "", "character": "绯英"},
+            ]
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": True, "stale": False}),
+            ), patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "vapi", "base_url": "https://api.gpt.ge/v1",
+                    "configured": False, "source": "test",
+                },
+            ):
+                config, plan = create_quick_project(archive, root=root / "project")
+
+            self.assertTrue(plan["ready"])
+            generated = Path(config.root) / ".generated" / "quick_index.csv"
+            with generated.open("r", encoding="utf-8-sig", newline="") as f:
+                rows = list(csv.DictReader(f))
+            self.assertEqual([row["filename"] for row in rows], names)
+            self.assertEqual(rows[0]["english"], "First.")
+            self.assertEqual(rows[1]["english"], "")
+            self.assertEqual(rows[1]["source"], "unindexed-package-file")
+
+    def test_quick_create_treats_ambiguous_remote_filenames_as_uncovered(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "English.zip"
+            names = [
+                "chapter5_27_evanescia_101.wav",
+                "chapter5_27_evanescia_102.wav",
+            ]
+            make_voice_zip(archive, names)
+            records = [
+                {"filename": names[0], "english": "First.", "hash": "", "character": "绯英"},
+                {"filename": names[0], "english": "Duplicate.", "hash": "", "character": "绯英"},
+                {"filename": names[1], "english": "Second.", "hash": "", "character": "绯英"},
+            ]
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": True, "stale": False}),
+            ), patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "vapi", "base_url": "https://api.gpt.ge/v1",
+                    "configured": False, "source": "test",
+                },
+            ):
+                plan = quick_scan(archive)
+                self.assertTrue(plan["ready"])
+                self.assertTrue(any("multiple index rows" in x for x in plan["warnings"]))
+                config, _ = create_quick_project(archive, root=root / "project")
+
+            generated = Path(config.root) / ".generated" / "quick_index.csv"
+            with generated.open("r", encoding="utf-8-sig", newline="") as f:
+                rows = list(csv.DictReader(f))
+            by_name = {row["filename"]: row for row in rows}
+            self.assertEqual(by_name[names[0]]["source"], "unindexed-package-file")
+            self.assertEqual(by_name[names[0]]["english"], "")
+            self.assertEqual(by_name[names[1]]["english"], "Second.")
 
     def test_quick_create_materializes_remote_rows(self) -> None:
         with tempfile.TemporaryDirectory() as td:
