@@ -7,6 +7,7 @@ import os
 import re
 import shutil
 import subprocess
+import tempfile
 import zipfile
 from collections import Counter
 from pathlib import Path, PurePosixPath
@@ -165,11 +166,36 @@ def source_inventory(source: Path) -> dict[str, Any]:
     else:
         raise ValueError("Quick mode accepts a directory, .zip, or .7z source")
 
-    wavs = [Path(item["name"]).name for item in files if str(item["name"]).lower().endswith(".wav")]
-    labs = [Path(item["name"]).stem for item in files if str(item["name"]).lower().endswith(".lab")]
+    wav_members = [
+        str(item["name"]) for item in files if str(item["name"]).lower().endswith(".wav")
+    ]
+    lab_members = [
+        str(item["name"]) for item in files if str(item["name"]).lower().endswith(".lab")
+    ]
+    wavs = [Path(name).name for name in wav_members]
+    labs = [Path(name).stem for name in lab_members]
     wav_stems = {Path(name).stem for name in wavs}
     lab_stems = set(labs)
-    duplicate_wavs = sorted(name for name, count in Counter(wavs).items() if count > 1)
+    members_by_basename: dict[str, list[str]] = {}
+    for member in wav_members:
+        members_by_basename.setdefault(Path(member).name, []).append(member)
+    duplicate_groups = {
+        name: members for name, members in members_by_basename.items() if len(members) > 1
+    }
+    duplicate_wavs = sorted(duplicate_groups)
+
+    # Member-level LAB pairing: a WAV counts as paired when its own sibling
+    # LAB (same directory, same stem) exists, or when its stem is unique
+    # across the package so the single LAB with that stem is unambiguous.
+    lab_member_names = {str(name).casefold() for name in lab_members}
+    lab_stem_counts = Counter(Path(name).stem for name in lab_members)
+    member_pairs = 0
+    for member in wav_members:
+        sibling = PurePosixPath(member).with_suffix(".lab").as_posix()
+        if sibling.casefold() in lab_member_names:
+            member_pairs += 1
+        elif lab_stem_counts.get(Path(member).stem, 0) == 1:
+            member_pairs += 1
 
     return {
         "source": str(source),
@@ -179,8 +205,12 @@ def source_inventory(source: Path) -> dict[str, Any]:
         "lab_count": len(labs),
         "wav_names": wavs,
         "lab_names": labs,
+        "wav_members": wav_members,
+        "lab_members": lab_members,
         "duplicate_wav_names": duplicate_wavs,
+        "duplicate_wav_groups": duplicate_groups,
         "wav_lab_pairs": len(wav_stems & lab_stems),
+        "wav_lab_member_pairs": member_pairs,
         "wav_without_lab": len(wav_stems - lab_stems),
         "declared_bytes": sum(int(item.get("size", 0)) for item in files),
         "fingerprint": {
@@ -189,6 +219,215 @@ def source_inventory(source: Path) -> dict[str, Any]:
             "source_size_bytes": source_stat.st_size,
             "source_modified_ns": source_stat.st_mtime_ns,
         },
+    }
+
+
+def _natural_member_key(member: str) -> tuple[Any, ...]:
+    """Natural-sort key so chapter2 sorts before chapter10 in member paths."""
+    return tuple(
+        int(part) if part.isdigit() else part.casefold()
+        for part in re.split(r"(\d+)", str(member))
+    )
+
+
+def _extract_source_members(
+    source: Path,
+    members: list[str],
+    dest: Path,
+) -> dict[str, Path]:
+    """Materialize selected package members under dest.
+
+    Returns a mapping keyed by the requested member names. Lookup is
+    case-insensitive so a computed sibling name (``x.lab``) still finds a
+    package member stored as ``x.LAB``. Only the requested members are
+    decompressed, which keeps duplicate-group inspection cheap even for
+    large archives.
+    """
+    source = Path(source)
+    requested = {str(member).casefold(): str(member) for member in members}
+    out: dict[str, Path] = {}
+    if source.is_dir():
+        for member in members:
+            candidate = source / str(member)
+            if candidate.is_file():
+                target = dest / str(member)
+                target.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(candidate, target)
+                out[str(member)] = target
+        return out
+    suffix = source.suffix.lower()
+    if suffix == ".zip":
+        with zipfile.ZipFile(source) as z:
+            for info in z.infolist():
+                if info.is_dir():
+                    continue
+                name = _safe_member_name(info.filename)
+                canonical = requested.get(name.casefold())
+                if canonical is None or canonical in out:
+                    continue
+                target = dest / canonical
+                target.parent.mkdir(parents=True, exist_ok=True)
+                with z.open(info) as fin, target.open("wb") as fout:
+                    shutil.copyfileobj(fin, fout)
+                out[canonical] = target
+        return out
+    if suffix == ".7z":
+        exe = shutil.which("7zz") or shutil.which("7z")
+        if not exe:
+            raise RuntimeError("7-Zip CLI is required to inspect .7z packages")
+        dest.mkdir(parents=True, exist_ok=True)
+        # Windows command lines cap at ~32k characters, so extract in chunks.
+        chunk_size = 200
+        member_list = [str(member) for member in members]
+        for start in range(0, len(member_list), chunk_size):
+            chunk = member_list[start : start + chunk_size]
+            extracted = subprocess.run(
+                [exe, "x", "-y", f"-o{dest}", str(source), *chunk],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                errors="replace",
+                check=False,
+            )
+            if extracted.returncode != 0:
+                raise RuntimeError(
+                    f"7-Zip member extraction failed ({extracted.returncode}): "
+                    f"{extracted.stderr.strip()}"
+                )
+        extracted_files: dict[str, Path] = {}
+        for path in dest.rglob("*"):
+            if path.is_file():
+                extracted_files[path.relative_to(dest).as_posix().casefold()] = path
+        for folded, canonical in requested.items():
+            path = extracted_files.get(folded)
+            if path is not None:
+                out[canonical] = path
+        return out
+    raise ValueError("Quick mode accepts a directory, .zip, or .7z source")
+
+
+def _hash_source_members(source: Path, members: list[str]) -> dict[str, str]:
+    """SHA-256 the given package members without extracting the whole package."""
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="hsr-members-") as td:
+        paths = _extract_source_members(Path(source), members, Path(td))
+        return {member: sha256_file(path) for member, path in paths.items()}
+
+
+def _member_lab_texts(source: Path, wav_members: list[str]) -> dict[str, str]:
+    """Read the sibling (same-directory same-stem) LAB text for WAV members."""
+    sibling_of = {
+        str(member): PurePosixPath(str(member)).with_suffix(".lab").as_posix()
+        for member in wav_members
+    }
+    wanted = sorted(set(sibling_of.values()))
+    if not wanted:
+        return {}
+    import tempfile
+
+    with tempfile.TemporaryDirectory(prefix="hsr-labs-") as td:
+        paths = _extract_source_members(Path(source), wanted, Path(td))
+        texts: dict[str, str] = {}
+        for member, sibling in sibling_of.items():
+            path = paths.get(sibling)
+            if path is None:
+                continue
+            texts[member] = path.read_text(
+                encoding="utf-8-sig", errors="replace"
+            ).strip()
+        return texts
+
+
+def _disambiguate_member(
+    source: Path,
+    members: list[str],
+    row: dict[str, str],
+) -> str:
+    """Pick the one duplicate-basename member an index row really describes.
+
+    A valid index SHA-256 is decisive. Otherwise exact LAB-text equality may
+    identify the member. Anything inconclusive returns "" so the caller
+    demotes the whole group to the appendix instead of guessing.
+    """
+    expected_hash = str(row.get("sha256", "")).strip().lower()
+    if re.fullmatch(r"[0-9a-f]{64}", expected_hash):
+        hashes = _hash_source_members(source, members)
+        winners = [
+            member
+            for member in members
+            if hashes.get(member, "").lower() == expected_hash
+        ]
+        return winners[0] if len(winners) == 1 else ""
+    expected_text = str(row.get("english", "")).strip()
+    if expected_text:
+        texts = _member_lab_texts(source, members)
+        winners = [
+            member for member in members if texts.get(member, "") == expected_text
+        ]
+        return winners[0] if len(winners) == 1 else ""
+    return ""
+
+
+def _package_lab_rows(
+    source: Path,
+    inventory: dict[str, Any],
+) -> list[dict[str, str]]:
+    """Synthesize index rows from a package whose WAVs all have LAB text.
+
+    Ordering follows the package's own directory structure (natural member
+    path order), which matches chapter/mission layout in practice. Each row
+    carries its source_member_id so same-basename members stay distinct.
+    """
+    members = sorted(
+        (str(m) for m in inventory.get("wav_members", [])),
+        key=_natural_member_key,
+    )
+    lab_texts = _member_lab_texts(source, members)
+    rows: list[dict[str, str]] = []
+    for pos, member in enumerate(members, 1):
+        filename = Path(member).name
+        rows.append({
+            "index": str(pos),
+            "group": parse_voice_identity(filename).group,
+            "filename": filename,
+            "source": "primary-package-lab",
+            "source_detail": "same-stem LAB",
+            "english": lab_texts.get(member, ""),
+            "reference_text": "",
+            "reference_language": "",
+            "official_target_text": "",
+            "official_target_language": "",
+            "official_target_source": "",
+            "sha256": "",
+            "source_member_id": member,
+        })
+    return rows
+
+
+def _package_lab_candidate(
+    inventory: dict[str, Any],
+    source_text_language: str,
+) -> dict[str, Any]:
+    """Synthetic scan candidate: the package itself is the index."""
+    wav_count = int(inventory.get("wav_count", 0))
+    return {
+        "source": "primary-package-lab",
+        "provider": "primary package LAB",
+        "source_text_language": source_text_language,
+        "url": "",
+        "row_count": wav_count,
+        "matched_wavs": wav_count,
+        "english_matched": int(inventory.get("wav_lab_member_pairs", 0)),
+        "coverage": 1.0,
+        "duplicate_filenames": [],
+        "characters": [],
+        "character_counts": {},
+        "primary_character": "",
+        "primary_character_share": 0.0,
+        "order_basis": "package_member_path",
+        "records_fingerprint": "",
+        "cache": {"cache_hit": False, "stale": False},
     }
 
 
@@ -506,6 +745,16 @@ def quick_scan(
     blockers: list[str] = []
     warnings: list[str] = []
 
+    # Member-level LAB coverage: every WAV member has its own sibling LAB or
+    # a tree-wide unique same-stem LAB. When complete, the package itself can
+    # act as the index (ordering from member paths, text from LABs), so an
+    # external index becomes optional for any source language.
+    complete_primary_lab = (
+        int(english.get("wav_count", 0)) > 0
+        and int(english.get("wav_lab_member_pairs", 0))
+        == int(english.get("wav_count", 0))
+    )
+
     remote_index_url = remote_index_url.strip()
     if not remote_index_url:
         try:
@@ -514,17 +763,13 @@ def quick_scan(
             # AI-Hobbyist currently publishes EN/CHS/JP/KR indexes. Other
             # source languages can still use EN only for ordering when the
             # primary audio package supplies complete same-stem LAB text.
-            complete_primary_lab = (
-                int(english.get("wav_count", 0)) > 0
-                and int(english.get("wav_lab_pairs", 0))
-                == int(english.get("wav_count", 0))
-            )
-            if source_text_language != "en" and complete_primary_lab:
+            if complete_primary_lab:
                 remote_index_url = DEFAULT_EN_INDEX_URL
-                warnings.append(
-                    f"No built-in remote {source_text_language} index; using EN.xlsx "
-                    "only for ordering while source text comes from primary-package LAB files"
-                )
+                if source_text_language != "en":
+                    warnings.append(
+                        f"No built-in remote {source_text_language} index; using EN.xlsx "
+                        "only for ordering while source text comes from primary-package LAB files"
+                    )
             else:
                 remote_index_url = DEFAULT_EN_INDEX_URL
                 blockers.append(
@@ -535,11 +780,6 @@ def quick_scan(
 
     if english["wav_count"] == 0:
         blockers.append("No WAV files were found in the primary audio source")
-    if english.get("duplicate_wav_names"):
-        blockers.append(
-            "Duplicate WAV basenames were found in the primary source: "
-            + ", ".join(english["duplicate_wav_names"][:5])
-        )
     wav_names = {Path(name).name for name in english["wav_names"]}
     # Existing local CSV discovery predates explicit language roles and its
     # schema does not declare the text language. Keep that legacy shortcut only
@@ -560,10 +800,12 @@ def quick_scan(
     def _index_coverage_key(index: dict[str, Any]) -> tuple[int, int]:
         return (int(index.get("matched_wavs", 0)), int(index.get("english_matched", 0)))
 
+    # Coverage is counted against unique basenames; same-basename duplicates
+    # share one index row and are resolved per member later.
     local_full = bool(
         selected_index
-        and int(selected_index["matched_wavs"]) == total_wavs
-        and int(selected_index["english_matched"]) == total_wavs
+        and int(selected_index["matched_wavs"]) == len(wav_names)
+        and int(selected_index["english_matched"]) == len(wav_names)
     )
     remote_attempt: dict[str, Any] | None = None
     remote_records: list[dict[str, str]] = []
@@ -593,22 +835,41 @@ def quick_scan(
             warnings.append(f"Remote index fallback failed: {type(exc).__name__}: {exc}")
 
     index_usable = False
+    package_lab_index = False
+    if selected_index is not None and int(selected_index.get("matched_wavs", 0)) == 0:
+        selected_index = None
     if selected_index is None:
-        blockers.append("No reliable local or remote index covers the package WAV names")
+        if complete_primary_lab:
+            selected_index = _package_lab_candidate(english, source_text_language)
+            index_usable = True
+            package_lab_index = True
+            warnings.append(
+                "未找到覆盖该语音包的可靠索引；包内每个 WAV 都有同名 LAB 文本，"
+                "已按包内目录顺序排列并使用 LAB 作为源文本"
+            )
+        else:
+            blockers.append("No reliable local or remote index covers the package WAV names")
     else:
         matched_wavs = int(selected_index["matched_wavs"])
         text_matched = int(selected_index["english_matched"])
         coverage = matched_wavs / max(1, total_wavs)
-        if matched_wavs == 0:
-            selected_index = None
-            blockers.append("No reliable local or remote index covers the package WAV names")
-        elif coverage < MIN_INDEX_COVERAGE:
-            blockers.append(
-                f"Best index covers only {matched_wavs} / {total_wavs} WAV files "
-                f"({coverage:.0%}), below the {MIN_INDEX_COVERAGE:.0%} minimum; check "
-                "that this is the right character package or provide a more "
-                "complete index"
-            )
+        if coverage < MIN_INDEX_COVERAGE:
+            if complete_primary_lab:
+                selected_index = _package_lab_candidate(english, source_text_language)
+                index_usable = True
+                package_lab_index = True
+                warnings.append(
+                    f"最佳索引仅覆盖 {matched_wavs} / {total_wavs} 个 WAV（{coverage:.0%}），"
+                    f"低于 {MIN_INDEX_COVERAGE:.0%} 下限；包内 LAB 文本完整，"
+                    "已改用包内目录顺序与同名 LAB 源文本"
+                )
+            else:
+                blockers.append(
+                    f"Best index covers only {matched_wavs} / {total_wavs} WAV files "
+                    f"({coverage:.0%}), below the {MIN_INDEX_COVERAGE:.0%} minimum; check "
+                    "that this is the right character package or provide a more "
+                    "complete index"
+                )
         else:
             index_usable = True
             uncovered = total_wavs - matched_wavs
@@ -731,6 +992,7 @@ def quick_scan(
     official_chinese_structural = 0
     official_chinese_unmatched = 0
     official_chinese_conflicts = 0
+    index_rows: list[dict[str, str]] = []
     if index_usable and selected_index is not None:
         if selected_index.get("source") == "remote":
             index_rows, _ambiguous_rows = _remote_rows(
@@ -738,6 +1000,8 @@ def quick_scan(
                 wav_names,
                 str(selected_index.get("provider") or ai_hobbyist_index_label(remote_index_url)),
             )
+        elif selected_index.get("source") == "primary-package-lab":
+            index_rows = _package_lab_rows(Path(english["source"]), english)
         else:
             index_rows = [
                 row for row in normalize_index(Path(selected_index["path"]))
@@ -782,6 +1046,62 @@ def quick_scan(
                 f"{official_chinese_unmatched} unmatched); "
                 "only unmatched items may use AI translation"
             )
+    # Same-basename WAV groups no longer block the build. When an index row
+    # exists for the basename we try to bind it to exactly one package member
+    # (audio hash first, then LAB text); members that cannot be bound
+    # reliably are demoted to the appendix instead of failing the scan.
+    duplicate_groups = english.get("duplicate_wav_groups") or {}
+    duplicate_report: dict[str, Any] = {
+        "groups": len(duplicate_groups),
+        "members": sum(len(members) for members in duplicate_groups.values()),
+        "auto_resolved": 0,
+        "pending": 0,
+        "pending_members": [],
+    }
+    if duplicate_groups:
+        if package_lab_index:
+            # Every member becomes its own synthesized row, so nothing in a
+            # duplicate group is ambiguous.
+            duplicate_report["auto_resolved"] = duplicate_report["members"]
+        else:
+            row_by_basename = {
+                Path(str(row.get("filename", ""))).name: row for row in index_rows
+            }
+            for basename in sorted(duplicate_groups):
+                members = list(duplicate_groups[basename])
+                winner = ""
+                row = row_by_basename.get(basename)
+                if row is not None:
+                    try:
+                        winner = _disambiguate_member(
+                            Path(english["source"]), members, row
+                        )
+                    except Exception as exc:
+                        warnings.append(
+                            f"同名 WAV 自动消歧失败（{basename}）："
+                            f"{type(exc).__name__}: {exc}"
+                        )
+                if winner:
+                    duplicate_report["auto_resolved"] += 1
+                    losers = [m for m in members if m != winner]
+                else:
+                    losers = members
+                duplicate_report["pending"] += len(losers)
+                duplicate_report["pending_members"].extend(losers)
+        if duplicate_report["pending"]:
+            warnings.append(
+                f"发现 {duplicate_report['groups']} 组同名 WAV"
+                f"（共 {duplicate_report['members']} 个文件）："
+                f"已自动消歧 {duplicate_report['auto_resolved']} 条 / "
+                f"待确认 {duplicate_report['pending']} 条；"
+                "待确认文件保留音频并列入附录，不阻塞构建"
+            )
+        else:
+            warnings.append(
+                f"发现 {duplicate_report['groups']} 组同名 WAV"
+                f"（共 {duplicate_report['members']} 个文件），已全部自动消歧"
+            )
+
     translation_estimate = estimate_workload_tokens(pending_records, 80)
 
     return {
@@ -789,13 +1109,15 @@ def quick_scan(
         "kind": "quick_scan",
         "source_text_language": source_text_language,
         "english": {
-            key: value for key, value in english.items() if key not in {"wav_names", "lab_names"}
+            key: value
+            for key, value in english.items()
+            if key not in {"wav_names", "lab_names", "wav_members", "lab_members"}
         },
         "chinese": (
             {
                 key: value
                 for key, value in chs.items()
-                if key not in {"wav_names", "lab_names"}
+                if key not in {"wav_names", "lab_names", "wav_members", "lab_members"}
             }
             if chs
             else None
@@ -806,11 +1128,12 @@ def quick_scan(
             {
                 key: value
                 for key, value in reference.items()
-                if key not in {"wav_names", "lab_names"}
+                if key not in {"wav_names", "lab_names", "wav_members", "lab_members"}
             }
             if reference
             else None
         ),
+        "duplicates": duplicate_report,
         "character": character,
         "index": selected_index,
         "index_coverage": {
@@ -944,16 +1267,27 @@ def create_quick_project(
         current_reference = source_inventory(reference_source)
         if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
             raise RuntimeError("Reference source changed after Quick Scan; scan again before building")
-    wanted = set(current_inventory["wav_names"])
-    ambiguous: list[str] = []
-    if selected_index.get("source") == "remote":
+    wanted_members = [str(m) for m in current_inventory.get("wav_members", [])]
+    if not wanted_members:
+        # Defensive fallback; source_inventory always provides member paths.
+        wanted_members = sorted(set(current_inventory["wav_names"]))
+    members_by_basename: dict[str, list[str]] = {}
+    for member in wanted_members:
+        members_by_basename.setdefault(Path(member).name, []).append(member)
+    wanted = set(members_by_basename)
+
+    package_lab_index = selected_index.get("source") == "primary-package-lab"
+    base_rows: list[dict[str, str]] = []
+    if package_lab_index:
+        base_rows = _package_lab_rows(english_source, current_inventory)
+    elif selected_index.get("source") == "remote":
         remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
             wanted,
             str(selected_index["url"]),
         )
         if _index_fingerprint(remote_records) != selected_index["records_fingerprint"]:
             raise RuntimeError("Remote index changed after Quick Scan; scan again before building")
-        filtered, ambiguous = _remote_rows(
+        base_rows, _ambiguous = _remote_rows(
             remote_records,
             wanted,
             str(selected_index.get("provider") or ai_hobbyist_index_label(str(selected_index["url"]))),
@@ -963,18 +1297,52 @@ def create_quick_project(
         if sha256_file(local_index) != selected_index["file_sha256"]:
             raise RuntimeError("Local index changed after Quick Scan; scan again before building")
         original_rows = normalize_index(local_index)
-        filtered = [row for row in original_rows if Path(row["filename"]).name in wanted]
-    # Files the index cannot order reliably keep their audio but join the
-    # archive as an unindexed appendix at the end, without subtitles.
-    uncovered = sorted(
-        (wanted - {Path(str(row.get("filename", ""))).name for row in filtered})
-        | set(ambiguous)
-    )
-    for name in uncovered:
+        base_rows = [row for row in original_rows if Path(row["filename"]).name in wanted]
+
+    # Bind each index row to exactly one package member. Same-basename groups
+    # are resolved by hash/LAB disambiguation; anything undecided falls
+    # through to the appendix below instead of blocking the build.
+    assigned: dict[str, dict[str, str]] = {}
+    used_indexes: set[int] = set()
+    for row in base_rows:
+        basename = Path(str(row.get("filename", ""))).name
+        candidates = [
+            member for member in members_by_basename.get(basename, [])
+            if member not in assigned
+        ]
+        if not candidates:
+            continue
+        if len(candidates) == 1:
+            member = candidates[0]
+        else:
+            member = _disambiguate_member(english_source, candidates, row)
+        if not member:
+            continue
+        bound = dict(row)
+        bound["filename"] = basename
+        bound["source_member_id"] = member
+        assigned[member] = bound
+        try:
+            used_indexes.add(int(str(bound.get("index", "")).strip()))
+        except ValueError:
+            pass
+
+    filtered = list(assigned.values())
+    # Members the index cannot order reliably keep their audio but join the
+    # archive as an unindexed appendix at the end, without subtitles. This
+    # includes the undecided members of same-basename duplicate groups.
+    uncovered_members = [
+        member
+        for member in sorted(wanted_members, key=_natural_member_key)
+        if member not in assigned
+    ]
+    next_index = (max(used_indexes) + 1) if used_indexes else 1
+    for member in uncovered_members:
+        basename = Path(member).name
         filtered.append({
-            "index": str(len(filtered) + 1),
-            "group": parse_voice_identity(name).group,
-            "filename": name,
+            "index": str(next_index),
+            "group": parse_voice_identity(basename).group,
+            "filename": basename,
             "source": "unindexed-package-file",
             "source_detail": "",
             "english": "",
@@ -984,8 +1352,10 @@ def create_quick_project(
             "official_target_language": "",
             "official_target_source": "",
             "sha256": "",
+            "source_member_id": member,
         })
-    if len(filtered) != len(wanted):
+        next_index += 1
+    if len(filtered) != len(wanted_members):
         raise RuntimeError("Index coverage changed between scan and project creation")
 
     reference_text_embedded = False
@@ -1028,7 +1398,7 @@ def create_quick_project(
         "index", "group", "filename", "source", "source_detail", "english",
         "reference_text", "reference_language",
         "official_target_text", "official_target_language", "official_target_source",
-        "sha256",
+        "sha256", "source_member_id",
     ]
     with generated_index.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)
