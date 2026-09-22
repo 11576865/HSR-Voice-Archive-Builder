@@ -13,6 +13,7 @@ from pathlib import Path
 from .builder import (
     Entry,
     atomic_write_text,
+    build_chapter_ordered_flac,
     build_continuous_flac,
     build_entries,
     ensure_dir_or_extract,
@@ -1407,6 +1408,7 @@ def build_project_v02(
     group_gap: float = 3.00,
     intro_gap: float = 9.0,
     make_flac: bool = True,
+    make_chapter_flac: bool = False,
     generate_ass: bool = False,
     translate_missing: bool = False,
     translation_model: str = translation_default_model(),
@@ -1482,6 +1484,7 @@ def build_project_v02(
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
+        "make_chapter_flac": make_chapter_flac,
         "generate_ass": generate_ass,
         "translate_missing": translate_missing,
         "review_official_target": bool(review_official_target),
@@ -1786,6 +1789,19 @@ def build_project_v02(
                 audio_report = build_continuous_flac(
                     entries, wav_root, out_dir / "continuous.flac"
                 )
+                audio_artifacts = [out_dir / "continuous.flac"]
+                if make_chapter_flac:
+                    chapter_report = build_chapter_ordered_flac(
+                        entries,
+                        wav_root,
+                        out_dir / "continuous_chapter_ordered.flac",
+                        intro_gap=intro_gap,
+                        same_group_gap=same_group_gap,
+                        group_gap=group_gap,
+                    )
+                    audio_report.update(chapter_report)
+                    audio_artifacts.append(out_dir / "continuous_chapter_ordered.flac")
+
                 # A previous black MKV contains the old FLAC. Invalidate it
                 # only after the replacement FLAC has encoded and verified.
                 (out_dir / "HSR_Voice_Archive_Black.mkv").unlink(missing_ok=True)
@@ -1796,7 +1812,7 @@ def build_project_v02(
                     "audio",
                     input_fingerprint,
                     {"report": audio_report},
-                    artifacts=[out_dir / "continuous.flac"],
+                    artifacts=audio_artifacts,
                     artifact_root=out_dir,
                 )
                 rebuilt_stages.append("audio")
@@ -1868,6 +1884,7 @@ if __name__ == "__main__":
     p.add_argument("--same-gap", type=float, default=1.50)
     p.add_argument("--group-gap", type=float, default=3.00)
     p.add_argument("--no-flac", action="store_true")
+    p.add_argument("--make-chapter-flac", action="store_true")
     p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
@@ -1890,6 +1907,7 @@ if __name__ == "__main__":
         group_gap=a.group_gap,
         intro_gap=a.intro_gap,
         make_flac=not a.no_flac,
+        make_chapter_flac=a.make_chapter_flac,
         generate_ass=a.generate_ass,
         translate_missing=a.translate_missing,
         review_official_target=a.review_official_target,

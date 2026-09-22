@@ -472,6 +472,7 @@ class Handler(BaseHTTPRequestHandler):
                 intro_gap=max(0.0, _float(data.get("intro_gap"), 9.0)),
                 same_group_gap=max(0.0, _float(data.get("same_group_gap"), 1.50)),
                 group_gap=max(0.0, _float(data.get("group_gap"), 3.00)),
+                make_chapter_flac=_bool(data.get("make_chapter_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
                 review_official_target=_bool(data.get("review_official_target")),
             )
@@ -545,6 +546,7 @@ class Handler(BaseHTTPRequestHandler):
                 target_language=data.get("target_language", "zh-CN"),
                 reference_language=data.get("reference_language", "auto"),
                 remote_character=data.get("remote_character", ""),
+                make_chapter_flac=_bool(data.get("make_chapter_flac")),
                 translate_missing=_bool(data.get("translate_missing")) if "translate_missing" in data else True,
                 review_official_target=_bool(data.get("review_official_target")) if "review_official_target" in data else False,
             )
@@ -676,6 +678,7 @@ class Handler(BaseHTTPRequestHandler):
                 same_group_gap=max(0.0, _float(data.get("same_group_gap"), 1.50)),
                 group_gap=_float(data.get("group_gap"), 3.00),
                 make_flac=_bool(data.get("make_flac")),
+                make_chapter_flac=_bool(data.get("make_chapter_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
                 review_official_target=_bool(data.get("review_official_target")),
                 translation_model=data.get("translation_model", "").strip() or translation_default_model(),
