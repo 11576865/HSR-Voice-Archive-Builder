@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import shutil
 import tempfile
 import unittest
 import wave
@@ -443,6 +444,7 @@ class SubtitleOverrideMemberTests(unittest.TestCase):
 
 
 class EndToEndDuplicateBuildTests(unittest.TestCase):
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
     def test_pipeline_builds_archive_with_duplicate_basenames(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
