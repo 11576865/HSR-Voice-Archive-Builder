@@ -438,7 +438,7 @@ details summary{cursor:pointer;font-weight:650}.small{font-size:12px}.divider{he
       <div class="progress-track"><div id="progressBar" class="progress-bar"></div></div>
       <div id="progressText" class="small muted">等待任务。</div>
       <div id="failureSummary" class="notice bad hidden" style="margin-top:12px"></div>
-      <details id="runReportDetails" open style="margin-top:14px">
+      <details id="runReportDetails" style="margin-top:14px">
         <summary>运行报告</summary>
         <pre id="runReport" style="margin-top:8px">等待任务。</pre>
       </details>
@@ -873,6 +873,7 @@ function renderJobs(jobs){
     state.textContent=(activeForCurrent?'正在':'另一项目正在')+label+(active.project_name?'「'+active.project_name+'」':'')+'。';
     const count=tot>0?' · '+cur+'/'+tot:'';
     state.className='notice';bar.style.width=pct+'%';textBox.textContent=(active.message||'正在处理')+count;failure.classList.add('hidden');
+    const runDetails=document.getElementById('runReportDetails');if(runDetails)runDetails.open=false;
     if(isBuild){setBuildButtonsDisabled(true);setBuildButtonText('构建中…');setInlineBuildStatus(active.message||'构建已经启动。');}
   }else{
     const latest=projectJobs[0];
@@ -1041,7 +1042,7 @@ document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
-document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;setRunReport('正在应用新增语音','正在准备 Hugging Face 定位索引并下载新增音频；首次运行需要下载约 188 MiB 的定位文件。',true);const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
+document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
