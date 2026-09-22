@@ -50,6 +50,10 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="quickAiBudget" class="hidden"', html)
         self.assertIn('id="quickTranslateMissing"', html)
         self.assertIn('id="quickReviewOfficial"', html)
+        self.assertIn('name="translate_missing" type="checkbox" checked', html)
+        self.assertIn('name="review_official_target" type="checkbox" checked', html)
+        self.assertIn("data.set('translate_missing'", html)
+        self.assertIn("data.set('review_official_target'", html)
         self.assertIn("d.set('intro_gap'", html)
         self.assertIn("d.set('same_group_gap'", html)
         self.assertIn("d.set('group_gap'", html)
@@ -103,11 +107,52 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("自行或交给智能体编辑", html)
         self.assertIn("重新构建不会预先清空 output", html)
         self.assertIn("const primaryOutputOrder=", html)
-        self.assertIn("const finalOutputOrder=['HSR_Voice_Archive.srt','HSR_Voice_Archive.ass','continuous.flac']", html)
-        self.assertIn("增量官方中文参考", html)
-        self.assertIn("无官方参考的 API 译文", html)
+        self.assertIn("const finalOutputOrder=['HSR_Voice_Archive.srt','continuous.flac']", html)
+        self.assertIn('id="assOutputBtn"', html)
+        self.assertIn("'/api/output/ass'", html)
+        self.assertIn("增量官方中文</span>", html)
+        self.assertIn("API 补译</span>", html)
         self.assertNotIn("缺失目标文本</span>", html)
 
+
+
+    def test_core_flac_ass_and_subtitle_editor_ui_contracts(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('type="checkbox" checked disabled> 生成连续 FLAC', html)
+        self.assertNotIn('name="generate_ass" type="checkbox"', html)
+        self.assertNotIn('name="make_flac" type="checkbox"', html)
+        self.assertIn("max-width:1440px", html)
+        self.assertIn("@media(max-width:1100px)", html)
+        self.assertIn(".sub-workspace>*,.sub-main{min-width:0}", html)
+        self.assertNotIn("(Ctrl+Enter)", html)
+        self.assertNotIn("(Alt+↑)", html)
+        self.assertNotIn("(Alt+↓)", html)
+        self.assertNotIn("document.addEventListener('keydown'", html)
+        self.assertIn('interactive-widget=resizes-content', html)
+        self.assertIn('@media(pointer:coarse)', html)
+        self.assertIn('@media(prefers-reduced-motion:reduce)', html)
+        self.assertIn('id="progressTrack" class="progress-track" role="progressbar"', html)
+        self.assertIn('role="status" aria-live="polite"', html)
+        self.assertIn('id="mobileProgressSlot"', html)
+        self.assertIn("syncProgressPlacement", html)
+        self.assertIn('type="search" autocomplete="off"', html)
+        self.assertNotIn('id="loadSubtitlesBtn"', html)
+        self.assertNotIn('id="saveSubtitlesBtn"', html)
+        self.assertIn('type="button" class="sub-item ', html)
+        self.assertIn("scheduleSubtitleFetch", html)
+
+    def test_job_polling_retries_and_bypasses_get_cache(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("opts.cache='no-store'", html)
+        self.assertIn("pollTimer=setTimeout(poll,delay)", html)
+        self.assertIn("进度连接暂时中断，正在自动重试", html)
+        self.assertNotIn("catch(e){clearInterval(pollTimer);setLog(String(e))}", html)
 
 class BuildProgressTests(unittest.TestCase):
     def test_build_jobs_report_progress_and_reject_concurrent_build(self) -> None:

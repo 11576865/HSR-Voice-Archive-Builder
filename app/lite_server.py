@@ -20,7 +20,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import (
@@ -498,6 +498,8 @@ class Handler(BaseHTTPRequestHandler):
                 target_language=data.get("target_language", "zh-CN"),
                 reference_language=data.get("reference_language", "auto"),
                 remote_character=data.get("remote_character", ""),
+                translate_missing=_bool(data.get("translate_missing")) if "translate_missing" in data else True,
+                review_official_target=_bool(data.get("review_official_target")) if "review_official_target" in data else True,
             )
             _set_active(config)
             self._json({"ok": True, "project": project_summary(config)})
@@ -853,8 +855,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 with index.open("r", encoding="utf-8-sig", newline="") as handle:
                     existing_rows = list(csv.DictReader(handle))
-                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "sha256"]
-                for field in ("reference_text", "reference_language"):
+                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256"]
+                for field in ("reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source"):
                     if field not in fields:
                         fields.append(field)
                 known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
@@ -863,18 +865,44 @@ class Handler(BaseHTTPRequestHandler):
                     if filename not in known:
                         metadata = details.get(filename, {})
                         reference = confirmed_references.get(filename, {})
-                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": "simon3000/starrail-voice", "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "sha256": ""})
+                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": "simon3000/starrail-voice", "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
                 updated_index = generated / "quick_index_incremental.csv"
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
                 update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "reference_guided_translation": len(reference_successful), "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
 
             job = create_job("remote-update-apply", run, with_progress=True, project_root=config.root, project_name=config.name)
+            self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/output/ass":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Output directory is not configured")
+            if not (output / "manifest.json").is_file():
+                raise FileNotFoundError("请先完成档案构建")
+
+            def run(report_progress):
+                report_progress("render", "正在生成 ASS 字幕", 0, 1)
+                result = refresh_subtitle_artifacts_from_settings(
+                    output,
+                    source_language=config.source_text_language or "en",
+                    target_language=config.target_language or "zh-CN",
+                    generate_ass=True,
+                )
+                report_progress("render", "ASS 字幕已生成", 1, 1)
+                return result
+
+            job = create_job(
+                "ass-export", run, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
             self._json({"ok": True, "job": job.id})
             return
 

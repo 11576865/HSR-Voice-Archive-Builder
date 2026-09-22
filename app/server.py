@@ -18,7 +18,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import (
@@ -405,6 +405,8 @@ def api_project_create(
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
     remote_character: str = Form(""),
+    translate_missing: bool = Form(True),
+    review_official_target: bool = Form(True),
 ):
     try:
         config = create_project(
@@ -422,6 +424,8 @@ def api_project_create(
             target_language=target_language,
             reference_language=reference_language,
             remote_character=remote_character,
+            translate_missing=translate_missing,
+            review_official_target=review_official_target,
         )
         _set_active(config)
         return {"ok": True, "project": project_summary(config)}
@@ -862,9 +866,14 @@ def api_update_apply_remote():
                 existing_rows = list(csv.DictReader(handle))
                 fields = list(existing_rows[0].keys()) if existing_rows else [
                     "index", "group", "filename", "source", "source_detail", "english",
-                    "reference_text", "reference_language", "sha256",
+                    "reference_text", "reference_language",
+                    "official_target_text", "official_target_language", "official_target_source",
+                    "sha256",
                 ]
-            for field in ("reference_text", "reference_language"):
+            for field in (
+                "reference_text", "reference_language",
+                "official_target_text", "official_target_language", "official_target_source",
+            ):
                 if field not in fields:
                     fields.append(field)
             known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
@@ -883,6 +892,19 @@ def api_update_apply_remote():
                     "english": str(metadata.get("english", "")),
                     "reference_text": str(reference.get("reference_text", "")),
                     "reference_language": str(reference.get("reference_language", "")),
+                    "official_target_text": (
+                        str(reference.get("reference_text", ""))
+                        if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"}
+                        else ""
+                    ),
+                    "official_target_language": (
+                        "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else ""
+                    ),
+                    "official_target_source": (
+                        "huggingface:Chinese(PRC):same_ingame_filename"
+                        if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"}
+                        else ""
+                    ),
                     "sha256": "",
                 })
             updated_index = generated / "quick_index_incremental.csv"
@@ -899,9 +921,10 @@ def api_update_apply_remote():
                 "chinese_reference_matched": len(reference_plan["targets"]),
                 "chinese_reference_downloaded": len(reference_successful),
                 "chinese_reference_failed": reference_download["failed"],
-                "reference_guided_translation": len(reference_successful),
+                "official_target_available": len(reference_successful),
+                "reference_guided_translation": 0,
                 "unreferenced_api_translation": len(successful - reference_successful),
-                "api_translation_required": len(successful),
+                "api_translation_required": len(successful - reference_successful),
                 "project_updated": True,
                 "rebuild_required": True,
                 "applied_filenames": sorted(successful),
@@ -942,6 +965,36 @@ def api_review_file():
     if not path.is_file():
         return JSONResponse({"ok": False, "error": "No review file is pending"}, status_code=404)
     return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
+
+
+@app.post("/api/output/ass")
+def api_output_ass():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Output directory is not configured")
+        if not (output / "manifest.json").is_file():
+            raise FileNotFoundError("请先完成档案构建")
+
+        def run(report_progress):
+            report_progress("render", "正在生成 ASS 字幕", 0, 1)
+            result = refresh_subtitle_artifacts_from_settings(
+                output,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                generate_ass=True,
+            )
+            report_progress("render", "ASS 字幕已生成", 1, 1)
+            return result
+
+        job = create_job(
+            "ass-export", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.post("/api/output/black-video")

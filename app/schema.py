@@ -15,6 +15,9 @@ INDEX_ALIASES = {
     "sha256": ("sha256", "SHA-256", "sha-256"),
     "reference_text": ("reference_text", "REFERENCE_TEXT", "参考文本"),
     "reference_language": ("reference_language", "REFERENCE_LANGUAGE", "参考语言"),
+    "official_target_text": ("official_target_text", "OFFICIAL_TARGET_TEXT", "官方目标文本"),
+    "official_target_language": ("official_target_language", "OFFICIAL_TARGET_LANGUAGE", "官方目标语言"),
+    "official_target_source": ("official_target_source", "OFFICIAL_TARGET_SOURCE", "官方目标来源"),
 }
 BILINGUAL_ALIASES = {
     "filename": INDEX_ALIASES["filename"],
@@ -59,6 +62,9 @@ def normalize_index(path: Path) -> list[dict[str, str]]:
             "sha256": pick(row, INDEX_ALIASES["sha256"]).lower(),
             "reference_text": pick(row, INDEX_ALIASES["reference_text"]),
             "reference_language": pick(row, INDEX_ALIASES["reference_language"]),
+            "official_target_text": pick(row, INDEX_ALIASES["official_target_text"]),
+            "official_target_language": pick(row, INDEX_ALIASES["official_target_language"]),
+            "official_target_source": pick(row, INDEX_ALIASES["official_target_source"]),
         })
     return out
 
@@ -90,7 +96,7 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
     with legacy_index.open("w", encoding="utf-8-sig", newline="") as f:
         fields = [
             "序号", "分组", "文件名", "来源", "来源细分",
-            "英文文本", "参考文本", "参考语言", "SHA-256",
+            "英文文本", "参考文本", "参考语言", "官方目标文本", "官方目标语言", "官方目标来源", "SHA-256",
         ]
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
@@ -104,6 +110,9 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
                 "来源": row["source"], "来源细分": row["source_detail"], "英文文本": english,
                 "参考文本": row.get("reference_text", ""),
                 "参考语言": row.get("reference_language", ""),
+                "官方目标文本": row.get("official_target_text", ""),
+                "官方目标语言": row.get("official_target_language", ""),
+                "官方目标来源": row.get("official_target_source", ""),
                 "SHA-256": row["sha256"],
             })
 

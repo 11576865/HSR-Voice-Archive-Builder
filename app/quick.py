@@ -955,7 +955,9 @@ def create_quick_project(
 
     fields = [
         "index", "group", "filename", "source", "source_detail", "english",
-        "reference_text", "reference_language", "sha256",
+        "reference_text", "reference_language",
+        "official_target_text", "official_target_language", "official_target_source",
+        "sha256",
     ]
     with generated_index.open("w", encoding="utf-8-sig", newline="") as f:
         writer = csv.DictWriter(f, fieldnames=fields)

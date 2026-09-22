@@ -10,7 +10,7 @@ from fastapi.testclient import TestClient
 from app.project import create_project
 from app.security import api_token
 from app.server import app, _set_active, _clear_active
-from app.subtitles import parse_time_range_str
+from app.subtitles import parse_time_range_str, refresh_subtitle_artifacts
 
 
 class TestSubtitleEditor(unittest.TestCase):
@@ -67,8 +67,6 @@ class TestSubtitleEditor(unittest.TestCase):
                 wav_source="wavs",
                 output_dir="output",
             )
-            from app.project import update_project
-            update_project(cfg, generate_ass=True)
             _set_active(cfg)
 
             resp = self.client.get("/api/project/active/subtitles", headers=self.headers)
@@ -188,6 +186,11 @@ class TestSubtitleEditor(unittest.TestCase):
                 ]
             }
             (out / "manifest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
+            (out / "bilingual_index_corrected.csv").write_text(
+                "index,filename,target_text,chinese\n"
+                "1,line.wav,规矩就是用来打破的！,规矩就是用来打破的！\n",
+                encoding="utf-8-sig",
+            )
 
             cfg = create_project(
                 root,
@@ -222,15 +225,26 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertEqual(overrides["1"]["final_chs"], "规则，就是用来打破的！")
             self.assertTrue(overrides["1"]["modified"])
 
-            # Verify ASS and SRT files regenerated
+            # Source provenance remains immutable; the human text is derived.
+            saved_manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            saved_entry = saved_manifest["entries"][0]
+            self.assertEqual(saved_entry["target_text"], "规矩就是用来打破的！")
+            self.assertEqual(saved_entry["chinese"], "规矩就是用来打破的！")
+            self.assertEqual(saved_entry["target_text_source"], "api:openai:gpt-4")
+            self.assertEqual(saved_entry["final_chs"], "规则，就是用来打破的！")
+            self.assertTrue(saved_entry["modified"])
+
+            corrected = (out / "bilingual_index_corrected.csv").read_text(encoding="utf-8-sig")
+            self.assertIn("final_chs", corrected)
+            self.assertIn("规则，就是用来打破的！", corrected)
+
+            # SRT is a core output; ASS is generated only on demand.
             ass_file = out / "HSR_Voice_Archive.ass"
             srt_file = out / "HSR_Voice_Archive.srt"
-            self.assertTrue(ass_file.is_file())
+            self.assertFalse(ass_file.exists())
             self.assertTrue(srt_file.is_file())
 
-            ass_content = ass_file.read_text(encoding="utf-8-sig")
             srt_content = srt_file.read_text(encoding="utf-8-sig")
-            self.assertIn("规则，就是用来打破的！", ass_content)
             self.assertIn("规则，就是用来打破的！", srt_content)
 
             # Fetch via GET to verify timestamps and source text are NOT modified
@@ -245,6 +259,32 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertEqual(item["source_text"], "Rules are made to be broken!")
             self.assertEqual(item["final_chs"], "规则，就是用来打破的！")
             self.assertTrue(item["modified"])
+
+            # Simulate a later full rebuild replacing the manifest with source
+            # text again. Refresh must re-apply the persistent human override.
+            rebuilt = {
+                "entries": [
+                    {
+                        "index": 1,
+                        "filename": "line.wav",
+                        "start_seconds": 1.0,
+                        "display_end_seconds": 5.0,
+                        "source_text": "Rules are made to be broken!",
+                        "target_text": "规矩就是用来打破的！",
+                        "target_text_source": "api:openai:gpt-4",
+                        "english": "Rules are made to be broken!",
+                        "chinese": "规矩就是用来打破的！",
+                    }
+                ]
+            }
+            (out / "manifest.json").write_text(
+                json.dumps(rebuilt, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            refresh_subtitle_artifacts(cfg, out)
+            rebuilt_saved = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(rebuilt_saved["entries"][0]["target_text"], "规矩就是用来打破的！")
+            self.assertEqual(rebuilt_saved["entries"][0]["final_chs"], "规则，就是用来打破的！")
 
 
 if __name__ == "__main__":

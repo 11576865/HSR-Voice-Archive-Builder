@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- v0.9-L makes Subtitle Review edits a persistent, non-destructive override layer: official/API `target_text` and provenance remain unchanged, `final_chs` is re-applied after later full rebuilds, corrected CSV/SRT/optional ASS stay synchronized, subtitle-only edits invalidate manifest/final stages without forcing a FLAC rebuild, and stale ASS overflow reports are removed when ASS generation is disabled.
+- v0.9-L also makes continuous FLAC a fixed project output, moves ASS generation to an on-demand finished-output action beside black MKV, removes visible editor shortcut/icon clutter, widens and constrains the responsive proofreading layout, and makes job polling retry transient failures without requiring manual refresh.
+- Incremental Chinese(PRC) matches now become official target text when the target language is Simplified Chinese. Existing v0.9-K reference-only incremental indexes are migrated during rebuild, so confirmed Chinese text bypasses API translation without re-downloading the audio.
+
 - Translation provider settings now store a local default model; change it with `python -m app.credentials model <model>` without re-entering the API key or editing source code. New projects inherit it, while existing projects keep their explicit model.
 
 - Changed the default translation model to `gpt-5.6-terra`; existing projects keep their saved model until it is changed in the dashboard.

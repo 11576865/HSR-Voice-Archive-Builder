@@ -1,523 +1,116 @@
 # HSR Voice Archive Builder
 
-Local-first tooling for turning fragmented **Honkai: Star Rail** character voice files into a reproducible continuous voice archive with bilingual metadata, subtitles, integrity checks, and update planning.
+Local-first archive builder for **Honkai: Star Rail** character voice packages.
 
-The repository contains the **builder**, not redistributed game assets. Audio packages, LAB files, extracted resources, and full dialogue datasets stay local and are ignored by Git.
+It turns indexed voice resources into a reproducible archive with a continuous FLAC, timed subtitles, manifests, update metadata, and optional translation assistance. The browser UI is only a controller; source voice packages and finished audio remain on the processing device.
 
-## Status
+**Current development version:** v0.9-L  
+**Web entry:** https://11576865.github.io/HSR-Voice-Archive-Builder/
 
-Current development version: **v0.9-K**.
+> Unofficial processing utility. Do not commit extracted game audio or full game text datasets to this repository.
 
-The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
+## What it does
 
-## Fixed web entry
+The normal project workflow can:
 
-The repository now includes a static GitHub Pages launcher in `docs/`.
+- scan a primary character voice package and resolve its indexed dialogue order;
+- build one verified `continuous.flac` as the core archive artifact;
+- generate `HSR_Voice_Archive.srt` from the same resolved Timeline;
+- generate ASS later as an optional finished output;
+- generate an optional black-video MKV containing the FLAC, without burning subtitles;
+- use official Chinese text when a safe filename/path match exists;
+- use confirmed incremental `Chinese(PRC)` text as official Chinese target text before API fallback;
+- translate only lines that still lack target text;
+- preserve human subtitle corrections across later rebuilds;
+- check remote indexes for new voice lines, download confirmed additions, and rebuild only affected stages;
+- resume validated stages after interruption.
 
-Expected public entry after Pages is enabled:
+The deterministic manifest and Timeline remain the durable machine-readable archive state. Presentation outputs are derived from them.
 
-```text
-https://11576865.github.io/HSR-Voice-Archive-Builder/
+## Recommended workflow
+
+### Android / Termux
+
+First install:
+
+```bash
+pkg install -y git
+cd ~
+git clone https://github.com/11576865/HSR-Voice-Archive-Builder.git
+cd HSR-Voice-Archive-Builder
+bash run_termux.sh
 ```
 
-One-time GitHub setting:
+Normal start:
 
-```text
-Repository → Settings → Pages
-Source: Deploy from a branch
-Branch: main
-Folder: /docs
+```bash
+cd ~/HSR-Voice-Archive-Builder
+git pull --ff-only
+bash run_termux.sh
 ```
 
-The public page is intentionally a launcher/documentation page, not the audio-processing runtime. Its “进入本机控制台” button navigates to:
+Then open:
 
 ```text
 http://127.0.0.1:8765/
 ```
 
-A hosted HTTPS page is not used as a hard dependency for direct `fetch()` access to localhost/LAN services, because browser Local Network Access / CORS behavior is not stable enough across browsers and versions.
-
-## Design rule
-
-**Browser UI, local-first processing.**
-
-The browser is a control plane. Archive extraction, hashing, WAV/FLAC work, FFmpeg, translation calls, manifests, subtitles, and final files are handled by the local Python backend.
-
-Two control modes are supported:
-
-- **Local control:** browser and processor are the same Windows/Linux/macOS/Android-Termux device.
-- **LAN control:** a phone or tablet can open the dashboard over the local network while the computer/Android host performs the actual work. LAN mode uses a generated control token.
-
-No internet processing server is required.
-
-## Reliability hardening
-
-v0.4-v0.9-I add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
-
-- no temporary continuous RIFF/WAV file during FLAC builds;
-- raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
-- FLAC is written as `.partial.flac`, decoded and PCM-hash verified, then atomically promoted;
-- manifest/report/subtitle/project-state writes use atomic replacement where practical;
-- `py7zr>=1.1.3` is required;
-- ZIP/7z extraction rejects suspicious traversal paths and symbolic links;
-- extraction size and archive-member count are bounded;
-- background job metadata is journaled locally;
-- jobs left running when the process exits are reported as `interrupted` after restart rather than disappearing;
-- GitHub Pages stays a static launcher instead of depending on cross-origin localhost requests;
-- local and LAN control APIs use a per-process token and Host allowlist;
-- PCM `WAVE_FORMAT_EXTENSIBLE` works consistently on Python 3.11 and 3.12;
-- remote XLSX downloads and decompressed workbook size are bounded, with `defusedxml` installed;
-- AI translation batches are checkpointed and reused after later failures/restarts;
-- launchers run an offline dependency preflight and no longer reinstall packages on every start;
-- LAN startup checks port conflicts and supports `--display-host` for multi-NIC/offline networks;
-- Termux/Android interruption risk is surfaced rather than hidden;
-- v0.9-B writes an input-bound, artifact-verified stage chain and resumes completed work after a process restart;
-- v0.9-C records Responses API usage, enforces optional per-build token/USD budgets before each new request, and caches successful structured-output capability probes;
-- v0.9-D adds validated local glossary overlays, structural neighbor context, sparse semantic verification/repair, and checkpointed semantic-QA artifacts;
-- v0.9-E adds recent-project switching, project-scoped task history, explicit language roles, multilingual EN/CHS/JP/KR Quick indexes, and optional second-package reference text;
-- v0.9-F separates internal resumable state from user-facing output files through a project-local `.state` directory;
-- v0.9-G reports project-source health and can safely relink moved voice packages after content-fingerprint verification;
-- v0.9-H adds safe project cloning for branching one source archive into another language/parameter configuration without duplicating finished outputs or source audio.
-- v0.9-I adds Alibaba Model Studio Chat Completions compatibility, fail-fast credential tests, provider-safe batch sizing, and runtime revision display.
-- The launcher now automatically falls back to the built-in lite server when the optional FastAPI/uvicorn stack is incomplete.
-- v0.9-K resolves one sample-based Timeline for the FLAC, manifest and ASS subtitle, adds a configurable five-second opening gap, removes legacy SRT output, and renders Chinese-primary archives as one Chinese subtitle line.
-
-See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
-
-## Project dashboard
-
-A project directory contains a local `.hsr-voice-project.json` file with source paths and build settings.
-
-The dashboard can:
-
-- create or reopen a project;
-- select a recent project explicitly and open it without implicitly replacing the current project just by changing the selector;
-- remove a project from the switcher without deleting files, or delete the selected project with ownership-aware cleanup;
-- remember recent projects and keep task history associated with the project that created each job;
-- edit build settings once instead of re-entering paths every run;
-- launch a build as a background job;
-- show current archive counts and generated outputs;
-- scan a local TXT/JSON/CSV candidate list;
-- check the current AI-Hobbyist English XLSX index for a configured character;
-- classify candidates as exact existing files, variants of existing logical lines, or genuinely new logical lines;
-- save the comparison as `update_plan.json` without modifying the current manifest;
-- open the output directory on the processing host.
-
-Quick Mode project roots are marked as app-managed. Deleting one may remove that dedicated project directory, but original voice packages outside the project root are not touched. Manual project roots are treated conservatively: deletion removes the project marker, `.generated`, and an in-root output directory while retaining unrelated user files. “Remove from list” is non-destructive and can be reversed by reopening the project.
-
-Remote index data can now resolve playback order and source text for Quick Mode, and it remains available for update discovery. The project still does not auto-download or splice new game audio into an existing archive.
-
-## Requirements
-
-- Python 3.11+
-- FFmpeg on `PATH` when building FLAC
-- packages in `requirements.txt`
-
-```bash
-python -m pip install -r requirements.txt
-```
-
-## Start locally
+The Termux path uses the lightweight stdlib server and native 7-Zip path documented in [docs/termux.md](docs/termux.md).
 
 ### Windows
+
+Run:
 
 ```text
 run_windows.bat
 ```
 
-### Termux / Android
+For LAN control from another device, use the corresponding `*_lan` launcher and open the tokenized URL printed by the host.
 
-```bash
-chmod +x run_termux.sh
-./run_termux.sh
-```
-
-Termux uses a dependency-light stdlib HTTP server plus native 7-Zip. It intentionally avoids the FastAPI/Pydantic stack because current Pydantic v2 pulls `pydantic-core`, which can fall back to a Rust/maturin source build on Android. Vendor Python SDKs are not required: AI translation calls an OpenAI-compatible Responses endpoint directly over HTTPS using Python's standard library.
-
-Default local URL:
+## Project flow
 
 ```text
-http://127.0.0.1:8765/
+primary voice package + canonical index
+                │
+                ▼
+        resolve ordered entries
+                │
+        ┌───────┴────────┐
+        ▼                ▼
+ official/known text   missing target text
+        │                │
+        │          optional API translation
+        └───────┬────────┘
+                ▼
+        resolved Timeline
+                │
+        ┌───────┼───────────────┐
+        ▼       ▼               ▼
+    manifest   SRT        continuous FLAC
+        │
+        ├── human subtitle overrides
+        ├── optional ASS
+        └── optional black MKV
 ```
 
-## Control the host from a phone or tablet
+Continuous FLAC is a fixed project output. ASS and black MKV are on-demand finished outputs.
 
-On Windows:
+## Incremental updates
 
-```text
-run_windows_lan.bat
-```
+The dashboard can check the configured remote source-text index for additions and resolve confirmed files against the Hugging Face voice dataset.
 
-On Termux:
+For Simplified Chinese target projects:
 
-```bash
-chmod +x run_termux_lan.sh
-./run_termux_lan.sh
-```
+1. new primary-language audio is resolved and downloaded;
+2. a same-path `Chinese(PRC)` row is checked;
+3. when the Chinese audio is actually available, its official transcription becomes target Chinese text;
+4. only remaining unmatched lines are sent to the configured translation API.
 
-Or directly:
+Existing v0.9-K incremental indexes that stored this Chinese text only as `reference_text` are migrated during rebuild; the audio does not need to be downloaded again.
 
-```bash
-python -m app.launch --lan --no-browser
-```
+## Finished outputs
 
-The launcher prints a URL containing a temporary token, for example:
-
-```text
-http://192.168.1.20:8765/?token=...
-```
-
-Open that URL on another device on the same LAN. The LAN entry URL carries a temporary token once; the local server then injects the per-process API token into the dashboard. API requests require that token, and unexpected Host values are rejected. Audio and generated files remain on the host device.
-
-## Quick mode
-
-The default dashboard workflow is package-first and language-aware:
-
-```text
-Choose primary voice package
-        ↓
-Choose primary-audio language + source-text language
-        ↓
-Read-only scan / preflight
-        ↓
-Resolve source text from local data or AI-Hobbyist EN / CHS / JP / KR index
-        ↓
-Optional official Chinese voice package (same-stem LAB text only; its audio is not used)
-        ↓
-Optional second voice/text package used only as semantic reference
-        ↓
-Auto-create filtered internal index/project
-        ↓
-Build continuous FLAC from the primary package only
-        ↓
-Generate bilingual metadata/subtitles and translate missing target text
-```
-
-On Termux, the dashboard discovers top-level `.7z` / `.zip` packages in the normal Download locations and passes filesystem paths to the local Python backend. It does not re-upload large archives through the browser.
-
-Quick Mode places new Termux projects in shared storage by default at `/storage/emulated/0/Download/HSR_Voice_Test/<project-name>/output`. Existing projects keep their saved paths. Set `HSR_VOICE_PROJECTS_DIR` to override the default project base.
-
-The source-text language is independent from the primary audio language. Quick Mode always produces Simplified Chinese subtitles and built-in remote discovery maps `en` → `EN.xlsx`, `zh-CN` → `CHS.xlsx`, `ja` → `JP.xlsx`, and `ko` → `KR.xlsx`. A same-stem LAB in the primary package is preferred for non-English source text when available; otherwise the selected language index can supply the text. If the source text is already Chinese, the primary package's same-stem LAB is also used directly as the Chinese subtitle, with no Chinese-to-Chinese API call and no need to select a second package.
-
-A second reference package never contributes PCM to `continuous.flac`. If it contains same-stem LAB files, those texts are supplied to the translator as semantic reference. For audio-only EN/CHS/JP/KR reference packages, Quick Mode can recover text from the corresponding AI-Hobbyist index and align it to primary lines by exact filename or a conservative structural identity. This avoids requiring ASR for indexed game resources; unmatched reference lines are reported rather than guessed.
-
-Quick scan is read-only. It records content fingerprints for package inputs and revalidates them before project creation. Remote slices are cached for 24 hours, with bounded stale-cache fallback for temporary network failures.
-
-The old manual project form remains under **Advanced / Manual project**.
-
-## Build pipeline
-
-The deterministic builder remains available through the project dashboard and CLI:
-
-```bash
-python -m app.pipeline \
-  --index "index.csv" \
-  --bilingual "bilingual.csv" \
-  --chs "Chinese.7z" \
-  --wavs "English-WAV.zip" \
-  --out "output"
-```
-
-The bilingual CSV and Chinese LAB source are optional.
-
-Useful options:
-
-```text
---intro-gap 5.00
---same-gap 0.40
---group-gap 1.20
---no-flac
---translate-missing
---review-official-target
---translation-model gpt-5.6-terra
---translation-batch-size 80
---translation-token-budget 0
---translation-budget-usd 0
---glossary /path/to/terms.csv
---reference /path/to/reference-package.7z
---audio-language ja
---source-language ja
---target-language zh-CN
---reference-language en
---state-dir /path/to/project/.state
-```
-
-## Translation quality benchmark
-
-To test the configured provider directly without treating official Chinese localization as a single gold answer, run:
-
-```bash
-python -m app.translation_benchmark --sample-size 50
-```
-
-If no recent project is available, pass an index explicitly:
-
-```bash
-python -m app.translation_benchmark \
-  --index "/path/to/index.csv" \
-  --sample-size 50 \
-  --model gpt-5.6-terra
-```
-
-The default 50-line benchmark is deterministic and deliberately spreads samples across terminology-heavy, long/complex, short/context-sensitive, expressive, tag/placeholder and general dialogue. It uses one 50-line API batch by default; batching is internal and requires no manual "continue" interaction.
-
-To inspect the selected sample without spending API balance:
-
-```bash
-python -m app.translation_benchmark --sample-size 50 --dry-run
-```
-
-Outputs are written to `translation_benchmark/`:
-
-```text
-benchmark_report.json
-benchmark_results.csv
-benchmark_sample.json
-```
-
-`benchmark_results.csv` contains blank review fields for semantic fidelity, omission/addition, terminology, Chinese fluency, character tone, severity and notes. Official Chinese text is intentionally not used as the scoring target.
-
-## Translation automation and QA
-
-Production AI translation now adds three acceptance layers:
-
-1. **Structural context + terminology**: a missing line receives its immediate previous/next English line only when the neighbor shares an explicit group or source-detail relation. Only glossary terms that actually occur in the batch are injected into the prompt.
-2. **Deterministic QA + targeted repair**: returned Chinese is checked for control-tag structure, required terminology, likely untranslated English residue and extreme length anomalies. Only suspicious rows receive one repair pass.
-3. **Sparse semantic QA**: lines carrying higher semantic-risk signals—negation, quantities/comparatives, conditional logic, or mixed grammatical-person references—receive a separate structured verifier pass. A failed row gets one targeted repair and one re-verification; persistent semantic mismatches stop the build.
-
-The built-in glossary is intentionally small and conservative. Current hard constraints include stable terms such as Evanescia→绯英, Planarcadia→二相乐园, Phantasmoon Games→幻月游戏, Wishpower→愿力, Supplicant→谒者, Graphia→绘世, Yao Guang→爻光, Fulwish→满愿 and Stellar Jade→星琼.
-
-A project can add or override terminology with `--glossary` (CSV columns `English,Chinese` / `source,target`, or an equivalent JSON mapping/list). The merged glossary is fingerprinted, and row checkpoints are revalidated against the terminology relevant to that source line.
-
-Translation builds write:
-
-```text
-output/translation_qa.json
-output/semantic_qa.json
-```
-
-If deterministic or semantic QA still has a hard failure after its one repair pass, the build stops before accepting the bad translation. Earlier paid batches and successfully verified semantic rows remain checkpointed, so a later restart does not force the whole character through the API again.
-
-## Cloning a project
-
-The project selector includes **Copy project** for creating a derived configuration from an existing archive. This is intended for cases such as keeping the same voice package while trying another target language, translation provider/model, subtitle arrangement, or build option.
-
-A clone copies:
-
-- the project configuration;
-- stored source-package fingerprints;
-- app-generated `.generated` data such as the filtered Quick Mode index and scan metadata.
-
-A clone does **not** copy:
-
-- `output/` finished artifacts;
-- `.state/` checkpoints, QA reports, usage ledgers, or stage state;
-- task history;
-- large original voice packages.
-
-The clone therefore starts with a clean build state but can reference the same source material. App-generated relative inputs remain project-local because `.generated` is copied. Other manual relative inputs are converted to absolute references back to the original location instead of being duplicated without permission.
-
-By default the clone is created as a uniquely named sibling directory. If the desired name already exists, a numeric suffix is used. An explicitly supplied destination must be empty.
-
-## Moving source packages without rebuilding the project
-
-A project may outlive the original filesystem location of its voice packages. The dashboard therefore reports source health separately from build completion:
-
-- **primary**: the package whose WAV files feed the continuous FLAC;
-- **target**: the optional official Chinese voice package, used only for its same-stem LAB subtitle text;
-- **reference**: the optional second-language reference package;
-- **index / bilingual / glossary**: supporting text/configuration inputs.
-
-For Quick Mode projects, the primary/target/reference package fingerprints are recorded when the project is created. If one of those packages is moved later, **Verify and relink** scans the candidate package and compares its content fingerprint with the stored identity. The project path is updated only on an exact match. A file with the same name but different bytes is rejected.
-
-Older Quick Mode projects can use the source fingerprints already stored in `.generated/quick_scan.json`. Manual projects created before this metadata existed may not have a verifiable identity; in that case automatic relink is intentionally refused and the Advanced source field remains the explicit content-replacement path.
-
-A verified relocation is different from replacing a package with new content. Manual source edits clear the old stored fingerprint so stale identity metadata cannot later approve the wrong package.
-
-## Project state vs output
-
-Dashboard-created projects now use two distinct locations:
-
-```text
-<project>/
-├── output/      # user-facing finished artifacts
-└── .state/      # checkpoints, QA, usage and validated stage state
-```
-
-The normal `output/` directory is intended for files you may actually consume or export: manifests, corrected bilingual index, subtitles, build report, update plan, and `continuous.flac` when enabled. Internal files such as `.translation_checkpoint.json`, `translation_qa.json`, `semantic_qa.json`, `translation_usage.json`, and the `stages/` chain live in `.state/`.
-
-Existing projects are migrated conservatively on their next build. A legacy internal item is moved out of `output/` only when the corresponding destination does not already exist in `.state/`; newer state is never overwritten by migration.
-
-Direct CLI users can opt into the same separation explicitly:
-
-```bash
-python -m app.pipeline \
-  --index index.csv \
-  --wavs Voice-WAV.zip \
-  --out output \
-  --state-dir .state
-```
-
-## Stage recovery
-
-Each output directory contains a `stages/` chain:
-
-```text
-01_scan.json
-02_metadata.json
-03_translation.json
-04_translation_qa.json
-05_manifest.json
-06_audio_state.json
-final_report.json
-```
-
-Every state file is atomically written and bound to the content fingerprints of the selected inputs, relevant build settings, translation provider/Base URL/model, and the stage schema version. Recorded output artifacts are checked by size and SHA-256 before reuse. If an input or artifact changes, the affected work is rebuilt instead of silently accepting stale state.
-
-`build_report.json` records `stage_resume.resumed` and `stage_resume.rebuilt`. In project-dashboard builds, the validated stage chain itself is stored under `.state/stages/`. Metadata and paid translation work can survive a Termux/process interruption. FLAC encoding remains all-or-nothing: only a completed, verified file is reusable; an interrupted encode starts again.
-
-## Translation usage, budgets, and capability cache
-
-v0.9-C makes API consumption observable instead of treating a successful translation as the only completion signal.
-
-Each translation build writes:
-
-```text
-output/translation_usage.json
-```
-
-The usage ledger records provider/Base URL/model identity, a pre-build heuristic token estimate, every capability/translation/repair API call, and the actual `usage` fields returned by the Responses endpoint. When the provider supplies them, cached-input and reasoning-token detail are retained as well.
-
-Two optional limits are available in Quick Mode, Advanced UI, and the CLI:
-
-```text
---translation-token-budget 120000
---translation-budget-usd 2.50
-```
-
-A value of `0` means unlimited. Budget checks run immediately before a new request. If the next request would cross the configured limit, the build stops before sending it and previously completed checkpoints remain available for resume.
-
-Token estimates are deliberately labeled estimates; they are not presented as exact tokenizer results. Actual API usage is the authoritative count after a response.
-
-USD budgeting is stricter. The built-in price table is used only for the official OpenAI provider and is versioned in code. V-API and custom relays do **not** silently inherit official OpenAI prices. If a relay has known rates, configure both overrides locally:
-
-```bash
-export HSR_TRANSLATION_INPUT_USD_PER_MTOK=...
-export HSR_TRANSLATION_OUTPUT_USD_PER_MTOK=...
-```
-
-Otherwise use a token budget. If a USD limit is requested while pricing is unknown, the request is blocked rather than inventing a cost.
-
-Structured-output smoke results are cached for seven days by provider + Base URL + model + schema fingerprint. Re-running:
-
-```bash
-python -m app.credentials test
-```
-
-reuses a fresh successful capability result. Use `--force` when a new probe is intentionally required.
-
-## Chinese-subtitle precedence
-
-```text
-same-stem LAB from the optional official Chinese voice package, or from a Chinese primary package
-        ↓
-existing target text in the bilingual index
-        ↓
-AI API translation into the configured target language
-        ↓
-missing
-```
-
-Translation providers are configured locally and are not stored in project files or the browser UI.
-
-Existing project files keep their saved `translation_model`; change the dashboard field once if an older project still shows another model.
-
-The default model is saved as local runtime configuration, not in source code. To change the model inherited by future projects without re-entering the API key:
-
-```bash
-python -m app.credentials model qwen3.7-plus
-python -m app.credentials test --model qwen3.7-plus
-```
-
-Existing projects deliberately keep their own saved model until it is changed in the dashboard, so a global change cannot silently alter an existing archive.
-
-During an incremental English-audio update, the builder also looks for a
-`Chinese(PRC)` dataset row with the same language-independent in-game voice
-path. If that Chinese audio can actually be downloaded, it is cached separately
-under `.generated/incremental_reference_audio_zh-CN/` and its official
-transcription is attached as `zh-CN` localization reference. It never enters
-the continuous English FLAC and is not treated as a gold translation. Missing
-or not-yet-published Chinese audio leaves the reference blank; the configured
-translation API still translates the English source. When a Chinese reference
-is available, the API may use it only for terminology and localization context.
-
-Credentials are entered once with hidden input and stored locally under
-`~/.hsr-voice-archive-builder/`. For an OpenAI-compatible HTTPS endpoint:
-
-```bash
-python -m app.credentials configure --provider custom --base-url https://example.com/v1
-```
-
-For Alibaba Cloud Model Studio / official Qwen in the Beijing region, substitute
-your workspace ID in the compatible-mode endpoint:
-
-```bash
-python -m app.credentials configure --provider custom --base-url https://YOUR_WORKSPACE_ID.cn-beijing.maas.aliyuncs.com/compatible-mode/v1
-```
-
-Check the local configuration without revealing the key:
-
-```bash
-python -m app.credentials status
-```
-
-Run a tiny paid/usage-bearing structured-output smoke test before a real batch:
-
-```bash
-python -m app.credentials test
-```
-
-Environment variables `HSR_TRANSLATION_API_KEY`, `HSR_TRANSLATION_PROVIDER`, and `HSR_TRANSLATION_BASE_URL` override the saved local configuration. `OPENAI_API_KEY` remains a backward-compatible fallback only when the selected provider is `openai`.
-
-Translation checkpoints are bound to provider + Base URL + model + source language + target language. Changing the provider, route, or language pair cannot silently reuse incompatible cached translations.
-
-## Voice identity
-
-The physical filename remains the exact file identity. A logical identity is also derived for gender/variant suffixes:
-
-```text
-chapter5_3_evanescia_125_f.wav
-        ↓
-logical_id = chapter5_3_evanescia_125
-variant    = f
-```
-
-This prevents a counterpart such as `chapter5_3_evanescia_125.wav` from being automatically counted as a completely new dialogue line.
-
-## Update checks
-
-Local candidate files can still be checked from the CLI:
-
-```bash
-python -m app.diff \
-  --manifest output/manifest.json \
-  --candidates pending.txt \
-  --out update_plan.json
-```
-
-The dashboard additionally supports a remote metadata check against the project's configured AI-Hobbyist source-text index. Quick Mode provides built-in mappings for `EN.xlsx`, `CHS.xlsx`, `JP.xlsx`, and `KR.xlsx`; the remote URL remains project-configurable and restricted to HTTPS.
-
-## Archive extraction safety
-
-The default uncompressed extraction ceiling is 32 GiB. It can be overridden for trusted larger archives:
-
-```bash
-export HSR_MAX_EXTRACT_BYTES=68719476736
-```
-
-The extractor also caps member count, validates archive member paths, and rejects symlink members.
-
-## Output
+Typical project output:
 
 ```text
 output/
@@ -525,49 +118,73 @@ output/
 ├── manifest.csv
 ├── bilingual_index_corrected.csv
 ├── timeline_resolved.json
-├── HSR_Voice_Archive.ass
-├── HSR_Voice_Archive.srt
-├── HSR_Voice_Archive_Black.mkv  # optional, generated from the dashboard
 ├── build_report.json
-├── translation_qa.json
-├── semantic_qa.json
-├── translation_usage.json
 ├── update_plan.json
+├── HSR_Voice_Archive.srt
 └── continuous.flac
 ```
 
-The manifest and `timeline_resolved.json` are the durable machine-readable results. `HSR_Voice_Archive.ass` is the finished subtitle paired with `continuous.flac`, and `HSR_Voice_Archive.srt` carries the same resolved timings for players and tools that only accept SRT; legacy `bilingual.srt` is no longer generated. The optional `HSR_Voice_Archive_Black.mkv` contains only a lightweight black video track and a stream copy of `continuous.flac`; subtitles stay external and are neither embedded nor burned in. Other presentation formats should be derived from the manifest and resolved Timeline rather than used as primary data.
+Optional outputs:
 
-Rebuilding does not clear `output/` in advance. Completed stages whose input fingerprint and artifact hashes still match are reused. Files that need updating are written to temporary siblings and atomically replace the same-named result only after writing succeeds; FLAC is additionally decoded and PCM-verified before promotion. If a finished file was moved away, it is treated as missing and regenerated in `output/`; the builder does not locate or move the external copy back. A black MKV is tied to the FLAC from which it was made, so a successful FLAC rebuild removes the stale MKV and restores the dashboard export action. A failed FLAC rebuild leaves both the prior FLAC and prior MKV untouched.
+```text
+HSR_Voice_Archive.ass
+HSR_Voice_Archive_Black.mkv
+```
 
-## Official Chinese cross-check
+Internal checkpoints, QA state, translation usage, and stage recovery files live under the project `.state/` directory instead of the finished-output directory.
 
-`--review-official-target` compares each official Chinese line against its source line before the archive is written. Local checks first sort every line into one of three zones, and only the last two cost anything:
+## Subtitle review
 
-- green: reordering, compression, dropped filler, rewritten idioms and localized tone; the official line is kept and no request is made;
-- yellow: weak evidence such as a question rendered as a statement, a missing glossary term or an extreme length gap;
-- red: conflicting numbers, flipped negation, or mismatched control tokens and placeholders.
+The dashboard includes a single-entry proofreading workspace.
 
-Yellow and red lines go to one structured request per batch that returns the accept/revise decision together with the replacement line, so a judgment and a retranslation never cost two calls. A replacement is only adopted when it passes the same deterministic translation QA as normal translation output; otherwise the official line is kept. Decisions are checkpointed in `.state/.official_review_checkpoint.json` and reported in `official_review.json`.
+- source text and official/API references are read-only;
+- only the final Chinese subtitle is editable;
+- edits are stored as a non-destructive override layer;
+- official/API source provenance is preserved;
+- later full rebuilds re-apply saved overrides;
+- SRT and any already-generated ASS are refreshed from the same final text layer.
 
-## Data integrity
+## Translation configuration
 
-The builder checks expected WAV presence, duplicate filename conflicts, optional SHA-256 values, a common PCM format, sample-accurate timeline positions, streamed PCM frame counts, and decoded-FLAC PCM identity after encoding.
+Translation is optional and only used when target text is missing or when explicitly enabled official-text review requires it.
 
-## Tests
+Configure a compatible provider locally:
 
 ```bash
+python -m app.credentials configure --provider custom --base-url https://example.com/v1
+python -m app.credentials test
+```
+
+Credentials are stored locally and are not written into project JSON or the browser UI.
+
+More detail on translation QA, budgets, checkpoint behavior, source relinking, archive safety, and recovery semantics is maintained in [docs/reliability.md](docs/reliability.md).
+
+## Documentation
+
+- [Architecture](docs/architecture.md)
+- [Reliability and recovery](docs/reliability.md)
+- [Termux notes](docs/termux.md)
+- [ASS layout engine](docs/layout_engine.md)
+- [Changelog](CHANGELOG.md)
+- [Project notice](NOTICE.md)
+
+The GitHub Pages site is intentionally a compact launcher and setup reference, not a duplicate of this README or the in-app dashboard.
+
+## Development and tests
+
+Install test dependencies and run:
+
+```bash
+python -m pip install -r requirements-test.txt
 python -m unittest discover -s tests -v
 ```
 
-GitHub Actions runs the synthetic test suite on Python 3.11, 3.12 and 3.13. No game data is required. The suite includes archive traversal/size-limit tests, a real FFmpeg streaming-FLAC regression test, localhost/LAN token and Host-header checks, `WAVE_FORMAT_EXTENSIBLE` input, remote-XLSX limits, runtime preflight, translation-checkpoint recovery, local glossary validation, structural context isolation, semantic repair/re-verification, and semantic-QA artifact recovery.
+GitHub Actions validates Python 3.11, 3.12, 3.13, plus the lightweight Termux import surface.
 
-## Current regression validation
+The test suite uses synthetic fixtures; no game data is required.
 
-On the local 379-line Evanescia corpus, the deterministic archive pipeline reproduced 379/379 WAVs, 181 same-stem official Chinese LAB matches, 198 existing Chinese entries, 0 missing Chinese lines, 4 filename variants, and 141,442,893 output samples at 48 kHz mono 16-bit PCM. The previous full FLAC rebuild passed decoded PCM SHA-256 identity verification.
+## Project scope
 
-The earlier 29-line pending list separates into 4 variant counterparts and 25 genuinely new logical lines.
+This repository builds and validates archives from user-supplied/local source material. It does not ship extracted game audio or full game text datasets.
 
-## Legal / project scope
-
-See [NOTICE.md](NOTICE.md). This is an unofficial processing utility. Do not commit extracted game audio or full game text datasets to this repository.
+See [NOTICE.md](NOTICE.md) for the project notice.

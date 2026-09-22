@@ -6,262 +6,73 @@
 <meta name="color-scheme" content="dark">
 <meta name="theme-color" content="#0e1117">
 <title>HSR Voice Archive Builder</title>
-<meta name="description" content="HSR Voice Archive Builder — static launcher for local-first voice archive processing.">
+<meta name="description" content="HSR Voice Archive Builder — local-first voice archive builder and launcher.">
 <style>
 :root{
   color-scheme:dark;
-  --bg:#0e1117;
-  --surface:#171b23;
-  --surface-2:#202631;
-  --text:#edf1f7;
-  --muted:#9ba5b3;
-  --line:#303846;
-  --line-strong:#424c5c;
-  --accent:#238e4d;
-  --accent-text:#ffffff;
-  --code:#0b0d10;
-  --code-text:#eef1f4;
-  --success:#45c879;
-  --blue:#5d9cec;
-  --orange:#f0a640;
-  --purple:#b78cff;
-  --shadow:0 10px 30px rgba(0,0,0,.18);
+  --bg:#0e1117;--surface:#171b23;--surface-2:#202631;--text:#edf1f7;
+  --muted:#9ba5b3;--line:#303846;--line-strong:#424c5c;
+  --accent:#238e4d;--accent-text:#fff;--code:#0b0d10;--success:#45c879;
 }
 *{box-sizing:border-box}
 html{scroll-behavior:smooth}
 body{
-  margin:0;
-  background:
-    radial-gradient(circle at 50% -10%,rgba(120,130,145,.09),transparent 36rem),
-    var(--bg);
-  color:var(--text);
+  margin:0;background:var(--bg);color:var(--text);
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-  -webkit-font-smoothing:antialiased;
+  -webkit-font-smoothing:antialiased;line-height:1.55
 }
 a{color:inherit}
-button,input{font:inherit}
-.shell{max-width:820px;margin:0 auto;padding:22px 18px max(64px,env(safe-area-inset-bottom))}
-.topbar{
-  display:flex;
-  align-items:center;
-  justify-content:space-between;
-  gap:16px;
-  margin-bottom:16px;
-}
-.brand{
-  display:flex;
-  align-items:center;
-  gap:10px;
-  min-width:0;
-}
-.logo{
-  width:34px;height:34px;border-radius:10px;
-  display:grid;place-items:center;
-  background:var(--accent);color:var(--accent-text);
-  font-size:13px;font-weight:850;letter-spacing:.03em;
-}
-.brand-copy{min-width:0}
-.brand-name{font-size:14px;font-weight:780;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+button{font:inherit}
+.shell{max-width:760px;margin:0 auto;padding:18px 16px max(52px,env(safe-area-inset-bottom))}
+.topbar{display:flex;align-items:center;justify-content:space-between;gap:14px;margin-bottom:14px}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
+.logo{width:34px;height:34px;border-radius:10px;display:grid;place-items:center;background:var(--accent);font-size:13px;font-weight:850}
+.brand-name{font-size:14px;font-weight:780}
 .brand-sub{font-size:11px;color:var(--muted);margin-top:1px}
-.repo-link{
-  text-decoration:none;
-  border:1px solid var(--line);
-  padding:8px 11px;border-radius:10px;
-  font-size:12px;font-weight:700;
-  background:var(--surface);
+.repo-link,.btn,.copy-btn{
+  text-decoration:none;border:1px solid var(--line);background:var(--surface);
+  color:var(--text);border-radius:10px;font-weight:750
 }
-.hero{
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:22px;
-  padding:28px;
-  box-shadow:var(--shadow);
-}
-.eyebrow{
-  display:inline-flex;align-items:center;gap:7px;
-  font-size:11px;font-weight:800;letter-spacing:.08em;
-  text-transform:uppercase;color:var(--muted);
-}
-.dot{width:7px;height:7px;border-radius:50%;background:var(--success)}
-h1{
-  margin:12px 0 8px;
-  font-size:clamp(30px,7vw,48px);
-  line-height:1.02;
-  letter-spacing:-.045em;
-}
-.lead{
-  margin:0;
-  max-width:680px;
-  color:var(--muted);
-  font-size:15px;
-  line-height:1.65;
-}
-.chips{display:flex;flex-wrap:wrap;gap:8px;margin-top:18px}
-.chip{
-  padding:7px 10px;border-radius:999px;
-  border:1px solid var(--line);
-  background:var(--surface-2);
-  font-size:11px;font-weight:720;color:var(--muted)
-}
-.hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:22px}
-.btn{
-  appearance:none;border:1px solid var(--line-strong);
-  border-radius:11px;padding:11px 15px;
-  text-decoration:none;cursor:pointer;
-  font-weight:760;font-size:13px;
-  background:var(--surface);color:var(--text);
-  transition:transform .12s ease,border-color .12s ease,background .12s ease;
-}
-.btn:active{transform:translateY(1px)}
+.repo-link{padding:8px 11px;font-size:12px}
+.hero,.panel{background:var(--surface);border:1px solid var(--line)}
+.hero{border-radius:20px;padding:26px}
+.eyebrow{font-size:11px;font-weight:800;letter-spacing:.07em;color:var(--muted)}
+h1{margin:10px 0 8px;font-size:clamp(30px,7vw,46px);line-height:1.04;letter-spacing:-.04em}
+.lead{margin:0;color:var(--muted);font-size:15px;max-width:640px}
+.hero-actions{display:flex;flex-wrap:wrap;gap:10px;margin-top:20px}
+.btn{padding:11px 15px;font-size:13px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-text)}
-.section{margin-top:16px}
-.panel{
-  background:var(--surface);
-  border:1px solid var(--line);
-  border-radius:18px;
-  overflow:hidden;
-}
-.panel-pad{padding:20px}
-.section-kicker{
-  font-size:11px;text-transform:uppercase;letter-spacing:.08em;
-  color:var(--muted);font-weight:820;margin-bottom:6px;
-}
-h2{font-size:19px;letter-spacing:-.02em;margin:0 0 6px}
-.small{font-size:13px;line-height:1.55;color:var(--muted);margin:0}
-.command-card{
-  margin-top:15px;
-  border:1px solid var(--line);
-  border-radius:14px;
-  overflow:hidden;
-  background:var(--surface-2);
-}
-.command-top{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:10px 11px 10px 14px;
-  border-bottom:1px solid var(--line);
-}
-.command-label{font-size:12px;font-weight:760;color:var(--muted)}
-.copy-btn{
-  border:1px solid var(--line-strong);
-  background:var(--surface);
-  color:var(--text);
-  border-radius:9px;padding:7px 10px;
-  font-size:12px;font-weight:760;cursor:pointer;
-  min-width:76px;
-}
-.copy-btn.done{color:var(--success);border-color:color-mix(in srgb,var(--success) 45%,var(--line))}
-pre{
-  margin:0;padding:15px 16px 16px;
-  overflow:auto;
-  background:var(--code);color:var(--code-text);
-  font:12.5px/1.65 ui-monospace,SFMono-Regular,Menlo,Consolas,"Liberation Mono",monospace;
-  white-space:pre;
-}
-.annotation{
-  display:grid;
-  grid-template-columns:auto 1fr;
-  gap:8px 10px;
-  margin-top:13px;
-  font-size:12px;
-  line-height:1.55;
-  color:var(--muted);
-}
-.annotation .tag{
-  align-self:start;
-  border:1px solid var(--line);
-  border-radius:7px;
-  padding:2px 6px;
-  background:var(--surface-2);
-  font:11px/1.4 ui-monospace,SFMono-Regular,Menlo,monospace;
-  color:var(--text);
-}
-.flow{
-  display:grid;grid-template-columns:repeat(3,1fr);
-  gap:9px;margin-top:15px;
-}
-.flow-step{
-  min-height:84px;
-  border:1px solid var(--line);
-  background:var(--surface-2);
-  border-radius:12px;padding:12px;
-}
-.flow-num{
-  width:23px;height:23px;border-radius:50%;
-  display:grid;place-items:center;
-  background:var(--accent);color:var(--accent-text);
-  font-size:11px;font-weight:850;margin-bottom:9px;
-}
-.flow-title{font-size:12px;font-weight:760;margin-bottom:3px}
-.flow-text{font-size:11px;color:var(--muted);line-height:1.45}
-.feature-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:9px;margin-top:15px}
-.feature{border:1px solid var(--line);background:var(--surface-2);border-radius:12px;padding:13px}
-.feature b{display:block;font-size:12px;margin-bottom:5px}.feature span{display:block;color:var(--muted);font-size:11px;line-height:1.5}
-.feature.progress b{color:var(--success)}.feature.update b{color:var(--blue)}.feature.translation b{color:var(--orange)}.feature.output b{color:var(--purple)}
-.accordion{
-  border-top:1px solid var(--line);
-}
-.accordion:first-child{border-top:0}
-.accordion summary{
-  list-style:none;
-  display:grid;
-  grid-template-columns:1fr auto;
-  gap:14px;
-  align-items:center;
-  padding:17px 20px;
-  cursor:pointer;
-  user-select:none;
-}
-.accordion summary::-webkit-details-marker{display:none}
-.summary-title{font-size:14px;font-weight:780}
-.summary-note{display:block;font-size:11px;color:var(--muted);margin-top:3px;font-weight:500}
-.chevron{
-  width:27px;height:27px;border-radius:9px;
-  display:grid;place-items:center;
-  border:1px solid var(--line);
-  color:var(--muted);
-  transition:transform .18s ease;
-}
-details[open] .chevron{transform:rotate(180deg)}
-.detail-body{padding:0 20px 20px}
-.note-box{
-  margin-top:12px;
-  border-left:3px solid var(--line-strong);
-  padding:9px 0 9px 12px;
-  color:var(--muted);
-  font-size:12px;line-height:1.55;
-}
-.footer{
-  padding:18px 4px 0;
-  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
-  color:var(--muted);font-size:11px;
-}
-.toast{
-  position:fixed;
-  left:50%;bottom:max(22px,env(safe-area-inset-bottom));
-  transform:translate(-50%,18px);
-  background:var(--accent);color:var(--accent-text);
-  border-radius:999px;padding:9px 13px;
-  font-size:12px;font-weight:760;
-  opacity:0;pointer-events:none;
-  transition:opacity .16s ease,transform .16s ease;
-  z-index:20;
-}
+.meta{display:flex;flex-wrap:wrap;gap:8px;margin-top:16px}
+.meta span{font-size:11px;color:var(--muted);padding:6px 9px;border:1px solid var(--line);border-radius:999px;background:var(--surface-2)}
+.section{margin-top:14px}
+.panel{border-radius:16px;overflow:hidden}
+.panel-pad{padding:18px}
+h2{font-size:18px;margin:0 0 5px}
+.small{font-size:13px;color:var(--muted);margin:0}
+.command-card{margin-top:14px;border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--surface-2)}
+.command-top{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 10px 9px 13px;border-bottom:1px solid var(--line)}
+.command-label{font-size:12px;color:var(--muted);font-weight:750}
+.copy-btn{padding:7px 10px;font-size:12px;cursor:pointer}
+.copy-btn.done{color:var(--success)}
+pre{margin:0;padding:14px 15px;overflow:auto;background:var(--code);font:12.5px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.step{border:1px solid var(--line);border-radius:11px;background:var(--surface-2);padding:11px}
+.step b{display:block;font-size:12px;margin-bottom:3px}
+.step span{font-size:11px;color:var(--muted)}
+details{border-top:1px solid var(--line)}
+details:first-child{border-top:0}
+summary{list-style:none;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;padding:15px 18px;cursor:pointer;font-weight:760}
+summary::-webkit-details-marker{display:none}
+.summary-note{display:block;font-size:11px;color:var(--muted);font-weight:500;margin-top:2px}
+.chevron{color:var(--muted)}
+.detail-body{padding:0 18px 18px}
+.note{margin-top:10px;font-size:12px;color:var(--muted)}
+.footer{padding:16px 3px 0;display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;color:var(--muted);font-size:11px}
+.toast{position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translate(-50%,16px);background:var(--accent);color:white;border-radius:999px;padding:8px 12px;font-size:12px;font-weight:750;opacity:0;pointer-events:none;transition:.15s;z-index:10}
 .toast.show{opacity:1;transform:translate(-50%,0)}
 @media(max-width:640px){
-  .shell{padding:14px 12px 48px}
-  .topbar{margin-bottom:12px}
-  .hero{padding:22px 18px;border-radius:18px}
-  h1{font-size:34px}
-  .lead{font-size:14px}
-  .hero-actions{display:grid;grid-template-columns:1fr}
-  .btn{text-align:center;width:100%}
-  .flow{grid-template-columns:1fr}
-  .feature-grid{grid-template-columns:1fr}
-  .flow-step{min-height:auto;display:grid;grid-template-columns:30px 1fr;column-gap:9px;align-items:start}
-  .flow-num{grid-row:1/3;margin:0}
-  .accordion summary{padding:15px 16px}
-  .detail-body{padding:0 16px 16px}
-  .panel-pad{padding:17px 16px}
+  .shell{padding:12px 12px 44px}.hero{padding:20px 17px}.hero-actions{display:grid;grid-template-columns:1fr}.btn{text-align:center}
+  .steps{grid-template-columns:1fr}.step{display:grid;grid-template-columns:88px 1fr;gap:8px}
 }
 </style>
 </head>
@@ -270,126 +81,62 @@ details[open] .chevron{transform:rotate(180deg)}
   <header class="topbar">
     <div class="brand">
       <div class="logo">HSR</div>
-      <div class="brand-copy">
+      <div>
         <div class="brand-name">Voice Archive Builder</div>
-        <div class="brand-sub">Static launcher · Local processing</div>
+        <div class="brand-sub">Local-first archive builder</div>
       </div>
     </div>
     <a class="repo-link" href="https://github.com/11576865/HSR-Voice-Archive-Builder">GitHub</a>
   </header>
 
   <section class="hero">
-    <div class="eyebrow"><span class="dot"></span> v0.9-H · STATIC ENTRY</div>
-    <h1>打开网页，启动本地引擎。</h1>
-    <p class="lead">这个页面长期存在，只负责启动说明、复制命令和进入控制台。语音、7z、FLAC、字幕与索引仍然只在你的设备上处理。</p>
-    <div class="chips">
-      <span class="chip">GitHub Pages 常驻</span>
-      <span class="chip">Android / Termux</span>
-      <span class="chip">本地 FFmpeg</span>
-      <span class="chip">深色控制台</span>
-      <span class="chip" id="platform-chip">正在识别设备</span>
+    <div class="eyebrow">v0.9-L</div>
+    <h1>星穹铁道角色语音归档工具</h1>
+    <p class="lead">把本地语音包整理成连续 FLAC、时间轴字幕和可复现的机器档案。网页只负责说明与进入本地控制台，原始语音和成品都留在你的设备上。</p>
+    <div class="meta">
+      <span>Android / Termux</span>
+      <span>Windows</span>
+      <span>本地 FFmpeg</span>
+      <span>增量更新</span>
+      <span>字幕校对</span>
     </div>
     <div class="hero-actions">
       <a class="btn primary" href="http://127.0.0.1:8765/">进入本机控制台</a>
-      <a class="btn" href="#termux">复制启动命令</a>
+      <a class="btn" href="https://github.com/11576865/HSR-Voice-Archive-Builder#recommended-workflow">查看安装说明</a>
+    </div>
+  </section>
+
+  <section class="section panel" id="start">
+    <div class="panel-pad">
+      <h2>Termux 日常启动</h2>
+      <p class="small">已经安装过项目时，只需要下面三行。</p>
+      <div class="command-card">
+        <div class="command-top">
+          <span class="command-label">更新并启动</span>
+          <button class="copy-btn" data-copy="cmd-start">复制</button>
+        </div>
+        <pre id="cmd-start">cd ~/HSR-Voice-Archive-Builder
+git pull --ff-only
+bash run_termux.sh</pre>
+      </div>
+      <div class="steps">
+        <div class="step"><b>1 · 执行命令</b><span>在 Termux 中粘贴并回车。</span></div>
+        <div class="step"><b>2 · 保持 Termux 运行</b><span>看到 127.0.0.1:8765 后即可。</span></div>
+        <div class="step"><b>3 · 打开控制台</b><span>返回本页，点“进入本机控制台”。</span></div>
+      </div>
     </div>
   </section>
 
   <section class="section panel">
-    <div class="panel-pad">
-      <div class="section-kicker">CURRENT WORKFLOW</div>
-      <h2>控制台已同步更新</h2>
-      <p class="small">更新本地仓库后，控制台会采用新的深色界面，并把耗时操作直接显示在“当前进度”区域。</p>
-      <div class="feature-grid">
-        <div class="feature progress"><b>进度不再藏在任务历史</b><span>构建、增量定位、下载、合并、AI 翻译与语义检查都会显示当前阶段及已完成数量。</span></div>
-        <div class="feature update"><b>增量更新防止重复应用</b><span>已经写入当前项目索引的语音会被识别为已应用，不会因旧 manifest 再次启用下载按钮。</span></div>
-        <div class="feature update"><b>英中语音同步对照</b><span>下载新增英文语音时，会按同一游戏内文件路径尝试取得中文语音与官方文本；中文音频单独缓存，只作为本地化参考。尚未发布时继续由 AI 翻译英文源文。</span></div>
-        <div class="feature translation"><b>语义偏离改为人工修订往返</b><span>问题条目集中生成 TXT；可自行或交给智能体只填写 CORRECTION 区域，上传完整文件后从检查点继续构建。</span></div>
-        <div class="feature output"><b>运行报告集中反馈</b><span>运行时自动展开阶段、数量和错误，成功后自动折叠；成品位置保留在项目区域。</span></div>
-        <div class="feature output"><b>ASS / SRT 与黑屏 MKV</b><span>同时输出同一时间轴的 ASS 和 SRT；可另行生成只含黑色视频轨与 FLAC 的 MKV，字幕保持外挂，不做耗时烧录。</span></div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section panel" id="termux">
-    <div class="panel-pad">
-      <div class="section-kicker">DAILY START</div>
-      <h2>日常启动</h2>
-      <p class="small">项目已经安装过时，只需要这两行。复制后打开 Termux，长按粘贴并回车。</p>
-
-      <div class="command-card">
-        <div class="command-top">
-          <span class="command-label">Termux · 日常启动</span>
-          <button class="copy-btn" data-copy="cmd-start">复制</button>
-        </div>
-        <pre id="cmd-start">cd ~/HSR-Voice-Archive-Builder
-bash run_termux.sh</pre>
-      </div>
-
-      <div class="annotation">
-        <span class="tag">cd</span><span>进入项目目录。看到提示符变成 <b>~/HSR-Voice-Archive-Builder</b>，说明位置正确。</span>
-        <span class="tag">bash</span><span>启动 Android 轻量本地引擎。终端出现 <b>127.0.0.1:8765</b> 后，再进入控制台。</span>
-      </div>
-
-      <div class="flow">
-        <div class="flow-step">
-          <div class="flow-num">1</div>
-          <div class="flow-title">复制</div>
-          <div class="flow-text">点上面的复制按钮。</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">2</div>
-          <div class="flow-title">执行</div>
-          <div class="flow-text">在 Termux 粘贴并回车，保持它运行。</div>
-        </div>
-        <div class="flow-step">
-          <div class="flow-num">3</div>
-          <div class="flow-title">进入</div>
-          <div class="flow-text">回到此页，点“进入本机控制台”。</div>
-        </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section panel" aria-label="更多操作">
-    <details class="accordion">
+    <details>
       <summary>
-        <span>
-          <span class="summary-title">更新后启动</span>
-          <span class="summary-note">拉取最新 main，再启动本地引擎</span>
-        </span>
+        <span>第一次安装<span class="summary-note">只需要做一次</span></span>
         <span class="chevron">⌄</span>
       </summary>
       <div class="detail-body">
         <div class="command-card">
           <div class="command-top">
-            <span class="command-label">Termux · 更新 + 启动</span>
-            <button class="copy-btn" data-copy="cmd-update">复制</button>
-          </div>
-          <pre id="cmd-update">cd ~/HSR-Voice-Archive-Builder
-git switch main
-git pull --ff-only
-bash run_termux.sh</pre>
-        </div>
-        <div class="annotation">
-          <span class="tag">switch</span><span>确保你在正式的 <b>main</b> 分支，不继续停留在旧的测试分支。</span>
-          <span class="tag">pull</span><span>只做快进更新；如果本地状态异常，它会停下来，而不是偷偷制造复杂合并。</span>
-        </div>
-      </div>
-    </details>
-
-    <details class="accordion">
-      <summary>
-        <span>
-          <span class="summary-title">第一次安装</span>
-          <span class="summary-note">只需要做一次；已经能打开控制台就不用再执行</span>
-        </span>
-        <span class="chevron">⌄</span>
-      </summary>
-      <div class="detail-body">
-        <div class="command-card">
-          <div class="command-top">
-            <span class="command-label">Termux · 首次安装</span>
+            <span class="command-label">Termux 首次安装</span>
             <button class="copy-btn" data-copy="cmd-install">复制</button>
           </div>
           <pre id="cmd-install">pkg install -y git
@@ -398,58 +145,39 @@ git clone https://github.com/11576865/HSR-Voice-Archive-Builder.git
 cd HSR-Voice-Archive-Builder
 bash run_termux.sh</pre>
         </div>
-        <div class="note-box">如果提示仓库目录已经存在，不要重复 clone；直接折叠这一项，使用上面的“日常启动”。</div>
       </div>
     </details>
 
-    <details class="accordion">
+    <details>
       <summary>
-        <span>
-          <span class="summary-title">手机 / 平板控制电脑</span>
-          <span class="summary-note">处理仍在电脑，本设备只打开局域网控制台</span>
-        </span>
+        <span>Windows 启动<span class="summary-note">本机运行或局域网控制</span></span>
         <span class="chevron">⌄</span>
       </summary>
       <div class="detail-body">
-        <p class="small">在电脑运行 <code>run_windows_lan.bat</code>。终端会打印类似 <code>http://192.168.1.20:8765/?token=...</code> 的地址。手机或平板与电脑处在同一局域网时，直接打开这个地址。</p>
-        <div class="note-box">不要把局域网 token 发到公开聊天或网页。GitHub Pages 不保存 token，也不代理你的语音文件。</div>
+        <p class="small">本机运行 <code>run_windows.bat</code>。需要用手机或平板控制电脑时，运行 <code>run_windows_lan.bat</code>，再打开终端打印的 token 地址。</p>
       </div>
     </details>
 
-    <details class="accordion">
+    <details>
       <summary>
-        <span>
-          <span class="summary-title">为什么网页不能直接启动 Termux</span>
-          <span class="summary-note">这是 Android / 浏览器的权限边界，不是少写了一行 JavaScript</span>
-        </span>
+        <span>项目会生成什么<span class="summary-note">核心成品与可选成品</span></span>
         <span class="chevron">⌄</span>
       </summary>
       <div class="detail-body">
-        <p class="small">普通网页没有执行 Android shell 命令的权限。否则任何网站都能在手机上执行任意命令。这个静态页面因此只负责复制命令；真正执行仍由 Termux 完成。</p>
-      </div>
-    </details>
-
-    <details class="accordion">
-      <summary>
-        <span>
-          <span class="summary-title">处理原则</span>
-          <span class="summary-note">Browser UI, local-first processing</span>
-        </span>
-        <span class="chevron">⌄</span>
-      </summary>
-      <div class="detail-body">
-        <p class="small">原始 WAV、FLAC、7z、LAB 与最终构建文件不需要上传到 GitHub Pages。Pages 只负责固定入口、文档与命令复制；实际处理由本机 Python、FFmpeg 与原生 7-Zip 完成。</p>
+        <p class="small"><b>固定核心成品：</b>连续 FLAC、SRT、manifest、时间轴与构建报告。</p>
+        <p class="small" style="margin-top:8px"><b>按需生成：</b>ASS 字幕、黑屏 MKV。</p>
+        <p class="note">详细能力、增量中文匹配、字幕校对和恢复机制见 GitHub README 与 docs。</p>
       </div>
     </details>
   </section>
 
   <footer class="footer">
-    <span>HSR Voice Archive Builder · v0.9-H</span>
-    <span>Static launcher / Local engine</span>
+    <span>HSR Voice Archive Builder · v0.9-L</span>
+    <span>Static entry · Local processing</span>
   </footer>
 </main>
 
-<div class="toast" id="toast" role="status" aria-live="polite">已复制到剪贴板</div>
+<div class="toast" id="toast" role="status" aria-live="polite">已复制</div>
 
 <script>
 const toast=document.getElementById("toast");
@@ -459,7 +187,7 @@ function showToast(message){
   toast.textContent=message;
   toast.classList.add("show");
   clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>toast.classList.remove("show"),1500);
+  toastTimer=setTimeout(()=>toast.classList.remove("show"),1400);
 }
 
 async function copyText(text){
@@ -468,21 +196,17 @@ async function copyText(text){
     return;
   }
   const ta=document.createElement("textarea");
-  ta.value=text;
-  ta.setAttribute("readonly","");
-  ta.style.position="fixed";
-  ta.style.opacity="0";
-  document.body.appendChild(ta);
-  ta.select();
-  const ok=document.execCommand("copy");
-  ta.remove();
-  if(!ok) throw new Error("copy failed");
+  ta.value=text;ta.setAttribute("readonly","");
+  ta.style.position="fixed";ta.style.opacity="0";
+  document.body.appendChild(ta);ta.select();
+  const ok=document.execCommand("copy");ta.remove();
+  if(!ok)throw new Error("copy failed");
 }
 
 document.querySelectorAll("[data-copy]").forEach(btn=>{
   btn.addEventListener("click",async()=>{
     const el=document.getElementById(btn.dataset.copy);
-    if(!el) return;
+    if(!el)return;
     const original=btn.textContent;
     try{
       await copyText(el.textContent.trim());
@@ -491,36 +215,20 @@ document.querySelectorAll("[data-copy]").forEach(btn=>{
       showToast("命令已复制");
     }catch(e){
       btn.textContent="复制失败";
-      showToast("复制失败，请长按代码手动复制");
+      showToast("复制失败，请手动复制");
     }
-    setTimeout(()=>{
-      btn.textContent=original;
-      btn.classList.remove("done");
-    },1600);
+    setTimeout(()=>{btn.textContent=original;btn.classList.remove("done")},1500);
   });
 });
 
-// Accordion: keep the page compact by allowing only one expanded item at a time.
-document.querySelectorAll("details.accordion").forEach(item=>{
+document.querySelectorAll("details").forEach(item=>{
   item.addEventListener("toggle",()=>{
-    if(!item.open) return;
-    document.querySelectorAll("details.accordion[open]").forEach(other=>{
-      if(other!==item) other.open=false;
+    if(!item.open)return;
+    document.querySelectorAll("details[open]").forEach(other=>{
+      if(other!==item)other.open=false;
     });
   });
 });
-
-const ua=navigator.userAgent||"";
-const platform=document.getElementById("platform-chip");
-if(/Android/i.test(ua)){
-  platform.textContent="检测到 Android";
-}else if(/Windows/i.test(ua)){
-  platform.textContent="检测到 Windows";
-}else if(/iPhone|iPad|iPod/i.test(ua)){
-  platform.textContent="检测到 iOS / iPadOS";
-}else{
-  platform.textContent="通用浏览器";
-}
 </script>
 </body>
 </html>

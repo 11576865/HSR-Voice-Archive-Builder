@@ -437,6 +437,7 @@ def build_entries(
     mismatched_hashes: list[str] = []
     missing_wavs: list[str] = []
     official_count = 0
+    incremental_official_count = 0
     translated_count = 0
     extensible_count = 0
 
@@ -472,10 +473,45 @@ def build_entries(
             mismatched_hashes.append(filename)
 
         stem = stem_of(filename)
+        official_target_text = str(row.get("官方目标文本", "") or "").strip()
+        official_target_language = str(row.get("官方目标语言", "") or "").strip().lower()
+        official_target_source = str(row.get("官方目标来源", "") or "").strip()
+        target_is_chinese = str(target_language or "").strip().lower() in {"zh", "zh-cn", "chs", "cn"}
+
+        # v0.9-K incremental indexes stored confirmed Chinese(PRC) text only
+        # as reference_text. Migrate those rows in-place at build time so an
+        # already-downloaded project does not need to download the same audio
+        # again merely to gain the newer official_target_* columns.
+        legacy_reference_text = str(row.get("参考文本", "") or "").strip()
+        legacy_reference_language = str(row.get("参考语言", "") or "").strip().lower()
+        legacy_incremental_reference = (
+            target_is_chinese
+            and not official_target_text
+            and legacy_reference_text
+            and legacy_reference_language in {"zh", "zh-cn", "chs", "cn"}
+            and str(row.get("来源", "") or "").strip().lower() == "huggingface"
+            and str(row.get("来源细分", "") or "").strip().lower()
+            == "simon3000/starrail-voice"
+        )
+        if legacy_incremental_reference:
+            official_target_text = legacy_reference_text
+            official_target_language = "zh-cn"
+            official_target_source = "huggingface:Chinese(PRC):same_ingame_filename"
+
+        incremental_official = (
+            target_is_chinese
+            and official_target_text
+            and official_target_language in {"zh", "zh-cn", "chs", "cn"}
+        )
+
         if filename in official_labs:
             chinese = official_labs[filename]
             chinese_source = "official_chs_lab"
             official_count += 1
+        elif incremental_official:
+            chinese = official_target_text
+            chinese_source = official_target_source or "official_incremental_dataset"
+            incremental_official_count += 1
         else:
             chinese = b.get("中文", "").strip()
             chinese_source = "translated_existing" if chinese else "missing"
@@ -581,6 +617,7 @@ def build_entries(
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
         "count_official_target_lab": official_count,
+        "count_incremental_official_reference": incremental_official_count,
         "count_existing_target_text": translated_count,
         "count_missing_target_text": sum(not e.chinese for e in entries),
         "count_reference_lab": sum(bool(e.reference_text) for e in entries),

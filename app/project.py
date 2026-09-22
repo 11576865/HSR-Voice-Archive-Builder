@@ -181,6 +181,12 @@ def load_project(root_or_file: Path) -> ProjectConfig:
         raise ValueError(f"Unsupported project schema: {data.get('schema_version')}")
     data["root"] = str(path.parent)
     config = ProjectConfig(**data)
+    # Continuous FLAC is the archive builder's primary artifact. Older project
+    # files may contain make_flac=false from the former optional UI.
+    if not config.make_flac or config.generate_ass:
+        config.make_flac = True
+        config.generate_ass = False
+        save_project(config)
     remember_project(path.parent)
     return config
 
@@ -201,6 +207,10 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
     for key, value in changes.items():
         if key not in allowed or key in {"schema_version", "root"}:
             continue
+        if key == "make_flac":
+            value = True
+        if key == "generate_ass":
+            value = False
         if value is None:
             continue
         setattr(config, key, value)
