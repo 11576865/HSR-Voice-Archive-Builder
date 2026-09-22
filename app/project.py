@@ -183,8 +183,9 @@ def load_project(root_or_file: Path) -> ProjectConfig:
     config = ProjectConfig(**data)
     # Continuous FLAC is the archive builder's primary artifact. Older project
     # files may contain make_flac=false from the former optional UI.
-    if not config.make_flac:
+    if not config.make_flac or config.generate_ass:
         config.make_flac = True
+        config.generate_ass = False
         save_project(config)
     remember_project(path.parent)
     return config
@@ -208,6 +209,8 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
             continue
         if key == "make_flac":
             value = True
+        if key == "generate_ass":
+            value = False
         if value is None:
             continue
         setattr(config, key, value)
