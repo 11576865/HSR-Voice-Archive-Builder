@@ -1406,6 +1406,16 @@ function syncEditorToMemory(){
   if(currentSub._dirty)currentSub.modified=true;
 }
 
+function renderSubtitleEditState(){
+  const sub=currentSubtitle();
+  const badge=document.getElementById('subStatusBadge');
+  if(!badge)return;
+  if(!sub){badge.innerHTML='';return;}
+  badge.innerHTML=sub._dirty
+    ? '<span class="badge" style="color:var(--warn)">未保存</span>'
+    : sub.modified?'<span class="badge" style="color:var(--ok)">已人工修改</span>':'<span class="badge" style="color:var(--muted)">未修改</span>';
+}
+
 function renderActiveSubtitle(){
   if(!loadedSubtitles.length||activeSubIndex<0||activeSubIndex>=loadedSubtitles.length){
     document.getElementById('subCurrentIndexTag').textContent='无字幕条目';
@@ -1429,9 +1439,7 @@ function renderActiveSubtitle(){
   const sub=currentSubtitle();
   document.getElementById('subCurrentIndexTag').textContent='条目 #'+sub.id+' ('+(activeSubIndex+1)+' / '+loadedSubtitles.length+')';
   document.getElementById('subTimeBadge').textContent=formatClockTime(sub.start)+' - '+formatClockTime(sub.end);
-  document.getElementById('subStatusBadge').innerHTML=sub._dirty
-    ? '<span class="badge" style="color:var(--warn)">未保存</span>'
-    : sub.modified?'<span class="badge" style="color:var(--ok)">已人工修改</span>':'<span class="badge" style="color:var(--muted)">未修改</span>';
+  renderSubtitleEditState();
 
   const srcEl=document.getElementById('subSourceText');
   srcEl.textContent=sub.source_text||'—';
@@ -1571,7 +1579,7 @@ subtitleEditor.oninput=()=>{
   syncEditorToMemory();
   updateCharCounter();
   renderSubtitleList();
-  renderActiveSubtitle();
+  renderSubtitleEditState();
   scheduleSubtitleAutosave();
 };
 subtitleEditor.addEventListener('compositionstart',()=>{
@@ -1583,7 +1591,7 @@ subtitleEditor.addEventListener('compositionend',()=>{
   syncEditorToMemory();
   updateCharCounter();
   renderSubtitleList();
-  renderActiveSubtitle();
+  renderSubtitleEditState();
   scheduleSubtitleAutosave();
 });
 subtitleEditor.addEventListener('blur',()=>{
