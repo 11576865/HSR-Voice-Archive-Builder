@@ -1389,6 +1389,7 @@ def remote_character_candidates(
     such as "绯英". The saved Quick Scan result is therefore a more reliable
     source for the remote role filter than the filename token.
     """
+
     saved = str(config.remote_character or "").strip()
     detected = ""
     scan_path = (
