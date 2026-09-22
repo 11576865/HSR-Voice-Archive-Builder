@@ -357,6 +357,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
       <details id="translationRecovery" style="margin-top:14px">
         <summary>Translation Recovery（翻译恢复）</summary>
         <p class="small muted">导出仅包含翻译检查点、QA、索引与必要文本元数据；不包含 WAV、FLAC、MKV 或 API 密钥。导入会先校验完整性，再合并可复用的翻译记录。</p>
+        <div id="autoRecoveryStatus" class="notice" style="margin-bottom:10px">自动恢复保护尚无状态。</div>
         <div class="actions">
           <button type="button" class="success" id="exportRecoveryBtn">导出翻译恢复包</button>
           <input type="file" id="importRecoveryFile" accept=".hsrbackup,application/json" style="max-width:320px">
@@ -630,7 +631,16 @@ async function deleteSelectedProject(){
   const mode=managed
     ? '这是 Quick Mode 管理的专用项目目录，将删除整个项目目录，但不会删除项目目录之外的原始语音包。'
     : '这是手动项目。只会删除项目配置、.generated 和项目目录内的输出目录；其他用户文件会保留。';
-  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n警告：删除会丢失 .generated、.state、增量索引、已下载增量语音和翻译/QA 恢复数据。构建失败时应优先继续使用当前项目；如果只是不想在列表里看到它，请使用“移出列表”。\n\n'+root))return;
+  let protection='自动恢复保护状态：未检查。';
+  try{
+    const q=new FormData();q.set('project_path',root);
+    const status=await api('/api/recovery/status',{method:'POST',body:q});
+    const a=status.automatic||{};
+    protection=a.has_backup
+      ? '自动恢复保护：已存在外置恢复包，包含 '+n(a.translation_records)+' 条翻译；删除项目不会删除该恢复包。'
+      : (a.error?'自动恢复保护：最近一次保存失败（'+a.error+'）。':'自动恢复保护：当前没有外置恢复包。');
+  }catch(e){protection='自动恢复保护状态检查失败：'+shortError(e);}
+  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n'+protection+'\n\n警告：删除会丢失 .generated、.state、增量索引、已下载增量语音和项目内恢复状态。构建失败时应优先继续使用当前项目；如果只是不想在列表里看到它，请使用“移出列表”。\n\n'+root))return;
   const d=new FormData();d.set('project_path',root);
   const j=await api('/api/project/delete',{method:'POST',body:d});
   fillProject(j.project||null);
@@ -776,6 +786,21 @@ function fillProject(p){
   if(recovery){
     recovery.textContent=p.recovery?.notice||'项目目录包含可恢复资源。构建失败后优先继续当前项目，不要删除 .generated 或 .state。';
     recovery.className='notice '+(p.recovery?.can_resume?'warn':'');
+  }
+  const autoBox=document.getElementById('autoRecoveryStatus');
+  if(autoBox){
+    const a=p.recovery?.automatic||{};
+    if(a.has_backup){
+      const when=a.last_backup?new Date(a.last_backup).toLocaleString():'时间未知';
+      autoBox.textContent='自动恢复保护：已保存 · '+when+' · '+n(a.translation_records)+' 条翻译 · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知');
+      autoBox.className='notice '+(a.healthy?'ok':'warn');
+    }else if(a.error){
+      autoBox.textContent='自动恢复保护：最近一次保存失败 · '+a.error;
+      autoBox.className='notice warn';
+    }else{
+      autoBox.textContent='自动恢复保护：尚无 API 翻译检查点；产生翻译后会自动创建外置恢复包。';
+      autoBox.className='notice';
+    }
   }
   if(has){
     const ass=outputMap['HSR_Voice_Archive.ass'],assRow=document.createElement('tr');
