@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import functools
 import unicodedata
 
 
@@ -19,7 +20,7 @@ def is_cjk_char(char: str) -> bool:
     )
 
 
-def char_width_ratio(char: str) -> float:
+def _uncached_char_width_ratio(char: str) -> float:
     if is_cjk_char(char):
         return 1.0
     if char == " ":
@@ -35,8 +36,26 @@ def char_width_ratio(char: str) -> float:
     return 0.52
 
 
+# Precompute lookup table for ASCII characters (ord 0..127) for fast character width calculation
+_ASCII_WIDTH_RATIOS: tuple[float, ...] = tuple(_uncached_char_width_ratio(chr(i)) for i in range(128))
+
+
+@functools.lru_cache(maxsize=2048)
+def char_width_ratio(char: str) -> float:
+    """Return width ratio for character, with O(1) ASCII table lookup and LRU caching for unicode chars."""
+    if not char:
+        return 0.35
+    code = ord(char)
+    if code < 128:
+        return _ASCII_WIDTH_RATIOS[code]
+    return _uncached_char_width_ratio(char)
+
+
 def measure_text_width(text: str, font_size: int) -> float:
-    return sum(char_width_ratio(c) * font_size for c in text)
+    """Measure total text width in pixels using sum(map(...)) for fast C-level iteration."""
+    if not text:
+        return 0.0
+    return sum(map(char_width_ratio, text)) * font_size
 
 
 def measure_line_height(font_size: int) -> float:

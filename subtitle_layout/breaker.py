@@ -16,6 +16,12 @@ PROTECTED_PHRASES: tuple[str, ...] = (
     "a lot of",
 )
 
+# Pre-compiled regex patterns for protected phrases to avoid repeated compilation overhead during line breaking
+_PROTECTED_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = tuple(
+    (f"__PROTECTED_{idx}__", phrase, re.compile(re.escape(phrase), re.IGNORECASE))
+    for idx, phrase in enumerate(PROTECTED_PHRASES)
+)
+
 
 def _tokenize_text(text: str) -> list[str]:
     """Tokenize text preserving protected phrases, words, spaces, and punctuation."""
@@ -24,9 +30,7 @@ def _tokenize_text(text: str) -> list[str]:
 
     normalized = text
     phrase_map: dict[str, str] = {}
-    for idx, phrase in enumerate(PROTECTED_PHRASES):
-        placeholder = f"__PROTECTED_{idx}__"
-        pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+    for placeholder, _phrase, pattern in _PROTECTED_PATTERNS:
         found = pattern.findall(normalized)
         for original in found:
             phrase_map[placeholder] = original
@@ -83,8 +87,7 @@ def _protected_phrase_spans(text: str) -> list[tuple[int, int]]:
     """Return character index ranges (start, end) for protected phrases in text."""
     spans: list[tuple[int, int]] = []
     text_lower = text.lower()
-    for phrase in PROTECTED_PHRASES:
-        pattern = re.compile(re.escape(phrase), re.IGNORECASE)
+    for _ph, _orig, pattern in _PROTECTED_PATTERNS:
         for match in pattern.finditer(text_lower):
             spans.append((match.start(), match.end()))
     return spans
