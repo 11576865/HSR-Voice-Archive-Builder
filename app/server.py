@@ -21,7 +21,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
-from .recovery import build_text_recovery, import_text_recovery
+from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -349,7 +349,10 @@ def api_quick_build(
             raise RuntimeError("FFmpeg is not installed or is not available on PATH")
 
         def run(report_progress):
-            return build_project_v02(
+            def auto_recovery(reason: str) -> None:
+                try_write_auto_text_recovery(config, reason=reason)
+
+            report = build_project_v02(
                 paths["index"],
                 paths["wavs"],
                 paths["output"],
@@ -374,7 +377,10 @@ def api_quick_build(
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
                 review_official_target=config.review_official_target,
+                recovery_callback=auto_recovery,
             )
+            auto_recovery("build-complete")
+            return report
 
         job = create_job(
             "quick-build", run, with_progress=True,
@@ -670,6 +676,9 @@ def api_review_import(review_text: str = Form(...)):
             output_path=output / "semantic_review_required.txt",
             target_language=config.target_language,
         )
+        result["auto_recovery"] = try_write_auto_text_recovery(
+            config, reason="manual-review-import"
+        )
         return {"ok": True, "result": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
@@ -939,6 +948,19 @@ def api_update_apply_remote():
             project_root=config.root, project_name=config.name,
         )
         return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/status")
+def api_recovery_status(project_path: str = Form("")):
+    try:
+        config = (
+            load_project(Path(project_path).expanduser().resolve())
+            if project_path.strip()
+            else _active_config()
+        )
+        return {"ok": True, "automatic": auto_recovery_status(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 

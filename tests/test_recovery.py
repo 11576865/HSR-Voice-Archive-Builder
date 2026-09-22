@@ -7,8 +7,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.project import create_project, update_project
-from app.recovery import build_text_recovery, import_text_recovery
+from app.project import create_project, delete_project, update_project
+from app.recovery import auto_recovery_status, build_text_recovery, import_text_recovery, write_auto_text_recovery
 
 
 def write_index(path: Path, english: str = "Hello.") -> None:
@@ -213,6 +213,76 @@ class TextRecoveryTests(unittest.TestCase):
             package["files"]["state/.translation_checkpoint.json"]["sha256"] = "0" * 64
             with self.assertRaisesRegex(ValueError, "checksum mismatch"):
                 import_text_recovery(config, json.dumps(package, ensure_ascii=False))
+
+
+    def test_automatic_recovery_is_external_and_survives_project_delete(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app_state_dir = root / "app-state"
+            state_file = app_state_dir / "state.json"
+            project_root = root / "managed-project"
+            write_index(project_root / ".generated" / "quick_index.csv")
+            (project_root / ".state").mkdir(parents=True)
+            (project_root / ".state" / ".translation_checkpoint.json").write_text(
+                json.dumps(checkpoint(), ensure_ascii=False), encoding="utf-8"
+            )
+
+            with patch("app.project.STATE_FILE", state_file), patch(
+                "app.recovery.STATE_DIR", app_state_dir
+            ):
+                config = create_project(
+                    project_root,
+                    name="Protected",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "voice.zip"),
+                    managed_project_root=True,
+                )
+                status = write_auto_text_recovery(
+                    config, reason="translation-batch"
+                )
+                latest = Path(status["path"])
+                self.assertTrue(status["has_backup"])
+                self.assertTrue(status["healthy"])
+                self.assertEqual(status["translation_records"], 1)
+                self.assertTrue(latest.is_file())
+                self.assertNotEqual(latest.parent, project_root)
+                self.assertNotIn(str(project_root), str(latest))
+
+                delete_project(project_root)
+                self.assertFalse(project_root.exists())
+                self.assertTrue(latest.is_file())
+
+    def test_automatic_recovery_status_reports_reason_and_latest(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app_state_dir = root / "app-state"
+            state_file = app_state_dir / "state.json"
+            project_root = root / "project"
+            write_index(project_root / ".generated" / "quick_index.csv")
+            (project_root / ".state").mkdir(parents=True)
+            (project_root / ".state" / ".translation_checkpoint.json").write_text(
+                json.dumps(checkpoint(), ensure_ascii=False), encoding="utf-8"
+            )
+
+            with patch("app.project.STATE_FILE", state_file), patch(
+                "app.recovery.STATE_DIR", app_state_dir
+            ):
+                config = create_project(
+                    project_root,
+                    name="Protected",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "voice.zip"),
+                )
+                write_auto_text_recovery(config, reason="manual-review-import")
+                status = auto_recovery_status(config)
+
+            self.assertTrue(status["has_backup"])
+            self.assertTrue(status["healthy"])
+            self.assertEqual(status["reason"], "manual-review-import")
+            self.assertEqual(status["translation_records"], 1)
+            self.assertFalse(status["contains_audio"])
+            self.assertTrue(status["last_backup"])
+
 
 
 if __name__ == "__main__":
