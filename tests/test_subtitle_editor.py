@@ -67,8 +67,6 @@ class TestSubtitleEditor(unittest.TestCase):
                 wav_source="wavs",
                 output_dir="output",
             )
-            from app.project import update_project
-            update_project(cfg, generate_ass=True)
             _set_active(cfg)
 
             resp = self.client.get("/api/project/active/subtitles", headers=self.headers)
@@ -240,15 +238,13 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertIn("final_chs", corrected)
             self.assertIn("规则，就是用来打破的！", corrected)
 
-            # Verify ASS and SRT files regenerated
+            # SRT is a core output; ASS is generated only on demand.
             ass_file = out / "HSR_Voice_Archive.ass"
             srt_file = out / "HSR_Voice_Archive.srt"
-            self.assertTrue(ass_file.is_file())
+            self.assertFalse(ass_file.exists())
             self.assertTrue(srt_file.is_file())
 
-            ass_content = ass_file.read_text(encoding="utf-8-sig")
             srt_content = srt_file.read_text(encoding="utf-8-sig")
-            self.assertIn("规则，就是用来打破的！", ass_content)
             self.assertIn("规则，就是用来打破的！", srt_content)
 
             # Fetch via GET to verify timestamps and source text are NOT modified
