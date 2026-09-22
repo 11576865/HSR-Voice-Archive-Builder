@@ -498,6 +498,8 @@ class Handler(BaseHTTPRequestHandler):
                 target_language=data.get("target_language", "zh-CN"),
                 reference_language=data.get("reference_language", "auto"),
                 remote_character=data.get("remote_character", ""),
+                translate_missing=_bool(data.get("translate_missing")) if "translate_missing" in data else True,
+                review_official_target=_bool(data.get("review_official_target")) if "review_official_target" in data else True,
             )
             _set_active(config)
             self._json({"ok": True, "project": project_summary(config)})
