@@ -10,6 +10,7 @@ import stat
 import subprocess
 import tempfile
 import zipfile
+from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping
@@ -994,6 +995,256 @@ def build_continuous_flac(
         "lossless_pcm_verified": True,
         "pcm_streamed_directly": True,
         "pcm_frames_written": written_frames,
+    }
+
+
+def extract_major_group(entry: Entry) -> str | None:
+    raw_group = str(entry.group or "").strip()
+    if not raw_group or raw_group.lower() == "unknown":
+        from .identity import infer_group
+        raw_group = infer_group(entry.source_member_id or entry.filename)
+    if not raw_group or raw_group.lower() == "unknown":
+        return None
+
+    m_chap = re.match(r"^(chapter\d+)", raw_group, re.IGNORECASE)
+    if m_chap:
+        return m_chap.group(1).lower()
+
+    m_fin = re.match(r"^(chapterfinality\d*|finality)", raw_group, re.IGNORECASE)
+    if m_fin:
+        return m_fin.group(1).lower()
+
+    if re.match(r"^archive", raw_group, re.IGNORECASE):
+        return "archive"
+
+    m_side = re.match(r"^(side(?:\d+|x)?)", raw_group, re.IGNORECASE)
+    if m_side:
+        return m_side.group(1).lower()
+
+    m_comp = re.match(r"^(companion\d*)", raw_group, re.IGNORECASE)
+    if m_comp:
+        return m_comp.group(1).lower()
+
+    return raw_group.lower()
+
+
+def major_group_sort_key(mg: str) -> tuple[int, int | str, str]:
+    mg_lower = mg.lower()
+    if mg_lower == "archive":
+        return (0, 0, mg_lower)
+    m_chap = re.match(r"^chapter(\d+)$", mg_lower)
+    if m_chap:
+        return (1, int(m_chap.group(1)), mg_lower)
+    if "finality" in mg_lower:
+        return (2, 0, mg_lower)
+    m_comp = re.match(r"^companion(\d*)$", mg_lower)
+    if m_comp:
+        num = int(m_comp.group(1)) if m_comp.group(1).isdigit() else 0
+        return (3, num, mg_lower)
+    m_side = re.match(r"^side(\w*)$", mg_lower)
+    if m_side:
+        num = int(m_side.group(1)) if m_side.group(1).isdigit() else 999
+        return (4, num, mg_lower)
+    return (5, 0, mg_lower)
+
+
+def build_chapter_ordered_flac(
+    entries: list[Entry],
+    wav_root: Path,
+    out_flac: Path,
+    intro_gap: float = 9.0,
+    same_group_gap: float = 1.50,
+    group_gap: float = 3.00,
+    compression_level: int = 8,
+) -> dict[str, object]:
+    wav_members = collect_wav_members(wav_root)
+    if not entries:
+        raise ValueError("No entries")
+
+    groups: dict[str, list[Entry]] = defaultdict(list)
+    unassigned_entries: list[Entry] = []
+
+    for entry in entries:
+        mg = extract_major_group(entry)
+        if mg is None:
+            unassigned_entries.append(entry)
+        else:
+            groups[mg].append(entry)
+
+    ordered_major_groups = sorted(groups.keys(), key=major_group_sort_key)
+    ordered_entries: list[Entry] = []
+
+    for mg in ordered_major_groups:
+        group_items = sorted(groups[mg], key=lambda e: e.index)
+        ordered_entries.extend(group_items)
+
+    if not ordered_entries:
+        raise ValueError("No assignable entries for chapter-ordered FLAC")
+
+    sr = entries[0].sample_rate
+    ch = entries[0].channels
+    sw = entries[0].sample_width_bits // 8
+    pcm_format, pcm_codec = _pcm_format(sw)
+    silence_frame = b"\x00" * (ch * sw)
+
+    intro_samples = round(intro_gap * sr)
+    same_samples = round(same_group_gap * sr)
+    group_samples = round(group_gap * sr)
+
+    out_flac.parent.mkdir(parents=True, exist_ok=True)
+    partial = out_flac.with_name(out_flac.stem + ".partial.flac")
+    partial.unlink(missing_ok=True)
+    pcm_hash = hashlib.sha256()
+    written_frames = 0
+
+    with tempfile.TemporaryFile() as stderr_log:
+        cmd = [
+            "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+            "-f", pcm_format,
+            "-ar", str(sr),
+            "-ac", str(ch),
+            "-i", "pipe:0",
+            "-c:a", "flac",
+            "-compression_level", str(compression_level),
+            str(partial),
+        ]
+        proc = subprocess.Popen(cmd, stdin=subprocess.PIPE, stderr=stderr_log)
+        if proc.stdin is None:
+            raise RuntimeError("Unable to open FFmpeg stdin")
+
+        try:
+            remaining = intro_samples
+            block_frames = 65536
+            block = silence_frame * block_frames
+            while remaining > 0:
+                n = min(block_frames, remaining)
+                data = block if n == block_frames else silence_frame * n
+                proc.stdin.write(data)
+                pcm_hash.update(data)
+                written_frames += n
+                remaining -= n
+
+            for i, e in enumerate(ordered_entries):
+                src, _resolved = resolve_member_wav(
+                    wav_members, e.filename, e.source_member_id
+                )
+                if src is None:
+                    raise RuntimeError(
+                        "WAV missing while streaming chapter-ordered FLAC: "
+                        f"{e.source_member_id or e.filename}"
+                    )
+                info = parse_wav_pcm(src)
+                actual = (
+                    info.sample_rate,
+                    info.channels,
+                    info.bits_per_sample,
+                    info.frames,
+                )
+                expected = (
+                    e.sample_rate,
+                    e.channels,
+                    e.sample_width_bits,
+                    e.source_frames,
+                )
+                if actual != expected:
+                    raise RuntimeError(
+                        f"WAV changed or no longer matches manifest at {e.filename}: "
+                        f"{actual} != {expected}"
+                    )
+                for frames in iter_pcm_chunks(src, info):
+                    proc.stdin.write(frames)
+                    pcm_hash.update(frames)
+                    written_frames += len(frames) // (ch * sw)
+
+                if i + 1 < len(ordered_entries):
+                    next_e = ordered_entries[i + 1]
+                    gap_len = same_samples if e.group == next_e.group else group_samples
+                    remaining = gap_len
+                    while remaining > 0:
+                        n = min(block_frames, remaining)
+                        data = block if n == block_frames else silence_frame * n
+                        proc.stdin.write(data)
+                        pcm_hash.update(data)
+                        written_frames += n
+                        remaining -= n
+
+            proc.stdin.close()
+            rc = proc.wait()
+        except BaseException:
+            try:
+                proc.stdin.close()
+            except Exception:
+                pass
+            proc.kill()
+            proc.wait()
+            partial.unlink(missing_ok=True)
+            raise
+
+        if rc != 0:
+            stderr_log.seek(0)
+            detail = stderr_log.read().decode("utf-8", "replace").strip()
+            partial.unlink(missing_ok=True)
+            raise RuntimeError(f"FFmpeg chapter FLAC encode failed ({rc}): {detail}")
+
+    expected_frames = intro_samples
+    for i, e in enumerate(ordered_entries):
+        expected_frames += e.source_frames
+        if i + 1 < len(ordered_entries):
+            next_e = ordered_entries[i + 1]
+            expected_frames += same_samples if e.group == next_e.group else group_samples
+
+    if written_frames != expected_frames:
+        partial.unlink(missing_ok=True)
+        raise RuntimeError(
+            f"PCM frame count mismatch before verification: {written_frames} != {expected_frames}"
+        )
+
+    decoded_hash = hashlib.sha256()
+    with tempfile.TemporaryFile() as decode_err:
+        decoded = subprocess.Popen(
+            [
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(partial),
+                "-f", pcm_format, "-acodec", pcm_codec, "-",
+            ],
+            stdout=subprocess.PIPE,
+            stderr=decode_err,
+        )
+        if decoded.stdout is None:
+            partial.unlink(missing_ok=True)
+            raise RuntimeError("Unable to open FFmpeg verification stream")
+        while True:
+            chunk = decoded.stdout.read(1024 * 1024)
+            if not chunk:
+                break
+            decoded_hash.update(chunk)
+        rc = decoded.wait()
+        if rc != 0:
+            decode_err.seek(0)
+            detail = decode_err.read().decode("utf-8", "replace").strip()
+            partial.unlink(missing_ok=True)
+            raise RuntimeError(f"FFmpeg decode verification failed ({rc}): {detail}")
+
+    source_pcm_hash = pcm_hash.hexdigest()
+    decoded_pcm_hash = decoded_hash.hexdigest()
+    if source_pcm_hash != decoded_pcm_hash:
+        partial.unlink(missing_ok=True)
+        raise RuntimeError("Chapter FLAC decoded PCM does not match assembled source PCM")
+
+    os.replace(partial, out_flac)
+    return {
+        "chapter_flac_path": str(out_flac),
+        "chapter_flac_filename": out_flac.name,
+        "chapter_flac_size_bytes": out_flac.stat().st_size,
+        "chapter_flac_total_items": len(ordered_entries),
+        "chapter_flac_duration_seconds": written_frames / sr,
+        "chapter_flac_group_order": ordered_major_groups,
+        "chapter_flac_unassigned_count": len(unassigned_entries),
+        "chapter_flac_unassigned_items": [
+            e.source_member_id or e.filename for e in unassigned_entries
+        ],
+        "chapter_flac_assembled_pcm_sha256": source_pcm_hash,
+        "chapter_flac_decoded_pcm_sha256": decoded_pcm_hash,
+        "chapter_flac_lossless_pcm_verified": True,
     }
 
 
