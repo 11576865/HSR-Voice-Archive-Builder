@@ -508,7 +508,12 @@ def api_project_delete(project_path: str = Form(...)):
         root = Path(project_path).expanduser().resolve()
         was_active = _active_root is not None and _active_root.resolve() == root
         assert_project_idle(str(root))
+        config = load_project(root)
+        protection = try_write_auto_text_recovery(
+            config, reason="pre-delete-safety"
+        )
         result = delete_project(root)
+        result["auto_recovery"] = protection
         result["deleted_job_records"] = delete_project_jobs(str(root))
         if was_active:
             _clear_active()
