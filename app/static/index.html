@@ -354,6 +354,16 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
         <p class="small muted">Manifest、时间轴、构建报告与更新计划用于审计、复现和后续自动化，不是普通播放所必需的成品。</p>
         <table><tbody id="archiveOutputTable"></tbody></table>
       </details>
+      <details id="translationRecovery" style="margin-top:14px">
+        <summary>Translation Recovery（翻译恢复）</summary>
+        <p class="small muted">导出仅包含翻译检查点、QA、索引与必要文本元数据；不包含 WAV、FLAC、MKV 或 API 密钥。导入会先校验完整性，再合并可复用的翻译记录。</p>
+        <div class="actions">
+          <button type="button" class="success" id="exportRecoveryBtn">导出翻译恢复包</button>
+          <input type="file" id="importRecoveryFile" accept=".hsrbackup,application/json" style="max-width:320px">
+          <button type="button" id="importRecoveryBtn">导入翻译恢复包</button>
+        </div>
+        <div id="recoveryImportStatus" class="small muted" style="margin-top:8px" role="status" aria-live="polite">尚未导入恢复包。</div>
+      </details>
       <details id="projectResources" style="margin-top:14px">
         <summary>Project Resources（项目资源）</summary>
         <p class="small muted">.generated 是可恢复的项目资源层，不是一次性缓存。它可保存增量音频、组合音频和内部索引；不要在失败后手动删除。</p>
@@ -1145,6 +1155,38 @@ document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormD
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
+async function exportTranslationRecovery(){
+  const s=document.getElementById('recoveryImportStatus');
+  try{
+    const r=await fetch('/api/recovery/export',{headers:headers(),cache:'no-store'});
+    if(!r.ok)throw new Error('HTTP '+r.status+' · '+await r.text());
+    const blob=await r.blob();
+    let filename='HSR-Translation-Recovery.hsrbackup';
+    const disposition=r.headers.get('Content-Disposition')||'';
+    const m=disposition.match(/filename="([^"]+)"/i);if(m)filename=m[1];
+    const url=URL.createObjectURL(blob),a=document.createElement('a');
+    a.href=url;a.download=filename;a.click();
+    setTimeout(()=>URL.revokeObjectURL(url),1000);
+    if(s)s.textContent='恢复包已导出：'+filename+'（不含音频）';
+  }catch(x){if(s)s.textContent='导出失败：'+shortError(x);setLog(String(x))}
+}
+async function importTranslationRecovery(){
+  const input=document.getElementById('importRecoveryFile'),button=document.getElementById('importRecoveryBtn'),s=document.getElementById('recoveryImportStatus');
+  try{
+    const file=input.files?.[0];if(!file)throw new Error('请先选择 .hsrbackup 文件');
+    button.disabled=true;if(s)s.textContent='正在校验并导入恢复包…';
+    const d=new FormData();d.set('recovery_text',await file.text());
+    const j=await api('/api/recovery/import',{method:'POST',body:d});
+    fillProject(j.project);
+    const x=j.result||{};
+    const extra=x.checkpoint_conflict?'；当前项目已有不同翻译路线的检查点，未覆盖':'';
+    if(s)s.textContent='包内翻译 '+n(x.package_records)+' 条；当前输入完全匹配 '+n(x.matching_now)+' 条；输入已变化 '+n(x.changed_now)+' 条；当前项目不存在 '+n(x.not_present_now)+' 条；已恢复/合并 '+n(x.imported_records)+' 条'+extra+'。';
+    setLog(j.result||j);
+  }catch(x){if(s)s.textContent='导入失败：'+shortError(x);setLog(String(x))}
+  finally{if(button)button.disabled=false}
+}
+document.getElementById('exportRecoveryBtn').onclick=exportTranslationRecovery;
+document.getElementById('importRecoveryBtn').onclick=importTranslationRecovery;
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('submitReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus'),input=document.getElementById('reviewFileInput'),button=document.getElementById('submitReviewBtn');try{const file=input.files?.[0];if(!file)throw new Error('请先选择修改后的 TXT 文件');button.disabled=true;s.textContent='正在校验并导入人工修订…';const d=new FormData();d.set('review_text',await file.text());const j=await api('/api/review/import',{method:'POST',body:d});fillProject(j.project);const r=j.result||{};if(r.remaining>0){s.textContent='已导入 '+n(r.imported)+' 条，仍有 '+n(r.remaining)+' 条未填写；请下载更新后的 TXT 继续修订。';button.disabled=false;return;}s.textContent='人工修订已导入，正在从检查点继续构建…';beginBuildLaunch();const build=await api('/api/project/build',{method:'POST'});watchJob(build.job);}catch(x){button.disabled=false;s.textContent='导入失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
