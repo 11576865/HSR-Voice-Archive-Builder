@@ -594,3 +594,4 @@ def update_project_subtitles(
         "total_count": len(entries),
         **refreshed,
     }
+
