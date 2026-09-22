@@ -1681,9 +1681,10 @@ def build_project_v02(
         report["reference_language"] = reference_language
         report["reference_text_embedded"] = bool(reference_text_embedded)
         report["count_incremental_official_reference"] = sum(
-            bool(str(getattr(entry, "reference_text", "") or "").strip())
-            and str(getattr(entry, "reference_language", "") or "").lower()
-            in {"zh", "zh-cn", "chs", "cn"}
+            str(getattr(entry, "chinese_source", "") or "").startswith(
+                "huggingface:Chinese(PRC):"
+            )
+            or str(getattr(entry, "chinese_source", "") or "") == "official_incremental_dataset"
             for entry in entries
         )
         report["count_unreferenced_api_target_text"] = sum(
