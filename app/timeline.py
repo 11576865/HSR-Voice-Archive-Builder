@@ -18,9 +18,9 @@ def resolve_timeline(
     rows: list[dict[str, object]],
     sample_rate: int,
     *,
-    intro_gap: float = 5.0,
-    same_group_gap: float = 0.40,
-    group_gap: float = 1.20,
+    intro_gap: float = 9.0,
+    same_group_gap: float = 1.50,
+    group_gap: float = 3.00,
 ) -> dict[str, Any]:
     """Resolve voice and gap segments once, using integer PCM sample positions."""
 
