@@ -7,7 +7,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import patch
 
-from app.project import create_project
+from app.project import create_project, update_project
 from app.recovery import build_text_recovery, import_text_recovery
 
 
@@ -89,8 +89,7 @@ class TextRecoveryTests(unittest.TestCase):
                     project_root,
                     name="Recovery",
                     index_csv=".generated/quick_index.csv",
-                    wav_source=str(root / "voice.zip"),
-                    translation_model="gpt-5.6-terra",
+                    wav_source=str(root / "voice.zip")
                 )
                 data, filename, summary = build_text_recovery(config)
 
@@ -121,15 +120,13 @@ class TextRecoveryTests(unittest.TestCase):
                     source_root,
                     name="Source",
                     index_csv=".generated/quick_index.csv",
-                    wav_source=str(root / "voice.zip"),
-                    translation_model="gpt-5.6-terra",
+                    wav_source=str(root / "voice.zip")
                 )
                 target = create_project(
                     target_root,
                     name="Target",
                     index_csv=".generated/quick_index.csv",
-                    wav_source=str(root / "voice.zip"),
-                    translation_model="gpt-5.6-terra",
+                    wav_source=str(root / "voice.zip")
                 )
                 data, _, _ = build_text_recovery(source)
                 result = import_text_recovery(target, data.decode("utf-8"))
@@ -170,16 +167,16 @@ class TextRecoveryTests(unittest.TestCase):
                     source_root,
                     name="Source",
                     index_csv=".generated/quick_index.csv",
-                    wav_source=str(root / "voice.zip"),
-                    translation_model="old-model",
+                    wav_source=str(root / "voice.zip")
                 )
                 target = create_project(
                     target_root,
                     name="Target",
                     index_csv=".generated/quick_index.csv",
-                    wav_source=str(root / "voice.zip"),
-                    translation_model="new-model",
+                    wav_source=str(root / "voice.zip")
                 )
+                update_project(source, translation_model="old-model")
+                update_project(target, translation_model="new-model")
                 data, _, _ = build_text_recovery(source)
                 result = import_text_recovery(target, data.decode("utf-8"))
 
