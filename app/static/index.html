@@ -179,6 +179,9 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
               </div>
               <label>术语覆盖层 CSV / JSON（可选）</label><input name="glossary_path" placeholder="D:\\HSR\\glossary.csv">
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
+              <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
+              <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
+              <label class="check"><input name="review_official_target" type="checkbox" checked> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
               <div class="actions"><button class="success">创建</button></div>
             </form>
           </div>
@@ -293,8 +296,8 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
       <div id="archiveStats" class="stats hidden" style="margin-top:12px">
         <div class="stat"><b id="statTotal">—</b><span>已归档语音</span></div>
         <div class="stat"><b id="statOfficial">—</b><span>官方中文字幕</span></div>
-        <div class="stat"><b id="statIncrementalOfficial">—</b><span>增量官方中文参考</span></div>
-        <div class="stat"><b id="statApiOnly">—</b><span>无官方参考的 API 译文</span></div>
+        <div class="stat"><b id="statIncrementalOfficial">—</b><span>增量官方中文</span></div>
+        <div class="stat"><b id="statApiOnly">—</b><span>API 补译</span></div>
       </div>
       <div id="translationUsage" class="small muted" style="margin-top:10px"></div>
       <div id="finishedOutputs" class="hidden">
@@ -1038,7 +1041,13 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   fillProject(j.project);setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('快速构建任务已启动：'+j.job);watchJob(j.job);
 }catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('openForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/open',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j);await refresh()}catch(x){setLog(String(x))}};
-document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/create',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j);await refresh()}catch(x){setLog(String(x))}};
+document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{
+  const data=fd(e.target);
+  data.set('translate_missing',e.target.elements.translate_missing?.checked?'true':'false');
+  data.set('review_official_target',e.target.elements.review_official_target?.checked?'true':'false');
+  const j=await api('/api/project/create',{method:'POST',body:data});
+  fillProject(j.project);setLog(j);await refresh()
+}catch(x){setLog(String(x))}};
 function syncAdvancedTranslationVisibility(){
   const form=document.getElementById('projectForm');
   const sameLanguage=(form.elements.source_text_language?.value||'')===(form.elements.target_language?.value||'');
