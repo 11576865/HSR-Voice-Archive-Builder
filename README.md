@@ -95,6 +95,17 @@ primary voice package + canonical index
 
 Continuous FLAC is a fixed project output. ASS and black MKV are on-demand finished outputs.
 
+## Remote index cache and offline use
+
+Quick Mode resolves dialogue order from the AI-Hobbyist text index workbook. That workbook is cached **by URL** under `~/.hsr-voice-archive-builder/remote-index-cache/`, so one successful download serves every character: fresh for 24 hours, then up to seven more days from the stale copy with a warning when a refresh fails.
+
+For a device without usable network access, download `EN.xlsx` (or `CHS/JP/KR.xlsx`) from the AI-Hobbyist index repository on any networked machine, copy it over, and point the environment variable at it before starting the app:
+
+```bash
+export HSR_VOICE_INDEX_FILE=/path/to/EN.xlsx
+bash run_termux.sh
+```
+
 ## Incremental updates
 
 The dashboard can check the configured remote source-text index for additions and resolve confirmed files against the Hugging Face voice dataset.
