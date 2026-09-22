@@ -9,12 +9,14 @@ from pathlib import Path
 from typing import Any
 
 from .builder import atomic_write_text
-from .project import ProjectConfig, resolve_project_path
+from .project import ProjectConfig, STATE_DIR, resolve_project_path
 from .schema import normalize_index
 
 RECOVERY_FORMAT = "hsr-voice-text-recovery"
 RECOVERY_SCHEMA_VERSION = 1
 MAX_RECOVERY_BYTES = 32 * 1024 * 1024
+AUTO_RECOVERY_STATUS_FILE = "recovery_status.json"
+AUTO_RECOVERY_LATEST_FILE = "latest.hsrbackup"
 
 _STATE_FILES = (
     ".translation_checkpoint.json",
@@ -206,6 +208,128 @@ def build_text_recovery(config: ProjectConfig) -> tuple[bytes, str, dict[str, An
         "contains_audio": False,
     }
     return data, filename, summary
+
+
+def _auto_recovery_dir(config: ProjectConfig) -> Path:
+    root = str(Path(config.root).expanduser().resolve())
+    project_id = hashlib.sha256(root.encode("utf-8")).hexdigest()[:16]
+    return STATE_DIR / "recovery" / f"project-{project_id}"
+
+
+def auto_recovery_status(config: ProjectConfig) -> dict[str, Any]:
+    directory = _auto_recovery_dir(config)
+    latest = directory / AUTO_RECOVERY_LATEST_FILE
+    status_file = directory / AUTO_RECOVERY_STATUS_FILE
+    status: dict[str, Any] = {}
+    if status_file.is_file():
+        try:
+            loaded = json.loads(status_file.read_text(encoding="utf-8"))
+            if isinstance(loaded, dict):
+                status = loaded
+        except (OSError, ValueError, TypeError):
+            status = {}
+    has_backup = latest.is_file()
+    return {
+        "enabled": True,
+        "has_backup": has_backup,
+        "healthy": bool(status.get("healthy", has_backup)),
+        "last_backup": str(status.get("last_backup", "")),
+        "reason": str(status.get("reason", "")),
+        "translation_records": int(status.get("translation_records", 0) or 0),
+        "size_bytes": latest.stat().st_size if has_backup else 0,
+        "path": str(latest),
+        "directory": str(directory),
+        "error": str(status.get("error", "")),
+        "contains_audio": False,
+    }
+
+
+def write_auto_text_recovery(
+    config: ProjectConfig,
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    state = resolve_project_path(config, config.state_dir)
+    checkpoint = state / ".translation_checkpoint.json" if state is not None else None
+    if checkpoint is None or not checkpoint.is_file():
+        status = auto_recovery_status(config)
+        status.update({
+            "reason": str(reason or "checkpoint-not-ready"),
+            "skipped": True,
+            "message": "尚无 API 翻译检查点，不需要创建自动恢复包。",
+        })
+        return status
+
+    data, _filename, summary = build_text_recovery(config)
+    directory = _auto_recovery_dir(config)
+    directory.mkdir(parents=True, exist_ok=True)
+    latest = directory / AUTO_RECOVERY_LATEST_FILE
+    status_file = directory / AUTO_RECOVERY_STATUS_FILE
+    atomic_write_text(latest, data.decode("utf-8"))
+    now = datetime.now(timezone.utc).isoformat()
+    status = {
+        "schema_version": 1,
+        "healthy": True,
+        "last_backup": now,
+        "reason": str(reason or "unspecified"),
+        "translation_records": int(summary.get("translation_records", 0) or 0),
+        "size_bytes": latest.stat().st_size,
+        "path": str(latest),
+        "project_name": config.name,
+        "project_root": str(Path(config.root).expanduser().resolve()),
+        "contains_audio": False,
+        "error": "",
+    }
+    atomic_write_text(
+        status_file,
+        json.dumps(status, ensure_ascii=False, indent=2),
+    )
+    return auto_recovery_status(config)
+
+
+def try_write_auto_text_recovery(
+    config: ProjectConfig,
+    *,
+    reason: str,
+) -> dict[str, Any]:
+    try:
+        return write_auto_text_recovery(config, reason=reason)
+    except Exception as exc:
+        directory = _auto_recovery_dir(config)
+        failure = {
+            "schema_version": 1,
+            "healthy": False,
+            "last_backup": "",
+            "reason": str(reason or "unspecified"),
+            "translation_records": 0,
+            "size_bytes": 0,
+            "path": str(directory / AUTO_RECOVERY_LATEST_FILE),
+            "project_name": config.name,
+            "project_root": str(Path(config.root).expanduser().resolve()),
+            "contains_audio": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
+        try:
+            directory.mkdir(parents=True, exist_ok=True)
+            atomic_write_text(
+                directory / AUTO_RECOVERY_STATUS_FILE,
+                json.dumps(failure, ensure_ascii=False, indent=2),
+            )
+        except Exception:
+            pass
+        return {
+            "enabled": True,
+            "has_backup": (directory / AUTO_RECOVERY_LATEST_FILE).is_file(),
+            "healthy": False,
+            "last_backup": "",
+            "reason": failure["reason"],
+            "translation_records": 0,
+            "size_bytes": 0,
+            "path": failure["path"],
+            "directory": str(directory),
+            "error": failure["error"],
+            "contains_audio": False,
+        }
 
 
 def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str, Any]:
