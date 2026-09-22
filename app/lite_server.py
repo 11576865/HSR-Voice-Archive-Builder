@@ -853,8 +853,8 @@ class Handler(BaseHTTPRequestHandler):
                     raise
                 with index.open("r", encoding="utf-8-sig", newline="") as handle:
                     existing_rows = list(csv.DictReader(handle))
-                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "sha256"]
-                for field in ("reference_text", "reference_language"):
+                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256"]
+                for field in ("reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source"):
                     if field not in fields:
                         fields.append(field)
                 known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
@@ -863,13 +863,13 @@ class Handler(BaseHTTPRequestHandler):
                     if filename not in known:
                         metadata = details.get(filename, {})
                         reference = confirmed_references.get(filename, {})
-                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": "simon3000/starrail-voice", "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "sha256": ""})
+                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": "simon3000/starrail-voice", "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
                 updated_index = generated / "quick_index_incremental.csv"
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
                 update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "reference_guided_translation": len(reference_successful), "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
