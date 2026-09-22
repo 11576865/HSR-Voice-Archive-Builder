@@ -693,6 +693,16 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "删除项目会丢失已下载语音、增量索引、翻译缓存或构建状态。"
         ),
     }
+    try:
+        from .recovery import auto_recovery_status
+        recovery["automatic"] = auto_recovery_status(config)
+    except Exception as exc:
+        recovery["automatic"] = {
+            "enabled": True,
+            "has_backup": False,
+            "healthy": False,
+            "error": f"{type(exc).__name__}: {exc}",
+        }
     return {
         "name": config.name,
         "root": config.root,
