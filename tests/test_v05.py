@@ -176,12 +176,20 @@ Attributes = A_ -rw-r--r--
                     raise RuntimeError("simulated 429")
                 return [{"id": "a.wav", "chinese": "阿尔法"}]
 
+            recovery_reasons = []
             with patch("app.translator.make_client", return_value=object()), patch(
                 "app.translator.translate_records", side_effect=flaky
             ):
                 with self.assertRaises(RuntimeError):
-                    _translate_missing(entries, "test-model", 1, checkpoint)
+                    _translate_missing(
+                        entries,
+                        "test-model",
+                        1,
+                        checkpoint,
+                        recovery_callback=recovery_reasons.append,
+                    )
 
+            self.assertEqual(recovery_reasons, ["translation-batch"])
             self.assertTrue(checkpoint.is_file())
             saved = checkpoint.read_text(encoding="utf-8")
             self.assertIn("a.wav", saved)
