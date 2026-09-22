@@ -306,22 +306,6 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
             return
-        if path == "/api/recovery/status":
-            raw = data.get("project_path", "").strip()
-            config = (
-                load_project(Path(raw).expanduser().resolve())
-                if raw
-                else _active_config()
-            )
-            self._json({"ok": True, "automatic": auto_recovery_status(config)})
-            return
-
-        if path == "/api/recovery/import":
-            config = _active_config()
-            result = import_text_recovery(config, data.get("recovery_text", ""))
-            self._json({"ok": True, "result": result, "project": project_summary(config)})
-            return
-
         if "/subtitles" in path and path.startswith("/api/project/"):
             query = parse_qs(urlsplit(self.path).query)
             q = (query.get("q") or [None])[-1]
@@ -391,6 +375,22 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/recovery/status":
+            raw = data.get("project_path", "").strip()
+            config = (
+                load_project(Path(raw).expanduser().resolve())
+                if raw
+                else _active_config()
+            )
+            self._json({"ok": True, "automatic": auto_recovery_status(config)})
+            return
+
+        if path == "/api/recovery/import":
+            config = _active_config()
+            result = import_text_recovery(config, data.get("recovery_text", ""))
+            self._json({"ok": True, "result": result, "project": project_summary(config)})
+            return
+
         if "/subtitles" in path and path.startswith("/api/project/"):
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
