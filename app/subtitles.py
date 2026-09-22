@@ -184,9 +184,12 @@ def invalidate_subtitle_stages(config: ProjectConfig) -> None:
         (state_dir / relative).unlink(missing_ok=True)
 
 
-def refresh_subtitle_artifacts(
-    config: ProjectConfig,
+def refresh_subtitle_artifacts_from_settings(
     output_dir: Path,
+    *,
+    source_language: str = "en",
+    target_language: str = "zh-CN",
+    generate_ass: bool = False,
     manifest_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply human overrides as a derived layer without mutating source provenance."""
@@ -213,13 +216,12 @@ def refresh_subtitle_artifacts(
     _sync_corrected_csv(output_dir, entries)
 
     adapters = _subtitle_adapters(entries)
-    source_language = config.source_text_language or "en"
-    target_language = config.target_language or "zh-CN"
+    source_language = source_language or "en"
+    target_language = target_language or "zh-CN"
     ass_file = output_dir / "HSR_Voice_Archive.ass"
     srt_file = output_dir / "HSR_Voice_Archive.srt"
     overflow_file = output_dir / "ass_layout_overflow_report.json"
 
-    generate_ass = bool(getattr(config, "generate_ass", False))
     if generate_ass:
         write_ass(
             adapters,
@@ -242,6 +244,20 @@ def refresh_subtitle_artifacts(
         "srt_file": str(srt_file),
         "override_count": sum(bool(entry.get("modified")) for entry in entries),
     }
+
+
+def refresh_subtitle_artifacts(
+    config: ProjectConfig,
+    output_dir: Path,
+    manifest_data: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    return refresh_subtitle_artifacts_from_settings(
+        output_dir,
+        source_language=config.source_text_language or "en",
+        target_language=config.target_language or "zh-CN",
+        generate_ass=bool(getattr(config, "generate_ass", False)),
+        manifest_data=manifest_data,
+    )
 
 
 def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | None]:
