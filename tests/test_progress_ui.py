@@ -132,7 +132,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn("(Alt+↓)", html)
         self.assertNotIn("document.addEventListener('keydown'", html)
         self.assertIn('interactive-widget=resizes-content', html)
-        self.assertIn('@media(pointer:coarse)', html)
+        self.assertNotIn('@media(pointer:coarse)', html)
         self.assertIn('@media(prefers-reduced-motion:reduce)', html)
         self.assertIn('id="progressTrack" class="progress-track" role="progressbar"', html)
         self.assertIn('role="status" aria-live="polite"', html)
@@ -143,6 +143,12 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('id="saveSubtitlesBtn"', html)
         self.assertIn('type="button" class="sub-item ', html)
         self.assertIn("scheduleSubtitleFetch", html)
+        self.assertIn('class="actions project-actions"', html)
+        self.assertIn('.project-actions>button{flex:0 0 auto;font-size:13px}', html)
+        desktop_pos = html.index('.sub-workspace{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr)')
+        mobile_pos = html.index('.sub-workspace{grid-template-columns:minmax(0,1fr);min-height:0}')
+        self.assertGreater(mobile_pos, desktop_pos)
+        self.assertNotIn('.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}', html)
 
     def test_job_polling_retries_and_bypasses_get_cache(self) -> None:
         html = (
