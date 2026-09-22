@@ -48,6 +48,9 @@ MAX_XLSX_UNCOMPRESSED_BYTES = 512 * 1024**2
 MAX_XLSX_MEMBERS = 10_000
 REMOTE_INDEX_CACHE_TTL_SECONDS = 24 * 60 * 60
 REMOTE_INDEX_CACHE_DIR = Path.home() / ".hsr-voice-archive-builder" / "remote-index-cache"
+# Fully-offline escape hatch: point this environment variable at a manually
+# downloaded AI-Hobbyist EN/CHS/JP/KR .xlsx to skip every network download.
+REMOTE_INDEX_LOCAL_FILE_ENV = "HSR_VOICE_INDEX_FILE"
 
 
 def _cell(value: object) -> str:
@@ -240,6 +243,144 @@ def fetch_ai_hobbyist_index_for_filenames(
         return read_ai_hobbyist_xlsx_for_filenames(path, filenames)
 
 
+def _workbook_cache_paths(url: str, cache_dir: Path) -> tuple[Path, Path]:
+    digest = hashlib.sha256(url.encode("utf-8")).hexdigest()
+    return (
+        cache_dir / f"workbook-{digest}.xlsx",
+        cache_dir / f"workbook-{digest}.json",
+    )
+
+
+def _read_workbook_cache_meta(path: Path, url: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return None
+    if (
+        payload.get("schema_version") != 1
+        or payload.get("url") != url
+        or not isinstance(payload.get("fetched_at_epoch"), (int, float))
+    ):
+        return None
+    return payload
+
+
+def _write_workbook_cache_meta(path: Path, url: str, fetched_at_epoch: float) -> None:
+    _atomic_write_cache(path, {
+        "schema_version": 1,
+        "url": url,
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(fetched_at_epoch)),
+        "fetched_at_epoch": fetched_at_epoch,
+    })
+
+
+def get_ai_hobbyist_workbook(
+    url: str = DEFAULT_EN_INDEX_URL,
+    *,
+    timeout: int = 90,
+    cache_dir: Path | None = None,
+    max_age_seconds: float = REMOTE_INDEX_CACHE_TTL_SECONDS,
+    max_stale_age_seconds: float = 7 * 24 * 60 * 60,
+) -> tuple[Path, dict[str, Any]]:
+    """Return a local copy of the remote index workbook.
+
+    The workbook is shared by every character: one successful download serves
+    all voice packages until the cache expires (fresh for 24 hours, then up
+    to seven more days from the stale copy when a refresh fails), so scanning
+    a different character never needs a fresh network round-trip of its own.
+    """
+    override = os.environ.get(REMOTE_INDEX_LOCAL_FILE_ENV, "").strip()
+    if override:
+        path = Path(override).expanduser()
+        if not path.is_file():
+            raise FileNotFoundError(
+                f"{REMOTE_INDEX_LOCAL_FILE_ENV} is set but does not point "
+                f"to a readable file: {path}"
+            )
+        _validate_xlsx_container(path)
+        return path, {
+            "cache_hit": True,
+            "stale": False,
+            "local_file": True,
+            "age_seconds": 0.0,
+            "fetched_at": "",
+        }
+
+    cache_root = (cache_dir or REMOTE_INDEX_CACHE_DIR).expanduser()
+    xlsx_path, meta_path = _workbook_cache_paths(url, cache_root)
+    meta = _read_workbook_cache_meta(meta_path, url) if meta_path.is_file() else None
+    now = time.time()
+
+    def cached_result(stale: bool) -> tuple[Path, dict[str, Any]]:
+        age = max(0.0, now - float((meta or {}).get("fetched_at_epoch", 0.0)))
+        return xlsx_path, {
+            "cache_hit": True,
+            "stale": stale,
+            "age_seconds": round(age, 3),
+            "fetched_at": str((meta or {}).get("fetched_at", "")),
+        }
+
+    if meta is not None and xlsx_path.is_file():
+        age = max(0.0, now - float(meta.get("fetched_at_epoch", 0.0)))
+        if age <= max_age_seconds:
+            return cached_result(stale=False)
+
+    cache_root.mkdir(parents=True, exist_ok=True)
+    fd, temp_name = tempfile.mkstemp(prefix=".workbook-", suffix=".xlsx", dir=cache_root)
+    os.close(fd)
+    temp = Path(temp_name)
+    try:
+        _download_remote_xlsx(url, timeout, temp)
+        _validate_xlsx_container(temp)
+        os.replace(temp, xlsx_path)
+    except Exception:
+        temp.unlink(missing_ok=True)
+        if meta is not None and xlsx_path.is_file():
+            age = max(0.0, now - float(meta.get("fetched_at_epoch", 0.0)))
+            if age <= max_stale_age_seconds:
+                return cached_result(stale=True)
+        raise
+    _write_workbook_cache_meta(meta_path, url, now)
+    return xlsx_path, {
+        "cache_hit": False,
+        "stale": False,
+        "age_seconds": 0.0,
+        "fetched_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(now)),
+    }
+
+
+def fetch_ai_hobbyist_index_for_filenames_cached(
+    filenames: set[str],
+    url: str = DEFAULT_EN_INDEX_URL,
+    *,
+    timeout: int = 90,
+    cache_dir: Path | None = None,
+    max_age_seconds: float = REMOTE_INDEX_CACHE_TTL_SECONDS,
+    max_stale_age_seconds: float = 7 * 24 * 60 * 60,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Resolve exact filenames against the shared, URL-cached remote workbook."""
+    wanted = sorted({Path(name).name for name in filenames})
+    if not wanted:
+        raise ValueError("At least one WAV filename is required")
+    workbook, workbook_cache = get_ai_hobbyist_workbook(
+        url,
+        timeout=timeout,
+        cache_dir=cache_dir,
+        max_age_seconds=max_age_seconds,
+        max_stale_age_seconds=max_stale_age_seconds,
+    )
+    records = read_ai_hobbyist_xlsx_for_filenames(workbook, set(wanted))
+    cache: dict[str, Any] = {
+        "cache_hit": bool(workbook_cache.get("cache_hit")),
+        "stale": bool(workbook_cache.get("stale")),
+        "age_seconds": float(workbook_cache.get("age_seconds", 0.0)),
+        "fetched_at": str(workbook_cache.get("fetched_at", "")),
+    }
+    if workbook_cache.get("local_file"):
+        cache["local_file"] = True
+    return records, cache
+
+
 def _cache_path(identity: str, url: str, cache_dir: Path) -> Path:
     raw = f"{url}\0{identity}".encode("utf-8")
     return cache_dir / f"{hashlib.sha256(raw).hexdigest()}.json"
@@ -348,29 +489,6 @@ def fetch_ai_hobbyist_index_cached(
         f"character:{character_key}",
         url,
         lambda: fetch_ai_hobbyist_index(character, url, timeout=timeout),
-        cache_dir=cache_dir,
-        max_age_seconds=max_age_seconds,
-        max_stale_age_seconds=max_stale_age_seconds,
-    )
-
-
-def fetch_ai_hobbyist_index_for_filenames_cached(
-    filenames: set[str],
-    url: str = DEFAULT_EN_INDEX_URL,
-    *,
-    timeout: int = 90,
-    cache_dir: Path | None = None,
-    max_age_seconds: int = REMOTE_INDEX_CACHE_TTL_SECONDS,
-    max_stale_age_seconds: int = 7 * 24 * 60 * 60,
-) -> tuple[list[dict[str, str]], dict[str, Any]]:
-    wanted = sorted({Path(name).name for name in filenames})
-    if not wanted:
-        raise ValueError("At least one WAV filename is required")
-    names_digest = hashlib.sha256("\n".join(wanted).encode("utf-8")).hexdigest()
-    return _fetch_records_cached(
-        f"filenames:{names_digest}",
-        url,
-        lambda: fetch_ai_hobbyist_index_for_filenames(set(wanted), url, timeout=timeout),
         cache_dir=cache_dir,
         max_age_seconds=max_age_seconds,
         max_stale_age_seconds=max_stale_age_seconds,
