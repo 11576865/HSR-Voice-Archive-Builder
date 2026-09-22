@@ -888,6 +888,7 @@ function renderQuickPlan(plan){
   const e=plan.english||{},z=plan.chinese||{},ref=plan.reference||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{};
   const lines=[
     '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
+    plan.language_folders?('混合语言包：主音频文件夹「'+plan.language_folders.primary+'」（'+n(plan.language_folders.primary_wav_count)+' 条）；官方中文字幕取自 '+plan.language_folders.reference.map(function(f){return '「'+f+'」'}).join('、')+' 的同名 LAB（'+n(plan.language_folders.reference_lab_count)+' 条），参考音频不进入 FLAC'):null,
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '官方中文字幕：'+(plan.chinese

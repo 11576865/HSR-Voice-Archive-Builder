@@ -16,6 +16,7 @@ from .builder import (
     MAX_ARCHIVE_MEMBERS,
     atomic_write_text,
     cross_language_voice_key,
+    ensure_dir_or_extract,
     map_labs_to_voice_filenames,
     sha256_file,
 )
@@ -171,6 +172,23 @@ def source_inventory(source: Path) -> dict[str, Any]:
     lab_stems = set(labs)
     duplicate_wavs = sorted(name for name, count in Counter(wavs).items() if count > 1)
 
+    # Track the top-level folder of every WAV so mixed-language packages can be
+    # split into a primary audio folder and reference-text folder(s) instead of
+    # failing on duplicate basenames (see analyze_language_folders).
+    wav_folder_names: dict[str, list[str]] = {}
+    for item in files:
+        name = str(item["name"])
+        if not name.lower().endswith(".wav"):
+            continue
+        parts = PurePosixPath(name).parts
+        folder = parts[0] if len(parts) > 1 else ""
+        wav_folder_names.setdefault(folder, []).append(Path(name).name)
+    same_folder_duplicates: set[str] = set()
+    for names in wav_folder_names.values():
+        for name, count in Counter(names).items():
+            if count > 1:
+                same_folder_duplicates.add(name)
+
     return {
         "source": str(source),
         "kind": "directory" if source.is_dir() else source.suffix.lower().lstrip("."),
@@ -179,7 +197,13 @@ def source_inventory(source: Path) -> dict[str, Any]:
         "lab_count": len(labs),
         "wav_names": wavs,
         "lab_names": labs,
+        "wav_folder_names": wav_folder_names,
+        "wav_folders": {
+            folder: len(names) for folder, names in sorted(wav_folder_names.items())
+        },
         "duplicate_wav_names": duplicate_wavs,
+        "same_folder_duplicate_wavs": sorted(same_folder_duplicates),
+        "cross_folder_duplicate_wavs": sorted(set(duplicate_wavs) - same_folder_duplicates),
         "wav_lab_pairs": len(wav_stems & lab_stems),
         "wav_without_lab": len(wav_stems - lab_stems),
         "declared_bytes": sum(int(item.get("size", 0)) for item in files),
@@ -189,6 +213,183 @@ def source_inventory(source: Path) -> dict[str, Any]:
             "source_size_bytes": source_stat.st_size,
             "source_modified_ns": source_stat.st_mtime_ns,
         },
+    }
+
+
+_LANGUAGE_FOLDER_KEYWORDS: tuple[tuple[str, "re.Pattern[str]"], ...] = (
+    ("zh-CN", re.compile(r"(^|[^a-z])(chs|cn)([^a-z]|$)|chinese|mandarin|中文|中国|国语|简体", re.IGNORECASE)),
+    ("en", re.compile(r"(^|[^a-z])(en|english|eng|英)([^a-z]|$)", re.IGNORECASE)),
+    ("ja", re.compile(r"(^|[^a-z])(jp|ja|japanese|日)([^a-z]|$)", re.IGNORECASE)),
+    ("ko", re.compile(r"(^|[^a-z])(kr|ko|korean|韩)([^a-z]|$)", re.IGNORECASE)),
+)
+_CJK_RE = re.compile(r"[一-鿿㐀-䶿豈-﫿]")
+_MAX_FOLDER_LAB_SAMPLES = 8
+
+
+def _detect_lab_language(texts: list[str]) -> str:
+    """Classify sampled LAB text as zh-CN/en; '' when there is no evidence.
+
+    Japanese/Korean LABs also contain CJK characters, so content detection
+    deliberately reports zh-CN for any CJK-dominant sample; folder-name
+    keywords above can still distinguish ja/ko before content is consulted.
+    """
+    cjk = 0
+    latin = 0
+    for text in texts:
+        cjk += len(_CJK_RE.findall(text))
+        latin += len(re.findall(r"[A-Za-z]", text))
+    if cjk > 0:
+        return "zh-CN"
+    if latin > 0:
+        return "en"
+    return ""
+
+
+def _folder_lab_paths(source: Path, folder: str) -> list[str]:
+    """Relative LAB member paths inside one top-level folder of the source."""
+    if source.is_dir():
+        root = source / folder if folder else source
+        if not root.is_dir():
+            return []
+        return [
+            path.relative_to(source).as_posix()
+            for path in sorted(root.rglob("*.lab"))
+        ]
+    if source.is_file() and source.suffix.lower() == ".zip":
+        with zipfile.ZipFile(source) as z:
+            return sorted(
+                name for name in z.namelist()
+                if name.lower().endswith(".lab")
+                and _top_folder_of(name) == folder
+            )
+    if source.is_file() and source.suffix.lower() == ".7z":
+        exe = shutil.which("7zz") or shutil.which("7z")
+        if not exe:
+            return []
+        listed = subprocess.run(
+            [exe, "l", "-slt", str(source)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            check=False,
+        )
+        if listed.returncode != 0:
+            return []
+        return sorted(
+            record.get("Path", "")
+            for record in _parse_7z_slt(listed.stdout)
+            if record.get("Path", "").lower().endswith(".lab")
+            and not record.get("Attributes", "").startswith("D")
+            and _top_folder_of(record.get("Path", "")) == folder
+        )
+    return []
+
+
+def _top_folder_of(name: str) -> str:
+    parts = PurePosixPath(str(name).replace("\\", "/")).parts
+    return parts[0] if len(parts) > 1 else ""
+
+
+def _folder_members(extracted: Path, folder: str, pattern: str) -> list[Path]:
+    """Files matching `pattern` inside one materialized top-level folder.
+
+    Root-level files (folder == "") are listed non-recursively so pruning or
+    merging a root reference folder cannot touch sibling language folders.
+    """
+    root = extracted / folder if folder else extracted
+    if not folder:
+        return sorted(root.glob(pattern))
+    return sorted(root.rglob(pattern))
+
+
+def _folder_lab_stems(source: Path, folder: str) -> set[str]:
+    return {Path(name).stem for name in _folder_lab_paths(source, folder)}
+
+
+def _folder_lab_sample(source: Path, folder: str) -> list[str]:
+    """Read up to a few LAB texts from one folder to detect its language."""
+    texts: list[str] = []
+    paths = _folder_lab_paths(source, folder)[:_MAX_FOLDER_LAB_SAMPLES]
+    if source.is_dir():
+        for rel in paths:
+            try:
+                texts.append((source / rel).read_text(encoding="utf-8-sig", errors="replace").strip())
+            except OSError:
+                continue
+    elif source.is_file() and source.suffix.lower() == ".zip":
+        with zipfile.ZipFile(source) as z:
+            for rel in paths:
+                try:
+                    texts.append(z.read(rel).decode("utf-8-sig", errors="replace").strip())
+                except (KeyError, UnicodeDecodeError, zipfile.BadZipFile):
+                    continue
+    # .7z content sampling is impractical through the 7-Zip CLI; folder-name
+    # keywords remain the only signal there (handled by the caller).
+    return [text for text in texts if text]
+
+
+def analyze_language_folders(
+    source: Path,
+    wav_folders: dict[str, int],
+    source_text_language: str,
+) -> dict[str, Any]:
+    """Split a mixed-language package into primary audio / reference text roles.
+
+    Cross-folder duplicate basenames usually mean one folder per dub language.
+    The folder whose language matches source_text_language supplies the audio;
+    the other folders contribute same-stem LAB text only (their audio never
+    enters the continuous FLAC, mirroring the official-Chinese-package flow).
+    """
+    folders = [folder for folder, count in wav_folders.items() if int(count) > 0]
+    if not folders:
+        raise ValueError("no WAV folders were found")
+
+    detected: dict[str, str] = {}
+    for folder in folders:
+        language = ""
+        for language_code, pattern in _LANGUAGE_FOLDER_KEYWORDS:
+            if folder and pattern.search(folder):
+                language = language_code
+                break
+        if not language:
+            language = _detect_lab_language(_folder_lab_sample(source, folder))
+        if language:
+            detected[folder] = language
+    undetected = [folder for folder in folders if folder not in detected]
+    if undetected:
+        raise ValueError(
+            "这些文件夹的语言无法识别（请在文件夹名中加入 en/CHS/中文 等关键词）: "
+            + ", ".join(folder or "<根目录>" for folder in undetected)
+        )
+
+    primary_candidates = [
+        folder for folder, language in detected.items() if language == source_text_language
+    ]
+    if not primary_candidates:
+        raise ValueError(
+            f"没有与源文本语言 {source_text_language} 对应的主音频文件夹；"
+            f"检测到: "
+            + ", ".join(f"{folder or '<根目录>'}={language}" for folder, language in sorted(detected.items()))
+        )
+    if len(primary_candidates) > 1:
+        raise ValueError(
+            "多个文件夹同时匹配源文本语言 "
+            f"{source_text_language}，无法确定主音频文件夹: "
+            + ", ".join(folder or "<根目录>" for folder in primary_candidates)
+        )
+    primary = primary_candidates[0]
+    references = [folder for folder in folders if folder != primary]
+    if not references:
+        raise ValueError("只有主音频文件夹，没有可参考的其他语言文件夹")
+    return {
+        "primary": primary,
+        "reference": references,
+        "detected": detected,
+        "primary_wav_count": int(wav_folders.get(primary, 0)),
+        "reference_lab_count": sum(
+            len(_folder_lab_stems(source, folder)) for folder in references
+        ),
     }
 
 
@@ -535,12 +736,38 @@ def quick_scan(
 
     if english["wav_count"] == 0:
         blockers.append("No WAV files were found in the primary audio source")
-    if english.get("duplicate_wav_names"):
+    language_folders: dict[str, Any] | None = None
+    if english.get("same_folder_duplicate_wavs"):
         blockers.append(
             "Duplicate WAV basenames were found in the primary source: "
-            + ", ".join(english["duplicate_wav_names"][:5])
+            + ", ".join(english["same_folder_duplicate_wavs"][:5])
         )
-    wav_names = {Path(name).name for name in english["wav_names"]}
+    elif english.get("cross_folder_duplicate_wavs"):
+        try:
+            language_folders = analyze_language_folders(
+                Path(english["source"]),
+                {str(k): int(v) for k, v in (english.get("wav_folders") or {}).items()},
+                source_text_language,
+            )
+        except ValueError as exc:
+            blockers.append(
+                "Duplicate WAV basenames were found in the primary source: "
+                + ", ".join(english["cross_folder_duplicate_wavs"][:5])
+                + f"; automatic language-folder split failed: {exc}"
+            )
+        else:
+            references = ", ".join(f"'{f}'" for f in language_folders["reference"])
+            warnings.append(
+                "Mixed-language package detected: folder "
+                f"'{language_folders['primary']}' ({language_folders['primary_wav_count']} voices) "
+                f"is the primary audio; same-stem LABs from {references} "
+                f"({language_folders['reference_lab_count']} entries) provide official "
+                "Chinese subtitles; reference audio is excluded from the continuous FLAC"
+            )
+    if language_folders:
+        wav_names = set(english["wav_folder_names"][language_folders["primary"]])
+    else:
+        wav_names = {Path(name).name for name in english["wav_names"]}
     # Existing local CSV discovery predates explicit language roles and its
     # schema does not declare the text language. Keep that legacy shortcut only
     # for English; non-English Quick Mode uses the selected CHS/JP/KR index
@@ -555,7 +782,7 @@ def quick_scan(
         selected_index = {**selected_index, "source": "local"}
 
     character = infer_character(list(wav_names))
-    total_wavs = int(english["wav_count"])
+    total_wavs = len(wav_names)
 
     def _index_coverage_key(index: dict[str, Any]) -> tuple[int, int]:
         return (int(index.get("matched_wavs", 0)), int(index.get("english_matched", 0)))
@@ -744,6 +971,9 @@ def quick_scan(
                 if Path(str(row.get("filename", ""))).name in wav_names
             ]
         chinese_stems = set(chs.get("lab_names", [])) if chs else set()
+        if language_folders and chs is None:
+            for folder in language_folders["reference"]:
+                chinese_stems.update(_folder_lab_stems(Path(english["source"]), folder))
         if source_text_language == target_language == "zh-CN":
             chinese_stems.update(english.get("lab_names", []))
         official_map, match_detail = map_labs_to_voice_filenames(
@@ -789,17 +1019,19 @@ def quick_scan(
         "kind": "quick_scan",
         "source_text_language": source_text_language,
         "english": {
-            key: value for key, value in english.items() if key not in {"wav_names", "lab_names"}
+            key: value for key, value in english.items()
+            if key not in {"wav_names", "lab_names", "wav_folder_names"}
         },
         "chinese": (
             {
                 key: value
                 for key, value in chs.items()
-                if key not in {"wav_names", "lab_names"}
+                if key not in {"wav_names", "lab_names", "wav_folder_names"}
             }
             if chs
             else None
         ),
+        "language_folders": language_folders,
         "reference_index_attempt": reference_index_attempt,
         "reference_text_match": reference_text_match,
         "reference": (
@@ -944,7 +1176,11 @@ def create_quick_project(
         current_reference = source_inventory(reference_source)
         if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
             raise RuntimeError("Reference source changed after Quick Scan; scan again before building")
-    wanted = set(current_inventory["wav_names"])
+    language_folders = plan.get("language_folders") or None
+    if language_folders:
+        wanted = set(current_inventory["wav_folder_names"][language_folders["primary"]])
+    else:
+        wanted = set(current_inventory["wav_names"])
     ambiguous: list[str] = []
     if selected_index.get("source") == "remote":
         remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
@@ -1035,18 +1271,78 @@ def create_quick_project(
         writer.writeheader()
         writer.writerows(filtered)
 
+    # Mixed-language packages are materialized once so builds never see the
+    # original mixed archive: the primary folder becomes the audio source and
+    # reference folders contribute same-stem LAB text only (their audio never
+    # enters the continuous FLAC, mirroring the official-Chinese-package flow).
+    primary_wav_source = english_source
+    official_chs_source = chs_source
+    wav_fingerprint_value = str(
+        current_inventory.get("fingerprint", {}).get("digest", "") or ""
+    )
+    chs_fingerprint_value = str(
+        (current_chs or {}).get("fingerprint", {}).get("digest", "") or ""
+    )
+    if language_folders:
+        extracted = ensure_dir_or_extract(
+            english_source, generated_dir, "language_folders"
+        )
+        primary_dir = extracted / language_folders["primary"]
+        if not primary_dir.is_dir():
+            raise RuntimeError(
+                f"Primary audio folder '{language_folders['primary']}' is missing "
+                "after extraction"
+            )
+        reference_dirs: list[Path] = []
+        for folder in language_folders["reference"]:
+            ref_dir = extracted / folder if folder else extracted
+            if not ref_dir.is_dir():
+                raise RuntimeError(
+                    f"Reference LAB folder '{folder or '<root>'}' is missing after extraction"
+                )
+            reference_dirs.append(ref_dir)
+            if english_source.is_file():
+                # Prune reference audio after extraction; only LAB text is kept.
+                for wav in sorted(_folder_members(extracted, folder, "*.wav")):
+                    wav.unlink()
+        if official_chs_source is None and reference_dirs:
+            if len(reference_dirs) == 1:
+                official_chs_source = reference_dirs[0]
+            else:
+                merged_labs = generated_dir / "official_chs_labs"
+                if merged_labs.exists():
+                    shutil.rmtree(merged_labs)
+                merged_labs.mkdir(parents=True)
+                for folder in language_folders["reference"]:
+                    for lab in sorted(_folder_members(extracted, folder, "*.lab")):
+                        target = merged_labs / lab.name
+                        if target.exists() and target.read_bytes() != lab.read_bytes():
+                            raise RuntimeError(
+                                f"Reference folders disagree on LAB text for {lab.name}"
+                            )
+                        shutil.copy2(lab, target)
+                official_chs_source = merged_labs
+        primary_wav_source = primary_dir
+        wav_fingerprint_value = str(
+            source_inventory(primary_wav_source).get("fingerprint", {}).get("digest", "")
+            or ""
+        )
+        if official_chs_source is not None:
+            chs_fingerprint_value = str(
+                source_inventory(official_chs_source).get("fingerprint", {}).get("digest", "")
+                or ""
+            )
+
     config = create_project(
         project_root,
         name=name.strip() or _safe_project_name(plan, english_source),
         index_csv=str(generated_index),
-        wav_source=str(english_source),
+        wav_source=str(primary_wav_source),
         output_dir="output",
-        chs_source=str(chs_source) if chs_source else "",
+        chs_source=str(official_chs_source) if official_chs_source else "",
         reference_source=str(reference_source) if reference_source else "",
-        wav_source_fingerprint=str(current_inventory.get("fingerprint", {}).get("digest", "") or ""),
-        chs_source_fingerprint=str(
-            (current_chs or {}).get("fingerprint", {}).get("digest", "") or ""
-        ),
+        wav_source_fingerprint=wav_fingerprint_value,
+        chs_source_fingerprint=chs_fingerprint_value,
         reference_source_fingerprint=str(
             (current_reference or {}).get("fingerprint", {}).get("digest", "") or ""
         ),
