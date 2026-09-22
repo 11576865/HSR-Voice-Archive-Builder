@@ -158,10 +158,10 @@ class BuilderTests(unittest.TestCase):
             self.assertEqual(entries[0].chinese_source, "official_chs_lab")
             self.assertEqual(entries[1].chinese, "译文 B")
             self.assertEqual(entries[1].chinese_source, "translated_existing")
-            self.assertEqual(entries[0].start_sample, round(5.0 * 8000))
+            self.assertEqual(entries[0].start_sample, round(9.0 * 8000))
             self.assertEqual(
                 entries[1].start_sample,
-                round(5.0 * 8000) + 8000 + round(1.2 * 8000),
+                round(9.0 * 8000) + 8000 + round(1.2 * 8000),
             )
             self.assertEqual(report["count_missing_chinese"], 0)
 
