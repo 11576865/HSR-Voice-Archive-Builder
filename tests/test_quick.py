@@ -257,7 +257,7 @@ class QuickModeTests(unittest.TestCase):
             make_voice_zip(chinese, ["chapter5_13_绯英_103.wav"])
             records = [
                 {"filename": name, "english": f"English {i}", "hash": "", "character": "绯英"}
-                for i, name in enumerate(names)
+                for i, name in enumerate(names, 1)
             ]
             with patch(
                 "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
