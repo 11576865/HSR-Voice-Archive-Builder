@@ -862,9 +862,14 @@ def api_update_apply_remote():
                 existing_rows = list(csv.DictReader(handle))
                 fields = list(existing_rows[0].keys()) if existing_rows else [
                     "index", "group", "filename", "source", "source_detail", "english",
-                    "reference_text", "reference_language", "sha256",
+                    "reference_text", "reference_language",
+                    "official_target_text", "official_target_language", "official_target_source",
+                    "sha256",
                 ]
-            for field in ("reference_text", "reference_language"):
+            for field in (
+                "reference_text", "reference_language",
+                "official_target_text", "official_target_language", "official_target_source",
+            ):
                 if field not in fields:
                     fields.append(field)
             known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
@@ -883,6 +888,19 @@ def api_update_apply_remote():
                     "english": str(metadata.get("english", "")),
                     "reference_text": str(reference.get("reference_text", "")),
                     "reference_language": str(reference.get("reference_language", "")),
+                    "official_target_text": (
+                        str(reference.get("reference_text", ""))
+                        if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"}
+                        else ""
+                    ),
+                    "official_target_language": (
+                        "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else ""
+                    ),
+                    "official_target_source": (
+                        "huggingface:Chinese(PRC):same_ingame_filename"
+                        if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"}
+                        else ""
+                    ),
                     "sha256": "",
                 })
             updated_index = generated / "quick_index_incremental.csv"
@@ -899,9 +917,10 @@ def api_update_apply_remote():
                 "chinese_reference_matched": len(reference_plan["targets"]),
                 "chinese_reference_downloaded": len(reference_successful),
                 "chinese_reference_failed": reference_download["failed"],
-                "reference_guided_translation": len(reference_successful),
+                "official_target_available": len(reference_successful),
+                "reference_guided_translation": 0,
                 "unreferenced_api_translation": len(successful - reference_successful),
-                "api_translation_required": len(successful),
+                "api_translation_required": len(successful - reference_successful),
                 "project_updated": True,
                 "rebuild_required": True,
                 "applied_filenames": sorted(successful),
