@@ -1472,6 +1472,10 @@ def build_project_v02(
         "review_official_target": bool(review_official_target),
         "translation_route": translation_route,
         "translation_qa_version": 2,
+        # Invalidate v0.9-K metadata/translation stages that treated confirmed
+        # Chinese(PRC) incremental text as reference-only instead of official
+        # target text. Audio files remain on disk and are not re-downloaded.
+        "incremental_official_target_version": 2,
     })
     resumed_stages: list[str] = []
     rebuilt_stages: list[str] = []
