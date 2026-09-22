@@ -189,7 +189,7 @@
 - Added local/LAN launch modes. LAN control uses a generated token while processing remains on the host device.
 - Added Windows and Termux LAN launchers.
 - Added an output-folder action for the host device.
-- Added GitHub Actions tests for Python 3.11 and Python 3.12.
+- Added GitHub Actions tests for Python 3.11 and 3.12.
 - Added project persistence, XLSX parsing, update classification, and background-job tests.
 
 ## v0.2
