@@ -477,6 +477,27 @@ def build_entries(
         official_target_language = str(row.get("官方目标语言", "") or "").strip().lower()
         official_target_source = str(row.get("官方目标来源", "") or "").strip()
         target_is_chinese = str(target_language or "").strip().lower() in {"zh", "zh-cn", "chs", "cn"}
+
+        # v0.9-K incremental indexes stored confirmed Chinese(PRC) text only
+        # as reference_text. Migrate those rows in-place at build time so an
+        # already-downloaded project does not need to download the same audio
+        # again merely to gain the newer official_target_* columns.
+        legacy_reference_text = str(row.get("参考文本", "") or "").strip()
+        legacy_reference_language = str(row.get("参考语言", "") or "").strip().lower()
+        legacy_incremental_reference = (
+            target_is_chinese
+            and not official_target_text
+            and legacy_reference_text
+            and legacy_reference_language in {"zh", "zh-cn", "chs", "cn"}
+            and str(row.get("来源", "") or "").strip().lower() == "huggingface"
+            and str(row.get("来源细分", "") or "").strip().lower()
+            == "simon3000/starrail-voice"
+        )
+        if legacy_incremental_reference:
+            official_target_text = legacy_reference_text
+            official_target_language = "zh-cn"
+            official_target_source = "huggingface:Chinese(PRC):same_ingame_filename"
+
         incremental_official = (
             target_is_chinese
             and official_target_text
