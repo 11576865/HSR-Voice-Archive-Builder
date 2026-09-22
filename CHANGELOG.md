@@ -2,6 +2,7 @@
 
 ## Unreleased
 
+- The AI-Hobbyist remote index workbook is now cached by URL instead of per voice-package filename set. After one successful download, Quick Mode resolves any character offline for 24 hours (up to seven more days via the stale-cache fallback when a refresh fails), so switching to another character no longer requires a fresh network round-trip per package. A new `HSR_VOICE_INDEX_FILE` environment variable can point at a manually downloaded EN/CHS/JP/KR `.xlsx` to skip the network entirely.
 - v0.9-L makes Subtitle Review edits a persistent, non-destructive override layer: official/API `target_text` and provenance remain unchanged, `final_chs` is re-applied after later full rebuilds, corrected CSV/SRT/optional ASS stay synchronized, subtitle-only edits invalidate manifest/final stages without forcing a FLAC rebuild, and stale ASS overflow reports are removed when ASS generation is disabled.
 - v0.9-L also makes continuous FLAC a fixed project output, moves ASS generation to an on-demand finished-output action beside black MKV, removes visible editor shortcut/icon clutter, widens and constrains the responsive proofreading layout, and makes job polling retry transient failures without requiring manual refresh.
 - Incremental Chinese(PRC) matches now become official target text when the target language is Simplified Chinese. Existing v0.9-K reference-only incremental indexes are migrated during rebuild, so confirmed Chinese text bypasses API translation without re-downloading the audio.
