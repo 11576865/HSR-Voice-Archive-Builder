@@ -7,7 +7,7 @@ import csv
 from pathlib import Path
 
 from fastapi import FastAPI, Form, Query, Request
-from fastapi.responses import FileResponse, HTMLResponse, JSONResponse
+from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
@@ -21,6 +21,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
+from .recovery import build_text_recovery, import_text_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -938,6 +939,30 @@ def api_update_apply_remote():
             project_root=config.root, project_name=config.name,
         )
         return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/recovery/export")
+def api_recovery_export():
+    try:
+        config = _active_config()
+        data, filename, _summary = build_text_recovery(config)
+        return Response(
+            content=data,
+            media_type="application/json",
+            headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+        )
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/import")
+def api_recovery_import(recovery_text: str = Form(...)):
+    try:
+        config = _active_config()
+        result = import_text_recovery(config, recovery_text)
+        return {"ok": True, "result": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
