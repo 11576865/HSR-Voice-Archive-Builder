@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- v0.9-L makes Subtitle Review edits a persistent, non-destructive override layer: official/API `target_text` and provenance remain unchanged, `final_chs` is re-applied after later full rebuilds, corrected CSV/SRT/optional ASS stay synchronized, subtitle-only edits invalidate manifest/final stages without forcing a FLAC rebuild, and stale ASS overflow reports are removed when ASS generation is disabled.
+
 - Translation provider settings now store a local default model; change it with `python -m app.credentials model <model>` without re-entering the API key or editing source code. New projects inherit it, while existing projects keep their explicit model.
 
 - Changed the default translation model to `gpt-5.6-terra`; existing projects keep their saved model until it is changed in the dashboard.
