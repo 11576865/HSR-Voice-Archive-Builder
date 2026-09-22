@@ -166,6 +166,47 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertEqual(len(subs_api), 2)
             self.assertEqual({s["id"] for s in subs_api}, {2, 3})
 
+    def test_post_rejects_empty_or_nonmatching_subtitle_updates(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "output"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "manifest.json").write_text(
+                json.dumps({
+                    "entries": [{
+                        "index": 1,
+                        "filename": "line.wav",
+                        "start_seconds": 1.0,
+                        "display_end_seconds": 2.0,
+                        "source_text": "Hello",
+                        "target_text": "你好",
+                    }]
+                }, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            cfg = create_project(
+                root,
+                name="test_proj_reject_false_save",
+                index_csv="index.csv",
+                wav_source="wavs",
+                output_dir="output",
+            )
+            _set_active(cfg)
+
+            empty = self.client.post(
+                "/api/project/active/subtitles",
+                json={"subtitles": []},
+                headers=self.headers,
+            )
+            self.assertEqual(empty.status_code, 400)
+
+            missing = self.client.post(
+                "/api/project/active/subtitles",
+                json={"subtitles": [{"id": 999, "final_chs": "不会匹配"}]},
+                headers=self.headers,
+            )
+            self.assertEqual(missing.status_code, 400)
+
     def test_post_update_editing_and_export(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
