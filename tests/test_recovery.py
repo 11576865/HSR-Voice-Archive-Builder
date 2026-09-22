@@ -285,5 +285,118 @@ class TextRecoveryTests(unittest.TestCase):
 
 
 
+    def test_automatic_recovery_keeps_previous_verified_generation(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app_state_dir = root / "app-state"
+            state_file = app_state_dir / "state.json"
+            project_root = root / "project"
+            write_index(project_root / ".generated" / "quick_index.csv")
+            (project_root / ".state").mkdir(parents=True)
+            checkpoint_path = project_root / ".state" / ".translation_checkpoint.json"
+            checkpoint_path.write_text(
+                json.dumps(checkpoint(), ensure_ascii=False), encoding="utf-8"
+            )
+
+            with patch("app.project.STATE_FILE", state_file), patch(
+                "app.recovery.STATE_DIR", app_state_dir
+            ):
+                config = create_project(
+                    project_root,
+                    name="Protected",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "voice.zip"),
+                )
+                first = write_auto_text_recovery(config, reason="translation-batch")
+                first_bytes = Path(first["path"]).read_bytes()
+
+                updated = checkpoint()
+                updated["records"]["b.wav"] = {
+                    "english_sha256": "",
+                    "input_sha256": input_sha("Another."),
+                    "chinese": "另一个。",
+                    "qa_version": 1,
+                    "qa_issues": [],
+                    "glossary_fingerprint": "",
+                }
+                checkpoint_path.write_text(
+                    json.dumps(updated, ensure_ascii=False), encoding="utf-8"
+                )
+                second = write_auto_text_recovery(config, reason="build-complete")
+
+            self.assertTrue(second["valid_backup"])
+            self.assertTrue(second["previous_exists"])
+            self.assertTrue(second["previous_valid"])
+            self.assertEqual(Path(second["previous_path"]).read_bytes(), first_bytes)
+
+    def test_automatic_recovery_status_detects_corrupted_latest_and_keeps_fallback(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app_state_dir = root / "app-state"
+            state_file = app_state_dir / "state.json"
+            project_root = root / "project"
+            write_index(project_root / ".generated" / "quick_index.csv")
+            (project_root / ".state").mkdir(parents=True)
+            checkpoint_path = project_root / ".state" / ".translation_checkpoint.json"
+            checkpoint_path.write_text(
+                json.dumps(checkpoint(), ensure_ascii=False), encoding="utf-8"
+            )
+
+            with patch("app.project.STATE_FILE", state_file), patch(
+                "app.recovery.STATE_DIR", app_state_dir
+            ):
+                config = create_project(
+                    project_root,
+                    name="Protected",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "voice.zip"),
+                )
+                write_auto_text_recovery(config, reason="translation-batch")
+                write_auto_text_recovery(config, reason="build-complete")
+                status = auto_recovery_status(config)
+                Path(status["path"]).write_text("{broken", encoding="utf-8")
+                damaged = auto_recovery_status(config)
+
+            self.assertFalse(damaged["valid_backup"])
+            self.assertFalse(damaged["healthy"])
+            self.assertTrue(damaged["previous_valid"])
+            self.assertIn("Invalid JSON recovery file", damaged["error"])
+
+    def test_try_write_failure_preserves_last_known_good_metadata(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            app_state_dir = root / "app-state"
+            state_file = app_state_dir / "state.json"
+            project_root = root / "project"
+            write_index(project_root / ".generated" / "quick_index.csv")
+            (project_root / ".state").mkdir(parents=True)
+            (project_root / ".state" / ".translation_checkpoint.json").write_text(
+                json.dumps(checkpoint(), ensure_ascii=False), encoding="utf-8"
+            )
+
+            with patch("app.project.STATE_FILE", state_file), patch(
+                "app.recovery.STATE_DIR", app_state_dir
+            ):
+                config = create_project(
+                    project_root,
+                    name="Protected",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "voice.zip"),
+                )
+                good = write_auto_text_recovery(config, reason="translation-batch")
+                with patch("app.recovery.build_text_recovery", side_effect=RuntimeError("simulated failure")):
+                    failed = __import__("app.recovery", fromlist=["try_write_auto_text_recovery"]).try_write_auto_text_recovery(
+                        config, reason="build-complete"
+                    )
+
+            self.assertTrue(failed["has_backup"])
+            self.assertTrue(failed["valid_backup"])
+            self.assertFalse(failed["healthy"])
+            self.assertEqual(failed["last_backup"], good["last_backup"])
+            self.assertEqual(failed["translation_records"], good["translation_records"])
+            self.assertIn("simulated failure", failed["error"])
+
+
+
 if __name__ == "__main__":
     unittest.main()
