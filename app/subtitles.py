@@ -69,28 +69,44 @@ def load_subtitle_overrides(output_dir: Path) -> dict[str, dict[str, Any]]:
 def _override_for_entry(
     entry: dict[str, Any],
     overrides: dict[str, dict[str, Any]],
+    ambiguous_filenames: frozenset[str] = frozenset(),
 ) -> dict[str, Any] | None:
     item_id = _entry_id(entry)
     filename = str(entry.get("filename", "") or "")
     logical_id = str(entry.get("logical_id", "") or "")
+    member_id = str(entry.get("source_member_id", "") or "")
 
     if item_id is not None:
         exact = overrides.get(str(item_id))
         if isinstance(exact, dict):
             stored_filename = str(exact.get("filename", "") or "")
             stored_logical_id = str(exact.get("logical_id", "") or "")
+            stored_member = str(exact.get("source_member_id", "") or "")
             if (
                 (not stored_filename or not filename or stored_filename == filename)
                 and (not stored_logical_id or not logical_id or stored_logical_id == logical_id)
+                and (not stored_member or not member_id or stored_member == member_id)
             ):
                 return exact
 
     for candidate in overrides.values():
         stored_filename = str(candidate.get("filename", "") or "")
         stored_logical_id = str(candidate.get("logical_id", "") or "")
+        stored_member = str(candidate.get("source_member_id", "") or "")
         if filename and stored_filename == filename:
+            # Same-basename entries make a bare filename match ambiguous:
+            # only trust it when the member ids agree, or when neither side
+            # is member-aware and the filename is unique in this project.
+            if stored_member or member_id:
+                if stored_member and member_id and stored_member == member_id:
+                    return candidate
+                continue
+            if filename in ambiguous_filenames:
+                continue
             return candidate
         if logical_id and stored_logical_id == logical_id:
+            if filename in ambiguous_filenames:
+                continue
             return candidate
     return None
 
@@ -99,9 +115,15 @@ def _apply_derived_subtitle_fields(
     entries: list[dict[str, Any]],
     overrides: dict[str, dict[str, Any]],
 ) -> None:
+    filename_counts: dict[str, int] = {}
+    for entry in entries:
+        name = str(entry.get("filename", "") or "")
+        if name:
+            filename_counts[name] = filename_counts.get(name, 0) + 1
+    ambiguous = frozenset(name for name, count in filename_counts.items() if count > 1)
     for entry in entries:
         raw_target = str(entry.get("target_text") or entry.get("chinese", ""))
-        override = _override_for_entry(entry, overrides)
+        override = _override_for_entry(entry, overrides, ambiguous)
         if override is None:
             entry["final_chs"] = raw_target
             entry["modified"] = False
@@ -125,6 +147,11 @@ def _sync_corrected_csv(
     except (OSError, csv.Error):
         return
 
+    by_member = {
+        str(entry.get("source_member_id", "")): entry
+        for entry in entries
+        if str(entry.get("source_member_id", "") or "")
+    }
     by_filename = {
         str(entry.get("filename", "")): entry
         for entry in entries
@@ -136,7 +163,9 @@ def _sync_corrected_csv(
         if _entry_id(entry) is not None
     }
     for row in rows:
-        entry = by_filename.get(str(row.get("filename", "")))
+        entry = by_member.get(str(row.get("source_member_id", "") or ""))
+        if entry is None:
+            entry = by_filename.get(str(row.get("filename", "")))
         if entry is None:
             entry = by_index.get(str(row.get("index", "")))
         if entry is None:
@@ -371,7 +400,7 @@ def get_project_subtitles(
     overrides: dict[str, dict[str, Any]] = {}
     if overrides_file.is_file():
         try:
-            overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
+            overrides(overrides_file.read_text(encoding="utf-8"))
         except Exception:
             overrides = {}
 
@@ -514,10 +543,18 @@ def update_project_subtitles(
         raw_target = str(entry.get("target_text") or entry.get("chinese", ""))
         filename = str(entry.get("filename", "") or "")
         logical_id = str(entry.get("logical_id", "") or "")
+        member_id = str(entry.get("source_member_id", "") or "")
 
         if new_chs == raw_target:
             overrides.pop(key, None)
             for old_key, value in list(overrides.items()):
+                stored_member = str(value.get("source_member_id", "") or "")
+                if member_id or stored_member:
+                    # Member-aware records only match by member id so a
+                    # same-basename sibling never loses its override.
+                    if member_id and stored_member and member_id == stored_member:
+                        overrides.pop(old_key, None)
+                    continue
                 if (
                     (filename and str(value.get("filename", "") or "") == filename)
                     or (
@@ -532,6 +569,7 @@ def update_project_subtitles(
                 "modified": True,
                 "filename": filename,
                 "logical_id": logical_id,
+                "source_member_id": member_id,
             }
         updated_count += 1
 
@@ -556,4 +594,3 @@ def update_project_subtitles(
         "total_count": len(entries),
         **refreshed,
     }
-
