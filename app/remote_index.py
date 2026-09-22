@@ -2,16 +2,23 @@ from __future__ import annotations
 
 import csv
 import hashlib
+import http.client
 import json
+import logging
 import os
+import socket
+import ssl
 import tempfile
 import time
+import urllib.error
 import urllib.request
 import zipfile
 from collections import Counter
 from pathlib import Path
 from typing import Any, Callable
 from urllib.parse import urlparse
+
+logger = logging.getLogger(__name__)
 
 AI_HOBBYIST_INDEX_URLS = {
     "en": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx",
@@ -183,48 +190,155 @@ def read_ai_hobbyist_xlsx_for_filenames(
         wb.close()
 
 
-def _download_remote_xlsx(url: str, timeout: int, path: Path) -> None:
+def _download_remote_xlsx(
+    url: str,
+    timeout: int | tuple[float, float] = (15.0, 60.0),
+    path: Path | None = None,
+    *,
+    max_attempts: int = 5,
+    retry_delay: float = 2.0,
+    has_cache_fallback: bool = False,
+) -> None:
     parsed = urlparse(url)
     if parsed.scheme != "https" or not parsed.netloc:
         raise ValueError("Remote index URL must be an HTTPS URL")
+
+    if path is None:
+        raise ValueError("Target path must be specified for remote XLSX download")
+
+    if isinstance(timeout, (tuple, list)):
+        connect_timeout, read_timeout = float(timeout[0]), float(timeout[1])
+    else:
+        connect_timeout = 15.0
+        read_timeout = float(timeout)
 
     request = urllib.request.Request(
         url,
         headers={"User-Agent": "HSR-Voice-Archive-Builder/0.9"},
     )
-    with urllib.request.urlopen(request, timeout=timeout) as response, path.open("wb") as out:
-        final = urlparse(response.geturl())
-        if final.scheme != "https" or not final.netloc:
-            raise ValueError("Remote index redirect left HTTPS")
 
-        declared = response.headers.get("Content-Length")
-        if declared:
-            try:
-                declared_size = int(declared)
-            except ValueError:
-                declared_size = -1
-            if declared_size > MAX_REMOTE_INDEX_BYTES:
-                raise ValueError(
-                    f"Remote index Content-Length exceeds safety limit: {declared_size} bytes"
+    last_error: Exception | None = None
+    last_reason: str = ""
+
+    for attempt in range(1, max_attempts + 1):
+        temp_file: Path | None = None
+        try:
+            fd, temp_name = tempfile.mkstemp(
+                prefix=".remote_dl_", suffix=".tmp", dir=path.parent
+            )
+            os.close(fd)
+            temp_file = Path(temp_name)
+
+            # Use socket timeout for connect phase
+            with urllib.request.urlopen(request, timeout=connect_timeout) as response:
+                status = getattr(response, "status", getattr(response, "code", 200))
+                if isinstance(status, int) and status != 200:
+                    raise urllib.error.HTTPError(
+                        url, status, f"HTTP status {status}", response.headers, None
+                    )
+                elif not isinstance(status, int):
+                    status = 200
+
+                final = urlparse(response.geturl())
+                if final.scheme != "https" or not final.netloc:
+                    raise ValueError("Remote index redirect left HTTPS")
+
+                declared = response.headers.get("Content-Length")
+                if declared:
+                    try:
+                        declared_size = int(declared)
+                    except ValueError:
+                        declared_size = -1
+                    if declared_size > MAX_REMOTE_INDEX_BYTES:
+                        raise ValueError(
+                            f"Remote index Content-Length exceeds safety limit: {declared_size} bytes"
+                        )
+
+                # Set socket timeout for read phase
+                if hasattr(response, "fp") and hasattr(response.fp, "raw") and hasattr(response.fp.raw, "_sock"):
+                    sock = response.fp.raw._sock
+                    if sock:
+                        sock.settimeout(read_timeout)
+                elif hasattr(response, "headers") and hasattr(response, "file"):
+                    # Legacy socket retrieval
+                    try:
+                        sock = response.file._sock
+                        if sock:
+                            sock.settimeout(read_timeout)
+                    except AttributeError:
+                        pass
+
+                downloaded = 0
+                with temp_file.open("wb") as out:
+                    while True:
+                        chunk = response.read(1024 * 1024)
+                        if not chunk:
+                            break
+                        downloaded += len(chunk)
+                        if downloaded > MAX_REMOTE_INDEX_BYTES:
+                            raise ValueError(
+                                f"Remote index download exceeds safety limit: {downloaded} bytes"
+                            )
+                        out.write(chunk)
+
+            if downloaded == 0:
+                raise ValueError("Downloaded file is empty (0 bytes)")
+
+            # Validate before moving into place
+            _validate_xlsx_container(temp_file)
+            os.replace(temp_file, path)
+            logger.info("Remote index download attempt %d/%d succeeded from %s", attempt, max_attempts, url)
+            return
+
+        except Exception as exc:
+            if temp_file and temp_file.exists():
+                temp_file.unlink(missing_ok=True)
+
+            last_error = exc
+            reason_parts = [str(exc)]
+            if isinstance(exc, urllib.error.URLError) and exc.reason:
+                reason_parts.append(str(exc.reason))
+            last_reason = " - ".join(p for p in reason_parts if p)
+
+            # Determine if error is retryable
+            is_retryable = False
+            if isinstance(exc, (ssl.SSLError, socket.timeout, TimeoutError, ConnectionError, http.client.IncompleteRead)):
+                is_retryable = True
+            elif isinstance(exc, urllib.error.HTTPError):
+                code = getattr(exc, "code", None)
+                if isinstance(code, int) and (code >= 500 or code == 429):
+                    is_retryable = True
+            elif isinstance(exc, urllib.error.URLError):
+                is_retryable = True
+
+            if is_retryable and attempt < max_attempts:
+                logger.warning(
+                    "Remote index download attempt %d/%d failed (%s): %s. Retrying in %.1f seconds...",
+                    attempt,
+                    max_attempts,
+                    url,
+                    last_reason,
+                    retry_delay,
                 )
-
-        downloaded = 0
-        while True:
-            chunk = response.read(1024 * 1024)
-            if not chunk:
+                time.sleep(retry_delay)
+            else:
                 break
-            downloaded += len(chunk)
-            if downloaded > MAX_REMOTE_INDEX_BYTES:
-                raise ValueError(
-                    f"Remote index download exceeds safety limit: {downloaded} bytes"
-                )
-            out.write(chunk)
+
+    fallback_str = "Using local cache" if has_cache_fallback else "No cache available"
+    detailed_msg = (
+        f"Remote index download failed\n"
+        f"URL: {url}\n"
+        f"Attempt: {max_attempts}/{max_attempts}\n"
+        f"Reason: {last_reason or str(last_error)}\n"
+        f"Fallback: {fallback_str}"
+    )
+    raise RuntimeError(detailed_msg) from last_error
 
 
 def fetch_ai_hobbyist_index(
     character: str,
     url: str = DEFAULT_EN_INDEX_URL,
-    timeout: int = 90,
+    timeout: int | tuple[float, float] = (15.0, 60.0),
 ) -> list[dict[str, str]]:
     with tempfile.TemporaryDirectory(prefix="hsr_remote_index_") as td:
         path = Path(td) / "index.xlsx"
@@ -235,7 +349,7 @@ def fetch_ai_hobbyist_index(
 def fetch_ai_hobbyist_index_for_filenames(
     filenames: set[str],
     url: str = DEFAULT_EN_INDEX_URL,
-    timeout: int = 90,
+    timeout: int | tuple[float, float] = (15.0, 60.0),
 ) -> list[dict[str, str]]:
     with tempfile.TemporaryDirectory(prefix="hsr_remote_index_") as td:
         path = Path(td) / "index.xlsx"
@@ -277,7 +391,7 @@ def _write_workbook_cache_meta(path: Path, url: str, fetched_at_epoch: float) ->
 def get_ai_hobbyist_workbook(
     url: str = DEFAULT_EN_INDEX_URL,
     *,
-    timeout: int = 90,
+    timeout: int | tuple[float, float] = (15.0, 60.0),
     cache_dir: Path | None = None,
     max_age_seconds: float = REMOTE_INDEX_CACHE_TTL_SECONDS,
     max_stale_age_seconds: float = 7 * 24 * 60 * 60,
@@ -329,8 +443,14 @@ def get_ai_hobbyist_workbook(
     fd, temp_name = tempfile.mkstemp(prefix=".workbook-", suffix=".xlsx", dir=cache_root)
     os.close(fd)
     temp = Path(temp_name)
+    has_valid_cache = bool(meta is not None and xlsx_path.is_file())
     try:
-        _download_remote_xlsx(url, timeout, temp)
+        _download_remote_xlsx(
+            url,
+            timeout,
+            temp,
+            has_cache_fallback=has_valid_cache,
+        )
         _validate_xlsx_container(temp)
         os.replace(temp, xlsx_path)
     except Exception:
@@ -338,6 +458,11 @@ def get_ai_hobbyist_workbook(
         if meta is not None and xlsx_path.is_file():
             age = max(0.0, now - float(meta.get("fetched_at_epoch", 0.0)))
             if age <= max_stale_age_seconds:
+                logger.warning(
+                    "Remote index refresh failed for %s. Falling back to cached index (%s)",
+                    url,
+                    xlsx_path,
+                )
                 return cached_result(stale=True)
         raise
     _write_workbook_cache_meta(meta_path, url, now)
@@ -353,7 +478,7 @@ def fetch_ai_hobbyist_index_for_filenames_cached(
     filenames: set[str],
     url: str = DEFAULT_EN_INDEX_URL,
     *,
-    timeout: int = 90,
+    timeout: int | tuple[float, float] = (15.0, 60.0),
     cache_dir: Path | None = None,
     max_age_seconds: float = REMOTE_INDEX_CACHE_TTL_SECONDS,
     max_stale_age_seconds: float = 7 * 24 * 60 * 60,
@@ -477,7 +602,7 @@ def fetch_ai_hobbyist_index_cached(
     character: str,
     url: str = DEFAULT_EN_INDEX_URL,
     *,
-    timeout: int = 90,
+    timeout: int | tuple[float, float] = (15.0, 60.0),
     cache_dir: Path | None = None,
     max_age_seconds: int = REMOTE_INDEX_CACHE_TTL_SECONDS,
     max_stale_age_seconds: int = 7 * 24 * 60 * 60,
