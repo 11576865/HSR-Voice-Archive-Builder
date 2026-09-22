@@ -83,7 +83,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("'manifest.json':'完整的机器可读档案", html)
         self.assertIn("'build_report.json':'本次构建的统计", html)
         self.assertIn("'HSR_Voice_Archive_Black.mkv':'黑色视频轨", html)
-        self.assertIn("/\\.(ass|srt)$/i.test(name)", html)
+        self.assertIn("file-subtitle", html)
 
     def test_workflow_actions_and_incremental_progress_are_visible(self) -> None:
         html = (
