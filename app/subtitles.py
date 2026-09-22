@@ -255,7 +255,12 @@ def refresh_subtitle_artifacts(
         output_dir,
         source_language=config.source_text_language or "en",
         target_language=config.target_language or "zh-CN",
-        generate_ass=bool(getattr(config, "generate_ass", False)),
+        # ASS is now an on-demand finished output. If the user has already
+        # generated it, keep it synchronized with later human proofreading.
+        generate_ass=(
+            (output_dir / "HSR_Voice_Archive.ass").is_file()
+            or bool(getattr(config, "generate_ass", False))
+        ),
         manifest_data=manifest_data,
     )
 
