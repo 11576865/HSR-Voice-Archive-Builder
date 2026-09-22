@@ -168,7 +168,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
         <p class="small muted">Quick Mode 固定生成简体中文字幕；源文本可使用 EN / CHS / JP / KR。第二语言包只作为额外逐条语义参考，不会混入连续 FLAC。</p>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
         <label class="check"><input id="quickTranslateMissing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
-        <label class="check"><input id="quickReviewOfficial" type="checkbox" checked> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
+        <label class="check"><input id="quickReviewOfficial" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <p class="small muted">这两项会随快速构建一起保存。关闭“官方中文对照复核”仍会采用官方中文文本；只是跳过英文与官方中文的快速语义比对，以及只针对高风险条目的 API 复核/重译。</p>
         <div class="actions">
           <button type="button" id="quickRefreshBtn">刷新本机文件</button>
@@ -223,7 +223,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
               <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
               <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
-              <label class="check"><input name="review_official_target" type="checkbox" checked> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
+              <label class="check"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
               <div class="actions"><button class="success">创建</button></div>
             </form>
           </div>
@@ -344,13 +344,25 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
       <div id="translationUsage" class="small muted" style="margin-top:10px"></div>
       <div id="finishedOutputs" class="hidden">
         <div class="divider"></div>
-        <h3>成品文件</h3>
+        <h3>Final Products（最终成品）</h3>
+        <p class="small muted">普通使用时主要关注连续音频与字幕；ASS / 黑屏 MKV 可按需生成。</p>
         <table><tbody id="outputTable"></tbody></table>
         <div id="optionalOutputStatus" class="small muted" style="margin-top:8px" role="status" aria-live="polite"></div>
       </div>
+      <details id="archiveOutputs" style="margin-top:14px">
+        <summary>Archive / Build Records（档案与构建记录）</summary>
+        <p class="small muted">Manifest、时间轴、构建报告与更新计划用于审计、复现和后续自动化，不是普通播放所必需的成品。</p>
+        <table><tbody id="archiveOutputTable"></tbody></table>
+      </details>
+      <details id="projectResources" style="margin-top:14px">
+        <summary>Project Resources（项目资源）</summary>
+        <p class="small muted">.generated 是可恢复的项目资源层，不是一次性缓存。它可保存增量音频、组合音频和内部索引；不要在失败后手动删除。</p>
+        <div id="recoveryNotice" class="notice warn" style="margin-top:8px"></div>
+        <table><tbody id="projectResourceTable"></tbody></table>
+      </details>
       <details id="diagnosticOutputs" style="margin-top:14px">
-        <summary>项目状态文件（高级）</summary>
-        <p class="small muted">断点、QA、usage 与 stages 已放在项目 .state 目录，不再混入 output 成品目录。它们用于恢复和排错，不代表构建已经成功。</p>
+        <summary>Runtime State（运行状态，高级）</summary>
+        <p class="small muted">断点、QA、usage 与 stages 位于 .state，用于断点恢复和排错，不代表构建已经成功。</p>
         <table><tbody id="diagnosticOutputTable"></tbody></table>
       </details>
     </section>
@@ -608,7 +620,7 @@ async function deleteSelectedProject(){
   const mode=managed
     ? '这是 Quick Mode 管理的专用项目目录，将删除整个项目目录，但不会删除项目目录之外的原始语音包。'
     : '这是手动项目。只会删除项目配置、.generated 和项目目录内的输出目录；其他用户文件会保留。';
-  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n'+root))return;
+  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n警告：删除会丢失 .generated、.state、增量索引、已下载增量语音和翻译/QA 恢复数据。构建失败时应优先继续使用当前项目；如果只是不想在列表里看到它，请使用“移出列表”。\n\n'+root))return;
   const d=new FormData();d.set('project_path',root);
   const j=await api('/api/project/delete',{method:'POST',body:d});
   fillProject(j.project||null);
@@ -725,17 +737,35 @@ function fillProject(p){
   document.getElementById('translationUsage').textContent=usage.join(' · ');
   const actionStatus=document.getElementById('projectActionStatus');
   if(has&&p.output_path){actionStatus.textContent='成品文件已放至：'+p.output_path;actionStatus.className='small status-ok action-status';}
-  const main=document.getElementById('outputTable'),diag=document.getElementById('diagnosticOutputTable');
-  main.innerHTML='';diag.innerHTML='';
-  const outputEntries=Object.entries(p.outputs||{}),outputMap=Object.fromEntries(outputEntries);
-  const orderedNames=[...primaryOutputOrder,...outputEntries.map(([name])=>name).filter(name=>!primaryOutputOrder.includes(name)&&!finalOutputOrder.includes(name)&&!['HSR_Voice_Archive.ass','HSR_Voice_Archive_Black.mkv'].includes(name)),...finalOutputOrder];
-  for(const name of orderedNames){
-    const o=outputMap[name];
-    if(!o)continue;
-    if(!o.exists)continue;
-    const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':/\.(ass|srt)$/i.test(name)?'file-subtitle':'';
+  const main=document.getElementById('outputTable'),archive=document.getElementById('archiveOutputTable'),resources=document.getElementById('projectResourceTable'),diag=document.getElementById('diagnosticOutputTable');
+  main.innerHTML='';archive.innerHTML='';resources.innerHTML='';diag.innerHTML='';
+  const outputMap=p.outputs||{};
+  const groups=p.output_groups||{};
+  const finalProducts=groups.final_products||{};
+  const archiveRecords=groups.archive_records||{};
+  for(const name of ['continuous.flac','HSR_Voice_Archive.srt']){
+    const o=finalProducts[name]||outputMap[name];
+    if(!o?.exists)continue;
+    const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':'file-subtitle';
     tr.innerHTML='<td><span class="'+fileClass+'">'+name+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
-    (has?main:diag).appendChild(tr);
+    main.appendChild(tr);
+  }
+  for(const [name,o] of Object.entries(archiveRecords)){
+    if(!o?.exists)continue;
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+name+'<div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
+    archive.appendChild(tr);
+  }
+  for(const [name,o] of Object.entries(p.project_resources||{})){
+    if(!o?.exists)continue;
+    const tr=document.createElement('tr');
+    tr.innerHTML='<td>'+name+'</td><td>'+(o.kind==='directory'?'目录':bytes(o.size_bytes))+'</td>';
+    resources.appendChild(tr);
+  }
+  const recovery=document.getElementById('recoveryNotice');
+  if(recovery){
+    recovery.textContent=p.recovery?.notice||'项目目录包含可恢复资源。构建失败后优先继续当前项目，不要删除 .generated 或 .state。';
+    recovery.className='notice '+(p.recovery?.can_resume?'warn':'');
   }
   if(has){
     const ass=outputMap['HSR_Voice_Archive.ass'],assRow=document.createElement('tr');
