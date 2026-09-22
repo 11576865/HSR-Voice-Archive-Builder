@@ -127,6 +127,18 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn("(Alt+↑)", html)
         self.assertNotIn("(Alt+↓)", html)
         self.assertNotIn("document.addEventListener('keydown'", html)
+        self.assertIn('interactive-widget=resizes-content', html)
+        self.assertIn('@media(pointer:coarse)', html)
+        self.assertIn('@media(prefers-reduced-motion:reduce)', html)
+        self.assertIn('id="progressTrack" class="progress-track" role="progressbar"', html)
+        self.assertIn('role="status" aria-live="polite"', html)
+        self.assertIn('id="mobileProgressSlot"', html)
+        self.assertIn("syncProgressPlacement", html)
+        self.assertIn('type="search" autocomplete="off"', html)
+        self.assertNotIn('id="loadSubtitlesBtn"', html)
+        self.assertNotIn('id="saveSubtitlesBtn"', html)
+        self.assertIn('type="button" class="sub-item ', html)
+        self.assertIn("scheduleSubtitleFetch", html)
 
     def test_job_polling_retries_and_bypasses_get_cache(self) -> None:
         html = (
