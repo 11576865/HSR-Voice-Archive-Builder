@@ -50,6 +50,10 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="quickAiBudget" class="hidden"', html)
         self.assertIn('id="quickTranslateMissing"', html)
         self.assertIn('id="quickReviewOfficial"', html)
+        self.assertIn('name="translate_missing" type="checkbox" checked', html)
+        self.assertIn('name="review_official_target" type="checkbox" checked', html)
+        self.assertIn("data.set('translate_missing'", html)
+        self.assertIn("data.set('review_official_target'", html)
         self.assertIn("d.set('intro_gap'", html)
         self.assertIn("d.set('same_group_gap'", html)
         self.assertIn("d.set('group_gap'", html)
@@ -106,8 +110,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("const finalOutputOrder=['HSR_Voice_Archive.srt','continuous.flac']", html)
         self.assertIn('id="assOutputBtn"', html)
         self.assertIn("'/api/output/ass'", html)
-        self.assertIn("增量官方中文参考", html)
-        self.assertIn("无官方参考的 API 译文", html)
+        self.assertIn("增量官方中文</span>", html)
+        self.assertIn("API 补译</span>", html)
         self.assertNotIn("缺失目标文本</span>", html)
 
 
