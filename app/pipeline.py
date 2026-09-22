@@ -25,6 +25,7 @@ from .human_review import HumanReviewRequired, write_review_txt
 from .semantic_quality import SEMANTIC_QA_VERSION
 from .schema import write_legacy_inputs
 from .stages import build_fingerprint, load_stage, path_fingerprint, save_stage
+from .subtitles import refresh_subtitle_artifacts_from_settings
 
 
 STAGE_FILES = {
@@ -1714,6 +1715,12 @@ def build_project_v02(
         else:
             write_manifest(entries, report, out_dir, generate_ass=generate_ass)
             _augment_outputs(entries, report, out_dir)
+            refresh_subtitle_artifacts_from_settings(
+                out_dir,
+                source_language=source_text_language,
+                target_language=target_language,
+                generate_ass=generate_ass,
+            )
             save_stage(
                 state_dir,
                 STAGE_FILES["manifest"],
@@ -1724,6 +1731,15 @@ def build_project_v02(
                 artifact_root=out_dir,
             )
             rebuilt_stages.append("manifest")
+
+        # Human proofreading is a derived layer. Re-apply it even when the
+        # manifest stage was resumed from an earlier verified build.
+        refresh_subtitle_artifacts_from_settings(
+            out_dir,
+            source_language=source_text_language,
+            target_language=target_language,
+            generate_ass=generate_ass,
+        )
 
         progress(
             "audio",
