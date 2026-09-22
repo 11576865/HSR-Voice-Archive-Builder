@@ -530,7 +530,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
 const injectedToken=__HSR_API_TOKEN_JSON__;
 const token=typeof injectedToken==="string"?injectedToken:"";
 if(location.search){history.replaceState(null,'',location.pathname)}
-const headers=()=>token?{'X-HSR-Token':token}:{};
+const headers=()=>token?{'X-HSR-Token':token}:{:};
 const log=document.getElementById('log');
 let currentProject=null,pollTimer=null;
 const narrowLayout=window.matchMedia('(max-width:767px)');
