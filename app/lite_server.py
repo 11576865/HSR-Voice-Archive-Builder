@@ -599,7 +599,20 @@ class Handler(BaseHTTPRequestHandler):
             root = Path(raw).expanduser().resolve()
             was_active = _active_root is not None and _active_root.resolve() == root
             assert_project_idle(str(root))
+            config = load_project(root)
+            protection = try_write_auto_text_recovery(
+                config, reason="pre-delete-safety"
+            )
+            if (
+                not protection.get("skipped")
+                and not protection.get("valid_backup")
+                and not protection.get("previous_valid")
+            ):
+                raise RuntimeError(
+                    "Refusing to delete project because no verified external translation recovery package is available"
+                )
             result = delete_project(root)
+            result["auto_recovery"] = protection
             result["deleted_job_records"] = delete_project_jobs(str(root))
             if was_active:
                 _clear_active()
