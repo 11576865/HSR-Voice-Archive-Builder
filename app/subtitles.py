@@ -400,7 +400,7 @@ def get_project_subtitles(
     overrides: dict[str, dict[str, Any]] = {}
     if overrides_file.is_file():
         try:
-            overrides(overrides_file.read_text(encoding="utf-8"))
+            overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
         except Exception:
             overrides = {}
 
