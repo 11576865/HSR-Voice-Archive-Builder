@@ -387,6 +387,7 @@ def _translate_missing(
     source_language: str = "en",
     target_language: str = "zh-CN",
     review_output_path: Path | None = None,
+    recovery_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     if batch_size < 1:
         raise ValueError("translation_batch_size must be >= 1")
@@ -755,6 +756,8 @@ def _translate_missing(
             model=model,
             records=qa_rows,
         )
+        if recovery_callback is not None:
+            recovery_callback("translation-batch")
 
         ledger.assert_observable()
 
@@ -986,6 +989,8 @@ def _translate_missing(
                 model=model,
                 records=qa_rows,
             )
+            if recovery_callback is not None:
+                recovery_callback("semantic-repair-batch")
             ledger.assert_observable()
 
     if semantic_hard_failures:
@@ -1150,6 +1155,7 @@ def _review_official_targets(
     progress_callback: Callable[[str, str, int, int], None] | None = None,
     source_language: str = "en",
     target_language: str = "zh-CN",
+    recovery_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     """Compare official target text against the source and revise only deviations.
 
@@ -1325,6 +1331,8 @@ def _review_official_targets(
         _write_official_checkpoint(
             checkpoint_path, model, provider, base_url, target_language, checkpoint
         )
+        if recovery_callback is not None:
+            recovery_callback("official-review-batch")
         ledger.assert_observable()
 
     for record in records:
@@ -1409,6 +1417,7 @@ def build_project_v02(
     reference_text_embedded: bool = False,
     state_dir: Path | None = None,
     review_official_target: bool = False,
+    recovery_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1623,6 +1632,7 @@ def build_project_v02(
                         source_text_language,
                         target_language,
                         out_dir / "semantic_review_required.txt",
+                        recovery_callback,
                     )
                 )
                 report["count_missing_chinese"] = sum(not e.chinese for e in entries)
@@ -1640,6 +1650,7 @@ def build_project_v02(
                         progress_callback=progress_callback,
                         source_language=source_text_language,
                         target_language=target_language,
+                        recovery_callback=recovery_callback,
                     )
                 )
             save_stage(
