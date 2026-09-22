@@ -382,7 +382,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
       <div class="topline">
         <h2>字幕审查编辑器 (Subtitle Review Editor)</h2>
       </div>
-      <p class="small muted">专为人类校对与中文修正设计的单条校对工作台。只有“最终中文”可编辑，时间轴与原文不可修改。</p>
+      <p class="small muted">专为人类校对与中文修正设计的单条校对工作台。只有“最终中文”可编辑，时间轴与原文不可修改。停止输入约 1 秒后会自动保存；“保存并下一条”会确认写入成功后再切换。</p>
 
       <div class="row3" style="margin-bottom:12px">
         <div>
@@ -436,6 +436,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
                 <span id="subSourceLangBadge" class="badge">EN</span>
               </div>
               <div id="subSourceText" class="sub-ref-content">May this journey lead us starward.</div>
+              <div id="subSourceFileMeta" class="small muted" style="margin-top:6px">源文件：—</div>
             </div>
 
             <div class="sub-ref-card">
@@ -461,7 +462,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
           <!-- Navigation controls -->
           <div class="sub-nav-bar">
             <button type="button" id="subPrevBtn">上一条</button>
-            <button type="button" class="success" id="subSaveCurrentBtn">保存</button>
+            <button type="button" class="success" id="subSaveCurrentBtn">保存并下一条</button>
             <button type="button" id="subNextBtn">下一条</button>
           </div>
         </div>
@@ -1267,6 +1268,47 @@ function parseTimeRangeInput(str){
 
 let loadedSubtitles=[];
 let activeSubIndex=0;
+let subtitleSearchTimer=null;
+let subtitleAutosaveTimer=null;
+let subtitleSavePromise=null;
+let subtitleEditorComposing=false;
+let subtitleSavedFlashTimer=null;
+
+function subtitleKey(sub){return String(sub?.id??'');}
+function currentSubtitle(){
+  return loadedSubtitles.length&&activeSubIndex>=0&&activeSubIndex<loadedSubtitles.length
+    ? loadedSubtitles[activeSubIndex]
+    : null;
+}
+function setSubtitleSaveUi(mode,message=''){
+  const status=document.getElementById('subtitleSaveStatus');
+  const button=document.getElementById('subSaveCurrentBtn');
+  clearTimeout(subtitleSavedFlashTimer);
+  if(status&&message){
+    status.textContent=message;
+    status.className='small '+(mode==='error'?'status-bad':mode==='saved'?'status-ok':'muted');
+  }
+  if(!button)return;
+  button.disabled=mode==='saving';
+  if(mode==='saving')button.textContent='保存中…';
+  else if(mode==='saved'){
+    button.textContent='已保存 ✓';
+    subtitleSavedFlashTimer=setTimeout(()=>{button.textContent='保存并下一条';button.disabled=false},800);
+  }else if(mode==='error')button.textContent='重试保存';
+  else button.textContent='保存并下一条';
+}
+function markServerSubtitle(sub){
+  sub._savedFinal=String(sub.final_chs??'');
+  sub._dirty=false;
+  return sub;
+}
+function dirtyDrafts(){
+  const drafts=new Map();
+  for(const sub of loadedSubtitles){
+    if(sub?._dirty)drafts.set(subtitleKey(sub),{final_chs:sub.final_chs,modified:sub.modified,_savedFinal:sub._savedFinal});
+  }
+  return drafts;
+}
 
 async function fetchSubtitles(){
   if(!currentProject)return;
@@ -1275,6 +1317,7 @@ async function fetchSubtitles(){
   const timeRangeStr=document.getElementById('subTimeRange').value;
   const selector=document.getElementById('subSelector').value;
   const timeRange=parseTimeRangeInput(timeRangeStr);
+  const drafts=dirtyDrafts();
 
   let url='/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?';
   const params=new URLSearchParams();
@@ -1284,10 +1327,18 @@ async function fetchSubtitles(){
   if(selector)params.set('selector',selector);
 
   try{
-    status.textContent='正在加载字幕数据…';
+    if(!drafts.size)status.textContent='正在加载字幕数据…';
+    const oldActiveId=currentSubtitle()?.id;
     const j=await api(url+params.toString());
-    const oldActiveId=loadedSubtitles[activeSubIndex]?.id;
-    loadedSubtitles=j.subtitles||[];
+    loadedSubtitles=(j.subtitles||[]).map(markServerSubtitle);
+    for(const sub of loadedSubtitles){
+      const draft=drafts.get(subtitleKey(sub));
+      if(!draft)continue;
+      sub.final_chs=draft.final_chs;
+      sub.modified=true;
+      sub._savedFinal=draft._savedFinal;
+      sub._dirty=true;
+    }
     let newIdx=0;
     if(oldActiveId!==undefined){
       const foundIdx=loadedSubtitles.findIndex(s=>String(s.id)===String(oldActiveId));
@@ -1296,7 +1347,9 @@ async function fetchSubtitles(){
     activeSubIndex=newIdx;
     renderSubtitleList();
     renderActiveSubtitle();
-    status.textContent='已加载 '+loadedSubtitles.length+' 条字幕记录。';
+    status.textContent=drafts.size
+      ? '字幕列表已刷新；未保存编辑已保留，并会自动保存。'
+      : '已加载 '+loadedSubtitles.length+' 条字幕记录。';
     status.className='small muted';
   }catch(x){
     status.textContent='加载字幕失败：'+shortError(x);
@@ -1318,7 +1371,9 @@ function renderSubtitleList(){
   listView.innerHTML=loadedSubtitles.map((sub,idx)=>{
     const timeStr=formatClockTime(sub.start)+' - '+formatClockTime(sub.end);
     const isActive=idx===activeSubIndex;
-    const modTag=sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
+    const editTag=sub._dirty
+      ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
+      : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
     return '<button type="button" class="sub-item '+(isActive?'active':'')+'"'+(isActive?' aria-current="true"':'')+' onclick="selectSubtitleIndex('+idx+')">'+
       '<div class="sub-item-top">'+
@@ -1326,28 +1381,29 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+escapeHtml(sub.final_chs||sub.source_text||'—')+'</div>'+
-      '<div class="sub-item-tags">'+modTag+srcTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+srcTag+'</div>'+
     '</button>';
   }).join('');
 }
 
-function selectSubtitleIndex(idx){
-  if(idx<0||idx>=loadedSubtitles.length)return;
-  syncEditorToMemory();
+async function selectSubtitleIndex(idx){
+  if(idx<0||idx>=loadedSubtitles.length||idx===activeSubIndex)return;
+  const ok=await saveCurrentSubtitle({quiet:true});
+  if(!ok)return;
   activeSubIndex=idx;
   renderSubtitleList();
   renderActiveSubtitle();
 }
 
 function syncEditorToMemory(){
-  if(!loadedSubtitles.length||activeSubIndex<0||activeSubIndex>=loadedSubtitles.length)return;
+  const currentSub=currentSubtitle();
   const editor=document.getElementById('subFinalEditor');
-  if(!editor)return;
-  const currentSub=loadedSubtitles[activeSubIndex];
-  if(currentSub&&editor.value!==currentSub.final_chs){
+  if(!currentSub||!editor)return;
+  if(editor.value!==currentSub.final_chs){
     currentSub.final_chs=editor.value;
-    currentSub.modified=true;
   }
+  currentSub._dirty=String(currentSub.final_chs??'')!==String(currentSub._savedFinal??'');
+  if(currentSub._dirty)currentSub.modified=true;
 }
 
 function renderActiveSubtitle(){
@@ -1357,6 +1413,7 @@ function renderActiveSubtitle(){
     document.getElementById('subStatusBadge').innerHTML='';
     document.getElementById('subSourceText').textContent='—';
     document.getElementById('subSourceText').className='sub-ref-content empty';
+    document.getElementById('subSourceFileMeta').textContent='源文件：—';
     document.getElementById('subOfficialText').textContent='—';
     document.getElementById('subOfficialText').className='sub-ref-content empty';
     document.getElementById('subApiText').textContent='—';
@@ -1369,15 +1426,18 @@ function renderActiveSubtitle(){
     return;
   }
 
-  const sub=loadedSubtitles[activeSubIndex];
+  const sub=currentSubtitle();
   document.getElementById('subCurrentIndexTag').textContent='条目 #'+sub.id+' ('+(activeSubIndex+1)+' / '+loadedSubtitles.length+')';
   document.getElementById('subTimeBadge').textContent=formatClockTime(sub.start)+' - '+formatClockTime(sub.end);
-  document.getElementById('subStatusBadge').innerHTML=sub.modified?'<span class="badge" style="color:var(--ok)">已人工修改</span>':'<span class="badge" style="color:var(--muted)">未修改</span>';
+  document.getElementById('subStatusBadge').innerHTML=sub._dirty
+    ? '<span class="badge" style="color:var(--warn)">未保存</span>'
+    : sub.modified?'<span class="badge" style="color:var(--ok)">已人工修改</span>':'<span class="badge" style="color:var(--muted)">未修改</span>';
 
   const srcEl=document.getElementById('subSourceText');
   srcEl.textContent=sub.source_text||'—';
   srcEl.className=sub.source_text?'sub-ref-content':'sub-ref-content empty';
   document.getElementById('subSourceLangBadge').textContent=(sub.source_language||'EN').toUpperCase();
+  document.getElementById('subSourceFileMeta').textContent='源文件：'+(sub.filename||'未记录');
 
   const offEl=document.getElementById('subOfficialText');
   offEl.textContent=sub.official_chs||'无官方中文参考';
@@ -1393,7 +1453,6 @@ function renderActiveSubtitle(){
 
   document.getElementById('subPrevBtn').disabled=activeSubIndex<=0;
   document.getElementById('subNextBtn').disabled=activeSubIndex>=loadedSubtitles.length-1;
-
   updateCharCounter();
 }
 
@@ -1404,64 +1463,135 @@ function updateCharCounter(){
   document.getElementById('subCharCounter').textContent=charCount+' 字'+(lineCount>1?' · '+lineCount+' 行':'');
 }
 
-function goToPrevSubtitle(){
-  if(activeSubIndex>0){
-    selectSubtitleIndex(activeSubIndex-1);
-  }
+function scheduleSubtitleAutosave(){
+  clearTimeout(subtitleAutosaveTimer);
+  if(subtitleEditorComposing||!currentSubtitle()?._dirty)return;
+  setSubtitleSaveUi('dirty','有未保存修改；停止输入约 1 秒后自动保存。');
+  subtitleAutosaveTimer=setTimeout(()=>saveCurrentSubtitle({quiet:true}),1000);
 }
 
-function goToNextSubtitle(){
-  if(activeSubIndex<loadedSubtitles.length-1){
-    selectSubtitleIndex(activeSubIndex+1);
-  }
-}
-
-async function saveSubtitles(){
-  if(!currentProject)return;
+async function saveCurrentSubtitle({advance=false,quiet=false}={}){
+  if(!currentProject)return false;
   syncEditorToMemory();
+  let sub=currentSubtitle();
+  if(!sub)return false;
 
-  const status=document.getElementById('subtitleSaveStatus');
-  const updates=loadedSubtitles.map(sub=>({
-    id:sub.id,
-    final_chs:sub.final_chs
-  }));
-
-  if(!updates.length){
-    status.textContent='无字幕可保存。';
-    return;
+  clearTimeout(subtitleAutosaveTimer);
+  if(subtitleSavePromise){
+    try{await subtitleSavePromise}catch(e){}
+    syncEditorToMemory();
+    sub=currentSubtitle();
+    if(!sub)return false;
   }
 
-  try{
-    status.textContent='正在保存字幕数据并更新字幕成品…';
-    status.className='small muted';
+  if(!sub._dirty){
+    if(!quiet)setSubtitleSaveUi('saved','当前条目已经保存。');
+    if(advance&&activeSubIndex<loadedSubtitles.length-1){
+      activeSubIndex+=1;renderSubtitleList();renderActiveSubtitle();
+    }
+    return true;
+  }
+
+  const sentId=sub.id;
+  const sentText=String(sub.final_chs??'');
+  const sentKey=subtitleKey(sub);
+  setSubtitleSaveUi('saving','正在保存条目 #'+sentId+'，并更新 SRT / ASS…');
+
+  subtitleSavePromise=(async()=>{
     const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({subtitles:updates})
+      body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
     });
-    status.textContent='字幕已保存；SRT 已更新，现有 ASS（如有）也已同步。';
-    status.className='small status-ok';
-    await fetchSubtitles();
-    await refresh();
+    if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
+    const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
+    if(target&&String(target.final_chs??'')===sentText){
+      target._savedFinal=sentText;
+      target._dirty=false;
+      target.modified=true;
+    }
+    renderSubtitleList();
+    renderActiveSubtitle();
+    setSubtitleSaveUi('saved','条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。');
+    return true;
+  })();
+
+  try{
+    await subtitleSavePromise;
+    const active=currentSubtitle();
+    if(advance&&active&&subtitleKey(active)===sentKey&&!active._dirty&&activeSubIndex<loadedSubtitles.length-1){
+      activeSubIndex+=1;
+      renderSubtitleList();
+      renderActiveSubtitle();
+    }
+    return true;
   }catch(x){
-    status.textContent='保存字幕失败：'+shortError(x);
-    status.className='small status-bad';
+    setSubtitleSaveUi('error','保存字幕失败：'+shortError(x)+'；当前输入仍保留在页面中。');
+    setLog(String(x));
+    return false;
+  }finally{
+    subtitleSavePromise=null;
+    if(currentSubtitle()?._dirty&&!subtitleEditorComposing)scheduleSubtitleAutosave();
   }
 }
 
-let subtitleSearchTimer=null;
+async function goToPrevSubtitle(){
+  if(activeSubIndex<=0)return;
+  if(await saveCurrentSubtitle({quiet:true})){
+    activeSubIndex-=1;renderSubtitleList();renderActiveSubtitle();
+  }
+}
+
+async function goToNextSubtitle(){
+  if(activeSubIndex>=loadedSubtitles.length-1)return;
+  if(await saveCurrentSubtitle({quiet:true})){
+    activeSubIndex+=1;renderSubtitleList();renderActiveSubtitle();
+  }
+}
+
+async function saveAndNextSubtitle(){
+  await saveCurrentSubtitle({advance:true});
+}
+
+async function fetchSubtitlesAfterSaving(){
+  if(!(await saveCurrentSubtitle({quiet:true})))return;
+  await fetchSubtitles();
+}
+
 function scheduleSubtitleFetch(){
   clearTimeout(subtitleSearchTimer);
-  subtitleSearchTimer=setTimeout(fetchSubtitles,300);
+  subtitleSearchTimer=setTimeout(fetchSubtitlesAfterSaving,300);
 }
+
 document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
-document.getElementById('subSaveCurrentBtn').onclick=saveSubtitles;
-document.getElementById('subFinalEditor').oninput=()=>{ syncEditorToMemory(); updateCharCounter(); renderSubtitleList(); };
+document.getElementById('subSaveCurrentBtn').onclick=saveAndNextSubtitle;
+const subtitleEditor=document.getElementById('subFinalEditor');
+subtitleEditor.oninput=()=>{
+  syncEditorToMemory();
+  updateCharCounter();
+  renderSubtitleList();
+  renderActiveSubtitle();
+  scheduleSubtitleAutosave();
+};
+subtitleEditor.addEventListener('compositionstart',()=>{
+  subtitleEditorComposing=true;
+  clearTimeout(subtitleAutosaveTimer);
+});
+subtitleEditor.addEventListener('compositionend',()=>{
+  subtitleEditorComposing=false;
+  syncEditorToMemory();
+  updateCharCounter();
+  renderSubtitleList();
+  renderActiveSubtitle();
+  scheduleSubtitleAutosave();
+});
+subtitleEditor.addEventListener('blur',()=>{
+  if(!subtitleEditorComposing&&currentSubtitle()?._dirty)saveCurrentSubtitle({quiet:true});
+});
 document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
-document.getElementById('subTimeRange').onchange=fetchSubtitles;
-document.getElementById('subSelector').onchange=fetchSubtitles;
-
+document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
+document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
 
 
 document.getElementById('refreshBtn').onclick=refresh;
