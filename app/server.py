@@ -18,7 +18,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .quick import (
@@ -961,6 +961,36 @@ def api_review_file():
     if not path.is_file():
         return JSONResponse({"ok": False, "error": "No review file is pending"}, status_code=404)
     return FileResponse(path, media_type="text/plain; charset=utf-8", filename=path.name)
+
+
+@app.post("/api/output/ass")
+def api_output_ass():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Output directory is not configured")
+        if not (output / "manifest.json").is_file():
+            raise FileNotFoundError("请先完成档案构建")
+
+        def run(report_progress):
+            report_progress("render", "正在生成 ASS 字幕", 0, 1)
+            result = refresh_subtitle_artifacts_from_settings(
+                output,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                generate_ass=True,
+            )
+            report_progress("render", "ASS 字幕已生成", 1, 1)
+            return result
+
+        job = create_job(
+            "ass-export", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.post("/api/output/black-video")
