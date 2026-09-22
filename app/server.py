@@ -952,6 +952,19 @@ def api_update_apply_remote():
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
+@app.post("/api/recovery/status")
+def api_recovery_status(project_path: str = Form("")):
+    try:
+        config = (
+            load_project(Path(project_path).expanduser().resolve())
+            if project_path.strip()
+            else _active_config()
+        )
+        return {"ok": True, "automatic": auto_recovery_status(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.get("/api/recovery/export")
 def api_recovery_export():
     try:
