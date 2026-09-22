@@ -155,6 +155,13 @@ class V09GSourceRelinkTests(unittest.TestCase):
             self.assertFalse(summary["source_status"]["target"]["exists"])
             self.assertTrue(summary["source_status"]["target"]["configured"])
             self.assertTrue(summary["source_status"]["index"]["exists"])
+            self.assertTrue(summary["project_resources"][".generated/"]["exists"])
+            self.assertTrue(summary["project_resources"]["quick_index.csv"]["exists"])
+            self.assertTrue(summary["recovery"]["generated_exists"])
+            self.assertTrue(summary["recovery"]["can_resume"])
+            self.assertIn("可恢复资源", summary["recovery"]["notice"])
+            self.assertIn("final_products", summary["output_groups"])
+            self.assertIn("archive_records", summary["output_groups"])
 
 
 if __name__ == "__main__":
