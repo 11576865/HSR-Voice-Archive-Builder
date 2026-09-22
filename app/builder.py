@@ -437,6 +437,7 @@ def build_entries(
     mismatched_hashes: list[str] = []
     missing_wavs: list[str] = []
     official_count = 0
+    incremental_official_count = 0
     translated_count = 0
     extensible_count = 0
 
@@ -472,10 +473,24 @@ def build_entries(
             mismatched_hashes.append(filename)
 
         stem = stem_of(filename)
+        official_target_text = str(row.get("官方目标文本", "") or "").strip()
+        official_target_language = str(row.get("官方目标语言", "") or "").strip().lower()
+        official_target_source = str(row.get("官方目标来源", "") or "").strip()
+        target_is_chinese = str(target_language or "").strip().lower() in {"zh", "zh-cn", "chs", "cn"}
+        incremental_official = (
+            target_is_chinese
+            and official_target_text
+            and official_target_language in {"zh", "zh-cn", "chs", "cn"}
+        )
+
         if filename in official_labs:
             chinese = official_labs[filename]
             chinese_source = "official_chs_lab"
             official_count += 1
+        elif incremental_official:
+            chinese = official_target_text
+            chinese_source = official_target_source or "official_incremental_dataset"
+            incremental_official_count += 1
         else:
             chinese = b.get("中文", "").strip()
             chinese_source = "translated_existing" if chinese else "missing"
@@ -581,6 +596,7 @@ def build_entries(
         "count_translated_existing": translated_count,
         "count_missing_chinese": sum(not e.chinese for e in entries),
         "count_official_target_lab": official_count,
+        "count_incremental_official_reference": incremental_official_count,
         "count_existing_target_text": translated_count,
         "count_missing_target_text": sum(not e.chinese for e in entries),
         "count_reference_lab": sum(bool(e.reference_text) for e in entries),
