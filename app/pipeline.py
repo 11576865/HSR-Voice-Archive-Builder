@@ -1389,9 +1389,9 @@ def build_project_v02(
     out_dir: Path,
     bilingual_csv: Path | None = None,
     chs_source: Path | None = None,
-    same_group_gap: float = 0.40,
-    group_gap: float = 1.20,
-    intro_gap: float = 5.0,
+    same_group_gap: float = 1.50,
+    group_gap: float = 3.00,
+    intro_gap: float = 9.0,
     make_flac: bool = True,
     generate_ass: bool = False,
     translate_missing: bool = False,
@@ -1847,9 +1847,9 @@ if __name__ == "__main__":
     p.add_argument("--state-dir", type=Path)
     p.add_argument("--bilingual", type=Path)
     p.add_argument("--chs", type=Path)
-    p.add_argument("--intro-gap", type=float, default=5.0)
-    p.add_argument("--same-gap", type=float, default=0.40)
-    p.add_argument("--group-gap", type=float, default=1.20)
+    p.add_argument("--intro-gap", type=float, default=9.0)
+    p.add_argument("--same-gap", type=float, default=1.50)
+    p.add_argument("--group-gap", type=float, default=3.00)
     p.add_argument("--no-flac", action="store_true")
     p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
     p.add_argument("--translate-missing", action="store_true")
