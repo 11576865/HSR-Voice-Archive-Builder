@@ -20,7 +20,7 @@ pre{margin:0;background:#111318;color:#e9ebef;border-radius:9px;padding:13px;whi
 .status-ok{color:var(--ok)}.status-warn{color:var(--warn)}.status-bad{color:var(--bad)}.topline{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
 details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;border-radius:6px;touch-action:manipulation}.small{font-size:12px}.divider{height:1px;background:var(--line);margin:15px 0}
 .progress-track{height:10px;background:var(--soft);border-radius:999px;overflow:hidden;margin:10px 0}.progress-bar{height:100%;width:0;background:linear-gradient(90deg,#238e4d,#45c879);transition:width .2s ease}#progressCard{align-self:start;position:sticky;top:12px}.notice{padding:11px 12px;border:1px solid var(--line);border-radius:9px;background:var(--soft);font-size:13px}.notice.bad{border-color:#753b41;background:#28191d;color:var(--bad)}.notice.ok{border-color:#275f40;background:#15271d;color:var(--ok)}.notice.warn{border-color:#7a5721;background:#2a2114;color:var(--warn)}.file-audio{color:var(--ok);font-weight:700}.file-subtitle{color:var(--purple);font-weight:700}.action-status{margin-top:8px;min-height:18px}
-@media(max-width:1100px){.grid{grid-template-columns:1fr}.sub-workspace{grid-template-columns:minmax(220px,300px) minmax(0,1fr)}#progressCard{position:static}}@media(max-width:820px){main,header{padding-left:14px;padding-right:14px}main{padding-bottom:calc(50px + env(safe-area-inset-bottom))}.stats{grid-template-columns:1fr 1fr}.row,.row3,.sub-workspace{grid-template-columns:1fr}header{align-items:start;flex-direction:column}h1{font-size:22px}.sub-sidebar{max-height:280px}.sub-current-header{align-items:flex-start!important;flex-wrap:wrap}.sub-current-header>div:first-child{min-width:0}.sub-time-badge{margin-left:0!important;margin-top:5px}.sub-main{padding:13px}.sub-textarea{font-size:16px}input,select,textarea{font-size:16px}}@media(max-width:640px){.card{padding:14px}.topline{align-items:stretch;flex-direction:column}.topline>.actions{margin-top:0}.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.actions>button{width:100%}.actions>input[type="file"]{grid-column:1/-1;max-width:none!important;width:100%}.sub-nav-bar button{flex:1;min-width:0;padding-left:8px;padding-right:8px}#projectName{max-width:100%;overflow-wrap:anywhere}.badge{white-space:normal;text-align:center}}@media(max-width:420px){.actions{grid-template-columns:1fr}.stats{gap:8px}.stat{padding:11px}.stat b{font-size:21px}}@media(pointer:coarse){button,select,input:not([type="checkbox"]):not([type="file"]){min-height:44px}.check{min-height:40px}}@media(prefers-reduced-motion:reduce){.progress-bar,.sub-item{transition:none!important}}
+@media(prefers-reduced-motion:reduce){.progress-bar,.sub-item{transition:none!important}}
 .sub-workspace{display:grid;grid-template-columns:minmax(220px,300px) minmax(0,1fr);gap:14px;min-height:480px;margin-top:10px}
 .sub-sidebar{border:1px solid var(--line);border-radius:10px;background:var(--soft);display:flex;flex-direction:column;max-height:540px;overflow:hidden}
 .sub-sidebar-header{padding:10px 12px;border-bottom:1px solid var(--line);font-size:13px;font-weight:650;display:flex;justify-content:space-between;align-items:center;background:var(--card)}
@@ -44,6 +44,50 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
 .sub-warning-box.warn{background:rgba(240,166,64,.15);border:1px solid var(--warn);color:var(--warn)}
 .sub-warning-box.ok{background:rgba(56,180,107,.1);color:var(--muted)}
 .sub-nav-bar{display:flex;align-items:center;justify-content:space-between;gap:10px;padding-top:10px;border-top:1px solid var(--line)}.sub-nav-bar button{flex:1}.sub-current-header{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--line);padding-bottom:10px}
+
+/* Responsive rules intentionally live after component rules so they are not
+   overwritten by the desktop declarations above. Mobile keeps desktop control
+   density; only layout changes when space becomes insufficient. */
+@media(max-width:1100px){
+  .grid{grid-template-columns:1fr}
+  #progressCard{position:static}
+}
+@media(max-width:820px){
+  main,header{padding-left:14px;padding-right:14px}
+  main{padding-bottom:calc(50px + env(safe-area-inset-bottom))}
+  header{align-items:start;flex-direction:column}
+  h1{font-size:22px}
+  .stats{grid-template-columns:1fr 1fr}
+  .row,.row3{grid-template-columns:1fr}
+  .sub-workspace{grid-template-columns:minmax(0,1fr);min-height:0}
+  .sub-sidebar{max-height:260px}
+  .sub-current-header{align-items:flex-start;flex-wrap:wrap}
+  .sub-current-header>div:first-child{min-width:0}
+  .sub-time-badge{margin-left:0!important;margin-top:5px}
+  .sub-main{padding:13px}
+  .sub-textarea{font-size:15px}
+  input,select,textarea{font-size:15px}
+}
+@media(max-width:640px){
+  .card{padding:14px}
+  .topline{align-items:flex-start;flex-wrap:wrap}
+  .topline>.actions{margin-top:0}
+  .actions{display:flex;flex-wrap:wrap;gap:7px}
+  .actions>button{width:auto;min-height:40px;padding:8px 12px}
+  .project-actions{display:flex;align-items:center}
+  .project-actions>button{flex:0 0 auto;font-size:13px}
+  .actions>input[type="file"]{max-width:100%!important;width:auto}
+  .sub-nav-bar{gap:7px}
+  .sub-nav-bar button{min-width:0;padding:8px 10px}
+  #projectName{max-width:100%;overflow-wrap:anywhere}
+  .badge{white-space:normal;text-align:center}
+}
+@media(max-width:420px){
+  .stats{gap:8px}
+  .stat{padding:11px}
+  .stat b{font-size:21px}
+  .actions>button{padding-left:10px;padding-right:10px}
+}
 </style>
 </head>
 <body>
@@ -59,7 +103,7 @@ details summary{cursor:pointer;font-weight:650;min-height:36px;padding:6px 2px;b
       <div style="margin-bottom:12px">
         <label>项目选择</label>
         <select id="projectSwitcher"><option value="">正在读取项目…</option></select>
-        <div class="actions">
+        <div class="actions project-actions">
           <button type="button" class="success" id="openSelectedProjectBtn">打开所选</button>
           <button type="button" class="success" id="newProjectBtn">新建 / 导入项目</button>
           <button type="button" id="cloneProjectBtn">复制项目</button>
