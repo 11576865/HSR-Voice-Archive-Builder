@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import zipfile
 from dataclasses import asdict, dataclass
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Iterable, Mapping
 
 from .timeline import (
@@ -168,6 +168,74 @@ def collect_wavs(root: Path) -> dict[str, Path]:
             raise ValueError(f"WAV duplicate filename with conflicting data: {key}")
         result[key] = p
     return result
+
+
+def collect_wav_members(root: Path) -> dict[str, Path]:
+    """Map package-relative member paths to extracted WAV files.
+
+    Keys are POSIX relative paths (``chapter4/female/vo_101.wav``) so
+    same-basename files in different directories keep distinct identities.
+    """
+    result: dict[str, Path] = {}
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or p.suffix.lower() != ".wav":
+            continue
+        result[p.relative_to(root).as_posix()] = p
+    return result
+
+
+def resolve_member_wav(
+    members: dict[str, Path],
+    filename: str,
+    member_id: str = "",
+) -> tuple[Path | None, str]:
+    """Resolve an index row to a WAV file by member id or unique basename.
+
+    Returns (path, resolved_member_id). (None, member_id) means the file is
+    missing; a basename that matches several members raises instead of
+    guessing, because picking one silently would misassign subtitles.
+    """
+    member_id = str(member_id or "").strip()
+    if member_id:
+        return members.get(member_id), member_id
+    base = Path(filename).name
+    candidates = [key for key in members if Path(key).name == base]
+    if len(candidates) == 1:
+        key = candidates[0]
+        return members[key], key
+    if len(candidates) > 1:
+        raise ValueError(
+            "WAV basename is ambiguous and the index row carries no "
+            f"source_member_id: {base}"
+        )
+    return None, member_id
+
+
+def collect_member_labs(root: Path) -> tuple[dict[str, str], dict[str, str]]:
+    """Return (member-keyed, unique-stem-keyed) LAB text for a package tree.
+
+    Member keys are POSIX relative paths; the stem fallback only contains
+    stems whose LAB text is unambiguous across the whole tree.
+    """
+    by_member: dict[str, str] = {}
+    texts_by_stem: dict[str, list[str]] = {}
+    for p in sorted(root.rglob("*")):
+        if not p.is_file() or p.suffix.lower() != ".lab":
+            continue
+        text = p.read_text(encoding="utf-8-sig", errors="replace").strip()
+        by_member[p.relative_to(root).as_posix()] = text
+        texts_by_stem.setdefault(p.stem, []).append(text)
+    by_stem = {
+        stem: texts[0]
+        for stem, texts in texts_by_stem.items()
+        if len(set(texts)) == 1
+    }
+    return by_member, by_stem
+
+
+def sibling_lab_member(member_id: str) -> str:
+    """Return the same-directory same-stem LAB member id for a WAV member."""
+    return PurePosixPath(str(member_id)).with_suffix(".lab").as_posix()
 
 
 def _max_extract_bytes() -> int:
@@ -397,6 +465,9 @@ class Entry:
     sha256: str
     reference_text: str = ""
     reference_language: str = "auto"
+    # Package-relative member path (POSIX) that uniquely identifies the source
+    # WAV inside its package; "" for legacy indexes that only know basenames.
+    source_member_id: str = ""
 
 
 def build_entries(
@@ -417,17 +488,28 @@ def build_entries(
     if len(full) != len(bi):
         raise ValueError(f"Row count differs: full={len(full)}, bilingual={len(bi)}")
 
-    bi_by_name = {r["文件名"]: r for r in bi}
-    if len(bi_by_name) != len(bi):
-        raise ValueError("Duplicate 文件名 in bilingual CSV")
+    def _row_key(row: dict[str, str]) -> str:
+        # Rows that know their package member path use it as identity, so two
+        # rows may share one basename; the basename remains the fallback key.
+        return str(row.get("来源成员路径", "") or "").strip() or str(row.get("文件名", "") or "")
+
+    bi_by_key: dict[str, dict[str, str]] = {}
+    for r in bi:
+        key = _row_key(r)
+        if key in bi_by_key:
+            raise ValueError(f"Duplicate bilingual row key: {key}")
+        bi_by_key[key] = r
 
     labs = collect_labs(chs_lab_root)
     reference_labs = collect_labs(reference_lab_root) if reference_lab_root else {}
-    primary_labs = collect_labs(wav_root) if source_text_language != "en" else {}
+    primary_member_labs: dict[str, str] = {}
+    primary_stem_labs: dict[str, str] = {}
+    if source_text_language != "en":
+        primary_member_labs, primary_stem_labs = collect_member_labs(wav_root)
     if source_text_language == target_language == "zh-CN":
-        labs = {**primary_labs, **labs}
-    wavs = collect_wavs(wav_root)
-    official_labs, official_match = map_labs_to_voice_filenames(wavs.keys(), labs)
+        labs = {**primary_stem_labs, **labs}
+    wav_members = collect_wav_members(wav_root)
+    official_labs, official_match = map_labs_to_voice_filenames(wav_members.keys(), labs)
 
     sample_rate: int | None = None
     channels: int | None = None
@@ -444,13 +526,16 @@ def build_entries(
     raw: list[dict[str, object]] = []
     for row in full:
         filename = row["文件名"]
-        b = bi_by_name.get(filename)
+        member_id = str(row.get("来源成员路径", "") or "").strip()
+        b = bi_by_key.get(_row_key(row))
         if not b:
-            raise ValueError(f"Missing bilingual row: {filename}")
-        wav = wavs.get(filename)
-        if not wav:
-            missing_wavs.append(filename)
+            raise ValueError(f"Missing bilingual row: {member_id or filename}")
+        wav, resolved_member = resolve_member_wav(wav_members, filename, member_id)
+        if wav is None:
+            missing_wavs.append(member_id or filename)
             continue
+        if not member_id:
+            member_id = resolved_member
 
         wav_info = parse_wav_pcm(wav)
         sr = wav_info.sample_rate
@@ -520,10 +605,14 @@ def build_entries(
 
         source_text = str(row.get("英文文本", b.get("ENGLISH", "")) or "").strip()
         if source_text_language != "en":
-            # A same-stem LAB in the primary package is the closest text to the
-            # actual selected voice and therefore wins when present. Otherwise
-            # use the selected CHS/JP/KR index text instead of requiring LAB.
-            primary_lab_text = str(primary_labs.get(stem, "") or "").strip()
+            # A same-stem LAB sitting next to the actual package member is the
+            # closest text to the selected voice; a tree-wide unique stem is
+            # the fallback. Otherwise use the selected index text.
+            primary_lab_text = str(
+                primary_member_labs.get(sibling_lab_member(member_id), "")
+                or primary_stem_labs.get(stem, "")
+                or ""
+            ).strip()
             if primary_lab_text:
                 source_text = primary_lab_text
             if not source_text:
@@ -539,6 +628,7 @@ def build_entries(
                 "filename": filename,
                 "source": row.get("来源", ""),
                 "source_detail": row.get("来源细分", ""),
+                "source_member_id": member_id,
                 "english": source_text,
                 "chinese": chinese,
                 "chinese_source": chinese_source,
@@ -604,6 +694,7 @@ def build_entries(
                 sha256=str(r["sha256"]),
                 reference_text=str(r.get("reference_text", "")),
                 reference_language=str(r.get("reference_language", "auto") or "auto"),
+                source_member_id=str(r.get("source_member_id", "")),
             )
         )
     cursor = int(resolved["total_samples"])
@@ -622,7 +713,11 @@ def build_entries(
         "count_missing_target_text": sum(not e.chinese for e in entries),
         "count_reference_lab": sum(bool(e.reference_text) for e in entries),
         "count_source_lab": sum(
-            bool(primary_labs.get(stem_of(e.filename))) for e in entries
+            bool(
+                primary_member_labs.get(sibling_lab_member(e.source_member_id))
+                or primary_stem_labs.get(stem_of(e.filename))
+            )
+            for e in entries
         ) if source_text_language != "en" else 0,
         "sample_rate": sample_rate,
         "channels": channels,
@@ -683,6 +778,7 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
 
     timeline_fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
+        "source_member_id",
         "target_text_source", "target_text", "source_text",
         "chinese_source", "chinese", "english",
         "reference_language", "reference_text",
@@ -697,6 +793,7 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
             "display_end": clock_time(e.display_end_seconds),
             "group": e.group,
             "filename": e.filename,
+            "source_member_id": e.source_member_id,
             "target_text_source": (
                 "official_target_lab"
                 if e.chinese_source == "official_chs_lab"
@@ -743,7 +840,7 @@ def build_continuous_flac(
     the classic ~4 GiB RIFF size ceiling and does not need a second full-size
     uncompressed copy on disk.
     """
-    wavs = collect_wavs(wav_root)
+    wav_members = collect_wav_members(wav_root)
     if not entries:
         raise ValueError("No entries")
 
@@ -788,7 +885,14 @@ def build_continuous_flac(
                 remaining -= n
 
             for i, e in enumerate(entries):
-                src = wavs[e.filename]
+                src, _resolved = resolve_member_wav(
+                    wav_members, e.filename, e.source_member_id
+                )
+                if src is None:
+                    raise RuntimeError(
+                        "WAV missing while streaming FLAC: "
+                        f"{e.source_member_id or e.filename}"
+                    )
                 info = parse_wav_pcm(src)
                 actual = (
                     info.sample_rate,

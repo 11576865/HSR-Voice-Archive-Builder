@@ -18,11 +18,13 @@ INDEX_ALIASES = {
     "official_target_text": ("official_target_text", "OFFICIAL_TARGET_TEXT", "官方目标文本"),
     "official_target_language": ("official_target_language", "OFFICIAL_TARGET_LANGUAGE", "官方目标语言"),
     "official_target_source": ("official_target_source", "OFFICIAL_TARGET_SOURCE", "官方目标来源"),
+    "source_member_id": ("source_member_id", "SOURCE_MEMBER_ID", "来源成员路径", "member_path"),
 }
 BILINGUAL_ALIASES = {
     "filename": INDEX_ALIASES["filename"],
     "english": INDEX_ALIASES["english"],
     "chinese": ("chinese", "CHINESE", "中文", "中文文本", "translation"),
+    "source_member_id": INDEX_ALIASES["source_member_id"],
 }
 
 
@@ -48,9 +50,13 @@ def normalize_index(path: Path) -> list[dict[str, str]]:
         filename = pick(row, INDEX_ALIASES["filename"])
         if not filename:
             raise ValueError(f"Index row {pos} has no filename")
-        if filename in seen:
-            raise ValueError(f"Duplicate filename in index: {filename}")
-        seen.add(filename)
+        member_id = pick(row, INDEX_ALIASES["source_member_id"])
+        # Rows carrying a package member path are distinct even when they share
+        # a basename; rows without one keep the legacy filename uniqueness.
+        key = member_id or filename
+        if key in seen:
+            raise ValueError(f"Duplicate filename in index: {key}")
+        seen.add(key)
         ident = parse_voice_identity(filename)
         out.append({
             "index": pick(row, INDEX_ALIASES["index"], str(pos)),
@@ -65,6 +71,7 @@ def normalize_index(path: Path) -> list[dict[str, str]]:
             "official_target_text": pick(row, INDEX_ALIASES["official_target_text"]),
             "official_target_language": pick(row, INDEX_ALIASES["official_target_language"]),
             "official_target_source": pick(row, INDEX_ALIASES["official_target_source"]),
+            "source_member_id": member_id,
         })
     return out
 
@@ -77,9 +84,10 @@ def normalize_bilingual(path: Path | None) -> dict[str, dict[str, str]]:
         filename = pick(row, BILINGUAL_ALIASES["filename"])
         if not filename:
             raise ValueError(f"Bilingual row {pos} has no filename")
-        if filename in out:
-            raise ValueError(f"Duplicate filename in bilingual CSV: {filename}")
-        out[filename] = {
+        key = pick(row, BILINGUAL_ALIASES["source_member_id"]) or filename
+        if key in out:
+            raise ValueError(f"Duplicate filename in bilingual CSV: {key}")
+        out[key] = {
             "english": pick(row, BILINGUAL_ALIASES["english"]),
             "chinese": pick(row, BILINGUAL_ALIASES["chinese"]),
         }
@@ -95,20 +103,22 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
 
     with legacy_index.open("w", encoding="utf-8-sig", newline="") as f:
         fields = [
-            "序号", "分组", "文件名", "来源", "来源细分",
+            "序号", "分组", "文件名", "来源", "来源细分", "来源成员路径",
             "英文文本", "参考文本", "参考语言", "官方目标文本", "官方目标语言", "官方目标来源", "SHA-256",
         ]
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for row in index:
-            b = bilingual.get(row["filename"], {})
+            member_id = str(row.get("source_member_id", "") or "")
+            b = bilingual.get(member_id or row["filename"], {})
             english = row["english"] or b.get("english", "")
             # Rows without source text are allowed: Quick Mode appends files
             # the remote index cannot order as an unindexed appendix. They
             # keep their audio and render without subtitles.
             w.writerow({
                 "序号": row["index"], "分组": row["group"], "文件名": row["filename"],
-                "来源": row["source"], "来源细分": row["source_detail"], "英文文本": english,
+                "来源": row["source"], "来源细分": row["source_detail"],
+                "来源成员路径": member_id, "英文文本": english,
                 "参考文本": row.get("reference_text", ""),
                 "参考语言": row.get("reference_language", ""),
                 "官方目标文本": row.get("official_target_text", ""),
@@ -118,10 +128,16 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
             })
 
     with legacy_bilingual.open("w", encoding="utf-8-sig", newline="") as f:
-        fields = ["文件名", "中文", "ENGLISH"]
+        fields = ["文件名", "来源成员路径", "中文", "ENGLISH"]
         w = csv.DictWriter(f, fieldnames=fields)
         w.writeheader()
         for row in index:
-            b = bilingual.get(row["filename"], {})
-            w.writerow({"文件名": row["filename"], "中文": b.get("chinese", ""), "ENGLISH": row["english"] or b.get("english", "")})
+            member_id = str(row.get("source_member_id", "") or "")
+            b = bilingual.get(member_id or row["filename"], {})
+            w.writerow({
+                "文件名": row["filename"],
+                "来源成员路径": member_id,
+                "中文": b.get("chinese", ""),
+                "ENGLISH": row["english"] or b.get("english", ""),
+            })
     return legacy_index, legacy_bilingual

@@ -306,7 +306,7 @@ class QuickModeTests(unittest.TestCase):
             root = Path(td)
             archive = root / "English.zip"
             names = ["a_evanescia_1.wav", "a_evanescia_2.wav", "a_evanescia_3.wav"]
-            make_voice_zip(archive, names)
+            make_voice_zip(archive, names, with_labs=False)
             write_index(
                 root / "index.csv",
                 [{"index": "1", "group": "a", "filename": names[0], "english": "First.", "sha256": ""}],
@@ -366,7 +366,7 @@ class QuickModeTests(unittest.TestCase):
                 "chapter5_27_evanescia_101.wav",
                 "chapter5_27_evanescia_102.wav",
             ]
-            make_voice_zip(archive, names)
+            make_voice_zip(archive, names, with_labs=False)
             with patch(
                 "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
                 return_value=([], {"cache_hit": True, "stale": False}),
@@ -517,7 +517,7 @@ class QuickModeTests(unittest.TestCase):
             self.assertEqual([row["index"] for row in rows], ["1", "2"])
             self.assertEqual(rows[0]["source"], "AI-Hobbyist EN.xlsx")
 
-    def test_quick_scan_blocks_duplicate_wav_basename(self) -> None:
+    def test_quick_scan_duplicate_wav_basenames_no_longer_block(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             archive = root / "English.zip"
@@ -532,10 +532,51 @@ class QuickModeTests(unittest.TestCase):
                     "configured": False,
                     "source": "test",
                 },
+            ), patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                side_effect=OSError("offline test"),
             ):
                 plan = quick_scan(archive)
+            # Duplicate basenames are demoted to the appendix instead of
+            # blocking; without an index or complete LABs the package still
+            # fails on coverage alone.
             self.assertFalse(plan["ready"])
-            self.assertTrue(any("Duplicate WAV basenames" in x for x in plan["blockers"]))
+            self.assertFalse(any("Duplicate WAV basenames" in x for x in plan["blockers"]))
+            self.assertTrue(any("reliable local or remote index" in x for x in plan["blockers"]))
+            self.assertEqual(plan["duplicates"]["groups"], 1)
+            self.assertEqual(plan["duplicates"]["members"], 2)
+            self.assertEqual(plan["duplicates"]["auto_resolved"], 0)
+            self.assertEqual(plan["duplicates"]["pending"], 2)
+            self.assertTrue(any("待确认 2 条" in x for x in plan["warnings"]))
+
+    def test_quick_scan_duplicate_wav_basenames_resolve_with_complete_labs(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            archive = root / "English.zip"
+            with zipfile.ZipFile(archive, "w") as z:
+                z.writestr("one/dup.wav", b"a")
+                z.writestr("one/dup.lab", "First line.")
+                z.writestr("two/dup.wav", b"b")
+                z.writestr("two/dup.lab", "Second line.")
+            with patch(
+                "app.quick.credentials_status",
+                return_value={
+                    "provider": "vapi",
+                    "base_url": "https://api.gpt.ge/v1",
+                    "configured": False,
+                    "source": "test",
+                },
+            ), patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                side_effect=OSError("offline test"),
+            ):
+                plan = quick_scan(archive)
+            self.assertTrue(plan["ready"], plan["blockers"])
+            self.assertEqual(plan["index"]["source"], "primary-package-lab")
+            self.assertEqual(plan["duplicates"]["groups"], 1)
+            self.assertEqual(plan["duplicates"]["auto_resolved"], 2)
+            self.assertEqual(plan["duplicates"]["pending"], 0)
+            self.assertTrue(any("已全部自动消歧" in x for x in plan["warnings"]))
 
     def test_quick_create_generates_filtered_internal_index(self) -> None:
         with tempfile.TemporaryDirectory() as td:

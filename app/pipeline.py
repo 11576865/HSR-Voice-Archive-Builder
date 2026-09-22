@@ -133,7 +133,7 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
         old_rows = list(csv.DictReader(f))
     fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
-        "logical_id", "variant",
+        "source_member_id", "logical_id", "variant",
         "target_text_source", "target_text", "source_text",
         "reference_language", "reference_text",
         "chinese_source", "chinese", "english",
@@ -142,6 +142,7 @@ def _augment_outputs(entries, report: dict[str, object], out_dir: Path) -> None:
     updated_rows = []
     for old, entry in zip(old_rows, entries, strict=True):
         ident = parse_voice_identity(entry.filename, entry.group)
+        old["source_member_id"] = str(getattr(entry, "source_member_id", "") or "")
         old["logical_id"] = ident.logical_id
         old["variant"] = ident.variant
         old["source_text"] = entry.english
