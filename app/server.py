@@ -281,7 +281,7 @@ def api_quick_scan(
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
     translate_missing: bool = Form(True),
-    review_official_target: bool = Form(True),
+    review_official_target: bool = Form(False),
 ):
     try:
         plan = quick_scan(
@@ -314,7 +314,7 @@ def api_quick_build(
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
     translate_missing: bool = Form(True),
-    review_official_target: bool = Form(True),
+    review_official_target: bool = Form(False),
 ):
     try:
         assert_no_active_build()
@@ -406,7 +406,7 @@ def api_project_create(
     reference_language: str = Form("auto"),
     remote_character: str = Form(""),
     translate_missing: bool = Form(True),
-    review_official_target: bool = Form(True),
+    review_official_target: bool = Form(False),
 ):
     try:
         config = create_project(
