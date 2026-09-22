@@ -405,6 +405,8 @@ def api_project_create(
     target_language: str = Form("zh-CN"),
     reference_language: str = Form("auto"),
     remote_character: str = Form(""),
+    translate_missing: bool = Form(True),
+    review_official_target: bool = Form(True),
 ):
     try:
         config = create_project(
@@ -422,6 +424,8 @@ def api_project_create(
             target_language=target_language,
             reference_language=reference_language,
             remote_character=remote_character,
+            translate_missing=translate_missing,
+            review_official_target=review_official_target,
         )
         _set_active(config)
         return {"ok": True, "project": project_summary(config)}
