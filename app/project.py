@@ -135,6 +135,8 @@ def create_project(
     target_language: str = "zh-CN",
     reference_language: str = "auto",
     remote_character: str = "",
+    translate_missing: bool = True,
+    review_official_target: bool = False,
 ) -> ProjectConfig:
     root = normalize_root(root)
     if not name.strip():
@@ -165,6 +167,8 @@ def create_project(
         target_language=str(target_language or "zh-CN").strip() or "zh-CN",
         reference_language=str(reference_language or "auto").strip() or "auto",
         remote_character=remote_character.strip(),
+        translate_missing=bool(translate_missing),
+        review_official_target=bool(review_official_target),
     )
     save_project(config)
     return config
@@ -576,6 +580,8 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     state = resolve_project_path(config, config.state_dir)
     assert output is not None
     assert state is not None
+    project_root = normalize_root(Path(config.root))
+    generated = project_root / ".generated"
     manifest = output / "manifest.json"
     report_file = output / "build_report.json"
     final_stage_file = state / "stages" / "final_report.json"
@@ -586,7 +592,8 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             report = json.loads(report_file.read_text(encoding="utf-8"))
         except (OSError, ValueError):
             report = {}
-    outputs = {}
+
+    outputs: dict[str, dict[str, Any]] = {}
     for name in (
         "manifest.json",
         "manifest.csv",
@@ -600,6 +607,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "continuous.flac",
         "semantic_review_required.txt",
         "update_plan.json",
+        "update_apply_report.json",
     ):
         p = output / name
         outputs[name] = {
@@ -608,7 +616,25 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "path": str(p),
         }
 
-    state_outputs = {}
+    final_product_names = (
+        "continuous.flac",
+        "HSR_Voice_Archive.srt",
+        "HSR_Voice_Archive.ass",
+        "HSR_Voice_Archive_Black.mkv",
+    )
+    archive_record_names = tuple(
+        name for name in outputs if name not in final_product_names
+    )
+    output_groups = {
+        "final_products": {
+            name: outputs[name] for name in final_product_names
+        },
+        "archive_records": {
+            name: outputs[name] for name in archive_record_names
+        },
+    }
+
+    state_outputs: dict[str, dict[str, Any]] = {}
     for name in (
         ".translation_checkpoint.json",
         "translation_qa.json",
@@ -628,6 +654,26 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "size_bytes": p.stat().st_size if p.is_file() else 0,
             "path": str(p),
         }
+
+    project_resources: dict[str, dict[str, Any]] = {}
+    resource_paths = {
+        ".generated/": generated,
+        "quick_index.csv": generated / "quick_index.csv",
+        "quick_scan.json": generated / "quick_scan.json",
+        "quick_index_incremental.csv": generated / "quick_index_incremental.csv",
+        "combined_audio/": generated / "combined_audio",
+        "incremental_audio/": generated / "incremental_audio",
+        "incremental_reference_audio_zh-CN/": generated / "incremental_reference_audio_zh-CN",
+    }
+    for name, p in resource_paths.items():
+        exists = p.exists()
+        project_resources[name] = {
+            "exists": exists,
+            "kind": "directory" if exists and p.is_dir() else ("file" if exists and p.is_file() else ""),
+            "size_bytes": p.stat().st_size if exists and p.is_file() else 0,
+            "path": str(p),
+        }
+
     source_status = {
         "index": _path_status(config, config.index_csv, required=True),
         "primary": _path_status(config, config.wav_source, required=True),
@@ -635,6 +681,17 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "reference": _path_status(config, config.reference_source),
         "bilingual": _path_status(config, config.bilingual_csv),
         "glossary": _path_status(config, config.glossary_path),
+    }
+    recovery = {
+        "generated_exists": generated.is_dir(),
+        "generated_path": str(generated),
+        "state_exists": state.is_dir(),
+        "state_path": str(state),
+        "can_resume": generated.is_dir() or state.is_dir(),
+        "notice": (
+            "项目目录包含可恢复资源；构建失败后应继续使用当前项目。"
+            "删除项目会丢失已下载语音、增量索引、翻译缓存或构建状态。"
+        ),
     }
     return {
         "name": config.name,
@@ -647,6 +704,14 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         ),
         "report": report,
         "outputs": outputs,
+        "output_groups": output_groups,
+        "project_resources": project_resources,
         "state_outputs": state_outputs,
+        "runtime_state": {
+            "path": str(state),
+            "exists": state.is_dir(),
+            "records": state_outputs,
+        },
+        "recovery": recovery,
         "source_status": source_status,
     }
