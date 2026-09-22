@@ -6,7 +6,7 @@ The repository contains the **builder**, not redistributed game assets. Audio pa
 
 ## Status
 
-Current development version: **v0.9-K**.
+Current development version: **v0.9-L**.
 
 The first regression corpus is a 379-line Evanescia/绯英 English voice archive. It is not included in this repository; it is used only as a local validation set.
 
@@ -52,7 +52,7 @@ No internet processing server is required.
 
 ## Reliability hardening
 
-v0.4-v0.9-I add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
+v0.4-v0.9-L add failure-driven hardening based on upstream documentation, issue reports, and security advisories:
 
 - no temporary continuous RIFF/WAV file during FLAC builds;
 - raw PCM is streamed directly into FFmpeg, avoiding the classic ~4 GiB RIFF size ceiling;
@@ -80,7 +80,7 @@ v0.4-v0.9-I add failure-driven hardening based on upstream documentation, issue 
 - v0.9-H adds safe project cloning for branching one source archive into another language/parameter configuration without duplicating finished outputs or source audio.
 - v0.9-I adds Alibaba Model Studio Chat Completions compatibility, fail-fast credential tests, provider-safe batch sizing, and runtime revision display.
 - The launcher now automatically falls back to the built-in lite server when the optional FastAPI/uvicorn stack is incomplete.
-- v0.9-K resolves one sample-based Timeline for the FLAC, manifest and ASS subtitle, adds a configurable five-second opening gap, removes legacy SRT output, and renders Chinese-primary archives as one Chinese subtitle line.
+- v0.9-K resolves one sample-based Timeline for FLAC and subtitle artifacts and adds a configurable five-second opening gap. Current builds generate `HSR_Voice_Archive.srt` by default and can opt in to the ASS layout engine.\n- v0.9-L preserves human proofreading as a non-destructive subtitle override layer, re-applies overrides after full rebuilds, keeps official/API source provenance intact, and synchronizes corrected CSV/SRT/optional ASS outputs.
 
 See [docs/reliability.md](docs/reliability.md) for the failure cases and upstream references that motivated these choices.
 
@@ -101,11 +101,11 @@ The dashboard can:
 - check the current AI-Hobbyist English XLSX index for a configured character;
 - classify candidates as exact existing files, variants of existing logical lines, or genuinely new logical lines;
 - save the comparison as `update_plan.json` without modifying the current manifest;
-- open the output directory on the processing host.
+- review and edit final Chinese subtitles without overwriting official/API source text;\n- generate SRT by default and opt in to the ASS layout engine with overflow diagnostics.
 
 Quick Mode project roots are marked as app-managed. Deleting one may remove that dedicated project directory, but original voice packages outside the project root are not touched. Manual project roots are treated conservatively: deletion removes the project marker, `.generated`, and an in-root output directory while retaining unrelated user files. “Remove from list” is non-destructive and can be reversed by reopening the project.
 
-Remote index data can now resolve playback order and source text for Quick Mode, and it remains available for update discovery. The project still does not auto-download or splice new game audio into an existing archive.
+Remote index data can resolve playback order and source text for Quick Mode and remains available for update discovery. Confirmed additions can now be resolved against the Hugging Face voice dataset, downloaded into an app-managed incremental source, paired with same-path Chinese reference audio when available, and then incorporated by an explicit rebuild.
 
 ## Requirements
 
