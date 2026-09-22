@@ -636,9 +636,11 @@ async function deleteSelectedProject(){
     const q=new FormData();q.set('project_path',root);
     const status=await api('/api/recovery/status',{method:'POST',body:q});
     const a=status.automatic||{};
-    protection=a.has_backup
-      ? '自动恢复保护：已存在外置恢复包，包含 '+n(a.translation_records)+' 条翻译；删除项目不会删除该恢复包。'
-      : (a.error?'自动恢复保护：最近一次保存失败（'+a.error+'）。':'自动恢复保护：当前没有外置恢复包。');
+    protection=a.valid_backup
+      ? '自动恢复保护：已有经过校验的外置恢复包，包含 '+n(a.translation_records)+' 条翻译；删除项目不会删除该恢复包。'
+      : (a.previous_valid
+          ? '自动恢复保护：latest 不可用，但上一代恢复包已校验可用；删除项目不会删除它。'
+          : (a.error?'自动恢复保护：最近一次保存/校验失败（'+a.error+'），后端可能拒绝删除。':'自动恢复保护：当前没有经过校验的外置恢复包。'));
   }catch(e){protection='自动恢复保护状态检查失败：'+shortError(e);}
   if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n'+protection+'\n\n警告：删除会丢失 .generated、.state、增量索引、已下载增量语音和项目内恢复状态。构建失败时应优先继续使用当前项目；如果只是不想在列表里看到它，请使用“移出列表”。\n\n'+root))return;
   const d=new FormData();d.set('project_path',root);
@@ -790,10 +792,13 @@ function fillProject(p){
   const autoBox=document.getElementById('autoRecoveryStatus');
   if(autoBox){
     const a=p.recovery?.automatic||{};
-    if(a.has_backup){
+    if(a.valid_backup){
       const when=a.last_backup?new Date(a.last_backup).toLocaleString():'时间未知';
-      autoBox.textContent='自动恢复保护：已保存 · '+when+' · '+n(a.translation_records)+' 条翻译 · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知');
+      autoBox.textContent='自动恢复保护：已校验 · '+when+' · '+n(a.translation_records)+' 条翻译 · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知')+(a.previous_valid?' · 上一代恢复包可用':'');
       autoBox.className='notice '+(a.healthy?'ok':'warn');
+    }else if(a.previous_valid){
+      autoBox.textContent='自动恢复保护：latest 校验失败，但上一代恢复包仍可用。'+(a.error?' · '+a.error:'');
+      autoBox.className='notice warn';
     }else if(a.error){
       autoBox.textContent='自动恢复保护：最近一次保存失败 · '+a.error;
       autoBox.className='notice warn';
