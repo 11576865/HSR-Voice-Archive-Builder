@@ -9,7 +9,6 @@ from pathlib import Path
 from typing import Any
 
 from .builder import atomic_write_text
-from .credentials import translation_identity
 from .project import ProjectConfig, resolve_project_path
 from .schema import normalize_index
 
@@ -113,17 +112,6 @@ def _checkpoint_identity(payload: object) -> dict[str, str] | None:
             "target_language": str(payload.get("target_language", "")),
         }
     return None
-
-
-def _current_route(config: ProjectConfig) -> dict[str, str]:
-    provider, base_url = translation_identity()
-    return {
-        "provider": provider,
-        "base_url": base_url,
-        "model": str(config.translation_model or ""),
-        "source_language": str(config.source_text_language or "en"),
-        "target_language": str(config.target_language or "zh-CN"),
-    }
 
 
 def _read_json_bytes(data: bytes, logical_name: str) -> dict[str, Any]:
@@ -275,9 +263,6 @@ def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str,
     preserved_package = imports_dir / f"text-recovery-{stamp}.hsrbackup"
     atomic_write_text(preserved_package, raw.decode("utf-8"))
 
-    current_route = _current_route(config)
-    route_compatible = imported_identity == current_route
-
     current_rows: dict[str, dict[str, str]] = {}
     if index is not None and index.is_file():
         current_rows = {
@@ -321,23 +306,24 @@ def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str,
     skipped_existing = 0
     active_checkpoint = state / ".translation_checkpoint.json"
     checkpoint_conflict = False
+    active_identity: dict[str, str] | None = None
 
-    if route_compatible:
-        current_payload: dict[str, Any] | None = None
-        if active_checkpoint.is_file():
-            try:
-                current_payload = _read_json_bytes(
-                    active_checkpoint.read_bytes(), str(active_checkpoint)
-                )
-            except ValueError:
-                current_payload = None
-
-        if current_payload is not None and _checkpoint_identity(current_payload) != current_route:
+    if active_checkpoint.is_file():
+        try:
+            current_payload = _read_json_bytes(
+                active_checkpoint.read_bytes(), str(active_checkpoint)
+            )
+            active_identity = _checkpoint_identity(current_payload)
+        except ValueError:
+            current_payload = None
+        if current_payload is None or active_identity != imported_identity:
             checkpoint_conflict = True
         else:
-            current_records: dict[str, Any] = {}
-            if current_payload is not None and isinstance(current_payload.get("records"), dict):
-                current_records = dict(current_payload["records"])
+            current_records = (
+                dict(current_payload["records"])
+                if isinstance(current_payload.get("records"), dict)
+                else {}
+            )
             for row_id, saved in records.items():
                 existing = current_records.get(str(row_id))
                 if isinstance(existing, dict) and str(existing.get("chinese", "")).strip():
@@ -347,23 +333,28 @@ def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str,
                     continue
                 current_records[str(row_id)] = saved
                 imported_records += 1
-
-            payload = {
-                "schema_version": 3,
-                **current_route,
-                "records": current_records,
-            }
+            current_payload["records"] = current_records
             atomic_write_text(
                 active_checkpoint,
-                json.dumps(payload, ensure_ascii=False, indent=2),
+                json.dumps(current_payload, ensure_ascii=False, indent=2),
             )
+    else:
+        atomic_write_text(
+            active_checkpoint,
+            json.dumps(imported_checkpoint, ensure_ascii=False, indent=2),
+        )
+        imported_records = sum(
+            1
+            for saved in records.values()
+            if isinstance(saved, dict) and str(saved.get("chinese", "")).strip()
+        )
+        active_identity = imported_identity
 
     return {
         "package_project": str((package.get("project") or {}).get("name", "")),
         "package_records": len(records),
-        "route_compatible": route_compatible,
-        "current_route": current_route,
         "package_route": imported_identity,
+        "active_route": active_identity,
         "matching_now": matching_now,
         "changed_now": changed_now,
         "not_present_now": not_present_now,
@@ -375,9 +366,9 @@ def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str,
         "message": (
             "恢复包已校验并保存。"
             + (
-                f" 已向当前翻译检查点合并 {imported_records} 条记录。"
-                if route_compatible and not checkpoint_conflict
-                else " 当前 API 路由/模型或现有检查点不兼容，因此未改写活动翻译检查点。"
+                " 当前项目存在不同翻译路线的检查点，因此未覆盖它；恢复包仍已保存在 recovery_imports。"
+                if checkpoint_conflict
+                else f" 已恢复/合并 {imported_records} 条翻译记录。"
             )
         ),
     }
