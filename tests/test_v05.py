@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import os
+import json
 import shutil
 import struct
 import subprocess
@@ -19,6 +20,7 @@ from app.pipeline import _translate_missing
 from app.preflight import dependency_status
 from app.remote_index import read_ai_hobbyist_xlsx
 from app.server import app
+from app.lite_server import _stringify_json_form
 from app.wavpcm import PCM_SUBFORMAT_GUID_LE, parse_wav_pcm
 from openpyxl import Workbook
 
@@ -145,6 +147,18 @@ class V05SecurityAndWavTests(unittest.TestCase):
             else:
                 os.environ["HSR_VOICE_ALLOWED_HOSTS"] = old_allowed
 
+
+    def test_lite_json_form_preserves_nested_subtitle_updates_as_json(self) -> None:
+        payload = {
+            "subtitles": [{"id": 206, "final_chs": "一起上吧，狐狸老师。"}],
+            "name": "demo",
+        }
+        adapted = _stringify_json_form(payload)
+        self.assertEqual(adapted["name"], "demo")
+        self.assertEqual(
+            json.loads(adapted["subtitles"]),
+            [{"id": 206, "final_chs": "一起上吧，狐狸老师。"}],
+        )
 
     def test_native_7z_listing_parser_ignores_archive_header(self) -> None:
         sample = """Path = archive.7z

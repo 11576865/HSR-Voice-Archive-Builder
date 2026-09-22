@@ -429,6 +429,8 @@ def get_project_subtitles(
         overflow_info = overflow_map.get(str_id)
         item = {
             "id": item_id,
+            "filename": str(entry.get("filename", "") or ""),
+            "logical_id": str(entry.get("logical_id", "") or ""),
             "start": start,
             "end": end,
             "source_language": source_lang,
@@ -493,6 +495,8 @@ def update_project_subtitles(
         raise ValueError("Manifest entries must be a list")
 
     overrides = load_subtitle_overrides(output_dir)
+    if not updates:
+        raise ValueError("No subtitle updates supplied")
     updates_by_id = {
         str(item.get("id")): str(item["final_chs"])
         for item in updates
@@ -541,9 +545,14 @@ def update_project_subtitles(
     invalidate_subtitle_stages(config)
     refreshed = refresh_subtitle_artifacts(config, output_dir, data)
 
+    if updated_count < 1:
+        raise ValueError("No matching subtitle entries were updated")
+
     return {
         "ok": True,
         "updated_count": updated_count,
+        "updated_ids": sorted(updates_by_id),
+        "modified_ids": sorted(str(key) for key in overrides),
         "total_count": len(entries),
         **refreshed,
     }

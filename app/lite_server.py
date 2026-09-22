@@ -116,6 +116,20 @@ def _float(value: object, default: float) -> float:
         return default
 
 
+def _stringify_json_form(data: dict[str, object]) -> dict[str, str]:
+    """Preserve nested JSON values when adapting JSON bodies to form-style handlers."""
+
+    result: dict[str, str] = {}
+    for key, value in data.items():
+        if value is None:
+            result[str(key)] = ""
+        elif isinstance(value, (list, dict)):
+            result[str(key)] = json.dumps(value, ensure_ascii=False)
+        else:
+            result[str(key)] = str(value)
+    return result
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"HSRVoiceLite/{APP_VERSION}"
 
@@ -173,7 +187,7 @@ class Handler(BaseHTTPRequestHandler):
             data = json.loads(body.decode("utf-8"))
             if not isinstance(data, dict):
                 raise ValueError("JSON body must be an object")
-            return {str(k): "" if v is None else str(v) for k, v in data.items()}
+            return _stringify_json_form(data)
         if ctype.startswith("application/x-www-form-urlencoded"):
             parsed = parse_qs(body.decode("utf-8"), keep_blank_values=True)
             return {k: v[-1] if v else "" for k, v in parsed.items()}

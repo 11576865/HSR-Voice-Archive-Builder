@@ -90,6 +90,8 @@ class TestSubtitleAPI(unittest.TestCase):
             self.assertEqual(len(subs), 2)
 
             self.assertEqual(subs[0]["id"], 1)
+            self.assertIn("filename", subs[0])
+            self.assertIn("logical_id", subs[0])
             self.assertEqual(subs[0]["official_chs"], "你好世界")
             self.assertEqual(subs[0]["api_chs"], "")
             self.assertEqual(subs[0]["final_chs"], "你好世界")
