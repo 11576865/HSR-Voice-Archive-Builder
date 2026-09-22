@@ -552,6 +552,7 @@ def update_project_subtitles(
         "ok": True,
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
+        "modified_ids": sorted(str(key) for key in overrides),
         "total_count": len(entries),
         **refreshed,
     }
