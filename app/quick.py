@@ -34,6 +34,9 @@ from .translator import DEFAULT_MODEL
 
 SUPPORTED_ARCHIVES = {".zip", ".7z"}
 MAX_SCAN_FILES = 100_000
+# Partial index coverage is allowed, but below this share the scan still
+# blocks: the continuous archive would be ordered mostly by guesswork.
+MIN_INDEX_COVERAGE = 0.5
 
 _STOP_TOKENS = {
     "archive", "vo", "avatar", "audio", "voice", "chapter", "companion", "side",
@@ -400,18 +403,27 @@ def _remote_rows(
     records: list[dict[str, str]],
     wanted: set[str],
     provider_label: str = "AI-Hobbyist EN.xlsx",
-) -> list[dict[str, str]]:
-    result: list[dict[str, str]] = []
-    seen: set[str] = set()
+) -> tuple[list[dict[str, str]], list[str]]:
+    """Build index rows for wanted filenames, tolerating partial coverage.
+
+    Filenames that match several conflicting index rows are ambiguous and are
+    reported instead of raising, so the rest of the package can still build.
+    Returns (rows, ambiguous_names).
+    """
+    result_by_name: dict[str, dict[str, str]] = {}
+    ambiguous: set[str] = set()
     for pos, row in enumerate(records, 1):
         filename = Path(str(row.get("filename", ""))).name
-        if filename not in wanted:
+        if filename not in wanted or filename in ambiguous:
             continue
-        if filename in seen:
-            raise RuntimeError(f"Remote index has a duplicate filename: {filename}")
-        seen.add(filename)
+        if filename in result_by_name:
+            # Conflicting duplicates make every occurrence unreliable, so the
+            # file is demoted to the unindexed appendix entirely.
+            ambiguous.add(filename)
+            del result_by_name[filename]
+            continue
         remote_hash = str(row.get("hash", "")).strip().lower()
-        result.append({
+        result_by_name[filename] = {
             "index": str(pos),
             "group": parse_voice_identity(filename).group,
             "filename": filename,
@@ -419,8 +431,8 @@ def _remote_rows(
             "source_detail": str(row.get("character", "")).strip(),
             "english": str(row.get("english", "")).strip(),
             "sha256": remote_hash if re.fullmatch(r"[0-9a-f]{64}", remote_hash) else "",
-        })
-    return result
+        }
+    return list(result_by_name.values()), sorted(ambiguous)
 
 
 def _cross_language_voice_key(filename: str) -> str:
@@ -543,14 +555,19 @@ def quick_scan(
         selected_index = {**selected_index, "source": "local"}
 
     character = infer_character(list(wav_names))
-    local_complete = bool(
+    total_wavs = int(english["wav_count"])
+
+    def _index_coverage_key(index: dict[str, Any]) -> tuple[int, int]:
+        return (int(index.get("matched_wavs", 0)), int(index.get("english_matched", 0)))
+
+    local_full = bool(
         selected_index
-        and int(selected_index["matched_wavs"]) == int(english["wav_count"])
-        and int(selected_index["english_matched"]) == int(english["wav_count"])
+        and int(selected_index["matched_wavs"]) == total_wavs
+        and int(selected_index["english_matched"]) == total_wavs
     )
     remote_attempt: dict[str, Any] | None = None
     remote_records: list[dict[str, str]] = []
-    if not local_complete and not blockers:
+    if not local_full and not blockers:
         try:
             remote_records, cache = fetch_ai_hobbyist_index_for_filenames_cached(
                 wav_names, remote_index_url
@@ -564,47 +581,64 @@ def quick_scan(
             )
             if cache.get("stale"):
                 warnings.append("Remote index refresh failed; a stale cached copy was used")
-            remote_complete = (
-                not remote_attempt["duplicate_filenames"]
-                and float(remote_attempt["primary_character_share"]) >= 0.75
-                and int(remote_attempt["matched_wavs"]) == int(english["wav_count"])
-                and int(remote_attempt["english_matched"]) == int(english["wav_count"])
-            )
-            if remote_complete:
+            # Per-file text is exact even for partial coverage, so keep
+            # whichever candidate carries more information instead of
+            # requiring a complete index up front.
+            if int(remote_attempt["matched_wavs"]) > 0 and (
+                selected_index is None
+                or _index_coverage_key(remote_attempt) > _index_coverage_key(selected_index)
+            ):
                 selected_index = remote_attempt
         except Exception as exc:
             warnings.append(f"Remote index fallback failed: {type(exc).__name__}: {exc}")
 
-    selected_complete = bool(
-        selected_index
-        and int(selected_index["matched_wavs"]) == int(english["wav_count"])
-        and int(selected_index["english_matched"]) == int(english["wav_count"])
-        and not selected_index.get("duplicate_filenames")
-        and (
-            selected_index.get("source") != "remote"
-            or float(selected_index.get("primary_character_share", 0.0)) >= 0.75
-        )
-    )
-    if not selected_complete:
-        if selected_index is None:
+    index_usable = False
+    if selected_index is None:
+        blockers.append("No reliable local or remote index covers the package WAV names")
+    else:
+        matched_wavs = int(selected_index["matched_wavs"])
+        text_matched = int(selected_index["english_matched"])
+        coverage = matched_wavs / max(1, total_wavs)
+        if matched_wavs == 0:
+            selected_index = None
             blockers.append("No reliable local or remote index covers the package WAV names")
+        elif coverage < MIN_INDEX_COVERAGE:
+            blockers.append(
+                f"Best index covers only {matched_wavs} / {total_wavs} WAV files "
+                f"({coverage:.0%}), below the {MIN_INDEX_COVERAGE:.0%} minimum; check "
+                "that this is the right character package or provide a more "
+                "complete index"
+            )
         else:
+            index_usable = True
+            uncovered = total_wavs - matched_wavs
+            if uncovered:
+                warnings.append(
+                    f"Index has no entry for {uncovered} / {total_wavs} WAV files; "
+                    "those files keep their audio but are appended at the end "
+                    "without indexed order or subtitles"
+                )
+            if text_matched < matched_wavs:
+                warnings.append(
+                    f"Index has no source text for {matched_wavs - text_matched} "
+                    "matched WAV files; they are treated like uncovered files"
+                )
             if selected_index.get("duplicate_filenames"):
-                blockers.append("The candidate index contains duplicate filenames")
+                warnings.append(
+                    f"{len(selected_index['duplicate_filenames'])} filenames match "
+                    "multiple index rows and are treated as uncovered: "
+                    + ", ".join(selected_index["duplicate_filenames"][:5])
+                )
             if (
                 selected_index.get("source") == "remote"
                 and float(selected_index.get("primary_character_share", 0.0)) < 0.75
             ):
-                blockers.append("Remote index matches do not have a sufficiently dominant character identity")
-            if int(selected_index["matched_wavs"]) != int(english["wav_count"]):
-                blockers.append(
-                    f"Best index covers only {selected_index['matched_wavs']} / "
-                    f"{english['wav_count']} WAV files"
-                )
-            if int(selected_index["english_matched"]) != int(english["wav_count"]):
-                blockers.append(
-                    f"Best index has source text for only {selected_index['english_matched']} / "
-                    f"{english['wav_count']} WAV files"
+                warnings.append(
+                    "Matched index rows are not dominated by one character label "
+                    f"(primary: {selected_index.get('primary_character', '')} "
+                    f"{float(selected_index.get('primary_character_share', 0.0)):.0%}); "
+                    "per-file text is still exact, but review the package if this "
+                    "should be a single-character archive"
                 )
 
     chs = None
@@ -697,9 +731,9 @@ def quick_scan(
     official_chinese_structural = 0
     official_chinese_unmatched = 0
     official_chinese_conflicts = 0
-    if selected_complete and selected_index is not None:
+    if index_usable and selected_index is not None:
         if selected_index.get("source") == "remote":
-            index_rows = _remote_rows(
+            index_rows, _ambiguous_rows = _remote_rows(
                 remote_records,
                 wav_names,
                 str(selected_index.get("provider") or ai_hobbyist_index_label(remote_index_url)),
@@ -729,6 +763,7 @@ def quick_scan(
             }
             for row in index_rows
             if Path(str(row.get("filename", ""))).name not in official_map
+            and str(row.get("english", "")).strip()
         ]
         if chs_source is not None and official_chinese_conflicts > 0:
             blockers.append(
@@ -778,6 +813,20 @@ def quick_scan(
         ),
         "character": character,
         "index": selected_index,
+        "index_coverage": {
+            "matched_wavs": (
+                int(selected_index["matched_wavs"]) if selected_index is not None else 0
+            ),
+            "text_matched_wavs": (
+                int(selected_index["english_matched"]) if selected_index is not None else 0
+            ),
+            "total_wavs": total_wavs,
+            "uncovered_wavs": (
+                total_wavs - int(selected_index["matched_wavs"])
+                if selected_index is not None
+                else total_wavs
+            ),
+        },
         "index_candidates": indexes[:8],
         "remote_index_attempt": remote_attempt,
         "translation": {
@@ -896,6 +945,7 @@ def create_quick_project(
         if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
             raise RuntimeError("Reference source changed after Quick Scan; scan again before building")
     wanted = set(current_inventory["wav_names"])
+    ambiguous: list[str] = []
     if selected_index.get("source") == "remote":
         remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
             wanted,
@@ -903,7 +953,7 @@ def create_quick_project(
         )
         if _index_fingerprint(remote_records) != selected_index["records_fingerprint"]:
             raise RuntimeError("Remote index changed after Quick Scan; scan again before building")
-        filtered = _remote_rows(
+        filtered, ambiguous = _remote_rows(
             remote_records,
             wanted,
             str(selected_index.get("provider") or ai_hobbyist_index_label(str(selected_index["url"]))),
@@ -914,6 +964,27 @@ def create_quick_project(
             raise RuntimeError("Local index changed after Quick Scan; scan again before building")
         original_rows = normalize_index(local_index)
         filtered = [row for row in original_rows if Path(row["filename"]).name in wanted]
+    # Files the index cannot order reliably keep their audio but join the
+    # archive as an unindexed appendix at the end, without subtitles.
+    uncovered = sorted(
+        (wanted - {Path(str(row.get("filename", ""))).name for row in filtered})
+        | set(ambiguous)
+    )
+    for name in uncovered:
+        filtered.append({
+            "index": str(len(filtered) + 1),
+            "group": parse_voice_identity(name).group,
+            "filename": name,
+            "source": "unindexed-package-file",
+            "source_detail": "",
+            "english": "",
+            "reference_text": "",
+            "reference_language": "",
+            "official_target_text": "",
+            "official_target_language": "",
+            "official_target_source": "",
+            "sha256": "",
+        })
     if len(filtered) != len(wanted):
         raise RuntimeError("Index coverage changed between scan and project creation")
 

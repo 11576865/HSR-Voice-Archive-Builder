@@ -103,8 +103,9 @@ def write_legacy_inputs(index_path: Path, bilingual_path: Path | None, dest: Pat
         for row in index:
             b = bilingual.get(row["filename"], {})
             english = row["english"] or b.get("english", "")
-            if not english:
-                raise ValueError(f"Missing English text: {row['filename']}")
+            # Rows without source text are allowed: Quick Mode appends files
+            # the remote index cannot order as an unindexed appendix. They
+            # keep their audio and render without subtitles.
             w.writerow({
                 "序号": row["index"], "分组": row["group"], "文件名": row["filename"],
                 "来源": row["source"], "来源细分": row["source_detail"], "英文文本": english,

@@ -296,6 +296,11 @@ def _target_records(entries) -> list[dict[str, str]]:
     for i, entry in enumerate(entries):
         if entry.chinese:
             continue
+        source_text = str(entry.english or "").strip()
+        if not source_text:
+            # Unindexed appendix files (Quick Mode partial coverage) have no
+            # source text to translate; their audio still enters the archive.
+            continue
         row = {
             "id": entry.filename,
             "english": entry.english,
