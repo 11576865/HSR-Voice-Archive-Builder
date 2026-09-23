@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Iterable
+from typing import Any, Iterable
 
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
@@ -244,6 +244,7 @@ def render_ass(
     enable_frosted_glass: bool = False,
     enable_multi_layer_outline: bool = False,
     enable_kinetic: bool = True,
+    kinetic_options: dict[str, Any] | None = None,
 ) -> str:
     header = """[Script Info]
 Title: HSR Voice Archive
@@ -329,26 +330,53 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if enable_kinetic
             else ""
         )
+        k_opts = kinetic_options or {}
 
         if enable_frosted_glass:
             if layout.primary_lines:
                 res_pri = generate_frosted_glass_card(layout.primary_lines)
                 if res_pri:
+                    card_tag = res_pri[0]
+                    if enable_kinetic:
+                        duration_ms = max(100, int(round(duration_sec * 1000)))
+                        max_anim_ms = max(30, int(duration_ms * 0.25))
+                        t_in = min(200, max_anim_ms)
+                        t_out = min(200, max_anim_ms)
+                        card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({t_in},{t_out})", 1)
                     dialogues.append(
-                        f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{res_pri[0]}"
+                        f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
             if layout.chs_lines:
                 res_chs = generate_frosted_glass_card(layout.chs_lines)
                 if res_chs:
+                    card_tag = res_chs[0]
+                    if enable_kinetic:
+                        duration_ms = max(100, int(round(duration_sec * 1000)))
+                        max_anim_ms = max(30, int(duration_ms * 0.25))
+                        t_in = min(200, max_anim_ms)
+                        t_out = min(200, max_anim_ms)
+                        card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({t_in},{t_out})", 1)
                     dialogues.append(
-                        f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{res_chs[0]}"
+                        f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
 
         if layout.primary_lines:
             pos0 = layout.primary_lines[0]
+            if enable_kinetic:
+                pri_motion_tags = generate_kinetic_tags(
+                    duration_sec,
+                    x=pos0.x,
+                    y=pos0.y,
+                    entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
+                    **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
+                )
+                pos_prefix = f"{{\\an{pos0.alignment}{pri_motion_tags}"
+            else:
+                pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
+
             if enable_multi_layer_outline:
                 pri_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.primary_lines)
-                out_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{pri_plain}"
+                out_text = f"{pos_prefix}\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{pri_plain}"
                 dialogues.append(
                     f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{out_text}"
                 )
@@ -362,16 +390,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{pri_text}"
+            dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}}}{pri_text}"
             dialogues.append(
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
             )
 
         if layout.chs_lines:
             pos0 = layout.chs_lines[0]
+            if enable_kinetic:
+                chs_motion_tags = generate_kinetic_tags(
+                    duration_sec,
+                    x=pos0.x,
+                    y=pos0.y,
+                    entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
+                    **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
+                )
+                pos_prefix = f"{{\\an{pos0.alignment}{chs_motion_tags}"
+            else:
+                pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
+
             if enable_multi_layer_outline:
                 chs_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.chs_lines)
-                out_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{chs_plain}"
+                out_text = f"{pos_prefix}\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{chs_plain}"
                 dialogues.append(
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
@@ -385,7 +425,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{chs_text}"
+            dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
@@ -419,6 +459,7 @@ def write_ass(
     enable_frosted_glass: bool = False,
     enable_multi_layer_outline: bool = False,
     enable_kinetic: bool = True,
+    kinetic_options: dict[str, Any] | None = None,
 ) -> None:
     report_path = overflow_report_path or (path.parent / "ass_layout_overflow_report.json")
     _atomic_write(
@@ -432,6 +473,7 @@ def write_ass(
             enable_frosted_glass=enable_frosted_glass,
             enable_multi_layer_outline=enable_multi_layer_outline,
             enable_kinetic=enable_kinetic,
+            kinetic_options=kinetic_options,
         ),
         encoding="utf-8-sig",
     )
