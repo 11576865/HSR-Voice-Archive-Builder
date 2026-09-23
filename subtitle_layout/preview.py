@@ -199,6 +199,21 @@ def preview_subtitle_layout(
         "font_size": chosen_chs_size,
     }
 
+    # Parallax region calculation: center-outward expansion displacement
+    primary_offset = pri_height
+    chs_offset = chs_height
+    total_span = pri_height + min_central_gap + chs_height
+    parallax_ratio = round(pri_height / chs_height, 3) if chs_height > 0 else (1.0 if pri_height == 0 else 999.0)
+
+    parallax_info = {
+        "primary_offset": primary_offset,
+        "chs_offset": chs_offset,
+        "total_span": total_span,
+        "parallax_ratio": parallax_ratio,
+        "y_primary_peak": pri_start,
+        "y_chs_peak": y_center_bottom + chs_height,
+    }
+
     return {
         "ok": True,
         "canvas": {
@@ -225,6 +240,7 @@ def preview_subtitle_layout(
             "y_bottom": y_center_bottom,
             "min_central_gap": min_central_gap,
         },
+        "parallax": parallax_info,
         "layout": {
             "scale_factor": chosen_scale,
             "scale_percent": round(chosen_scale * 100),

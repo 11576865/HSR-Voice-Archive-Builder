@@ -32,6 +32,11 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertEqual(res["safe_area"]["margin_top"], 54)
         self.assertEqual(len(res["layout"]["primary_lines"]), 1)
         self.assertEqual(len(res["layout"]["chs_lines"]), 1)
+        self.assertIn("parallax", res)
+        self.assertIn("primary_offset", res["parallax"])
+        self.assertIn("chs_offset", res["parallax"])
+        self.assertIn("total_span", res["parallax"])
+        self.assertIn("parallax_ratio", res["parallax"])
 
     def test_custom_margins_and_gap(self):
         res = preview_subtitle_layout(
@@ -80,6 +85,7 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertIn("canvas", data)
         self.assertIn("safe_area", data)
         self.assertIn("central_gap", data)
+        self.assertIn("parallax", data)
         self.assertIn("layout", data)
 
 
