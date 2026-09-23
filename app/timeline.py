@@ -226,12 +226,24 @@ def render_ass(
     *,
     source_language: str = "en",
     target_language: str = "zh-CN",
+    overflow_report_path: Path | None = None,
+    enable_karaoke: bool = False,
+    enable_frosted_glass: bool = False,
+    enable_multi_layer_outline: bool = False,
+    enable_kinetic: bool = True,
+    kinetic_options: dict[str, Any] | None = None,
 ) -> str:
     from subtitle_layout import render_ass as _layout_render_ass
     return _layout_render_ass(
         entries,
         source_language=source_language,
         target_language=target_language,
+        overflow_report_path=overflow_report_path,
+        enable_karaoke=enable_karaoke,
+        enable_frosted_glass=enable_frosted_glass,
+        enable_multi_layer_outline=enable_multi_layer_outline,
+        enable_kinetic=enable_kinetic,
+        kinetic_options=kinetic_options,
     )
 
 
@@ -241,6 +253,12 @@ def write_ass(
     *,
     source_language: str = "en",
     target_language: str = "zh-CN",
+    overflow_report_path: Path | None = None,
+    enable_karaoke: bool = False,
+    enable_frosted_glass: bool = False,
+    enable_multi_layer_outline: bool = False,
+    enable_kinetic: bool = True,
+    kinetic_options: dict[str, Any] | None = None,
 ) -> None:
     from subtitle_layout import write_ass as _layout_write_ass
     _layout_write_ass(
@@ -248,6 +266,12 @@ def write_ass(
         path,
         source_language=source_language,
         target_language=target_language,
+        overflow_report_path=overflow_report_path,
+        enable_karaoke=enable_karaoke,
+        enable_frosted_glass=enable_frosted_glass,
+        enable_multi_layer_outline=enable_multi_layer_outline,
+        enable_kinetic=enable_kinetic,
+        kinetic_options=kinetic_options,
     )
 
 
