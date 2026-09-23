@@ -45,7 +45,6 @@ class ProjectConfig:
     same_group_gap: float = 1.50
     group_gap: float = 3.00
     make_flac: bool = True
-    make_chapter_flac: bool = False
     chapter_order: bool = False
     generate_ass: bool = False
     translate_missing: bool = True
@@ -137,7 +136,6 @@ def create_project(
     target_language: str = "zh-CN",
     reference_language: str = "auto",
     remote_character: str = "",
-    make_chapter_flac: bool = False,
     chapter_order: bool = False,
     translate_missing: bool = True,
     review_official_target: bool = False,
@@ -171,7 +169,6 @@ def create_project(
         target_language=str(target_language or "zh-CN").strip() or "zh-CN",
         reference_language=str(reference_language or "auto").strip() or "auto",
         remote_character=remote_character.strip(),
-        make_chapter_flac=bool(make_chapter_flac),
         chapter_order=bool(chapter_order),
         translate_missing=bool(translate_missing),
         review_official_target=bool(review_official_target),
@@ -611,7 +608,6 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "ass_layout_overflow_report.json",
         "build_report.json",
         "continuous.flac",
-        "continuous_chapter_ordered.flac",
         "semantic_review_required.txt",
         "update_plan.json",
         "update_apply_report.json",
@@ -625,7 +621,6 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
 
     final_product_names = (
         "continuous.flac",
-        "continuous_chapter_ordered.flac",
         "HSR_Voice_Archive.srt",
         "HSR_Voice_Archive.ass",
         "HSR_Voice_Archive_Black.mkv",
