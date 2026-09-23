@@ -13,6 +13,7 @@ import zipfile
 from collections import defaultdict
 from dataclasses import asdict, dataclass
 from pathlib import Path, PurePosixPath
+from types import SimpleNamespace
 from typing import Iterable, Mapping
 
 from .timeline import (
@@ -526,6 +527,7 @@ def build_entries(
     reference_language: str = "auto",
     source_text_language: str = "en",
     target_language: str = "zh-CN",
+    chapter_order: bool = False,
 ) -> tuple[list[Entry], dict[str, object]]:
     full = read_csv_rows(full_index_csv)
     bi = read_csv_rows(bilingual_csv)
@@ -746,6 +748,13 @@ def build_entries(
     if sample_rate is None or channels is None or sample_width is None:
         raise ValueError("No usable WAV entries")
 
+    if chapter_order:
+        # Reorder the whole archive by story chapter before the timeline
+        # assigns sample positions, so the FLAC, subtitles and manifest all
+        # follow the same chapter order. Unassignable voices keep their
+        # relative order at the end instead of being dropped.
+        raw.sort(key=_chapter_order_key)
+
     resolved = resolve_timeline(
         raw,
         sample_rate,
@@ -820,6 +829,7 @@ def build_entries(
         "all_source_hashes_match": not mismatched_hashes,
         "count_wav_extensible": extensible_count,
         "count_wav_pcm_normalized": normalized_count,
+        "chapter_order": bool(chapter_order),
     }
     return entries, report
 
@@ -1135,6 +1145,19 @@ def major_group_sort_key(mg: str) -> tuple[int, int | str, str]:
         num = int(m_side.group(1)) if m_side.group(1).isdigit() else 999
         return (4, num, mg_lower)
     return (5, 0, mg_lower)
+
+
+def _chapter_order_key(row: dict[str, object]) -> tuple[tuple[int, int | str, str], int]:
+    """Sort key placing a raw build_entries row into story-chapter order."""
+    probe = SimpleNamespace(
+        group=str(row.get("group", "") or ""),
+        source_member_id=str(row.get("source_member_id", "") or ""),
+        filename=str(row.get("filename", "") or ""),
+    )
+    mg = extract_major_group(probe)  # type: ignore[arg-type]
+    if mg is None:
+        return ((6, 0, ""), int(row["index"]))
+    return (major_group_sort_key(mg), int(row["index"]))
 
 
 def build_chapter_ordered_flac(
