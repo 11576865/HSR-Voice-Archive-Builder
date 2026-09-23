@@ -1237,7 +1237,7 @@ def _review_official_targets(
             continue
         saved = checkpoint.get(row["id"])
         fingerprint = _text_fingerprint(
-            row["english"] + " " + row["official_chinese"]
+            row["english"] + "\u0000" + row["official_chinese"]
         )
         if (
             isinstance(saved, dict)
