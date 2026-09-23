@@ -51,7 +51,6 @@ def cross_language_voice_key(filename: str) -> str:
     if num_match:
         return f"id::{num_match.group('id').casefold()}"
     # Strip optional vo_ prefix for fallback stem comparison
-_FOREIGN = None
     if stem.startswith("vo_"):
         return stem[3:]
     return stem
