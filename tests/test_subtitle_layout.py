@@ -13,7 +13,7 @@ from subtitle_layout import (
     render_ass,
     solve_subtitle_layout,
 )
-from subtitle_layout.collision import LayoutBlock
+from subtitle_layout.measure import clear_measure_cache
 
 
 class SubtitleLayoutTests(unittest.TestCase):
@@ -35,21 +35,48 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(get_scaled_font_size(base_size, 0.90), 47)
         self.assertEqual(get_scaled_font_size(base_size, 0.85), 44)
 
+    def test_center_outward_alignment_tags_and_coords(self) -> None:
+        entry = SimpleNamespace(
+            english="Primary main subtitle line.",
+            chinese="次要辅助字幕行。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        ass_output = render_ass([entry], source_language="en", target_language="zh-CN")
+        self.assertIn(r"{\an2\pos(960,530)\fs42}Primary main subtitle line.", ass_output)
+        self.assertIn(r"{\an8\pos(960,550)\fs52}次要辅助字幕行。", ass_output)
+
     def test_protected_phrases_line_breaking(self) -> None:
-        # Long English text containing protected phrases
         text = "Please let alone this matter and do it as soon as possible in order to succeed even though right now at least kind of a lot of work remains."
         lines = break_line(text, max_width=500, font_size=42)
         full_reconstructed = " ".join(lines)
         self.assertIn("as soon as", full_reconstructed)
         self.assertIn("a lot of", full_reconstructed)
-        # Verify protected phrase 'as soon as' is intact on some line
         has_phrase = any("as soon as" in line for line in lines)
         self.assertTrue(has_phrase, "Protected phrase 'as soon as' should be kept intact on a single line")
 
+    def test_repeated_protected_phrases_no_leak(self) -> None:
+        text = "We need at least two items at least for now to proceed with at least minimum effort."
+        lines = break_line(text, max_width=400, font_size=42)
+        full_text = " ".join(lines)
+        self.assertEqual(full_text.count("at least"), 3, "All occurrences of 'at least' must be preserved")
+
+    def test_semantic_collocation_binding(self) -> None:
+        text = "You must look at all options according to the rules and rely on your team."
+        lines = break_line(text, max_width=350, font_size=42)
+        full_text = " ".join(lines)
+        self.assertIn("look at", full_text)
+        self.assertIn("according to", full_text)
+        self.assertIn("rely on", full_text)
+
+    def test_cjk_boundary_vs_accented_latin(self) -> None:
+        text = "Visit Café and enjoy crème brûlée near the river bank."
+        lines = break_line(text, max_width=300, font_size=42)
+        for line in lines:
+            self.assertNotIn("Caf", line.split()[0] if line.split() else "")
+
     def test_punctuation_preferred_over_whitespace(self) -> None:
-        # Text with punctuation boundary vs earlier whitespace boundary
         text = "Hello world, this is a test sentence."
-        # Width where splitting after comma vs splitting after world
         width = measure_text_width("Hello world, ", 42)
         lines = break_line(text, max_width=width, font_size=42)
         self.assertEqual(lines[0], "Hello world,")
@@ -61,8 +88,28 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(layout.scale_factor, 1.0)
         self.assertEqual(len(layout.chs_lines), 1)
         self.assertEqual(len(layout.primary_lines), 1)
-        self.assertEqual(layout.chs_lines[0].font_size, 52)
-        self.assertEqual(layout.primary_lines[0].font_size, 42)
+        self.assertEqual(layout.chs_lines[0].alignment, 8)
+        self.assertEqual(layout.primary_lines[0].alignment, 2)
+        self.assertEqual(layout.chs_lines[0].y, 550)
+        self.assertEqual(layout.primary_lines[0].y, 530)
+
+    def test_multiline_backslash_N_joining(self) -> None:
+        entry = SimpleNamespace(
+            english="This is a very long primary subtitle designed to exceed maximum printable line width and trigger automatic line wrapping into multiple lines.",
+            chinese="这是一个非常漫长的主字幕文本，用来触发自动换行算法并验证在生成Dialogue事件时使用反斜杠N正确连接多行文本。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        ass_output = render_ass([entry], source_language="en", target_language="zh-CN")
+        primary_dialogue = [line for line in ass_output.splitlines() if line.startswith("Dialogue: 0,")]
+        chs_dialogue = [line for line in ass_output.splitlines() if line.startswith("Dialogue: 1,")]
+
+        self.assertEqual(len(primary_dialogue), 1)
+        self.assertEqual(len(chs_dialogue), 1)
+        self.assertIn(r"\N", primary_dialogue[0])
+        self.assertIn(r"\N", chs_dialogue[0])
+        self.assertIn(r"{\an2\pos(960,530)", primary_dialogue[0])
+        self.assertIn(r"{\an8\pos(960,550)", chs_dialogue[0])
 
     def test_long_english_text_layout(self) -> None:
         english = "This is a very long sentence designed to test the automatic line breaking capabilities of the ASS subtitle layout engine when processing English text."
@@ -90,6 +137,9 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertLess(layout.scale_factor, 1.0)
         self.assertIn(layout.scale_factor, (0.95, 0.90, 0.85))
 
+    def test_clear_measure_cache(self) -> None:
+        clear_measure_cache()
+
     def test_real_project_voice_samples(self) -> None:
         entries = [
             SimpleNamespace(
@@ -111,7 +161,6 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertIn("PlayResY: 1080", ass_output)
         self.assertIn("愿此行，终抵群星。", ass_output)
         self.assertIn("May this journey lead us starward.", ass_output)
-        self.assertNotIn(r"\N", ass_output)
 
     def test_verify_ass_render_script_helper(self) -> None:
         from scripts.verify_ass_render import _get_png_bbox_stdlib
@@ -121,10 +170,9 @@ class SubtitleLayoutTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             png_path = Path(td) / "test.png"
             width, height = 100, 100
-            # Construct a raw RGB PNG in memory
             raw_rows = []
             for y in range(height):
-                row = bytearray([0])  # filter byte
+                row = bytearray([0])
                 for x in range(width):
                     if x == 10 and y == 20:
                         row.extend([255, 255, 255])
@@ -147,20 +195,6 @@ class SubtitleLayoutTests(unittest.TestCase):
             bbox = _get_png_bbox_stdlib(png_path)
             self.assertIsNotNone(bbox)
             self.assertEqual(bbox, (10, 20, 11, 21))
-
-    def test_no_english_backslash_N_in_dialogue(self) -> None:
-        entry = SimpleNamespace(
-            english="Line 1\nLine 2",
-            chinese="第一行\n第二行",
-            start_seconds=1.0,
-            display_end_seconds=3.0,
-        )
-        ass_output = render_ass([entry], source_language="en", target_language="zh-CN")
-        dialogues = [line for line in ass_output.splitlines() if line.startswith("Dialogue:")]
-        # Every line must be an independent Dialogue event
-        self.assertGreaterEqual(len(dialogues), 2)
-        for d in dialogues:
-            self.assertNotIn(r"\N", d)
 
 
 if __name__ == "__main__":

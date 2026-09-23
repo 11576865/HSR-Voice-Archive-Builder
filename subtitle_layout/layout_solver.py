@@ -1,10 +1,10 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Sequence
 
 from .breaker import break_line
-from .collision import LayoutBlock, check_bilingual_collision
+from .collision import LayoutBlock, check_bilingual_collision_with_reason
 from .font_scale import (
     DEFAULT_BASE_FONT_SIZE_CHS,
     DEFAULT_BASE_FONT_SIZE_PRIMARY,
@@ -21,11 +21,7 @@ class SubtitleLinePos:
     font_size: int
     x: int
     y: int
-    alignment: int  # ASS alignment tag value, e.g. 8 for top-center
-
-
-from dataclasses import field
-from .collision import LayoutBlock, check_bilingual_collision_with_reason
+    alignment: int  # ASS alignment tag value: 2 for bottom-center (Primary), 8 for top-center (Secondary)
 
 
 @dataclass
@@ -51,6 +47,11 @@ def solve_subtitle_layout(
     same_chinese = source_language == target_language == "zh-CN"
     center_x = safe_area.canvas_width // 2
 
+    # Central boundary coordinates
+    y_center = safe_area.canvas_height / 2.0
+    y_center_top = round(y_center - min_central_gap / 2.0)
+    y_center_bottom = round(y_center + min_central_gap / 2.0)
+
     scale_attempts: list[int] = []
     last_failure_condition: str | None = None
 
@@ -69,32 +70,34 @@ def solve_subtitle_layout(
             pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size)
             chs_broken = []
         else:
-            chs_broken = break_line(chinese_text, safe_area.max_printable_width, chs_size)
             pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size)
+            chs_broken = break_line(chinese_text, safe_area.max_printable_width, chs_size)
 
         chs_lh = measure_line_height(chs_size)
         pri_lh = measure_line_height(primary_size)
 
-        # Chinese block anchored at top safe boundary (y_min), grows downward
-        chs_top = safe_area.y_min
-        chs_bottom = chs_top + (len(chs_broken) * chs_lh if chs_broken else 0)
+        # Primary Language Block (Top Side): anchored at y_center_top, grows upward towards y_min
+        pri_height = len(pri_broken) * pri_lh if pri_broken else 0.0
+        pri_end = y_center_top
+        pri_start = pri_end - pri_height
 
-        # Primary block anchored at bottom safe boundary (y_max), grows upward
-        pri_bottom = safe_area.y_max
-        pri_top = pri_bottom - (len(pri_broken) * pri_lh if pri_broken else 0)
+        # Secondary Language Block (Bottom Side / CHS): anchored at y_center_bottom, grows downward towards y_max
+        chs_height = len(chs_broken) * chs_lh if chs_broken else 0.0
+        chs_start = y_center_bottom
+        chs_end = chs_start + chs_height
 
         chs_block = LayoutBlock(
             lines=chs_broken,
             font_size=chs_size,
-            y_start=chs_top,
-            y_end=chs_bottom,
+            y_start=chs_start,
+            y_end=chs_end,
             max_width=safe_area.max_printable_width,
         )
         pri_block = LayoutBlock(
             lines=pri_broken,
             font_size=primary_size,
-            y_start=pri_top,
-            y_end=pri_bottom,
+            y_start=pri_start,
+            y_end=pri_end,
             max_width=safe_area.max_printable_width,
         )
 
@@ -103,29 +106,27 @@ def solve_subtitle_layout(
         )
 
         if not has_collision:
-            chs_positions: list[SubtitleLinePos] = []
-            for i, line in enumerate(chs_broken):
-                line_y = round(chs_top + i * chs_lh)
-                chs_positions.append(
-                    SubtitleLinePos(
-                        text=line,
-                        font_size=chs_size,
-                        x=center_x,
-                        y=line_y,
-                        alignment=8,
-                    )
-                )
-
             pri_positions: list[SubtitleLinePos] = []
-            for i, line in enumerate(pri_broken):
-                line_y = round(pri_top + i * pri_lh)
+            for line in pri_broken:
                 pri_positions.append(
                     SubtitleLinePos(
                         text=line,
                         font_size=primary_size,
                         x=center_x,
-                        y=line_y,
-                        alignment=8,
+                        y=y_center_top,
+                        alignment=2,  # Bottom-Center alignment for Primary
+                    )
+                )
+
+            chs_positions: list[SubtitleLinePos] = []
+            for line in chs_broken:
+                chs_positions.append(
+                    SubtitleLinePos(
+                        text=line,
+                        font_size=chs_size,
+                        x=center_x,
+                        y=y_center_bottom,
+                        alignment=8,  # Top-Center alignment for Secondary
                     )
                 )
 
@@ -140,7 +141,7 @@ def solve_subtitle_layout(
 
         last_failure_condition = failure_condition
 
-    # At 85% scale, invalid layouts are rejected rather than accepted silently
+    # Rejection if all scaling attempts fail
     return SolvedLayout(
         scale_factor=SCALE_FACTORS[-1],
         chs_lines=[],
