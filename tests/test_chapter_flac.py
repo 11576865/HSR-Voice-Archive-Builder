@@ -253,5 +253,106 @@ class ChapterOrderedFlacTests(unittest.TestCase):
             self.assertEqual(report["chapter_flac_group_order"], ["chapter1", "chapter2"])
 
 
+class ChapterOrderArchiveTests(unittest.TestCase):
+    def _fixture(self, root: Path) -> tuple[Path, Path, Path, Path]:
+        wavs = root / "wavs"
+        write_wav(wavs / "c2" / "dup.wav", 8000)
+        write_wav(wavs / "c1" / "dup.wav", 4000)
+        write_wav(wavs / "arch" / "arch.wav", 2000)
+        write_wav(wavs / "unk" / "unk.wav", 1000)
+
+        labs = root / "labs"
+        labs.mkdir()
+
+        index = root / "index.csv"
+        bilingual = root / "bilingual.csv"
+
+        # Default (index) order is intentionally not chapter order.
+        write_csv(
+            index,
+            ["序号", "分组", "文件名", "来源", "来源细分", "来源成员路径", "英文文本", "SHA-256"],
+            [
+                {"序号": "1", "分组": "chapter2_1", "文件名": "dup.wav", "来源": "", "来源细分": "",
+                 "来源成员路径": "c2/dup.wav", "英文文本": "C2 Line", "SHA-256": ""},
+                {"序号": "2", "分组": "chapter1_1", "文件名": "dup.wav", "来源": "", "来源细分": "",
+                 "来源成员路径": "c1/dup.wav", "英文文本": "C1 Line", "SHA-256": ""},
+                {"序号": "3", "分组": "archive", "文件名": "arch.wav", "来源": "", "来源细分": "",
+                 "来源成员路径": "arch/arch.wav", "英文文本": "Arch Line", "SHA-256": ""},
+                {"序号": "4", "分组": "unknown", "文件名": "unk.wav", "来源": "", "来源细分": "",
+                 "来源成员路径": "unk/unk.wav", "英文文本": "Unk Line", "SHA-256": ""},
+            ],
+        )
+        write_csv(
+            bilingual,
+            ["文件名", "来源成员路径", "中文", "ENGLISH"],
+            [
+                {"文件名": "dup.wav", "来源成员路径": "c2/dup.wav", "中文": "", "ENGLISH": "C2 Line"},
+                {"文件名": "dup.wav", "来源成员路径": "c1/dup.wav", "中文": "", "ENGLISH": "C1 Line"},
+                {"文件名": "arch.wav", "来源成员路径": "arch/arch.wav", "中文": "", "ENGLISH": "Arch Line"},
+                {"文件名": "unk.wav", "来源成员路径": "unk/unk.wav", "中文": "", "ENGLISH": "Unk Line"},
+            ],
+        )
+        return index, bilingual, labs, wavs
+
+    def test_build_entries_chapter_order_reorders_archive(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            index, bilingual, labs, wavs = self._fixture(Path(td))
+
+            default_entries, default_report = build_entries(index, bilingual, labs, wavs)
+            self.assertEqual(
+                [e.source_member_id for e in default_entries],
+                ["c2/dup.wav", "c1/dup.wav", "arch/arch.wav", "unk/unk.wav"],
+            )
+            self.assertFalse(default_report["chapter_order"])
+
+            entries, report = build_entries(
+                index, bilingual, labs, wavs, chapter_order=True
+            )
+            # Chapter order: archive, chapter1, chapter2; the unassignable
+            # voice stays at the end instead of being dropped.
+            self.assertEqual(
+                [e.source_member_id for e in entries],
+                ["arch/arch.wav", "c1/dup.wav", "c2/dup.wav", "unk/unk.wav"],
+            )
+            self.assertTrue(report["chapter_order"])
+            self.assertEqual(report["count_total"], 4)
+            # Timeline positions remain consistent with the new order.
+            starts = [e.start_sample for e in entries]
+            self.assertEqual(starts, sorted(starts))
+            for prev, cur in zip(entries, entries[1:]):
+                self.assertGreaterEqual(cur.start_sample, prev.audio_end_sample)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
+    def test_pipeline_chapter_order_manifest_and_srt(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            index, bilingual, labs, wavs = self._fixture(root)
+
+            out_dir = root / "output"
+            report = build_project_v02(
+                index,
+                wavs,
+                out_dir,
+                bilingual_csv=bilingual,
+                chs_source=labs,
+                make_flac=True,
+                chapter_order=True,
+            )
+
+            self.assertTrue(report["chapter_order"])
+            manifest = json.loads((out_dir / "manifest.json").read_text(encoding="utf-8"))
+            order = [e["source_member_id"] for e in manifest["entries"]]
+            self.assertEqual(
+                order,
+                ["arch/arch.wav", "c1/dup.wav", "c2/dup.wav", "unk/unk.wav"],
+            )
+            # The main FLAC and the SRT follow the same chapter order.
+            self.assertTrue((out_dir / "continuous.flac").is_file())
+            srt = (out_dir / "HSR_Voice_Archive.srt").read_text(encoding="utf-8")
+            self.assertLess(srt.index("Arch Line"), srt.index("C1 Line"))
+            self.assertLess(srt.index("C1 Line"), srt.index("C2 Line"))
+            self.assertLess(srt.index("C2 Line"), srt.index("Unk Line"))
+
+
 if __name__ == "__main__":
     unittest.main()
