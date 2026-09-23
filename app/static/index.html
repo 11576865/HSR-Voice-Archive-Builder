@@ -381,6 +381,110 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
       </details>
     </section>
 
+    <!-- Subtitle Layout Real-Time Preview Workspace -->
+    <section class="card" id="subtitleLayoutPreviewCard">
+      <div class="topline">
+        <h2>字幕排版实时预览控制台 (Subtitle Layout Preview)</h2>
+        <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
+          <span id="previewScaleBadge" class="badge">Scale: 100%</span>
+          <span id="previewStatusBadge" class="badge" style="color:var(--ok)">✓ 正常 OK</span>
+        </div>
+      </div>
+      <p class="small muted">所见即所得 (WYSIWYG) 控制面板：调节排版参数、安全边距与间隔，实时预览 1920×1080 视频画面的双语字幕堆叠、分行断点与碰撞预警。</p>
+
+      <!-- Control Panel Controls & Inputs -->
+      <div class="row" style="margin-bottom:12px">
+        <div>
+          <label for="prevChsText">中文字幕 (Chinese Subtitle)</label>
+          <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
+        </div>
+        <div>
+          <label for="prevPriText">原文/英文字幕 (Primary Subtitle)</label>
+          <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
+        </div>
+      </div>
+
+      <!-- Presets & Sliders -->
+      <div style="background:var(--soft);padding:14px;border-radius:10px;border:1px solid var(--line);margin-bottom:14px">
+        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
+          <b style="font-size:13px;color:var(--text)">快捷预设 (Quick Presets)</b>
+          <div class="actions" style="margin:0">
+            <button type="button" class="small" id="prevPresetDefault">默认标准</button>
+            <button type="button" class="small" id="prevPresetLongText">长句自动换行</button>
+            <button type="button" class="small danger" id="prevPresetCollision">碰撞/溢出压力测试</button>
+          </div>
+        </div>
+
+        <div class="row3" style="margin-bottom:12px">
+          <div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevChsSize" style="margin:0 0 3px">中文基础字号</label>
+              <span id="prevChsSizeVal" class="small muted">52 px</span>
+            </div>
+            <input type="range" id="prevChsSize" min="38" max="64" value="52" step="1">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevPriSize" style="margin:0 0 3px">原文基础字号</label>
+              <span id="prevPriSizeVal" class="small muted">42 px</span>
+            </div>
+            <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevCentralGap" style="margin:0 0 3px">中央安全间隔</label>
+              <span id="prevCentralGapVal" class="small muted">20 px</span>
+            </div>
+            <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
+          </div>
+        </div>
+
+        <div class="row" style="margin-bottom:12px">
+          <div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevMarginH" style="margin:0 0 3px">水平安全边距 % (Margin H)</label>
+              <span id="prevMarginHVal" class="small muted">10 % (192px)</span>
+            </div>
+            <input type="range" id="prevMarginH" min="0" max="30" value="10" step="1">
+          </div>
+          <div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevMarginV" style="margin:0 0 3px">垂直安全边距 % (Margin V)</label>
+              <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
+            </div>
+            <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted)">
+          <b>图层辅助线：</b>
+          <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域 (Safe Area)</label>
+          <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔 (Central Gap)</label>
+          <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒 (Text Bounding Box)</label>
+        </div>
+      </div>
+
+      <!-- 16:9 Interactive Simulated Video Screen Canvas -->
+      <div style="position:relative;width:100%;aspect-ratio:16 / 9;background:#080a0e;border-radius:10px;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 0 20px rgba(0,0,0,0.8)" id="previewCanvasContainer">
+        <!-- Overlay SVG -->
+        <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none">
+          <!-- Rendered dynamically via JS -->
+        </svg>
+
+        <!-- Simulated Video Overlay UI -->
+        <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
+          <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080 FHD</span>
+          <span style="background:rgba(0,0,0,0.6);color:var(--ok);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">60 FPS</span>
+        </div>
+
+        <!-- Real-time Collision Banner Overlay -->
+        <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
+          <span>⚠️ 布局碰撞/溢出预警：</span>
+          <span id="previewCollisionReason">CENTRAL_COLLISION</span>
+        </div>
+      </div>
+    </section>
+
     <section class="card hidden" id="subtitleReviewCard">
       <div class="topline">
         <h2>字幕审查编辑器 (Subtitle Review Editor)</h2>
@@ -1681,6 +1785,203 @@ document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
 document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
 
+
+/* Subtitle Layout Real-Time Preview Workspace JS Logic */
+let previewDebounceTimer = null;
+
+async function updateLayoutPreview() {
+  const chsText = document.getElementById('prevChsText')?.value || '';
+  const priText = document.getElementById('prevPriText')?.value || '';
+  const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '52', 10);
+  const priSize = parseInt(document.getElementById('prevPriSize')?.value || '42', 10);
+  const centralGap = parseFloat(document.getElementById('prevCentralGap')?.value || '20');
+  const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '10');
+  const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
+
+  const showSafeArea = document.getElementById('prevShowSafeArea')?.checked ?? true;
+  const showCentralGap = document.getElementById('prevShowCentralGap')?.checked ?? true;
+  const showBBox = document.getElementById('prevShowBBox')?.checked ?? true;
+
+  if (document.getElementById('prevChsSizeVal')) document.getElementById('prevChsSizeVal').textContent = chsSize + ' px';
+  if (document.getElementById('prevPriSizeVal')) document.getElementById('prevPriSizeVal').textContent = priSize + ' px';
+  if (document.getElementById('prevCentralGapVal')) document.getElementById('prevCentralGapVal').textContent = centralGap + ' px';
+  if (document.getElementById('prevMarginHVal')) {
+    const pxH = Math.round(1920 * (marginH / 100));
+    document.getElementById('prevMarginHVal').textContent = marginH + ' % (' + pxH + 'px)';
+  }
+  if (document.getElementById('prevMarginVVal')) {
+    const pxV = Math.round(1080 * (marginV / 100));
+    document.getElementById('prevMarginVVal').textContent = marginV + ' % (' + pxV + 'px)';
+  }
+
+  try {
+    const res = await api('/api/subtitle-layout/preview', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        english_text: priText,
+        chinese_text: chsText,
+        base_chs_size: chsSize,
+        base_primary_size: priSize,
+        margin_left_percent: marginH / 100.0,
+        margin_top_percent: marginV / 100.0,
+        min_central_gap: centralGap,
+      })
+    });
+
+    renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
+  } catch (err) {
+    console.error('Preview request error:', err);
+  }
+}
+
+function scheduleLayoutPreviewUpdate() {
+  clearTimeout(previewDebounceTimer);
+  previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
+}
+
+function renderPreviewCanvasSvg(data, options) {
+  const svg = document.getElementById('previewSvg');
+  if (!svg || !data || !data.ok) return;
+
+  const sa = data.safe_area;
+  const gap = data.central_gap;
+  const layout = data.layout;
+
+  const scaleBadge = document.getElementById('previewScaleBadge');
+  if (scaleBadge) {
+    scaleBadge.textContent = 'Scale: ' + layout.scale_percent + '%';
+    scaleBadge.style.color = layout.scale_percent < 100 ? 'var(--warn)' : 'var(--text)';
+  }
+
+  const statusBadge = document.getElementById('previewStatusBadge');
+  const banner = document.getElementById('previewCollisionBanner');
+  const reasonEl = document.getElementById('previewCollisionReason');
+
+  if (layout.failed) {
+    if (statusBadge) {
+      statusBadge.textContent = '⚠️ 碰撞/溢出';
+      statusBadge.style.color = 'var(--bad)';
+    }
+    if (banner) banner.classList.remove('hidden');
+    if (reasonEl) reasonEl.textContent = layout.failed_condition || 'OVERFLOW';
+  } else {
+    if (statusBadge) {
+      statusBadge.textContent = '✓ 正常 OK';
+      statusBadge.style.color = 'var(--ok)';
+    }
+    if (banner) banner.classList.add('hidden');
+  }
+
+  let elements = [];
+
+  elements.push('<rect width="1920" height="1080" fill="#0b0e14" />');
+  elements.push('<rect width="1920" height="1080" fill="url(#bgGradient)" opacity="0.3" />');
+  elements.push('<defs><linearGradient id="bgGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#161c28"/><stop offset="100%" stop-color="#080a0f"/></linearGradient></defs>');
+
+  // Center Y reference line
+  elements.push('<line x1="0" y1="540" x2="1920" y2="540" stroke="#303846" stroke-width="1" stroke-dasharray="4 4" />');
+
+  // Safe Area Box
+  if (options.showSafeArea) {
+    const strokeColor = layout.failed && (layout.failed_condition === 'HORIZONTAL_OVERFLOW' || layout.failed_condition === 'TOP_OVERFLOW' || layout.failed_condition === 'BOTTOM_OVERFLOW') ? '#ef6b73' : '#38b46b';
+    elements.push(`<rect x="${sa.x_min}" y="${sa.y_min}" width="${sa.max_printable_width}" height="${sa.max_printable_height}" fill="rgba(56,180,107,0.02)" stroke="${strokeColor}" stroke-width="2" stroke-dasharray="8 6" />`);
+    elements.push(`<text x="${sa.x_min + 8}" y="${sa.y_min + 20}" font-size="14" fill="${strokeColor}" font-weight="600" opacity="0.85">Safe Area (${sa.max_printable_width}×${sa.max_printable_height})</text>`);
+  }
+
+  // Central Gap Area
+  if (options.showCentralGap) {
+    const gapColor = layout.failed && layout.failed_condition === 'CENTRAL_COLLISION' ? '#ef6b73' : '#5d9cec';
+    const gapHeight = gap.y_bottom - gap.y_top;
+    elements.push(`<rect x="${sa.x_min}" y="${gap.y_top}" width="${sa.max_printable_width}" height="${gapHeight}" fill="rgba(93,156,236,0.08)" stroke="${gapColor}" stroke-width="1.5" stroke-dasharray="6 4" />`);
+    elements.push(`<text x="${sa.x_min + 8}" y="${gap.y_top + gapHeight / 2 + 4}" font-size="13" fill="${gapColor}" font-weight="600" opacity="0.85">Central Gap (${gap.min_central_gap}px)</text>`);
+  }
+
+  // Primary Subtitles (Top block, growing upward)
+  (layout.primary_lines || []).forEach((line) => {
+    const bbox = line.bbox;
+    const boxColor = layout.failed ? '#ef6b73' : '#5d9cec';
+
+    if (options.showBBox) {
+      const boxW = bbox.x_max - bbox.x_min;
+      const boxH = bbox.y_max - bbox.y_min;
+      elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(93,156,236,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
+    }
+
+    const textY = bbox.y_min + line.font_size * 0.82;
+    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="Noto Sans, Arial, sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
+  });
+
+  // Chinese Subtitles (Bottom block, growing downward)
+  (layout.chs_lines || []).forEach((line) => {
+    const bbox = line.bbox;
+    const boxColor = layout.failed ? '#ef6b73' : '#b78cff';
+
+    if (options.showBBox) {
+      const boxW = bbox.x_max - bbox.x_min;
+      const boxH = bbox.y_max - bbox.y_min;
+      elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(183,140,255,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
+    }
+
+    const textY = bbox.y_min + line.font_size * 0.82;
+    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="'Microsoft YaHei', 'Source Han Sans CN', 'SimHei', sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
+  });
+
+  svg.innerHTML = elements.join('');
+}
+
+// Attach event listeners for controls
+['prevChsText', 'prevPriText'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', scheduleLayoutPreviewUpdate);
+});
+
+['prevChsSize', 'prevPriSize', 'prevCentralGap', 'prevMarginH', 'prevMarginV'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('input', scheduleLayoutPreviewUpdate);
+});
+
+['prevShowSafeArea', 'prevShowCentralGap', 'prevShowBBox'].forEach(id => {
+  const el = document.getElementById(id);
+  if (el) el.addEventListener('change', updateLayoutPreview);
+});
+
+// Preset Buttons
+document.getElementById('prevPresetDefault')?.addEventListener('click', () => {
+  document.getElementById('prevChsText').value = "愿此行，终抵群星。";
+  document.getElementById('prevPriText').value = "May this journey lead us starward.";
+  document.getElementById('prevChsSize').value = 52;
+  document.getElementById('prevPriSize').value = 42;
+  document.getElementById('prevCentralGap').value = 20;
+  document.getElementById('prevMarginH').value = 10;
+  document.getElementById('prevMarginV').value = 5;
+  updateLayoutPreview();
+});
+
+document.getElementById('prevPresetLongText')?.addEventListener('click', () => {
+  document.getElementById('prevChsText').value = "在这个广袤无垠的宇宙中，我们终将踏上属于自己的旅程，无论前路多么坎坷与漫长，星光终会照亮每一个勇敢前行的灵魂。";
+  document.getElementById('prevPriText').value = "In this vast and boundless universe, we will eventually embark on our own journey, regardless of how treacherous and long the road ahead may be, starward light will illuminate every brave soul.";
+  document.getElementById('prevChsSize').value = 52;
+  document.getElementById('prevPriSize').value = 42;
+  document.getElementById('prevCentralGap').value = 20;
+  document.getElementById('prevMarginH').value = 10;
+  document.getElementById('prevMarginV').value = 5;
+  updateLayoutPreview();
+});
+
+document.getElementById('prevPresetCollision')?.addEventListener('click', () => {
+  document.getElementById('prevChsText').value = "这是一句极长且字号巨大的中文字幕，第一行、第二行、第三行、第四行不断向下堆叠增长，直到侵入中央安全间隔区并突破底部安全边界。";
+  document.getElementById('prevPriText').value = "This is an extremely long primary sentence with oversized base font size that breaks into multiple lines and grows upward rapidly until top boundary overflow occurs.";
+  document.getElementById('prevChsSize').value = 64;
+  document.getElementById('prevPriSize').value = 54;
+  document.getElementById('prevCentralGap').value = 100;
+  document.getElementById('prevMarginH').value = 30;
+  document.getElementById('prevMarginV').value = 20;
+  updateLayoutPreview();
+});
+
+// Initial trigger
+updateLayoutPreview();
 
 document.getElementById('refreshBtn').onclick=refresh;
 refresh();loadQuickCandidates();

@@ -226,10 +226,10 @@ def render_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
-    enable_kinetic: bool = True,
     enable_karaoke: bool = False,
     enable_frosted_glass: bool = False,
     enable_multi_layer_outline: bool = False,
+    enable_kinetic: bool = True,
 ) -> str:
     header = """[Script Info]
 Title: HSR Voice Archive
@@ -264,7 +264,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         end_sec = float(getattr(entry, "display_end_seconds", getattr(entry, "end", 0.0)))
         start_time = _ass_time(start_sec)
         end_time = _ass_time(end_sec)
-        duration_sec = max(0.1, end_sec - start_sec)
+        duration_sec = max(0.01, end_sec - start_sec)
+        word_alignments = getattr(entry, "word_alignments", getattr(entry, "words", None))
 
         layout = solve_subtitle_layout(
             english_text=clean_source,
@@ -289,8 +290,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             continue
 
         motion_tags = generate_kinetic_tags(duration_sec) if enable_kinetic else ""
-        duration_sec = max(0.01, end_sec - start_sec)
-        word_alignments = getattr(entry, "word_alignments", getattr(entry, "words", None))
 
         if enable_frosted_glass:
             if layout.primary_lines:
@@ -308,9 +307,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if layout.primary_lines:
             pos0 = layout.primary_lines[0]
-
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{pri_text}"
-
             if enable_multi_layer_outline:
                 pri_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.primary_lines)
                 out_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{pri_plain}"
@@ -327,17 +323,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}}}{pri_text}"
-
+            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{pri_text}"
             dialogues.append(
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
             )
 
         if layout.chs_lines:
             pos0 = layout.chs_lines[0]
-
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{chs_text}"
-
             if enable_multi_layer_outline:
                 chs_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.chs_lines)
                 out_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{chs_plain}"
@@ -354,8 +346,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}}}{chs_text}"
-
+            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
@@ -385,13 +376,10 @@ def write_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
-
-    enable_kinetic: bool = True,
-
     enable_karaoke: bool = False,
     enable_frosted_glass: bool = False,
     enable_multi_layer_outline: bool = False,
-
+    enable_kinetic: bool = True,
 ) -> None:
     report_path = overflow_report_path or (path.parent / "ass_layout_overflow_report.json")
     _atomic_write(
@@ -401,13 +389,10 @@ def write_ass(
             source_language=source_language,
             target_language=target_language,
             overflow_report_path=report_path,
-
-            enable_kinetic=enable_kinetic,
-
             enable_karaoke=enable_karaoke,
             enable_frosted_glass=enable_frosted_glass,
             enable_multi_layer_outline=enable_multi_layer_outline,
-
+            enable_kinetic=enable_kinetic,
         ),
         encoding="utf-8-sig",
     )
