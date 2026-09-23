@@ -1237,7 +1237,7 @@ def _review_official_targets(
             continue
         saved = checkpoint.get(row["id"])
         fingerprint = _text_fingerprint(
-            row["english"] + "\u0000" + row["official_chinese"]
+            row["english"] + " " + row["official_chinese"]
         )
         if (
             isinstance(saved, dict)
@@ -1409,6 +1409,7 @@ def build_project_v02(
     intro_gap: float = 9.0,
     make_flac: bool = True,
     make_chapter_flac: bool = False,
+    chapter_order: bool = False,
     generate_ass: bool = False,
     translate_missing: bool = False,
     translation_model: str = translation_default_model(),
@@ -1485,6 +1486,7 @@ def build_project_v02(
         "group_gap": group_gap,
         "make_flac": make_flac,
         "make_chapter_flac": make_chapter_flac,
+        "chapter_order": chapter_order,
         "generate_ass": generate_ass,
         "translate_missing": translate_missing,
         "review_official_target": bool(review_official_target),
@@ -1552,6 +1554,7 @@ def build_project_v02(
                 reference_language=reference_language,
                 source_text_language=source_text_language,
                 target_language=target_language,
+                chapter_order=chapter_order,
             )
             save_stage(
                 state_dir,
@@ -1885,6 +1888,8 @@ if __name__ == "__main__":
     p.add_argument("--group-gap", type=float, default=3.00)
     p.add_argument("--no-flac", action="store_true")
     p.add_argument("--make-chapter-flac", action="store_true")
+    p.add_argument("--chapter-order", action="store_true",
+                   help="Order the main archive (FLAC + subtitles) by story chapter")
     p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
@@ -1908,6 +1913,7 @@ if __name__ == "__main__":
         intro_gap=a.intro_gap,
         make_flac=not a.no_flac,
         make_chapter_flac=a.make_chapter_flac,
+        chapter_order=a.chapter_order,
         generate_ass=a.generate_ass,
         translate_missing=a.translate_missing,
         review_official_target=a.review_official_target,
