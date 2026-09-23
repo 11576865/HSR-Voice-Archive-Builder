@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Iterable
 
+from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
 
 
@@ -50,6 +51,7 @@ def render_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
+    enable_kinetic: bool = True,
 ) -> str:
     header = """[Script Info]
 Title: HSR Voice Archive
@@ -83,6 +85,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         end_sec = float(getattr(entry, "display_end_seconds", getattr(entry, "end", 0.0)))
         start_time = _ass_time(start_sec)
         end_time = _ass_time(end_sec)
+        duration_sec = max(0.1, end_sec - start_sec)
 
         layout = solve_subtitle_layout(
             english_text=clean_source,
@@ -106,10 +109,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             })
             continue
 
+        motion_tags = generate_kinetic_tags(duration_sec) if enable_kinetic else ""
+
         if layout.primary_lines:
             pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
             pos0 = layout.primary_lines[0]
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}}}{pri_text}"
+            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{pri_text}"
             dialogues.append(
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
             )
@@ -117,7 +122,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if layout.chs_lines:
             chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             pos0 = layout.chs_lines[0]
-            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}}}{chs_text}"
+            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}{motion_tags}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
@@ -147,6 +152,7 @@ def write_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
+    enable_kinetic: bool = True,
 ) -> None:
     report_path = overflow_report_path or (path.parent / "ass_layout_overflow_report.json")
     _atomic_write(
@@ -156,6 +162,7 @@ def write_ass(
             source_language=source_language,
             target_language=target_language,
             overflow_report_path=report_path,
+            enable_kinetic=enable_kinetic,
         ),
         encoding="utf-8-sig",
     )

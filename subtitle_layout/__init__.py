@@ -3,6 +3,7 @@ from .breaker import break_line
 from .collision import check_bilingual_collision, check_bilingual_collision_with_reason
 from .dynamic_scaler import calculate_target_font_size
 from .font_scale import get_scaled_font_size
+from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
 from .measure import measure_line_height, measure_text_width
 from .safe_area import SafeArea
@@ -19,6 +20,7 @@ __all__ = [
     "check_bilingual_collision",
     "check_bilingual_collision_with_reason",
     "solve_subtitle_layout",
+    "generate_kinetic_tags",
     "render_ass",
     "write_ass",
 ]
