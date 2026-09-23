@@ -51,6 +51,7 @@ def cross_language_voice_key(filename: str) -> str:
     if num_match:
         return f"id::{num_match.group('id').casefold()}"
     # Strip optional vo_ prefix for fallback stem comparison
+_FOREIGN = None
     if stem.startswith("vo_"):
         return stem[3:]
     return stem
@@ -442,6 +443,49 @@ def clock_time(seconds: float) -> str:
     return f"{m:02d}:{s:02d}.{ms:03d}"
 
 
+def _normalized_wav_record_path(wav_root: Path) -> Path:
+    return wav_root / ".pcm_normalized.json"
+
+
+def _load_normalized_wavs(wav_root: Path) -> dict[str, str]:
+    """Map pre-normalization SHA-256 -> normalized SHA-256.
+
+    Normalization rewrites WAVs in place, so on a later run the on-disk hash
+    no longer matches the index; this record lets the builder recognize files
+    it converted itself instead of reporting them as corrupted.
+    """
+    try:
+        data = json.loads(_normalized_wav_record_path(wav_root).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(data, dict):
+        return {}
+    return {str(k): str(v) for k, v in data.items()}
+
+
+def _normalize_wav_pcm(path: Path, sample_rate: int, channels: int, sample_width: int) -> None:
+    """Convert a WAV in place to the archive PCM format via FFmpeg."""
+    _, pcm_codec = _pcm_format(sample_width)
+    tmp = path.with_name(path.name + ".pcm-norm.tmp")
+    tmp.unlink(missing_ok=True)
+    try:
+        subprocess.run(
+            [
+                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                "-i", str(path),
+                "-ar", str(sample_rate),
+                "-ac", str(channels),
+                "-c:a", pcm_codec,
+                "-f", "wav",
+                str(tmp),
+            ],
+            check=True,
+        )
+        os.replace(tmp, path)
+    finally:
+        tmp.unlink(missing_ok=True)
+
+
 @dataclass
 class Entry:
     index: int
@@ -512,9 +556,31 @@ def build_entries(
     wav_members = collect_wav_members(wav_root)
     official_labs, official_match = map_labs_to_voice_filenames(wav_members.keys(), labs)
 
+    normalized_wavs = _load_normalized_wavs(wav_root)
+    normalized_record_changed = False
+
+    # Use the package's majority PCM format as the archive target, so a few
+    # differently-encoded voices are converted instead of aborting the build
+    # with "Mixed PCM format" (and the whole package is not re-encoded just
+    # because the first row happens to be the odd one).
+    format_votes: dict[tuple[int, int, int], int] = defaultdict(int)
+    for member_path in wav_members.values():
+        try:
+            member_info = parse_wav_pcm(member_path)
+        except Exception:
+            continue
+        format_votes[
+            (member_info.sample_rate, member_info.channels, member_info.sample_width_bytes)
+        ] += 1
+    majority_format: tuple[int, int, int] | None = (
+        max(format_votes.items(), key=lambda item: item[1])[0] if format_votes else None
+    )
+
     sample_rate: int | None = None
     channels: int | None = None
     sample_width: int | None = None
+    if majority_format is not None:
+        sample_rate, channels, sample_width = majority_format
     cursor = 0
     entries: list[Entry] = []
     mismatched_hashes: list[str] = []
@@ -523,6 +589,7 @@ def build_entries(
     incremental_official_count = 0
     translated_count = 0
     extensible_count = 0
+    normalized_count = 0
 
     raw: list[dict[str, object]] = []
     for row in full:
@@ -546,17 +613,33 @@ def build_entries(
         if wav_info.extensible:
             extensible_count += 1
 
+        got_hash = sha256_file(wav)
+        expected_hash = row.get("SHA-256", "").strip().lower()
+        hash_matches = not expected_hash or got_hash.lower() == expected_hash
+        if not hash_matches and normalized_wavs.get(expected_hash) == got_hash:
+            # This WAV was PCM-normalized in an earlier run; the index still
+            # records the pre-normalization hash, which is expected.
+            hash_matches = True
+        if not hash_matches:
+            mismatched_hashes.append(filename)
+
         if sample_rate is None:
             sample_rate, channels, sample_width = sr, ch, sw
         if (sr, ch, sw) != (sample_rate, channels, sample_width):
-            raise ValueError(
-                f"Mixed PCM format at {filename}: {(sr, ch, sw)} != {(sample_rate, channels, sample_width)}"
-            )
-
-        got_hash = sha256_file(wav)
-        expected_hash = row.get("SHA-256", "").strip().lower()
-        if expected_hash and got_hash.lower() != expected_hash:
-            mismatched_hashes.append(filename)
+            # A few voices ship in a different PCM format (e.g. stereo casts
+            # in a mono package). Normalize them in place to the archive
+            # format instead of aborting the whole build.
+            original_hash = got_hash
+            _normalize_wav_pcm(wav, sample_rate, channels, sample_width)
+            wav_info = parse_wav_pcm(wav)
+            sr = wav_info.sample_rate
+            ch = wav_info.channels
+            sw = wav_info.sample_width_bytes
+            frames = wav_info.frames
+            got_hash = sha256_file(wav)
+            normalized_wavs[original_hash] = got_hash
+            normalized_record_changed = True
+            normalized_count += 1
 
         stem = stem_of(filename)
         official_target_text = str(row.get("官方目标文本", "") or "").strip()
@@ -651,6 +734,12 @@ def build_entries(
             }
         )
 
+    if normalized_record_changed:
+        atomic_write_text(
+            _normalized_wav_record_path(wav_root),
+            json.dumps(normalized_wavs, ensure_ascii=False, indent=2),
+        )
+
     if missing_wavs:
         raise FileNotFoundError(f"Missing {len(missing_wavs)} WAVs, first: {missing_wavs[0]}")
     if mismatched_hashes:
@@ -731,6 +820,7 @@ def build_entries(
         "duration_continuous_seconds": cursor / sample_rate,
         "all_source_hashes_match": not mismatched_hashes,
         "count_wav_extensible": extensible_count,
+        "count_wav_pcm_normalized": normalized_count,
     }
     return entries, report
 
