@@ -1847,6 +1847,7 @@ function renderPreviewCanvasSvg(data, options) {
   const sa = data.safe_area;
   const gap = data.central_gap;
   const layout = data.layout;
+  const parallax = data.parallax;
 
   const scaleBadge = document.getElementById('previewScaleBadge');
   if (scaleBadge) {
@@ -1895,6 +1896,23 @@ function renderPreviewCanvasSvg(data, options) {
     const gapHeight = gap.y_bottom - gap.y_top;
     elements.push(`<rect x="${sa.x_min}" y="${gap.y_top}" width="${sa.max_printable_width}" height="${gapHeight}" fill="rgba(93,156,236,0.08)" stroke="${gapColor}" stroke-width="1.5" stroke-dasharray="6 4" />`);
     elements.push(`<text x="${sa.x_min + 8}" y="${gap.y_top + gapHeight / 2 + 4}" font-size="13" fill="${gapColor}" font-weight="600" opacity="0.85">Central Gap (${gap.min_central_gap}px)</text>`);
+  }
+
+  // Parallax Baseline Region Guides
+  if (parallax) {
+    const pX = sa.x_min - 35;
+    if (pX > 20) {
+      // Primary displacement indicator (growing upward from y_top)
+      if (parallax.primary_offset > 0) {
+        elements.push(`<line x1="${pX}" y1="${gap.y_top}" x2="${pX}" y2="${parallax.y_primary_peak}" stroke="#5d9cec" stroke-width="2" stroke-dasharray="3 3" />`);
+        elements.push(`<circle cx="${pX}" cy="${parallax.y_primary_peak}" r="3" fill="#5d9cec" />`);
+      }
+      // Secondary CHS displacement indicator (growing downward from y_bottom)
+      if (parallax.chs_offset > 0) {
+        elements.push(`<line x1="${pX}" y1="${gap.y_bottom}" x2="${pX}" y2="${parallax.y_chs_peak}" stroke="#b78cff" stroke-width="2" stroke-dasharray="3 3" />`);
+        elements.push(`<circle cx="${pX}" cy="${parallax.y_chs_peak}" r="3" fill="#b78cff" />`);
+      }
+    }
   }
 
   // Primary Subtitles (Top block, growing upward)

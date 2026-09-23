@@ -206,6 +206,20 @@ def preview_subtitle_layout(
     gap_b = gap_sec if gap_sec is not None else gap_before
     gap_a = gap_sec if gap_sec is not None else gap_after
     kinetic_tags = generate_kinetic_tags(3.0, gap_before=gap_b, gap_after=gap_a)
+    # Parallax region calculation: center-outward expansion displacement
+    primary_offset = pri_height
+    chs_offset = chs_height
+    total_span = pri_height + min_central_gap + chs_height
+    parallax_ratio = round(pri_height / chs_height, 3) if chs_height > 0 else (1.0 if pri_height == 0 else 999.0)
+
+    parallax_info = {
+        "primary_offset": primary_offset,
+        "chs_offset": chs_offset,
+        "total_span": total_span,
+        "parallax_ratio": parallax_ratio,
+        "y_primary_peak": pri_start,
+        "y_chs_peak": y_center_bottom + chs_height,
+    }
 
     return {
         "ok": True,
@@ -233,6 +247,7 @@ def preview_subtitle_layout(
             "y_bottom": y_center_bottom,
             "min_central_gap": min_central_gap,
         },
+        "parallax": parallax_info,
         "layout": {
             "scale_factor": chosen_scale,
             "scale_percent": round(chosen_scale * 100),
