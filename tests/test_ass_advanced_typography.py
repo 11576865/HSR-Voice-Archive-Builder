@@ -99,10 +99,71 @@ class TestAdvancedTypography(unittest.TestCase):
             enable_karaoke=False,
             enable_frosted_glass=False,
             enable_multi_layer_outline=False,
+            enable_kinetic=False,
         )
         self.assertNotIn(r"{\k", plain_ass)
         self.assertNotIn(r"\p1", plain_ass)
         self.assertNotIn(r"\bord6", plain_ass)
+        self.assertNotIn(r"\fad", plain_ass)
+
+    def test_render_ass_kinetic_motion_displacement(self):
+        entries = [
+            DummyEntry(
+                english="May this journey lead us starward.",
+                chinese="愿此行，终抵群星。",
+                start_seconds=1.0,
+                display_end_seconds=4.0,
+            )
+        ]
+        ass_output = render_ass(
+            entries,
+            enable_kinetic=True,
+            kinetic_options={
+                "primary_entry_y_offset": 8,
+                "chs_entry_y_offset": -8,
+            },
+        )
+        self.assertIn(r"\move(960,538,960,530,0,200)", ass_output)
+        self.assertIn(r"\move(960,542,960,550,0,200)", ass_output)
+
+    def test_render_ass_kinetic_motion_multi_layer_outline_sync(self):
+        entries = [
+            DummyEntry(
+                english="Synchronized motion test.",
+                chinese="同步动态测试。",
+                start_seconds=1.0,
+                display_end_seconds=4.0,
+            )
+        ]
+        ass_output = render_ass(
+            entries,
+            enable_kinetic=True,
+            enable_multi_layer_outline=True,
+        )
+        lines = [line for line in ass_output.splitlines() if line.startswith("Dialogue:")]
+        # Ensure outline lines and text lines share identical kinetic tags
+        for line in lines:
+            if "Primary" in line or "CHS" in line:
+                self.assertIn(r"\fscx88\fscy88\fad(200,200)", line)
+
+    def test_render_ass_kinetic_motion_frosted_glass_fade(self):
+        entries = [
+            DummyEntry(
+                english="Frosted glass motion test.",
+                chinese="磨砂玻璃动态测试。",
+                start_seconds=1.0,
+                display_end_seconds=4.0,
+            )
+        ]
+        ass_output = render_ass(
+            entries,
+            enable_kinetic=True,
+            enable_frosted_glass=True,
+        )
+        card_lines = [line for line in ass_output.splitlines() if line.startswith("Dialogue:") and ",Card," in line]
+        self.assertTrue(len(card_lines) > 0)
+        for line in card_lines:
+            self.assertIn(r"\fad(200,200)", line)
 
 
 if __name__ == "__main__":

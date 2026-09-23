@@ -64,6 +64,15 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertIn(r"\fad(75,75)", tags_short)
         self.assertIn(r"\t(225,300,1.5,\fscx92\fscy92)", tags_short)
 
+    def test_kinetic_tags_position_and_displacement(self) -> None:
+        # Static pos tagging
+        tags_pos = generate_kinetic_tags(2.0, x=960, y=530)
+        self.assertTrue(tags_pos.startswith(r"\pos(960,530)"))
+
+        # Movement displacement tagging
+        tags_move = generate_kinetic_tags(2.0, x=960, y=530, entry_y_offset=10)
+        self.assertTrue(tags_move.startswith(r"\move(960,540,960,530,0,200)"))
+
     def test_render_ass_with_kinetic_motion(self) -> None:
         entry = SimpleNamespace(
             english="Kinetic motion test line.",

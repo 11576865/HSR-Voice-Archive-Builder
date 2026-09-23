@@ -12,10 +12,15 @@ def generate_kinetic_tags(
     initial_scale: int = 88,
     peak_scale: int = 106,
     exit_scale: int = 92,
+    x: int | float | None = None,
+    y: int | float | None = None,
+    entry_y_offset: int | float = 0,
+    exit_y_offset: int | float = 0,
 ) -> str:
-    """Generate ASS motion override tags for smooth spring easing entry/exit.
+    """Generate ASS motion override tags for smooth spring easing entry/exit and physics displacement.
 
     Utilizes ASS tags:
+      - \\pos(x, y) / \\move(x1, y1, x2, y2, t1, t2) for spatial positioning and displacement
       - \\fscx / \\fscy for scale transformation
       - \\fad(t_in, t_out) for opacity fading
       - \\t(t1, t2, accel, tags) for physics-inspired easing keyframes
@@ -36,11 +41,19 @@ def generate_kinetic_tags(
         Overshoot percentage scale at the peak of spring entry (e.g., 106%).
     exit_scale : int
         Final percentage scale during shrink exit transition (e.g., 92%).
+    x : int | float | None
+        Target horizontal coordinate.
+    y : int | float | None
+        Target vertical coordinate.
+    entry_y_offset : int | float
+        Vertical pixel offset at the start of entry motion (e.g., +8 or -8).
+    exit_y_offset : int | float
+        Vertical pixel offset at the end of exit motion.
 
     Returns
     -------
     str
-        ASS tag string (e.g., "\\fscx88\\fscy88\\fad(200,200)...").
+        ASS tag string (e.g., "\\pos(960,530)\\fscx88\\fscy88\\fad(200,200)...").
     """
     duration_ms = max(100, int(round(duration_seconds * 1000)))
 
@@ -65,6 +78,15 @@ def generate_kinetic_tags(
     t_exit_end = duration_ms
 
     tags: list[str] = []
+
+    # Positional displacement tags
+    if x is not None and y is not None:
+        rx, ry = round(x), round(y)
+        if entry_y_offset != 0 and t_in > 0:
+            start_y = round(y + entry_y_offset)
+            tags.append(f"\\move({rx},{start_y},{rx},{ry},0,{t_in})")
+        else:
+            tags.append(f"\\pos({rx},{ry})")
 
     # Set initial scale
     tags.append(f"\\fscx{initial_scale}\\fscy{initial_scale}")
