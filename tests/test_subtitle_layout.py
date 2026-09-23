@@ -133,6 +133,8 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(len(layout.primary_lines), 1)
         self.assertEqual(layout.chs_lines[0].alignment, 8)
         self.assertEqual(layout.primary_lines[0].alignment, 2)
+        self.assertEqual(layout.chs_lines[0].font_size, 52)
+        self.assertEqual(layout.primary_lines[0].font_size, 42)
         self.assertEqual(layout.chs_lines[0].y, 550)
         self.assertEqual(layout.primary_lines[0].y, 530)
 
@@ -204,11 +206,21 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertFalse(lines[1].startswith("！"))
         self.assertGreaterEqual(len(lines[1]), 4)
 
-    def test_calculate_target_font_size(self) -> None:
-        text = "短文本"
-        size, scale = calculate_target_font_size(text, base_font_size=48)
-        self.assertGreater(size, 48)
-        self.assertGreater(scale, 1.0)
+    def test_font_size_stability_across_sentences(self) -> None:
+        # Verify base font sizes remain strictly consistent (52 for CHS, 42 for Primary)
+        short_layout = solve_subtitle_layout("Hello!", "你好！")
+        medium_layout = solve_subtitle_layout("This is a medium length sentence for testing.", "这是一个中等长度的句子测试。")
+        self.assertEqual(short_layout.chs_lines[0].font_size, 52)
+        self.assertEqual(short_layout.primary_lines[0].font_size, 42)
+        self.assertEqual(medium_layout.chs_lines[0].font_size, 52)
+        self.assertEqual(medium_layout.primary_lines[0].font_size, 42)
+
+    def test_dynamic_scale_factor_minimum_threshold(self) -> None:
+        # Scale factors must be within safe limits: 1.0, 0.95, 0.90, 0.85
+        english = "This sentence is quite long to test line wrapping and vertical scaling bounds in layout solver."
+        chinese = "这是一个很长很长用来测试行数较多时动态字体缩放安全阈值的句子。"
+        layout = solve_subtitle_layout(english, chinese)
+        self.assertGreaterEqual(layout.scale_factor, 0.85)
 
     def test_clear_measure_cache(self) -> None:
         clear_measure_cache()
