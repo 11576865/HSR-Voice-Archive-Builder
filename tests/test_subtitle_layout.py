@@ -98,6 +98,47 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertNotIn(r"\fad", ass_output)
         self.assertNotIn(r"\fscx88", ass_output)
 
+    def test_tiered_voice_gap_classification(self) -> None:
+        # Compact Mode (T_gap < 0.3s): compressed fade (80ms), initial scale 94%, peak 103%, exit 96%
+        tags_compact = generate_kinetic_tags(2.0, voice_gap_seconds=0.1)
+        self.assertIn(r"\fad(80,80)", tags_compact)
+        self.assertIn(r"\fscx94\fscy94", tags_compact)
+        self.assertIn(r"\fscx103\fscy103", tags_compact)
+        self.assertIn(r"\fscx96\fscy96", tags_compact)
+
+        # Normal Mode (0.3s <= T_gap <= 1.0s): baseline fade (150ms)
+        tags_normal = generate_kinetic_tags(2.0, voice_gap_seconds=0.5)
+        self.assertIn(r"\fad(150,150)", tags_normal)
+        self.assertIn(r"\fscx88\fscy88", tags_normal)
+        self.assertIn(r"\fscx106\fscy106", tags_normal)
+        self.assertIn(r"\fscx92\fscy92", tags_normal)
+
+        # Spacious/Cinematic Mode (T_gap > 1.0s): extended fade (300ms)
+        tags_spacious = generate_kinetic_tags(2.0, voice_gap_seconds=1.5)
+        self.assertIn(r"\fad(300,300)", tags_spacious)
+        self.assertIn(r"\fscx82\fscy82", tags_spacious)
+        self.assertIn(r"\fscx108\fscy108", tags_spacious)
+        self.assertIn(r"\fscx88\fscy88", tags_spacious)
+
+    def test_render_ass_with_voice_gap_adaptation(self) -> None:
+        entry_compact = SimpleNamespace(
+            english="Fast dialogue.",
+            chinese="快速对话。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+            voice_gap_seconds=0.15,
+        )
+        entry_spacious = SimpleNamespace(
+            english="Slow narrative.",
+            chinese="旁白叙述。",
+            start_seconds=4.0,
+            display_end_seconds=6.0,
+            voice_gap_seconds=2.0,
+        )
+        ass_output = render_ass([entry_compact, entry_spacious], enable_kinetic=True)
+        self.assertIn(r"\fad(80,80)", ass_output)
+        self.assertIn(r"\fad(300,300)", ass_output)
+
     def test_protected_phrases_line_breaking(self) -> None:
         text = "Please let alone this matter and do it as soon as possible in order to succeed even though right now at least kind of a lot of work remains."
         lines = break_line(text, max_width=500, font_size=42)
