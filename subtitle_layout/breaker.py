@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from typing import Sequence
 
-from .measure import measure_text_width
+from .measure import is_cjk_char, measure_text_width
 
 PROTECTED_PHRASES: tuple[str, ...] = (
     "let alone",
@@ -16,15 +16,45 @@ PROTECTED_PHRASES: tuple[str, ...] = (
     "a lot of",
 )
 
-# Pre-compiled regex patterns for protected phrases to avoid repeated compilation overhead during line breaking
-_PROTECTED_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = tuple(
-    (f"__PROTECTED_{idx}__", phrase, re.compile(re.escape(phrase), re.IGNORECASE))
-    for idx, phrase in enumerate(PROTECTED_PHRASES)
+SEMANTIC_COLLOCATIONS: tuple[str, ...] = (
+    "look at",
+    "look for",
+    "look after",
+    "give up",
+    "turn on",
+    "turn off",
+    "take off",
+    "rely on",
+    "depend on",
+    "according to",
+    "because of",
+    "due to",
+    "instead of",
+    "such as",
+    "next to",
+    "in front of",
+    "set up",
+    "log in",
+    "carry out",
+    "bring up",
+    "work on",
+    "pointed out",
 )
+
+ALL_PROTECTED_TERMS: tuple[str, ...] = PROTECTED_PHRASES + SEMANTIC_COLLOCATIONS
+
+# Pre-compiled regex patterns for protected terms to avoid repeated compilation overhead
+_PROTECTED_PATTERNS: tuple[tuple[str, str, re.Pattern[str]], ...] = tuple(
+    (f"__PROTECTED_{idx}__", phrase, re.compile(r"\b" + re.escape(phrase) + r"\b", re.IGNORECASE))
+    for idx, phrase in enumerate(ALL_PROTECTED_TERMS)
+)
+
+PUNCTUATION_CHARS = {".", ",", "!", "?", "，", "。", "！", "？"}
+ALL_PUNCTUATION = {".", ",", "!", "?", "，", "。", "！", "？", ";", ":", "；", "：", "—", "…", "-", "\"", "'"}
 
 
 def _tokenize_text(text: str) -> list[str]:
-    """Tokenize text preserving protected phrases, words, spaces, and punctuation."""
+    """Tokenize text preserving protected phrases, words (including contractions), spaces, and punctuation."""
     if not text:
         return []
 
@@ -32,9 +62,10 @@ def _tokenize_text(text: str) -> list[str]:
     phrase_map: dict[str, str] = {}
     for placeholder, _phrase, pattern in _PROTECTED_PATTERNS:
         found = pattern.findall(normalized)
-        for original in found:
-            phrase_map[placeholder] = original
-            normalized = pattern.sub(placeholder, normalized, count=1)
+        if found:
+            phrase_map[placeholder] = found[0]
+            # Global substitution without count=1 leak
+            normalized = pattern.sub(placeholder, normalized)
 
     raw_tokens: list[str] = []
     current_word: list[str] = []
@@ -44,28 +75,25 @@ def _tokenize_text(text: str) -> list[str]:
             raw_tokens.append("".join(current_word))
             current_word.clear()
 
-    for char in normalized:
-        code = ord(char)
-        is_cjk = (
-            0x4E00 <= code <= 0x9FFF
-            or 0x3400 <= code <= 0x4DBF
-            or 0x3000 <= code <= 0x303F
-            or 0x3040 <= code <= 0x309F
-            or 0x30A0 <= code <= 0x30FF
-            or 0xAC00 <= code <= 0xD7AF
-            or 0xFF00 <= code <= 0xFFEF
-        )
-        if is_cjk:
+    idx = 0
+    n = len(normalized)
+    while idx < n:
+        char = normalized[idx]
+        if is_cjk_char(char):
             flush_word()
             raw_tokens.append(char)
         elif char.isspace():
             flush_word()
             raw_tokens.append(char)
-        elif char in ",.?!;:，。！？；：—…-\"':":
+        elif char in "'’" and current_word and idx + 1 < n and normalized[idx + 1].isalpha():
+            # Preserve English contractions (e.g., don't, it's, we'll)
+            current_word.append(char)
+        elif char in ALL_PUNCTUATION:
             flush_word()
             raw_tokens.append(char)
         else:
             current_word.append(char)
+        idx += 1
     flush_word()
 
     tokens: list[str] = []
@@ -79,12 +107,8 @@ def _tokenize_text(text: str) -> list[str]:
     return tokens
 
 
-PUNCTUATION_CHARS = {".", ",", "!", "?", "，", "。", "！", "？"}
-ALL_PUNCTUATION = {".", ",", "!", "?", "，", "。", "！", "？", ";", ":", "；", "：", "—", "…", "-", "\"", "'"}
-
-
 def _protected_phrase_spans(text: str) -> list[tuple[int, int]]:
-    """Return character index ranges (start, end) for protected phrases in text."""
+    """Return character index ranges (start, end) for protected phrases and semantic collocations in text."""
     spans: list[tuple[int, int]] = []
     text_lower = text.lower()
     for _ph, _orig, pattern in _PROTECTED_PATTERNS:
@@ -106,8 +130,8 @@ def _get_candidate_split_points(text: str) -> list[int]:
         # Candidate split right after punctuation
         elif c_prev in ALL_PUNCTUATION:
             candidates.add(i)
-        # Candidate split between CJK characters
-        elif ord(c_prev) > 127 or ord(c_curr) > 127:
+        # Candidate split between CJK characters (exact Unicode check)
+        elif is_cjk_char(c_prev) or is_cjk_char(c_curr):
             candidates.add(i)
 
     # Fallback: if no natural candidates, consider all character boundaries
@@ -117,7 +141,9 @@ def _get_candidate_split_points(text: str) -> list[int]:
     return sorted(candidates)
 
 
-def _score_split_point(text: str, k: int, protected_spans: list[tuple[int, int]]) -> tuple[float, float, float]:
+def _score_split_point(
+    text: str, k: int, font_size: int, protected_spans: list[tuple[int, int]]
+) -> tuple[float, float, float]:
     """Calculate (boundary_score, protected_penalty, imbalance_penalty) for split index k."""
     l1 = text[:k].strip()
     l2 = text[k:].strip()
@@ -129,19 +155,21 @@ def _score_split_point(text: str, k: int, protected_spans: list[tuple[int, int]]
         boundary_score = 10.0
     elif text[k - 1].isspace() or text[k].isspace():
         boundary_score = 5.0
-    elif ord(text[k - 1]) > 127 or ord(text[k]) > 127:
+    elif is_cjk_char(text[k - 1]) or is_cjk_char(text[k]):
         boundary_score = 5.0
     else:
         boundary_score = 0.0
 
-    # 2. Protected phrase penalty
+    # 2. Protected phrase & semantic collocation penalty
     protected_penalty = 0.0
     for p_start, p_end in protected_spans:
         if p_start < k < p_end:
             protected_penalty -= 100.0
 
-    # 3. Line imbalance penalty
-    imbalance_penalty = -abs(len(l1) - len(l2)) * 2.0
+    # 3. Pixel-width based line imbalance penalty
+    w1 = measure_text_width(l1, font_size)
+    w2 = measure_text_width(l2, font_size)
+    imbalance_penalty = -abs(w1 - w2) * 0.05
 
     return boundary_score, protected_penalty, imbalance_penalty
 
@@ -151,14 +179,7 @@ def break_line(
     max_width: float,
     font_size: int,
 ) -> list[str]:
-    """Rule-based line breaking with scoring and backtracking.
-
-    Scoring Rules:
-    - Punctuation Boundary Score: +10
-    - Whitespace / Word Boundary Score: +5
-    - Protected Phrase Splitting Penalty: -100
-    - Line Imbalance Penalty: - |len(line1) - len(line2)| * 2
-    """
+    """Rule-based line breaking with scoring, semantic-protected binding, and pixel imbalance penalty."""
     cleaned = text.strip()
     if not cleaned:
         return []
@@ -182,13 +203,16 @@ def break_line(
         w2 = measure_text_width(l2, font_size)
 
         if w1 <= max_width and w2 <= max_width:
-            b_score, p_pen, imb_pen = _score_split_point(cleaned, k, protected_spans)
+            b_score, p_pen, imb_pen = _score_split_point(cleaned, k, font_size, protected_spans)
             total_score = b_score + p_pen + imb_pen
             valid_two_line_candidates.append((total_score, k, l1, l2))
 
     if valid_two_line_candidates:
         # Pick the candidate with the highest total score
-        valid_two_line_candidates.sort(key=lambda x: (x[0], -abs(len(x[2]) - len(x[3]))), reverse=True)
+        valid_two_line_candidates.sort(
+            key=lambda x: (x[0], -abs(measure_text_width(x[2], font_size) - measure_text_width(x[3], font_size))),
+            reverse=True,
+        )
         best = valid_two_line_candidates[0]
         return [best[2], best[3]]
 
@@ -203,9 +227,8 @@ def break_line(
 
         w1 = measure_text_width(l1, font_size)
         if w1 <= max_width:
-            b_score, p_pen, _ = _score_split_point(cleaned, k, protected_spans)
-            # Prefer longer line1 to maximize progress while keeping line1 valid
-            fill_score = w1 / max_width * 10.0
+            b_score, p_pen, _ = _score_split_point(cleaned, k, font_size, protected_spans)
+            fill_score = (w1 / max_width) * 10.0
             total_score = b_score + p_pen + fill_score
             fit_candidates.append((total_score, k, l1, l2))
 
@@ -215,15 +238,13 @@ def break_line(
         rest_lines = break_line(best[3], max_width, font_size)
         return [best[2]] + rest_lines
 
-    # Last resort fallback: forced character splitting when a single word/character exceeds max_width
+    # Single-character / single-word overflow handler fallback
     sub_line = ""
     for char in cleaned:
-        if measure_text_width(sub_line + char, font_size) <= max_width:
+        if not sub_line or measure_text_width(sub_line + char, font_size) <= max_width:
             sub_line += char
         else:
-            if sub_line:
-                break
-            sub_line = char
+            break
     if sub_line and len(sub_line) < len(cleaned):
         rest = cleaned[len(sub_line):].strip()
         return [sub_line] + (break_line(rest, max_width, font_size) if rest else [])

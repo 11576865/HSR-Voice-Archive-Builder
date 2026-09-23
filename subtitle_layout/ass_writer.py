@@ -106,16 +106,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             })
             continue
 
-        for pos in layout.chs_lines:
-            dialogue_text = f"{{\\an{pos.alignment}\\pos({pos.x},{pos.y})\\fs{pos.font_size}}}{pos.text}"
-            dialogues.append(
-                f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
-            )
-
-        for pos in layout.primary_lines:
-            dialogue_text = f"{{\\an{pos.alignment}\\pos({pos.x},{pos.y})\\fs{pos.font_size}}}{pos.text}"
+        if layout.primary_lines:
+            pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
+            pos0 = layout.primary_lines[0]
+            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}}}{pri_text}"
             dialogues.append(
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
+            )
+
+        if layout.chs_lines:
+            chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
+            pos0 = layout.chs_lines[0]
+            dialogue_text = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})\\fs{pos0.font_size}}}{chs_text}"
+            dialogues.append(
+                f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
 
     if overflow_report_path is not None:

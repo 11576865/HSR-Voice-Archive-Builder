@@ -3,6 +3,14 @@ from __future__ import annotations
 import functools
 import unicodedata
 
+try:
+    from PIL import ImageFont
+    _HAS_PIL = True
+except ImportError:
+    _HAS_PIL = False
+
+_FONT_CACHE: dict[tuple[str | None, int], object] = {}
+
 
 def is_cjk_char(char: str) -> bool:
     if not char:
@@ -51,12 +59,60 @@ def char_width_ratio(char: str) -> float:
     return _uncached_char_width_ratio(char)
 
 
-def measure_text_width(text: str, font_size: int) -> float:
-    """Measure total text width in pixels using sum(map(...)) for fast C-level iteration."""
+@functools.lru_cache(maxsize=2048)
+def _pil_measure_text_width(text: str, font_path: str | None, font_size: int) -> float | None:
+    if not _HAS_PIL:
+        return None
+    key = (font_path, font_size)
+    if key not in _FONT_CACHE:
+        font_obj = None
+        if font_path:
+            try:
+                font_obj = ImageFont.truetype(font_path, size=font_size)
+            except Exception:
+                pass
+        if font_obj is None:
+            try:
+                font_obj = ImageFont.load_default(size=font_size)
+            except Exception:
+                try:
+                    font_obj = ImageFont.load_default()
+                except Exception:
+                    font_obj = None
+        _FONT_CACHE[key] = font_obj
+
+    font = _FONT_CACHE[key]
+    if font is None:
+        return None
+
+    try:
+        if hasattr(font, "getlength"):
+            return float(font.getlength(text))
+        elif hasattr(font, "getbbox"):
+            bbox = font.getbbox(text)
+            return float(bbox[2] - bbox[0])
+    except Exception:
+        pass
+    return None
+
+
+def measure_text_width(text: str, font_size: int, font_path: str | None = None) -> float:
+    """Measure total text width in pixels using PIL font metrics if available, falling back to ratio sum."""
     if not text:
         return 0.0
+    if font_path:
+        pil_width = _pil_measure_text_width(text, font_path, font_size)
+        if pil_width is not None and pil_width > 0:
+            return pil_width
     return sum(map(char_width_ratio, text)) * font_size
 
 
 def measure_line_height(font_size: int) -> float:
     return font_size * 1.25
+
+
+def clear_measure_cache() -> None:
+    """Explicitly invalidate LRU caches and font metric cache to prevent memory leaks."""
+    char_width_ratio.cache_clear()
+    _pil_measure_text_width.cache_clear()
+    _FONT_CACHE.clear()
