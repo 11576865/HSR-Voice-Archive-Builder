@@ -167,7 +167,6 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
         </div>
         <p class="small muted">Quick Mode 固定生成简体中文字幕；源文本可使用 EN / CHS / JP / KR。第二语言包只作为额外逐条语义参考，不会混入连续 FLAC。</p>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
-        <label class="check"><input id="quickMakeChapterFlac" type="checkbox"> 额外生成按章节顺序排序的连续 FLAC 文件</label>
         <label class="check"><input id="quickChapterOrder" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
         <label class="check"><input id="quickTranslateMissing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check"><input id="quickReviewOfficial" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
@@ -224,7 +223,6 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
               <label>术语覆盖层 CSV / JSON（可选）</label><input name="glossary_path" placeholder="D:\\HSR\\glossary.csv">
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
               <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
-              <label class="check"><input name="make_chapter_flac" type="checkbox"> 额外生成按章节顺序排序的连续 FLAC 文件</label>
               <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
               <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
               <label class="check"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
@@ -248,7 +246,6 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
           </select></div>
         </div>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
-        <label class="check"><input name="make_chapter_flac" type="checkbox"> 额外生成按章节顺序排序的连续 FLAC 文件</label>
         <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
         <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check" id="advancedReviewRow"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
@@ -710,7 +707,6 @@ async function relinkSelectedSource(){
 
 const outputDescriptions={
   'continuous.flac':'连续播放的无损语音音频',
-  'continuous_chapter_ordered.flac':'按章节/分组顺序排列的连续无损语音音频',
   'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
   'HSR_Voice_Archive.srt':'与 ASS 同一时间轴的通用 SRT 字幕',
   'HSR_Voice_Archive_Black.mkv':'黑色视频轨与连续 FLAC 的播放容器（不含字幕）',
@@ -743,7 +739,6 @@ function fillProject(p){
   for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','intro_gap','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
-  if(f.elements.make_chapter_flac)f.elements.make_chapter_flac.checked=!!c.make_chapter_flac;
   if(f.elements.chapter_order)f.elements.chapter_order.checked=!!c.chapter_order;
   f.elements.translate_missing.checked=!!c.translate_missing;
   if(f.elements.review_official_target)f.elements.review_official_target.checked=!!c.review_official_target;
@@ -778,7 +773,7 @@ function fillProject(p){
   const groups=p.output_groups||{};
   const finalProducts=groups.final_products||{};
   const archiveRecords=groups.archive_records||{};
-  for(const name of ['continuous.flac','continuous_chapter_ordered.flac','HSR_Voice_Archive.srt']){
+  for(const name of ['continuous.flac','HSR_Voice_Archive.srt']){
     const o=finalProducts[name]||outputMap[name];
     if(!o?.exists)continue;
     const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':'file-subtitle';
@@ -1171,7 +1166,6 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
   d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
   d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
-  d.set('make_chapter_flac',document.getElementById('quickMakeChapterFlac').checked?'true':'false');
   d.set('chapter_order',document.getElementById('quickChapterOrder').checked?'true':'false');
   d.set('translate_missing',document.getElementById('quickTranslateMissing').checked?'true':'false');
   d.set('review_official_target',document.getElementById('quickReviewOfficial').checked?'true':'false');
@@ -1186,7 +1180,6 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
 document.getElementById('openForm').onsubmit=async e=>{e.preventDefault();try{const j=await api('/api/project/open',{method:'POST',body:fd(e.target)});fillProject(j.project);setLog(j);await refresh()}catch(x){setLog(String(x))}};
 document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{
   const data=fd(e.target);
-  data.set('make_chapter_flac',e.target.elements.make_chapter_flac?.checked?'true':'false');
   data.set('chapter_order',e.target.elements.chapter_order?.checked?'true':'false');
   data.set('translate_missing',e.target.elements.translate_missing?.checked?'true':'false');
   data.set('review_official_target',e.target.elements.review_official_target?.checked?'true':'false');
@@ -1209,7 +1202,6 @@ for(const name of ['source_text_language','target_language']){
 }
 async function saveProject(){
   const form=document.getElementById('projectForm'),data=fd(form);
-  if(form.elements.make_chapter_flac)data.set('make_chapter_flac',form.elements.make_chapter_flac.checked?'true':'false');
   if(form.elements.chapter_order)data.set('chapter_order',form.elements.chapter_order.checked?'true':'false');
   if(form.elements.translate_missing&&!form.elements.translate_missing.checked)data.delete('translate_missing');
   const j=await api('/api/project/save',{method:'POST',body:data});
