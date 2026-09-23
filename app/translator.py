@@ -321,6 +321,174 @@ def _remap_corrupted_ids(
     return remapped
 
 
+def _dedupe_identical_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Drop exact repeats of the same row, keeping the first occurrence."""
+    seen: set[str] = set()
+    out: list[dict[str, Any]] = []
+    for row in rows:
+        key = json.dumps(row, sort_keys=True, ensure_ascii=False)
+        if key in seen:
+            continue
+        seen.add(key)
+        out.append(row)
+    return out
+
+
+def _dedupe_translation_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Collapse repeated translation rows for one ID when harmless.
+
+    Compatible providers sometimes emit the same row twice. Exact repeats
+    are dropped; when the texts differ, an empty-text repeat is dropped in
+    favor of the non-empty one. Remaining conflicts are left for the strict
+    duplicate-ID check.
+    """
+    out = _dedupe_identical_rows(rows)
+    by_id: dict[Any, list[int]] = {}
+    for i, row in enumerate(out):
+        by_id.setdefault(row.get("id"), []).append(i)
+    drop: set[int] = set()
+    for indices in by_id.values():
+        if len(indices) < 2:
+            continue
+        non_empty = [i for i in indices if str(out[i].get("chinese", "")).strip()]
+        if len(non_empty) == 1:
+            drop.update(i for i in indices if i != non_empty[0])
+    return [row for i, row in enumerate(out) if i not in drop]
+
+
+def _run_with_validation_retry(
+    create: Callable[[], Any],
+    validate: Callable[[Any], Any],
+    *,
+    attempts: int = 2,
+) -> Any:
+    """Retry once more when a well-formed response fails content validation.
+
+    HTTP/network failures are already retried inside the client; this covers
+    responses that parse fine but contain duplicated, corrupted or missing
+    IDs, which are often transient for compatible providers.
+    """
+    last_error: RuntimeError | None = None
+    for _ in range(max(1, attempts)):
+        response = create()
+        try:
+            return validate(response)
+        except RuntimeError as exc:
+            last_error = exc
+    raise last_error or RuntimeError("Translation API request failed")
+
+
+def _validate_translation_rows(
+    got: list[dict[str, Any]],
+    wanted_list: list[str],
+) -> list[dict[str, str]]:
+    """Join response rows to the requested IDs, tolerating provider noise."""
+    wanted_set = set(wanted_list)
+    got = _dedupe_translation_rows(got)
+    relevant = [row for row in got if row.get("id") in wanted_set]
+    relevant_ids = [row["id"] for row in relevant]
+    if len(relevant_ids) != len(set(relevant_ids)):
+        raise RuntimeError("Translation response contains duplicate IDs")
+    missing = wanted_set - set(relevant_ids)
+    if missing:
+        extra = {row.get("id") for row in got} - wanted_set
+        repaired = _remap_corrupted_ids(got, missing, extra)
+        if repaired is None:
+            raise RuntimeError(
+                f"Translation ID mismatch: missing={missing}, extra={extra}"
+            )
+        got = repaired
+        relevant = [row for row in got if row.get("id") in wanted_set]
+        relevant_ids = [row["id"] for row in relevant]
+        if len(relevant_ids) != len(set(relevant_ids)):
+            raise RuntimeError("Translation response contains duplicate IDs")
+    # Some compatible providers append a guessed or explanatory row despite
+    # the schema.  It is safe to discard it only after every requested ID is
+    # present exactly once; requested rows are still joined strictly by ID.
+    by_id = {r["id"]: r for r in relevant}
+    ordered = [by_id[i] for i in wanted_list]
+    for row in ordered:
+        if not str(row.get("chinese", "")).strip():
+            raise RuntimeError(f"Translation response contains empty target text: {row['id']}")
+    return ordered
+
+
+def _validate_verdict_rows(
+    verdicts: list[dict[str, Any]],
+    wanted: list[str],
+) -> list[dict[str, Any]]:
+    """Join verifier verdicts to the requested IDs, tolerating provider noise."""
+    verdicts = _dedupe_identical_rows(verdicts)
+    got_ids = [str(row.get("id", "")) for row in verdicts]
+    if len(got_ids) != len(set(got_ids)):
+        raise RuntimeError("Semantic verifier response contains duplicate IDs")
+    if set(got_ids) != set(wanted) or len(verdicts) != len(wanted):
+        missing = set(wanted) - set(got_ids)
+        extra = set(got_ids) - set(wanted)
+        repaired = _remap_corrupted_ids(verdicts, missing, extra)
+        if repaired is None:
+            raise RuntimeError(
+                f"Semantic verifier ID mismatch: missing={missing}, extra={extra}"
+            )
+        verdicts = repaired
+        got_ids = [str(row.get("id", "")) for row in verdicts]
+        if len(got_ids) != len(set(got_ids)):
+            raise RuntimeError("Semantic verifier response contains duplicate IDs")
+    by_id = {str(row["id"]): row for row in verdicts}
+    ordered: list[dict[str, Any]] = []
+    for row_id in wanted:
+        row = dict(by_id[row_id])
+        issues = row.get("issues")
+        if not isinstance(issues, list):
+            raise RuntimeError(f"Semantic verifier issues must be a list: {row_id}")
+        if bool(row.get("ok")) and issues:
+            raise RuntimeError(
+                f"Semantic verifier returned ok=true with issues for {row_id}"
+            )
+        if not bool(row.get("ok")) and not issues:
+            raise RuntimeError(
+                f"Semantic verifier returned ok=false without issues for {row_id}"
+            )
+        ordered.append(row)
+    return ordered
+
+
+def _validate_review_rows(
+    reviews: list[dict[str, Any]],
+    wanted: list[str],
+) -> list[dict[str, Any]]:
+    """Join official-review rows to the requested IDs, tolerating provider noise."""
+    reviews = _dedupe_identical_rows(reviews)
+    got_ids = [str(row.get("id", "")) for row in reviews]
+    if len(got_ids) != len(set(got_ids)):
+        raise RuntimeError("Official review response contains duplicate IDs")
+    if set(got_ids) != set(wanted) or len(reviews) != len(wanted):
+        missing = set(wanted) - set(got_ids)
+        extra = set(got_ids) - set(wanted)
+        repaired = _remap_corrupted_ids(reviews, missing, extra)
+        if repaired is None:
+            raise RuntimeError(
+                f"Official review ID mismatch: missing={missing}, extra={extra}"
+            )
+        reviews = repaired
+        got_ids = [str(row.get("id", "")) for row in reviews]
+        if len(got_ids) != len(set(got_ids)):
+            raise RuntimeError("Official review response contains duplicate IDs")
+    by_id = {str(row["id"]): row for row in reviews}
+    ordered: list[dict[str, Any]] = []
+    for row_id in wanted:
+        row = dict(by_id[row_id])
+        decision = str(row.get("decision", ""))
+        translation = str(row.get("translation", "")).strip()
+        if decision == "revise" and not translation:
+            raise RuntimeError(
+                f"Official review returned decision=revise without a translation: {row_id}"
+            )
+        row["translation"] = translation if decision == "revise" else ""
+        ordered.append(row)
+    return ordered
+
+
 class OpenAIResponsesHTTPClient:
     """Dependency-free OpenAI-compatible Responses API client."""
 
@@ -500,64 +668,42 @@ def translate_records(
     if not records:
         return []
     client = client or make_client()
-
-    response = client.responses.create(
-        model=model,
-        reasoning={"effort": "low"},
-        store=False,
-        input=_translation_prompt(
-            records,
-            glossary,
-            source_language=source_language,
-            target_language=target_language,
-        ),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "voice_translation_batch",
-                "strict": True,
-                "schema": TRANSLATION_SCHEMA,
-            }
-        },
-    )
-
-    if usage_callback is not None:
-        from .translation_runtime import parse_usage
-
-        usage_callback(parse_usage(getattr(response, "raw", None)))
-
-    if not getattr(response, "output_text", ""):
-        raise RuntimeError("Translation API response contained no output_text")
-    data = _parse_json_output(response.output_text, context="Translation API")
-    got = _structured_rows(data, "translations", context="Translation")
     wanted_list = [r["id"] for r in records]
-    wanted_set = set(wanted_list)
-    relevant = [row for row in got if row.get("id") in wanted_set]
-    relevant_ids = [row["id"] for row in relevant]
-    if len(relevant_ids) != len(set(relevant_ids)):
-        raise RuntimeError("Translation response contains duplicate IDs")
-    missing = wanted_set - set(relevant_ids)
-    if missing:
-        extra = {row.get("id") for row in got} - wanted_set
-        repaired = _remap_corrupted_ids(got, missing, extra)
-        if repaired is None:
-            raise RuntimeError(
-                f"Translation ID mismatch: missing={missing}, extra={extra}"
-            )
-        got = repaired
-        relevant = [row for row in got if row.get("id") in wanted_set]
-        relevant_ids = [row["id"] for row in relevant]
-        if len(relevant_ids) != len(set(relevant_ids)):
-            raise RuntimeError("Translation response contains duplicate IDs")
-    # Some compatible providers append a guessed or explanatory row despite
-    # the schema.  It is safe to discard it only after every requested ID is
-    # present exactly once; requested rows are still joined strictly by ID.
-    by_id = {r["id"]: r for r in relevant}
-    ordered = [by_id[i] for i in wanted_list]
-    for row in ordered:
-        if not str(row.get("chinese", "")).strip():
-            raise RuntimeError(f"Translation response contains empty target text: {row['id']}")
-    return ordered
+
+    def create() -> Any:
+        response = client.responses.create(
+            model=model,
+            reasoning={"effort": "low"},
+            store=False,
+            input=_translation_prompt(
+                records,
+                glossary,
+                source_language=source_language,
+                target_language=target_language,
+            ),
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "voice_translation_batch",
+                    "strict": True,
+                    "schema": TRANSLATION_SCHEMA,
+                }
+            },
+        )
+        if usage_callback is not None:
+            from .translation_runtime import parse_usage
+
+            usage_callback(parse_usage(getattr(response, "raw", None)))
+        return response
+
+    def validate(response: Any) -> list[dict[str, str]]:
+        if not getattr(response, "output_text", ""):
+            raise RuntimeError("Translation API response contained no output_text")
+        data = _parse_json_output(response.output_text, context="Translation API")
+        got = _structured_rows(data, "translations", context="Translation")
+        return _validate_translation_rows(got, wanted_list)
+
+    return _run_with_validation_retry(create, validate)
 
 
 def verify_semantic_records(
@@ -573,6 +719,7 @@ def verify_semantic_records(
     if not records:
         return []
     client = client or make_client()
+    wanted = [str(row["id"]) for row in records]
     prompt = (
         f"Audit each {target_language} translation against its {source_language} source. "
         "This is a semantic and record-alignment verification pass, not a style review. "
@@ -590,63 +737,36 @@ def verify_semantic_records(
         "\n\nInput JSON:\n"
         + json.dumps(records, ensure_ascii=False)
     )
-    response = client.responses.create(
-        model=model,
-        reasoning={"effort": "low"},
-        store=False,
-        input=prompt,
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "voice_translation_semantic_audit",
-                "strict": True,
-                "schema": SEMANTIC_VERIFIER_SCHEMA,
-            }
-        },
-    )
 
-    if usage_callback is not None:
-        from .translation_runtime import parse_usage
+    def create() -> Any:
+        response = client.responses.create(
+            model=model,
+            reasoning={"effort": "low"},
+            store=False,
+            input=prompt,
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "voice_translation_semantic_audit",
+                    "strict": True,
+                    "schema": SEMANTIC_VERIFIER_SCHEMA,
+                }
+            },
+        )
+        if usage_callback is not None:
+            from .translation_runtime import parse_usage
 
-        usage_callback(parse_usage(getattr(response, "raw", None)))
+            usage_callback(parse_usage(getattr(response, "raw", None)))
+        return response
 
-    if not getattr(response, "output_text", ""):
-        raise RuntimeError("Semantic verifier response contained no output_text")
-    data = _parse_json_output(response.output_text, context="Semantic verifier")
-    verdicts = _structured_rows(data, "verdicts", context="Semantic verifier")
-    wanted = [str(row["id"]) for row in records]
-    got_ids = [str(row.get("id", "")) for row in verdicts]
-    if len(got_ids) != len(set(got_ids)):
-        raise RuntimeError("Semantic verifier response contains duplicate IDs")
-    if set(got_ids) != set(wanted) or len(verdicts) != len(records):
-        missing = set(wanted) - set(got_ids)
-        extra = set(got_ids) - set(wanted)
-        repaired = _remap_corrupted_ids(verdicts, missing, extra)
-        if repaired is None:
-            raise RuntimeError(
-                f"Semantic verifier ID mismatch: missing={missing}, extra={extra}"
-            )
-        verdicts = repaired
-        got_ids = [str(row.get("id", "")) for row in verdicts]
-        if len(got_ids) != len(set(got_ids)):
-            raise RuntimeError("Semantic verifier response contains duplicate IDs")
-    by_id = {str(row["id"]): row for row in verdicts}
-    ordered: list[dict[str, Any]] = []
-    for row_id in wanted:
-        row = dict(by_id[row_id])
-        issues = row.get("issues")
-        if not isinstance(issues, list):
-            raise RuntimeError(f"Semantic verifier issues must be a list: {row_id}")
-        if bool(row.get("ok")) and issues:
-            raise RuntimeError(
-                f"Semantic verifier returned ok=true with issues for {row_id}"
-            )
-        if not bool(row.get("ok")) and not issues:
-            raise RuntimeError(
-                f"Semantic verifier returned ok=false without issues for {row_id}"
-            )
-        ordered.append(row)
-    return ordered
+    def validate(response: Any) -> list[dict[str, Any]]:
+        if not getattr(response, "output_text", ""):
+            raise RuntimeError("Semantic verifier response contained no output_text")
+        data = _parse_json_output(response.output_text, context="Semantic verifier")
+        verdicts = _structured_rows(data, "verdicts", context="Semantic verifier")
+        return _validate_verdict_rows(verdicts, wanted)
+
+    return _run_with_validation_retry(create, validate)
 
 
 def _official_review_prompt(
@@ -702,65 +822,42 @@ def review_official_records(
     if not records:
         return []
     client = client or make_client()
-
-    response = client.responses.create(
-        model=model,
-        reasoning={"effort": "low"},
-        store=False,
-        input=_official_review_prompt(
-            records,
-            glossary,
-            source_language,
-            target_language,
-        ),
-        text={
-            "format": {
-                "type": "json_schema",
-                "name": "official_target_review",
-                "strict": True,
-                "schema": OFFICIAL_REVIEW_SCHEMA,
-            }
-        },
-    )
-
-    if usage_callback is not None:
-        from .translation_runtime import parse_usage
-
-        usage_callback(parse_usage(getattr(response, "raw", None)))
-
-    if not getattr(response, "output_text", ""):
-        raise RuntimeError("Official review response contained no output_text")
-    data = _parse_json_output(response.output_text, context="Official review")
-    reviews = _structured_rows(data, "reviews", context="Official review")
     wanted = [str(row["id"]) for row in records]
-    got_ids = [str(row.get("id", "")) for row in reviews]
-    if len(got_ids) != len(set(got_ids)):
-        raise RuntimeError("Official review response contains duplicate IDs")
-    if set(got_ids) != set(wanted) or len(reviews) != len(records):
-        missing = set(wanted) - set(got_ids)
-        extra = set(got_ids) - set(wanted)
-        repaired = _remap_corrupted_ids(reviews, missing, extra)
-        if repaired is None:
-            raise RuntimeError(
-                f"Official review ID mismatch: missing={missing}, extra={extra}"
-            )
-        reviews = repaired
-        got_ids = [str(row.get("id", "")) for row in reviews]
-        if len(got_ids) != len(set(got_ids)):
-            raise RuntimeError("Official review response contains duplicate IDs")
-    by_id = {str(row["id"]): row for row in reviews}
-    ordered: list[dict[str, Any]] = []
-    for row_id in wanted:
-        row = dict(by_id[row_id])
-        decision = str(row.get("decision", ""))
-        translation = str(row.get("translation", "")).strip()
-        if decision == "revise" and not translation:
-            raise RuntimeError(
-                f"Official review returned decision=revise without a translation: {row_id}"
-            )
-        row["translation"] = translation if decision == "revise" else ""
-        ordered.append(row)
-    return ordered
+
+    def create() -> Any:
+        response = client.responses.create(
+            model=model,
+            reasoning={"effort": "low"},
+            store=False,
+            input=_official_review_prompt(
+                records,
+                glossary,
+                source_language,
+                target_language,
+            ),
+            text={
+                "format": {
+                    "type": "json_schema",
+                    "name": "official_target_review",
+                    "strict": True,
+                    "schema": OFFICIAL_REVIEW_SCHEMA,
+                }
+            },
+        )
+        if usage_callback is not None:
+            from .translation_runtime import parse_usage
+
+            usage_callback(parse_usage(getattr(response, "raw", None)))
+        return response
+
+    def validate(response: Any) -> list[dict[str, Any]]:
+        if not getattr(response, "output_text", ""):
+            raise RuntimeError("Official review response contained no output_text")
+        data = _parse_json_output(response.output_text, context="Official review")
+        reviews = _structured_rows(data, "reviews", context="Official review")
+        return _validate_review_rows(reviews, wanted)
+
+    return _run_with_validation_retry(create, validate)
 
 
 def ensure_translation_capability(
