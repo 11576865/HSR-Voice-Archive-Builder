@@ -5,6 +5,7 @@ from typing import Sequence
 
 from .breaker import break_line
 from .collision import LayoutBlock, check_bilingual_collision_with_reason
+from .dynamic_scaler import calculate_target_font_size
 from .font_scale import (
     DEFAULT_BASE_FONT_SIZE_CHS,
     DEFAULT_BASE_FONT_SIZE_PRIMARY,
@@ -55,12 +56,39 @@ def solve_subtitle_layout(
     scale_attempts: list[int] = []
     last_failure_condition: str | None = None
 
+    # 1. Preliminary semantic line-breaking at base font sizes
+    chs_input = chinese_text or english_text
+    if same_chinese or not english_text.strip():
+        pre_pri = []
+        pre_chs = break_line(chs_input, safe_area.max_printable_width, base_chs_size)
+    elif not chinese_text.strip():
+        pre_pri = break_line(english_text, safe_area.max_printable_width, base_primary_size)
+        pre_chs = []
+    else:
+        pre_pri = break_line(english_text, safe_area.max_printable_width, base_primary_size)
+        pre_chs = break_line(chinese_text, safe_area.max_printable_width, base_chs_size)
+
+    # 2. Pixel Metric Measurement & Dynamic Font Size Calculation on chunked lines
+    if pre_chs:
+        chunked_chs_text = r"\N".join(pre_chs)
+        calc_chs, _ = calculate_target_font_size(chunked_chs_text, base_font_size=base_chs_size, max_width=safe_area.max_printable_width)
+        effective_base_chs = min(max(calc_chs, 38), 64)
+    else:
+        effective_base_chs = base_chs_size
+
+    if pre_pri:
+        chunked_pri_text = r"\N".join(pre_pri)
+        calc_pri, _ = calculate_target_font_size(chunked_pri_text, base_font_size=base_primary_size, max_width=safe_area.max_printable_width)
+        effective_base_pri = min(max(calc_pri, 32), 54)
+    else:
+        effective_base_pri = base_primary_size
+
     for scale in SCALE_FACTORS:
         scale_percent = round(scale * 100)
         scale_attempts.append(scale_percent)
 
-        chs_size = get_scaled_font_size(base_chs_size, scale)
-        primary_size = get_scaled_font_size(base_primary_size, scale)
+        chs_size = get_scaled_font_size(effective_base_chs, scale)
+        primary_size = get_scaled_font_size(effective_base_pri, scale)
 
         if same_chinese or not english_text.strip():
             pri_broken = []
