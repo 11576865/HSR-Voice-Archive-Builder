@@ -13,7 +13,6 @@ from pathlib import Path
 from .builder import (
     Entry,
     atomic_write_text,
-    build_chapter_ordered_flac,
     build_continuous_flac,
     build_entries,
     ensure_dir_or_extract,
@@ -1408,7 +1407,6 @@ def build_project_v02(
     group_gap: float = 3.00,
     intro_gap: float = 9.0,
     make_flac: bool = True,
-    make_chapter_flac: bool = False,
     chapter_order: bool = False,
     generate_ass: bool = False,
     translate_missing: bool = False,
@@ -1485,7 +1483,6 @@ def build_project_v02(
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,
         "make_flac": make_flac,
-        "make_chapter_flac": make_chapter_flac,
         "chapter_order": chapter_order,
         "generate_ass": generate_ass,
         "translate_missing": translate_missing,
@@ -1793,17 +1790,6 @@ def build_project_v02(
                     entries, wav_root, out_dir / "continuous.flac"
                 )
                 audio_artifacts = [out_dir / "continuous.flac"]
-                if make_chapter_flac:
-                    chapter_report = build_chapter_ordered_flac(
-                        entries,
-                        wav_root,
-                        out_dir / "continuous_chapter_ordered.flac",
-                        intro_gap=intro_gap,
-                        same_group_gap=same_group_gap,
-                        group_gap=group_gap,
-                    )
-                    audio_report.update(chapter_report)
-                    audio_artifacts.append(out_dir / "continuous_chapter_ordered.flac")
 
                 # A previous black MKV contains the old FLAC. Invalidate it
                 # only after the replacement FLAC has encoded and verified.
@@ -1887,7 +1873,6 @@ if __name__ == "__main__":
     p.add_argument("--same-gap", type=float, default=1.50)
     p.add_argument("--group-gap", type=float, default=3.00)
     p.add_argument("--no-flac", action="store_true")
-    p.add_argument("--make-chapter-flac", action="store_true")
     p.add_argument("--chapter-order", action="store_true",
                    help="Order the main archive (FLAC + subtitles) by story chapter")
     p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
@@ -1912,7 +1897,6 @@ if __name__ == "__main__":
         group_gap=a.group_gap,
         intro_gap=a.intro_gap,
         make_flac=not a.no_flac,
-        make_chapter_flac=a.make_chapter_flac,
         chapter_order=a.chapter_order,
         generate_ass=a.generate_ass,
         translate_missing=a.translate_missing,
