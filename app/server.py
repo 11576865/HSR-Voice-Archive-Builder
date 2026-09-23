@@ -45,6 +45,7 @@ from .project import (
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
+from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
 
@@ -264,6 +265,34 @@ async def api_post_project_subtitles(
 
         result = update_project_subtitles(config, output_dir, updates)
         return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/preview")
+async def api_subtitle_layout_preview(request: Request):
+    try:
+        try:
+            data = await request.json()
+        except Exception:
+            try:
+                form = await request.form()
+                data = dict(form)
+            except Exception:
+                data = {}
+
+        result = preview_subtitle_layout(
+            english_text=str(data.get("english_text") if data.get("english_text") is not None else "May this journey lead us starward."),
+            chinese_text=str(data.get("chinese_text") if data.get("chinese_text") is not None else "愿此行，终抵群星。"),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            base_chs_size=int(data.get("base_chs_size") if data.get("base_chs_size") is not None else 52),
+            base_primary_size=int(data.get("base_primary_size") if data.get("base_primary_size") is not None else 42),
+            margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.10),
+            margin_top_percent=float(data.get("margin_top_percent") if data.get("margin_top_percent") is not None else 0.05),
+            min_central_gap=float(data.get("min_central_gap") if data.get("min_central_gap") is not None else 20.0),
+        )
+        return JSONResponse(result)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
