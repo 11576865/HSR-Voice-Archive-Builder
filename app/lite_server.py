@@ -47,6 +47,7 @@ from .project import (
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
+from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
 STATIC = BASE / "static"
@@ -389,6 +390,31 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/subtitle-layout/preview":
+            english_text = data.get("english_text") if data.get("english_text") is not None else "May this journey lead us starward."
+            chinese_text = data.get("chinese_text") if data.get("chinese_text") is not None else "愿此行，终抵群星。"
+            source_language = data.get("source_language") or "en"
+            target_language = data.get("target_language") or "zh-CN"
+            base_chs_size = _int(data.get("base_chs_size"), 52)
+            base_primary_size = _int(data.get("base_primary_size"), 42)
+            margin_left_percent = _float(data.get("margin_left_percent"), 0.10)
+            margin_top_percent = _float(data.get("margin_top_percent"), 0.05)
+            min_central_gap = _float(data.get("min_central_gap"), 20.0)
+
+            result = preview_subtitle_layout(
+                english_text=english_text,
+                chinese_text=chinese_text,
+                source_language=source_language,
+                target_language=target_language,
+                base_chs_size=base_chs_size,
+                base_primary_size=base_primary_size,
+                margin_left_percent=margin_left_percent,
+                margin_top_percent=margin_top_percent,
+                min_central_gap=min_central_gap,
+            )
+            self._json(result)
+            return
+
         if path == "/api/recovery/status":
             raw = data.get("project_path", "").strip()
             config = (
