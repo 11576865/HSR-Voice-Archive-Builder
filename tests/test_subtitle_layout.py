@@ -8,6 +8,7 @@ from subtitle_layout import (
     break_line,
     calculate_target_font_size,
     check_bilingual_collision,
+    generate_kinetic_tags,
     get_scaled_font_size,
     measure_line_height,
     measure_text_width,
@@ -48,6 +49,45 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertIn("WrapStyle: 2", ass_output)
         self.assertIn(r"{\an2\pos(960,530)", ass_output)
         self.assertIn(r"{\an8\pos(960,550)", ass_output)
+
+    def test_kinetic_tags_duration_capping(self) -> None:
+        # Long duration line (2.0s = 2000ms): base 200ms entry and 200ms exit applied
+        tags_long = generate_kinetic_tags(2.0)
+        self.assertIn(r"\fscx88\fscy88", tags_long)
+        self.assertIn(r"\fad(200,200)", tags_long)
+        self.assertIn(r"\t(0,120,0.6,\fscx106\fscy106)", tags_long)
+        self.assertIn(r"\t(120,200,1.4,\fscx100\fscy100)", tags_long)
+        self.assertIn(r"\t(1800,2000,1.5,\fscx92\fscy92)", tags_long)
+
+        # Short duration line (0.3s = 300ms): entry/exit capped to 25% (75ms)
+        tags_short = generate_kinetic_tags(0.3)
+        self.assertIn(r"\fad(75,75)", tags_short)
+        self.assertIn(r"\t(225,300,1.5,\fscx92\fscy92)", tags_short)
+
+    def test_render_ass_with_kinetic_motion(self) -> None:
+        entry = SimpleNamespace(
+            english="Kinetic motion test line.",
+            chinese="动态效果测试行。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        ass_output = render_ass([entry], enable_kinetic=True)
+        self.assertIn(r"\fad(200,200)", ass_output)
+        self.assertIn(r"\fscx88\fscy88", ass_output)
+        self.assertIn(r"\fscx106\fscy106", ass_output)
+        self.assertIn(r"\fscx100\fscy100", ass_output)
+        self.assertIn(r"\fscx92\fscy92", ass_output)
+
+    def test_render_ass_kinetic_motion_disabled(self) -> None:
+        entry = SimpleNamespace(
+            english="Kinetic motion disabled line.",
+            chinese="禁用动态效果测试行。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        ass_output = render_ass([entry], enable_kinetic=False)
+        self.assertNotIn(r"\fad", ass_output)
+        self.assertNotIn(r"\fscx88", ass_output)
 
     def test_protected_phrases_line_breaking(self) -> None:
         text = "Please let alone this matter and do it as soon as possible in order to succeed even though right now at least kind of a lot of work remains."
