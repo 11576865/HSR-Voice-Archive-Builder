@@ -12,6 +12,7 @@ from .measure import measure_line_height, measure_text_width
 from .collision import LayoutBlock, check_bilingual_collision_with_reason
 from .breaker import break_line
 from .dynamic_scaler import calculate_target_font_size
+from .kinetic_motion import classify_gap_mode, compute_gap_fade_ms, generate_kinetic_tags
 
 
 def preview_subtitle_layout(
@@ -24,6 +25,9 @@ def preview_subtitle_layout(
     margin_left_percent: float = 0.10,
     margin_top_percent: float = 0.05,
     min_central_gap: float = 20.0,
+    gap_before: float | None = 1.0,
+    gap_after: float | None = 1.0,
+    gap_sec: float | None = None,
 ) -> dict[str, Any]:
     margin_left_percent = max(0.0, min(0.40, float(margin_left_percent)))
     margin_top_percent = max(0.0, min(0.40, float(margin_top_percent)))
@@ -199,6 +203,10 @@ def preview_subtitle_layout(
         "font_size": chosen_chs_size,
     }
 
+    gap_b = gap_sec if gap_sec is not None else gap_before
+    gap_a = gap_sec if gap_sec is not None else gap_after
+    kinetic_tags = generate_kinetic_tags(3.0, gap_before=gap_b, gap_after=gap_a)
+
     return {
         "ok": True,
         "canvas": {
@@ -237,5 +245,14 @@ def preview_subtitle_layout(
             "chs_lines": chs_lines_info,
             "primary_block": pri_block_info,
             "chs_block": chs_block_info,
+        },
+        "gap_adaptation": {
+            "gap_before": gap_b,
+            "gap_after": gap_a,
+            "mode_before": classify_gap_mode(gap_b),
+            "mode_after": classify_gap_mode(gap_a),
+            "fade_in_ms": compute_gap_fade_ms(gap_b),
+            "fade_out_ms": compute_gap_fade_ms(gap_a),
+            "kinetic_tags": kinetic_tags,
         },
     }

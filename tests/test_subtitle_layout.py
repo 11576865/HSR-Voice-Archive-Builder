@@ -70,6 +70,8 @@ class SubtitleLayoutTests(unittest.TestCase):
             chinese="动态效果测试行。",
             start_seconds=1.0,
             display_end_seconds=3.0,
+            gap_before=1.0,
+            gap_after=1.0,
         )
         ass_output = render_ass([entry], enable_kinetic=True)
         self.assertIn(r"\fad(200,200)", ass_output)
@@ -77,6 +79,72 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertIn(r"\fscx106\fscy106", ass_output)
         self.assertIn(r"\fscx100\fscy100", ass_output)
         self.assertIn(r"\fscx92\fscy92", ass_output)
+
+    def test_voice_gap_compact_mode(self) -> None:
+        # T_gap = 0.1s < 0.3s -> Compact Mode (50ms - 100ms fade, damped scale)
+        tags_compact = generate_kinetic_tags(2.0, gap_before=0.1, gap_after=0.1)
+        self.assertIn(r"\fad(67,67)", tags_compact)
+        self.assertIn(r"\fscx93\fscy93", tags_compact)
+        self.assertIn(r"\fscx103\fscy103", tags_compact)
+
+    def test_voice_gap_spacious_mode(self) -> None:
+        # T_gap = 1.5s > 1.0s -> Spacious Mode (200ms - 400ms fade, full spring scale)
+        tags_spacious = generate_kinetic_tags(2.0, gap_before=1.5, gap_after=1.5)
+        self.assertIn(r"\fad(300,300)", tags_spacious)
+        self.assertIn(r"\fscx88\fscy88", tags_spacious)
+        self.assertIn(r"\fscx106\fscy106", tags_spacious)
+
+    def test_voice_gap_normal_mode(self) -> None:
+        # T_gap = 0.65s -> Normal Mode (100ms - 200ms fade)
+        tags_normal = generate_kinetic_tags(2.0, gap_before=0.65, gap_after=0.65)
+        self.assertIn(r"\fad(150,150)", tags_normal)
+
+    def test_render_ass_consecutive_entries_gap_adaptation(self) -> None:
+        entries = [
+            SimpleNamespace(
+                english="Line 1 rapid dialogue",
+                chinese="第一句快速对话",
+                start_seconds=0.0,
+                display_end_seconds=2.0,
+            ),
+            SimpleNamespace(
+                english="Line 2 rapid dialogue",
+                chinese="第二句紧凑对话",
+                start_seconds=2.1,  # Gap = 0.1s -> Compact
+                display_end_seconds=4.0,
+            ),
+            SimpleNamespace(
+                english="Line 3 spacious pause",
+                chinese="第三句长停顿对话",
+                start_seconds=6.0,  # Gap = 2.0s -> Spacious
+                display_end_seconds=8.0,
+            ),
+        ]
+        ass_output = render_ass(entries, enable_kinetic=True)
+        # Entry 2 gap_before = 0.1s -> Compact mode short fade
+        self.assertIn(r"\fad(67,", ass_output)
+        # Entry 3 gap_before = 2.0s -> Spacious mode long fade (400ms)
+        self.assertIn(r"\fad(400,", ass_output)
+
+    def test_alignment_line_gaps_helper(self) -> None:
+        from app.official_alignment import compute_alignment_line_gaps
+        records = [
+            {"start": 0.0, "end": 2.0},
+            {"start": 2.1, "end": 4.0},
+            {"start": 6.0, "end": 8.0},
+        ]
+        res = compute_alignment_line_gaps(records)
+        self.assertEqual(res[1]["gap_before"], 0.1)
+        self.assertEqual(res[1]["mode_before"], "compact")
+        self.assertEqual(res[2]["gap_before"], 2.0)
+        self.assertEqual(res[2]["mode_before"], "spacious")
+
+    def test_preview_subtitle_layout_gap_adaptation(self) -> None:
+        from subtitle_layout.preview import preview_subtitle_layout
+        res = preview_subtitle_layout(gap_sec=0.1)
+        self.assertIn("gap_adaptation", res)
+        self.assertEqual(res["gap_adaptation"]["mode_before"], "compact")
+        self.assertEqual(res["gap_adaptation"]["fade_in_ms"], 67)
 
     def test_render_ass_kinetic_motion_disabled(self) -> None:
         entry = SimpleNamespace(

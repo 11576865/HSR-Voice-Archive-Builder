@@ -207,6 +207,56 @@ def official_candidate(
     }
 
 
+def compute_alignment_line_gaps(
+    records: list[dict[str, Any]],
+) -> list[dict[str, Any]]:
+    """Compute silence gaps between consecutive alignment records and annotate gap modes."""
+    if not records:
+        return []
+
+    processed: list[dict[str, Any]] = []
+    for i, record in enumerate(records):
+        item = dict(record)
+        start_sec = float(item.get("start_seconds", item.get("start", 0.0)))
+        end_sec = float(
+            item.get(
+                "display_end_seconds",
+                item.get("end", item.get("audio_end_seconds", 0.0)),
+            )
+        )
+
+        if i > 0:
+            prev_item = records[i - 1]
+            prev_end = float(
+                prev_item.get(
+                    "display_end_seconds",
+                    prev_item.get("end", prev_item.get("audio_end_seconds", 0.0)),
+                )
+            )
+            gap_before = max(0.0, start_sec - prev_end)
+        else:
+            gap_before = float(item.get("gap_before", 1.5))
+
+        if i < len(records) - 1:
+            next_item = records[i + 1]
+            next_start = float(next_item.get("start_seconds", next_item.get("start", 0.0)))
+            gap_after = max(0.0, next_start - end_sec)
+        else:
+            gap_after = float(item.get("gap_after", 1.5))
+
+        item["gap_before"] = round(gap_before, 4)
+        item["gap_after"] = round(gap_after, 4)
+        item["mode_before"] = (
+            "compact" if gap_before < 0.3 else ("spacious" if gap_before > 1.0 else "normal")
+        )
+        item["mode_after"] = (
+            "compact" if gap_after < 0.3 else ("spacious" if gap_after > 1.0 else "normal")
+        )
+        processed.append(item)
+
+    return processed
+
+
 def summarize_official_alignment(records: list[dict[str, Any]]) -> dict[str, int]:
     def zone_count(zone: str) -> int:
         return sum(str(row.get("zone", "")) == zone for row in records)

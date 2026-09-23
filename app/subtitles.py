@@ -34,12 +34,16 @@ class SubtitleEntryAdapter:
         chinese: str,
         start_seconds: float,
         display_end_seconds: float,
+        gap_before: float | None = None,
+        gap_after: float | None = None,
     ):
         self.id = item_id
         self.english = english
         self.chinese = chinese
         self.start_seconds = start_seconds
         self.display_end_seconds = display_end_seconds
+        self.gap_before = gap_before
+        self.gap_after = gap_after
 
 
 def _entry_id(entry: dict[str, Any]) -> int | str | None:
@@ -181,7 +185,35 @@ def _sync_corrected_csv(
 
 def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapter]:
     adapters: list[SubtitleEntryAdapter] = []
-    for entry in entries:
+    for idx, entry in enumerate(entries):
+        start_sec = float(entry.get("start_seconds", 0.0))
+        display_end_sec = float(
+            entry.get(
+                "display_end_seconds",
+                entry.get("audio_end_seconds", 0.0),
+            )
+        )
+        gap_before = entry.get("gap_before")
+        if gap_before is None:
+            if idx > 0:
+                prev_end = float(
+                    entries[idx - 1].get(
+                        "display_end_seconds",
+                        entries[idx - 1].get("audio_end_seconds", 0.0),
+                    )
+                )
+                gap_before = max(0.0, start_sec - prev_end)
+            else:
+                gap_before = 1.5
+
+        gap_after = entry.get("gap_after")
+        if gap_after is None:
+            if idx < len(entries) - 1:
+                next_start = float(entries[idx + 1].get("start_seconds", 0.0))
+                gap_after = max(0.0, next_start - display_end_sec)
+            else:
+                gap_after = 1.5
+
         adapters.append(
             SubtitleEntryAdapter(
                 item_id=_entry_id(entry) or "",
@@ -191,13 +223,10 @@ def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapt
                     or entry.get("target_text")
                     or entry.get("chinese", "")
                 ),
-                start_seconds=float(entry.get("start_seconds", 0.0)),
-                display_end_seconds=float(
-                    entry.get(
-                        "display_end_seconds",
-                        entry.get("audio_end_seconds", 0.0),
-                    )
-                ),
+                start_seconds=start_sec,
+                display_end_seconds=display_end_sec,
+                gap_before=float(gap_before),
+                gap_after=float(gap_after),
             )
         )
     return adapters

@@ -69,6 +69,14 @@ def resolve_timeline(
             next_start = audio_end
             display_end = audio_end
 
+        if position > 0:
+            prev_disp_end = timings[position - 1]["display_end_sample"]
+            gap_before_sec = max(0.0, (start - prev_disp_end) / sample_rate)
+        else:
+            gap_before_sec = intro_samples / sample_rate
+
+        gap_after_sec = max(0.0, (next_start - display_end) / sample_rate) if gap_samples else (group_samples / sample_rate if group_samples else 1.5)
+
         segments.append({
             "type": "voice",
             "entry_id": int(row.get("index", position + 1)),
@@ -83,6 +91,8 @@ def resolve_timeline(
             "audio_end_sample": audio_end,
             "display_end_sample": display_end,
             "next_start_sample": next_start,
+            "gap_before_seconds": gap_before_sec,
+            "gap_after_seconds": gap_after_sec,
         })
         if gap_samples:
             segments.append({

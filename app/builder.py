@@ -513,6 +513,8 @@ class Entry:
     # Package-relative member path (POSIX) that uniquely identifies the source
     # WAV inside its package; "" for legacy indexes that only know basenames.
     source_member_id: str = ""
+    gap_before: float = 1.5
+    gap_after: float = 1.5
 
 
 def build_entries(
@@ -768,6 +770,8 @@ def build_entries(
         audio_end = int(timing["audio_end_sample"])
         next_start = int(timing["next_start_sample"])
         display_end = int(timing["display_end_sample"])
+        gap_before = float(timing.get("gap_before_seconds", 1.5))
+        gap_after = float(timing.get("gap_after_seconds", 1.5))
         entries.append(
             Entry(
                 index=int(r["index"]),
@@ -793,6 +797,8 @@ def build_entries(
                 reference_text=str(r.get("reference_text", "")),
                 reference_language=str(r.get("reference_language", "auto") or "auto"),
                 source_member_id=str(r.get("source_member_id", "")),
+                gap_before=gap_before,
+                gap_after=gap_after,
             )
         )
     cursor = int(resolved["total_samples"])

@@ -220,6 +220,20 @@ def format_multiline_karaoke(
     return "\\N".join(formatted_lines)
 
 
+def _get_entry_val(entry: object, *keys: str, default: object = None) -> object:
+    if isinstance(entry, dict):
+        for k in keys:
+            if k in entry and entry[k] is not None:
+                return entry[k]
+        return default
+    for k in keys:
+        if hasattr(entry, k):
+            val = getattr(entry, k)
+            if val is not None:
+                return val
+    return default
+
+
 def render_ass(
     entries: Iterable[object],
     *,
@@ -250,22 +264,39 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     dialogues: list[str] = []
     overflow_records: list[dict[str, object]] = []
+    entries_list = list(entries)
 
-    for entry in entries:
-        raw_source = getattr(entry, "english", getattr(entry, "source_text", ""))
-        raw_target = getattr(entry, "chinese", getattr(entry, "target_text", ""))
+    for idx, entry in enumerate(entries_list):
+        raw_source = _get_entry_val(entry, "english", "source_text", default="")
+        raw_target = _get_entry_val(entry, "chinese", "target_text", default="")
         clean_source = _clean_ass_text(raw_source)
         clean_target = _clean_ass_text(raw_target)
 
         if not clean_source and not clean_target:
             continue
 
-        start_sec = float(getattr(entry, "start_seconds", getattr(entry, "start", 0.0)))
-        end_sec = float(getattr(entry, "display_end_seconds", getattr(entry, "end", 0.0)))
+        start_sec = float(_get_entry_val(entry, "start_seconds", "start", default=0.0))
+        end_sec = float(_get_entry_val(entry, "display_end_seconds", "end", "audio_end_seconds", default=0.0))
         start_time = _ass_time(start_sec)
         end_time = _ass_time(end_sec)
         duration_sec = max(0.01, end_sec - start_sec)
-        word_alignments = getattr(entry, "word_alignments", getattr(entry, "words", None))
+        word_alignments = _get_entry_val(entry, "word_alignments", "words", default=None)
+
+        gap_before = _get_entry_val(entry, "gap_before", "gap_before_seconds", default=None)
+        if gap_before is None:
+            if idx > 0:
+                prev_end = float(_get_entry_val(entries_list[idx - 1], "display_end_seconds", "end", "audio_end_seconds", default=0.0))
+                gap_before = max(0.0, start_sec - prev_end)
+            else:
+                gap_before = 1.5
+
+        gap_after = _get_entry_val(entry, "gap_after", "gap_after_seconds", default=None)
+        if gap_after is None:
+            if idx < len(entries_list) - 1:
+                next_start = float(_get_entry_val(entries_list[idx + 1], "start_seconds", "start", default=0.0))
+                gap_after = max(0.0, next_start - end_sec)
+            else:
+                gap_after = 1.5
 
         layout = solve_subtitle_layout(
             english_text=clean_source,
@@ -275,7 +306,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         )
 
         if layout.failed:
-            subtitle_id = str(getattr(entry, "index", getattr(entry, "id", getattr(entry, "filename", ""))))
+            subtitle_id = str(_get_entry_val(entry, "index", "id", "filename", default=""))
             overflow_records.append({
                 "subtitle_id": subtitle_id,
                 "time_range": {
@@ -289,7 +320,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             })
             continue
 
-        motion_tags = generate_kinetic_tags(duration_sec) if enable_kinetic else ""
+        motion_tags = (
+            generate_kinetic_tags(
+                duration_sec,
+                gap_before=float(gap_before),
+                gap_after=float(gap_after),
+            )
+            if enable_kinetic
+            else ""
+        )
 
         if enable_frosted_glass:
             if layout.primary_lines:
