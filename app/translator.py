@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import difflib
 import hashlib
 import json
 import os
 import random
+import re
 import time
 import urllib.error
 import urllib.request
@@ -257,6 +259,68 @@ def _structured_rows(data: Any, field: str, *, context: str) -> list[dict[str, A
     return rows
 
 
+_ID_TAIL_RE = re.compile(r"(\d+)(\.[A-Za-z0-9]+)?$")
+
+
+def _repairable_id_pair(wanted_id: str, got_id: str) -> bool:
+    """True when a returned ID looks like a corrupted copy of a wanted ID.
+
+    Long filename-like IDs occasionally come back from compatible providers
+    with a spurious syllable inserted or dropped (for example
+    ``..._silverwolf999_01_703591349.wav`` returned as
+    ``..._silverwolflv999_01_703591349.wav``).  The pair must keep the same
+    trailing numeric token, differ by only a few characters, and stay
+    textually near-identical, so two genuinely different records can never
+    be paired by accident.
+    """
+    if wanted_id == got_id:
+        return True
+    tail_wanted = _ID_TAIL_RE.search(wanted_id)
+    tail_got = _ID_TAIL_RE.search(got_id)
+    if not tail_wanted or not tail_got or tail_wanted.group(0) != tail_got.group(0):
+        return False
+    if abs(len(wanted_id) - len(got_id)) > 4:
+        return False
+    return difflib.SequenceMatcher(None, wanted_id, got_id).ratio() >= 0.85
+
+
+def _remap_corrupted_ids(
+    got: list[dict[str, Any]],
+    missing: set[str],
+    extra: set[Any],
+) -> list[dict[str, Any]] | None:
+    """Rewrite model-corrupted IDs back to the requested ones when safe.
+
+    A remap is accepted only when every missing ID pairs with exactly one
+    unused extra ID (and all extras are consumed) via _repairable_id_pair;
+    anything ambiguous returns None so the caller keeps the strict error.
+    """
+    extra_ids = {e for e in extra if isinstance(e, str)}
+    if not missing or len(missing) != len(extra_ids):
+        return None
+    pairs: dict[str, str] = {}
+    used_extra: set[str] = set()
+    for wanted_id in sorted(missing):
+        candidates = [
+            e for e in extra_ids
+            if e not in used_extra and _repairable_id_pair(wanted_id, e)
+        ]
+        if len(candidates) != 1:
+            return None
+        pairs[candidates[0]] = wanted_id
+        used_extra.add(candidates[0])
+    if used_extra != extra_ids:
+        return None
+    remapped: list[dict[str, Any]] = []
+    for row in got:
+        row_id = row.get("id")
+        if isinstance(row_id, str) and row_id in pairs:
+            row = dict(row)
+            row["id"] = pairs[row_id]
+        remapped.append(row)
+    return remapped
+
+
 class OpenAIResponsesHTTPClient:
     """Dependency-free OpenAI-compatible Responses API client."""
 
@@ -474,10 +538,17 @@ def translate_records(
         raise RuntimeError("Translation response contains duplicate IDs")
     missing = wanted_set - set(relevant_ids)
     if missing:
-        raise RuntimeError(
-            f"Translation ID mismatch: missing={missing}, "
-            f"extra={set(row.get('id') for row in got)-wanted_set}"
-        )
+        extra = {row.get("id") for row in got} - wanted_set
+        repaired = _remap_corrupted_ids(got, missing, extra)
+        if repaired is None:
+            raise RuntimeError(
+                f"Translation ID mismatch: missing={missing}, extra={extra}"
+            )
+        got = repaired
+        relevant = [row for row in got if row.get("id") in wanted_set]
+        relevant_ids = [row["id"] for row in relevant]
+        if len(relevant_ids) != len(set(relevant_ids)):
+            raise RuntimeError("Translation response contains duplicate IDs")
     # Some compatible providers append a guessed or explanatory row despite
     # the schema.  It is safe to discard it only after every requested ID is
     # present exactly once; requested rows are still joined strictly by ID.
@@ -548,10 +619,17 @@ def verify_semantic_records(
     if len(got_ids) != len(set(got_ids)):
         raise RuntimeError("Semantic verifier response contains duplicate IDs")
     if set(got_ids) != set(wanted) or len(verdicts) != len(records):
-        raise RuntimeError(
-            f"Semantic verifier ID mismatch: missing={set(wanted)-set(got_ids)}, "
-            f"extra={set(got_ids)-set(wanted)}"
-        )
+        missing = set(wanted) - set(got_ids)
+        extra = set(got_ids) - set(wanted)
+        repaired = _remap_corrupted_ids(verdicts, missing, extra)
+        if repaired is None:
+            raise RuntimeError(
+                f"Semantic verifier ID mismatch: missing={missing}, extra={extra}"
+            )
+        verdicts = repaired
+        got_ids = [str(row.get("id", "")) for row in verdicts]
+        if len(got_ids) != len(set(got_ids)):
+            raise RuntimeError("Semantic verifier response contains duplicate IDs")
     by_id = {str(row["id"]): row for row in verdicts}
     ordered: list[dict[str, Any]] = []
     for row_id in wanted:
@@ -659,10 +737,17 @@ def review_official_records(
     if len(got_ids) != len(set(got_ids)):
         raise RuntimeError("Official review response contains duplicate IDs")
     if set(got_ids) != set(wanted) or len(reviews) != len(records):
-        raise RuntimeError(
-            f"Official review ID mismatch: missing={set(wanted)-set(got_ids)}, "
-            f"extra={set(got_ids)-set(wanted)}"
-        )
+        missing = set(wanted) - set(got_ids)
+        extra = set(got_ids) - set(wanted)
+        repaired = _remap_corrupted_ids(reviews, missing, extra)
+        if repaired is None:
+            raise RuntimeError(
+                f"Official review ID mismatch: missing={missing}, extra={extra}"
+            )
+        reviews = repaired
+        got_ids = [str(row.get("id", "")) for row in reviews]
+        if len(got_ids) != len(set(got_ids)):
+            raise RuntimeError("Official review response contains duplicate IDs")
     by_id = {str(row["id"]): row for row in reviews}
     ordered: list[dict[str, Any]] = []
     for row_id in wanted:
