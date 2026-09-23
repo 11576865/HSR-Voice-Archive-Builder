@@ -147,6 +147,15 @@ class SubtitleLayoutTests(unittest.TestCase):
         lines = split_res.split(r"\N")
         self.assertTrue(all(len(line) >= 4 for line in lines))
 
+    def test_split_chinese_semantic_fallback_without_jieba(self) -> None:
+        from unittest.mock import patch
+        text = "这是一个非常漫长的主字幕文本用来触发自动换行算法并验证在无结巴分词模块时的回退表现"
+        with patch("subtitle_layout.semantic_chunker.pseg", None):
+            split_res = split_chinese_semantic(text, max_chars_per_line=15)
+            self.assertIn(r"\N", split_res)
+            lines = split_res.split(r"\N")
+            self.assertTrue(all(len(line) >= 4 for line in lines))
+
     def test_split_chinese_semantic_kinsoku_shori_orphan_protection(self) -> None:
         text = "活动联谊活动！指标了"
         split_res = split_chinese_semantic(text, max_chars_per_line=8)

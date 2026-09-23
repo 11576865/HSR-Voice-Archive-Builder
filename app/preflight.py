@@ -14,6 +14,7 @@ MIN_PYTHON = (3, 11)
 COMMON_DEPENDENCIES = (
     ("openpyxl", "openpyxl", None),
     ("defusedxml", "defusedxml", None),
+    ("jieba", "jieba", None),
 )
 
 DESKTOP_DEPENDENCIES = (

@@ -1,8 +1,20 @@
 from __future__ import annotations
 
-import jieba.posseg as pseg
+try:
+    import jieba.posseg as pseg
+except ImportError:
+    pseg = None
 
 PUNCTUATION_SPLITS = ("，", "。", "！", "？", "；", "——", "~", ",", ";", "!", "?")
+
+
+def _cut_words(cleaned: str) -> list[tuple[str, str]]:
+    if pseg is not None:
+        try:
+            return list(pseg.cut(cleaned))
+        except Exception:
+            pass
+    return [(char, "") for char in cleaned]
 FORBIDDEN_LINE_START_PUNCT = ("！", "？", "。", "」", "!", "?", ".", ")", "]", "}", "”", "’", "；", "，", ",")
 
 
@@ -63,7 +75,7 @@ def split_chinese_semantic(
         best_idx = best_punct_idx
     else:
         # 2. Grammar Component Boundaries (Secondary Priority: POS tagging)
-        words = list(pseg.cut(cleaned))
+        words = _cut_words(cleaned)
         min_diff = total_len
         curr_len = 0
 
@@ -96,7 +108,7 @@ def split_chinese_semantic(
 
     # Orphan protection: check if line2 or line1 is shorter than min_chars_line
     if len(line1) < min_chars_line or len(line2) < min_chars_line:
-        words1 = list(pseg.cut(line1))
+        words1 = _cut_words(line1)
         if len(words1) > 1:
             last_word = words1[-1][0]
             line1_cand = line1[:-len(last_word)].rstrip("，, ")
