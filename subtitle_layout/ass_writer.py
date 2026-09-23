@@ -56,7 +56,7 @@ Title: HSR Voice Archive
 ScriptType: v4.00+
 PlayResX: 1920
 PlayResY: 1080
-WrapStyle: 0
+WrapStyle: 2
 ScaledBorderAndShadow: yes
 
 [V4+ Styles]

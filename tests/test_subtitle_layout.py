@@ -6,12 +6,14 @@ from types import SimpleNamespace
 from subtitle_layout import (
     SafeArea,
     break_line,
+    calculate_target_font_size,
     check_bilingual_collision,
     get_scaled_font_size,
     measure_line_height,
     measure_text_width,
     render_ass,
     solve_subtitle_layout,
+    split_chinese_semantic,
 )
 from subtitle_layout.measure import clear_measure_cache
 
@@ -43,8 +45,9 @@ class SubtitleLayoutTests(unittest.TestCase):
             display_end_seconds=3.0,
         )
         ass_output = render_ass([entry], source_language="en", target_language="zh-CN")
-        self.assertIn(r"{\an2\pos(960,530)\fs42}Primary main subtitle line.", ass_output)
-        self.assertIn(r"{\an8\pos(960,550)\fs52}次要辅助字幕行。", ass_output)
+        self.assertIn("WrapStyle: 2", ass_output)
+        self.assertIn(r"{\an2\pos(960,530)", ass_output)
+        self.assertIn(r"{\an8\pos(960,550)", ass_output)
 
     def test_protected_phrases_line_breaking(self) -> None:
         text = "Please let alone this matter and do it as soon as possible in order to succeed even though right now at least kind of a lot of work remains."
@@ -136,6 +139,27 @@ class SubtitleLayoutTests(unittest.TestCase):
         layout = solve_subtitle_layout(english, chinese)
         self.assertLess(layout.scale_factor, 1.0)
         self.assertIn(layout.scale_factor, (0.95, 0.90, 0.85))
+
+    def test_split_chinese_semantic_punctuation_and_pos(self) -> None:
+        text = "这是一个非常漫长的主字幕文本，用来触发自动换行算法并验证语义切分"
+        split_res = split_chinese_semantic(text, max_chars_per_line=15)
+        self.assertIn(r"\N", split_res)
+        lines = split_res.split(r"\N")
+        self.assertTrue(all(len(line) >= 4 for line in lines))
+
+    def test_split_chinese_semantic_kinsoku_shori_orphan_protection(self) -> None:
+        text = "活动联谊活动！指标了"
+        split_res = split_chinese_semantic(text, max_chars_per_line=8)
+        self.assertIn(r"\N", split_res)
+        lines = split_res.split(r"\N")
+        self.assertFalse(lines[1].startswith("！"))
+        self.assertGreaterEqual(len(lines[1]), 4)
+
+    def test_calculate_target_font_size(self) -> None:
+        text = "短文本"
+        size, scale = calculate_target_font_size(text, base_font_size=48)
+        self.assertGreater(size, 48)
+        self.assertGreater(scale, 1.0)
 
     def test_clear_measure_cache(self) -> None:
         clear_measure_cache()

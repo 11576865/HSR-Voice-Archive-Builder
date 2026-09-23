@@ -4,6 +4,7 @@ import re
 from typing import Sequence
 
 from .measure import is_cjk_char, measure_text_width
+from .semantic_chunker import split_chinese_semantic
 
 PROTECTED_PHRASES: tuple[str, ...] = (
     "let alone",
@@ -186,6 +187,19 @@ def break_line(
 
     if measure_text_width(cleaned, font_size) <= max_width:
         return [cleaned]
+
+    if any(is_cjk_char(c) for c in cleaned):
+        semantic_split = split_chinese_semantic(cleaned, max_chars_per_line=0)
+        if r"\N" in semantic_split:
+            parts = [p.strip() for p in semantic_split.split(r"\N") if p.strip()]
+            if len(parts) > 1:
+                final_lines: list[str] = []
+                for part in parts:
+                    if measure_text_width(part, font_size) <= max_width:
+                        final_lines.append(part)
+                    else:
+                        final_lines.extend(break_line(part, max_width, font_size))
+                return final_lines
 
     protected_spans = _protected_phrase_spans(cleaned)
     candidate_k = _get_candidate_split_points(cleaned)
