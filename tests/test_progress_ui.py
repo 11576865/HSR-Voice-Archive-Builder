@@ -368,6 +368,17 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("let attempts=0;while(attempts<5)", html)
         self.assertIn("await new Promise(r=>setTimeout(r,1000*(attempts+1)));", html)
 
+    def test_index_html_contains_a11y_and_ux_improvements(self) -> None:
+        index_path = Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        html = index_path.read_text(encoding="utf-8")
+
+        self.assertIn('class="skip-link"', html)
+        self.assertIn('<a href="#mainContent" class="skip-link">跳过导航进入主内容</a>', html)
+        self.assertIn('<main id="mainContent">', html)
+        self.assertIn('id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)"', html)
+        self.assertIn('id="subNextBtn" aria-label="下一条字幕 (Alt+Down)"', html)
+        self.assertIn("subtitleEditor.addEventListener('keydown'", html)
+
 
 if __name__ == "__main__":
     unittest.main()

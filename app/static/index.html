@@ -86,14 +86,17 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
   .stat b{font-size:21px}
   .actions>button{padding-left:10px;padding-right:10px}
 }
+.skip-link{position:absolute;top:-60px;left:10px;background:var(--blue);color:#fff;padding:8px 14px;border-radius:6px;z-index:1000;font-weight:650;text-decoration:none;transition:top .2s ease}
+.skip-link:focus{top:10px;outline:2px solid #86b7ff}
 </style>
 </head>
 <body>
+<a href="#mainContent" class="skip-link">跳过导航进入主内容</a>
 <header>
   <div><h1>HSR Voice Archive Builder <span class="badge" id="versionBadge">正在读取版本…</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
-<main>
+<main id="mainContent">
 <div class="grid">
   <div class="stack" id="primaryStack">
     <section class="card">
@@ -572,8 +575,8 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
 
           <!-- Navigation controls -->
           <div class="sub-nav-bar">
-            <button type="button" id="subPrevBtn">上一条</button>
-            <button type="button" id="subNextBtn">下一条</button>
+            <button type="button" id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)" title="上一条字幕 (Alt+Up)">上一条</button>
+            <button type="button" id="subNextBtn" aria-label="下一条字幕 (Alt+Down)" title="下一条字幕 (Alt+Down)">下一条</button>
           </div>
         </div>
       </div>
@@ -1763,6 +1766,17 @@ function scheduleSubtitleFetch(){
 document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
 const subtitleEditor=document.getElementById('subFinalEditor');
+subtitleEditor.addEventListener('keydown',(e)=>{
+  if((e.altKey&&e.key==='ArrowUp')||(e.ctrlKey&&e.key==='ArrowUp')){
+    e.preventDefault();
+    goToPrevSubtitle();
+    subtitleEditor.focus();
+  }else if((e.altKey&&e.key==='ArrowDown')||(e.ctrlKey&&e.key==='ArrowDown')||((e.ctrlKey||e.metaKey)&&e.key==='Enter')){
+    e.preventDefault();
+    goToNextSubtitle();
+    subtitleEditor.focus();
+  }
+});
 subtitleEditor.oninput=()=>{
   syncEditorToMemory();
   updateCharCounter();
