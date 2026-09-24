@@ -1,4 +1,5 @@
 from .ass_writer import render_ass, write_ass
+from .config import SubtitleRenderConfig
 from .breaker import break_line
 from .collision import check_bilingual_collision, check_bilingual_collision_with_reason
 from .dynamic_scaler import calculate_target_font_size
@@ -23,4 +24,5 @@ __all__ = [
     "generate_kinetic_tags",
     "render_ass",
     "write_ass",
+    "SubtitleRenderConfig",
 ]
