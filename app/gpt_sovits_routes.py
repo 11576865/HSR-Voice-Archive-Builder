@@ -5,7 +5,7 @@ from pathlib import Path
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
-from .gpt_sovits_exporter import export_gpt_sovits_dataset
+from .gpt_sovits_exporter import export_gpt_sovits_dataset, load_training_rows
 from .project import load_project, resolve_project_path
 
 router = APIRouter(prefix="/api")
@@ -17,22 +17,22 @@ def export_project_gpt_sovits(
     speaker: str = "",
     language: str = "en",
 ):
-    """Export archive metadata into a GPT-SoVITS compatible dataset.
+    """Export dataset files for manual GPT-SoVITS WebUI training.
 
-    This endpoint intentionally exports data only. Training remains handled by
-    the GPT-SoVITS WebUI.
+    This endpoint does not call GPT-SoVITS and does not start training.
     """
     try:
         config = load_project(Path(project_id))
-        index_path = resolve_project_path(config, config.index_csv)
+
         wav_path = resolve_project_path(config, config.wav_source)
         output_path = resolve_project_path(config, config.output_dir)
-        if index_path is None or wav_path is None or output_path is None:
+        bilingual_path = resolve_project_path(config, config.bilingual_csv)
+        manifest_path = resolve_project_path(config, config.index_csv)
+
+        if wav_path is None or output_path is None:
             raise ValueError("Project paths are incomplete")
 
-        import csv
-        with index_path.open("r", encoding="utf-8-sig", newline="") as f:
-            rows = list(csv.DictReader(f))
+        rows = load_training_rows(bilingual_path, manifest_path)
 
         report = export_gpt_sovits_dataset(
             rows,
