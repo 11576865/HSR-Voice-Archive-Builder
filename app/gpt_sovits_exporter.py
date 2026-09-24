@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import json
 import shutil
+import tempfile
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any
@@ -129,4 +130,50 @@ def export_gpt_sovits_dataset(
         "See rejected.csv for missing, unreadable, short or unmatched samples.\n",
         encoding="utf-8",
     )
+    return report
+
+
+def export_project_dataset(config: Any, *, speaker: str = "", language: str = "en") -> dict[str, Any]:
+    """Shared export operation for the FastAPI and stdlib control servers."""
+    from .builder import ensure_dir_or_extract
+    from .project import resolve_project_path
+
+    wav_path = resolve_project_path(config, config.wav_source)
+    output = resolve_project_path(config, config.output_dir)
+    if wav_path is None or output is None:
+        raise ValueError("Project paths are incomplete")
+    corrected = output / "bilingual_index_corrected.csv"
+    manifest = output / "manifest.csv"
+    if not manifest.is_file() and not corrected.is_file():
+        raise FileNotFoundError("Build the archive before exporting a training dataset")
+    rows = load_training_rows(corrected, manifest)
+    name = (speaker or config.name).strip()
+    if not name or name != name.strip(" .") or any(c in name for c in '<>:"/\\|?*\r\n'):
+        raise ValueError("Invalid speaker name")
+    output.mkdir(parents=True, exist_ok=True)
+    destination = output / f"{name}_GPTSoVITS"
+    with tempfile.TemporaryDirectory(prefix=".gpt_sovits_", dir=output) as temp:
+        working = Path(temp)
+        wav_root = ensure_dir_or_extract(wav_path, working, "source_wavs")
+        staging = working / destination.name
+        report = export_gpt_sovits_dataset(rows, wav_root, staging, speaker=name, language=language)
+        list_file = staging / f"{name}.list"
+        list_file.write_text(
+            list_file.read_text(encoding="utf-8").replace(str(staging.resolve()), str(destination.resolve())),
+            encoding="utf-8",
+        )
+        report["output"] = str(destination.resolve())
+        report["list_file"] = str((destination / f"{name}.list").resolve())
+        (staging / "dataset_report.json").write_text(json.dumps(report, ensure_ascii=False, indent=2), encoding="utf-8")
+        backup = working / "previous_dataset"
+        if destination.exists():
+            destination.rename(backup)
+        try:
+            staging.rename(destination)
+        except BaseException:
+            if backup.exists():
+                backup.rename(destination)
+            raise
+        if backup.exists():
+            shutil.rmtree(backup)
     return report
