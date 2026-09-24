@@ -582,6 +582,18 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
       </div>
     </section>
 
+    <section class="card hidden" id="gptSovitsCard">
+      <h2>GPT-SoVITS训练集导出</h2>
+      <p class="small muted">从已完成归档的 WAV 与最终校对文本生成数据集；训练请在 GPT-SoVITS WebUI 手动完成。</p>
+      <div class="grid two">
+        <div><label for="gptSovitsSpeaker">角色</label><input id="gptSovitsSpeaker" autocomplete="off"></div>
+        <div><label for="gptSovitsLanguage">语言</label><select id="gptSovitsLanguage"><option value="en">English</option></select></div>
+      </div>
+      <label for="gptSovitsOutput">输出目录</label><input id="gptSovitsOutput" readonly>
+      <div class="actions"><button type="button" class="success" id="gptSovitsExportBtn">导出训练集</button></div>
+      <div id="gptSovitsResult" class="small muted" role="status" aria-live="polite"></div>
+    </section>
+
     <section class="card hidden" id="updateCard">
       <h2>增量更新</h2>
       <p class="small muted">先检查索引中是否出现新的语音记录，再从 Hugging Face 精确定位并下载可确认的音频。下载不会覆盖旧 WAV；角色身份由快速扫描自动保存。</p>
@@ -671,6 +683,29 @@ async function api(url,opts={}){
   if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));
   return j;
 }
+document.getElementById('gptSovitsExportBtn').onclick=async()=>{
+  const button=document.getElementById('gptSovitsExportBtn');
+  const status=document.getElementById('gptSovitsResult');
+  if(!currentProject){status.textContent='请先选择项目。';return}
+  const speaker=document.getElementById('gptSovitsSpeaker').value.trim();
+  if(!speaker){status.textContent='请填写角色名。';return}
+  button.disabled=true;
+  status.textContent='正在检查音频和文本，复制训练数据…';
+  try{
+    const query=new URLSearchParams({speaker,language:document.getElementById('gptSovitsLanguage').value});
+    const result=await api('/api/project/active/export/gpt-sovits?'+query,{method:'POST'});
+    const report=result.report||{};
+    status.textContent='GPT-SoVITS Dataset Export Complete · Samples: '+report.exported+
+      ' · Rejected: '+report.rejected+' · Output: '+report.output;
+  }catch(error){
+    status.textContent='导出失败：'+String(error.message||error);
+  }finally{button.disabled=false}
+};
+document.getElementById('gptSovitsSpeaker').addEventListener('input',()=>{
+  if(currentProject)document.getElementById('gptSovitsOutput').value=
+    (currentProject.root||'')+' / '+(currentProject.config.output_dir||'output')+
+    ' / '+document.getElementById('gptSovitsSpeaker').value+'_GPTSoVITS';
+});
 function fd(form){return new FormData(form)}
 function setLog(x){log.textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
 function showDiagnosticLog(){
@@ -842,11 +877,19 @@ function fillProject(p){
   document.getElementById('noProject').classList.toggle('hidden',!!p);
   document.getElementById('projectForm').classList.toggle('hidden',!p);
   document.getElementById('archiveCard').classList.toggle('hidden',!p);
+  document.getElementById('gptSovitsCard').classList.toggle('hidden',!p);
   document.getElementById('updateCard').classList.toggle('hidden',!p);
   document.getElementById('projectName').textContent=p?p.name:'未打开';
   renderSourceHealth(p);
   if(!p)return;
   const c=p.config,f=document.getElementById('projectForm');
+  const speaker=document.getElementById('gptSovitsSpeaker');
+  if(!speaker.value||speaker.dataset.project!==p.root){
+    speaker.value=p.name||'';
+    speaker.dataset.project=p.root||'';
+  }
+  document.getElementById('gptSovitsOutput').value=
+    (p.root||'')+' / '+(c.output_dir||'output')+' / '+speaker.value+'_GPTSoVITS';
   for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','intro_gap','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
