@@ -8,11 +8,11 @@ from pathlib import Path
 from typing import Any
 
 
-"""GPT-SoVITS training dataset export helpers.
+"""GPT-SoVITS WebUI dataset exporter.
 
-This module intentionally sits outside the archive builder pipeline. Existing
-archive outputs remain unchanged; this only converts resolved archive metadata
-into a model-training dataset.
+This module only creates training input files. It does not call GPT-SoVITS,
+start training, manage models, or perform preprocessing steps handled by the
+GPT-SoVITS WebUI.
 """
 
 
@@ -32,17 +32,31 @@ def export_gpt_sovits_dataset(
     speaker: str,
     language: str = "en",
     copy_wav: bool = True,
+    min_duration: float = 1.0,
 ) -> dict[str, Any]:
-    """Export sentence-level WAV/text pairs to GPT-SoVITS list format.
+    """Create a GPT-SoVITS WebUI compatible dataset.
 
-    rows are expected to already contain resolved metadata. This function does
-    not perform ASR, translation, or filename guessing.
+    Generated structure:
+
+    dataset/
+    ├── raw/
+    │   └── 000001.wav
+    ├── speaker.list
+    ├── dataset_report.json
+    ├── rejected.csv
+    └── README_GPTSoVITS.txt
+
+    The .list format is:
+
+    audio_path|speaker|language|text
+
+    No ASR, translation, or filename guessing is performed here.
     """
 
     destination.mkdir(parents=True, exist_ok=True)
-    wav_dir = destination / "wav"
+    raw_dir = destination / "raw"
     if copy_wav:
-        wav_dir.mkdir(parents=True, exist_ok=True)
+        raw_dir.mkdir(parents=True, exist_ok=True)
 
     exported = 0
     rejected: list[dict[str, str]] = []
@@ -51,19 +65,27 @@ def export_gpt_sovits_dataset(
     for index, row in enumerate(rows, 1):
         filename = str(row.get("filename", "") or "").strip()
         text = str(row.get("english", "") or row.get("text", "") or "").strip()
+
         if not filename:
             rejected.append({"index": str(index), "reason": "missing_filename"})
             continue
+
         source = wav_root / filename
         if not source.is_file():
             rejected.append({"index": str(index), "reason": "missing_audio", "file": filename})
             continue
+
         if not text:
             rejected.append({"index": str(index), "reason": "missing_text", "file": filename})
             continue
 
-        target = wav_dir / f"{exported + 1:06d}{source.suffix.lower()}"
+        duration = _duration_seconds(source)
+        if duration is not None and duration < min_duration:
+            rejected.append({"index": str(index), "reason": "too_short", "file": filename})
+            continue
+
         if copy_wav:
+            target = raw_dir / f"{exported + 1:06d}.wav"
             shutil.copy2(source, target)
             audio_path = target.resolve()
         else:
@@ -84,14 +106,30 @@ def export_gpt_sovits_dataset(
     report = {
         "speaker": speaker,
         "language": language,
+        "format": "GPT-SoVITS WebUI dataset",
         "total": len(rows),
         "exported": exported,
         "rejected": len(rejected),
         "list_file": str(list_file),
         "rejected_file": str(rejected_file),
     }
+
     (destination / "dataset_report.json").write_text(
         json.dumps(report, ensure_ascii=False, indent=2),
         encoding="utf-8",
     )
+
+    (destination / "README_GPTSoVITS.txt").write_text(
+        "HSR Voice Archive Builder generated GPT-SoVITS dataset\n\n"
+        f"Speaker: {speaker}\n"
+        f"Language: {language}\n"
+        f"Samples: {exported}\n\n"
+        "Next steps:\n"
+        "1. Open GPT-SoVITS WebUI.\n"
+        "2. Use dataset formatting tools.\n"
+        "3. Select this .list file.\n"
+        "4. Continue with GPT-SoVITS training workflow.\n",
+        encoding="utf-8",
+    )
+
     return report
