@@ -16,6 +16,7 @@ from .builder import atomic_write_text, ensure_dir_or_extract
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
+from .gpt_sovits_exporter import export_project_dataset
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .identity import infer_group
 from .human_review import import_review_txt
@@ -390,6 +391,16 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/project/active/export/gpt-sovits":
+            query = parse_qs(urlsplit(self.path).query)
+            report = export_project_dataset(
+                _active_config(),
+                speaker=(query.get("speaker") or [data.get("speaker", "")])[-1],
+                language=(query.get("language") or [data.get("language", "en")])[-1],
+            )
+            self._json({"ok": True, "report": report})
+            return
+
         if path == "/api/subtitle-layout/preview":
             english_text = data.get("english_text") if data.get("english_text") is not None else "May this journey lead us starward."
             chinese_text = data.get("chinese_text") if data.get("chinese_text") is not None else "愿此行，终抵群星。"
