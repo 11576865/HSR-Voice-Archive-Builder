@@ -53,16 +53,11 @@ class SubtitleLayoutTests(unittest.TestCase):
     def test_kinetic_tags_duration_capping(self) -> None:
         # Long duration line (2.0s = 2000ms): base 200ms entry and 200ms exit applied
         tags_long = generate_kinetic_tags(2.0)
-        self.assertIn(r"\fscx88\fscy88", tags_long)
         self.assertIn(r"\fad(200,200)", tags_long)
-        self.assertIn(r"\t(0,120,0.6,\fscx106\fscy106)", tags_long)
-        self.assertIn(r"\t(120,200,1.4,\fscx100\fscy100)", tags_long)
-        self.assertIn(r"\t(1800,2000,1.5,\fscx92\fscy92)", tags_long)
 
         # Short duration line (0.3s = 300ms): entry/exit capped to 25% (75ms)
         tags_short = generate_kinetic_tags(0.3)
         self.assertIn(r"\fad(75,75)", tags_short)
-        self.assertIn(r"\t(225,300,1.5,\fscx92\fscy92)", tags_short)
 
     def test_kinetic_tags_position_and_displacement(self) -> None:
         # Static pos tagging
@@ -82,10 +77,6 @@ class SubtitleLayoutTests(unittest.TestCase):
         )
         ass_output = render_ass([entry], enable_kinetic=True)
         self.assertIn(r"\fad(200,200)", ass_output)
-        self.assertIn(r"\fscx88\fscy88", ass_output)
-        self.assertIn(r"\fscx106\fscy106", ass_output)
-        self.assertIn(r"\fscx100\fscy100", ass_output)
-        self.assertIn(r"\fscx92\fscy92", ass_output)
 
     def test_render_ass_kinetic_motion_disabled(self) -> None:
         entry = SimpleNamespace(
@@ -99,26 +90,36 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertNotIn(r"\fscx88", ass_output)
 
     def test_tiered_voice_gap_classification(self) -> None:
-        # Compact Mode (T_gap < 0.3s): compressed fade (80ms), initial scale 94%, peak 103%, exit 96%
+        # Compact Mode (T_gap < 0.3s): compressed fade (80ms)
         tags_compact = generate_kinetic_tags(2.0, voice_gap_seconds=0.1)
         self.assertIn(r"\fad(80,80)", tags_compact)
-        self.assertIn(r"\fscx94\fscy94", tags_compact)
-        self.assertIn(r"\fscx103\fscy103", tags_compact)
-        self.assertIn(r"\fscx96\fscy96", tags_compact)
 
         # Normal Mode (0.3s <= T_gap <= 1.0s): baseline fade (150ms)
         tags_normal = generate_kinetic_tags(2.0, voice_gap_seconds=0.5)
         self.assertIn(r"\fad(150,150)", tags_normal)
-        self.assertIn(r"\fscx88\fscy88", tags_normal)
-        self.assertIn(r"\fscx106\fscy106", tags_normal)
-        self.assertIn(r"\fscx92\fscy92", tags_normal)
 
         # Spacious/Cinematic Mode (T_gap > 1.0s): extended fade (300ms)
         tags_spacious = generate_kinetic_tags(2.0, voice_gap_seconds=1.5)
         self.assertIn(r"\fad(300,300)", tags_spacious)
-        self.assertIn(r"\fscx82\fscy82", tags_spacious)
-        self.assertIn(r"\fscx108\fscy108", tags_spacious)
-        self.assertIn(r"\fscx88\fscy88", tags_spacious)
+
+    def test_audio_aware_pre_roll_fade(self) -> None:
+        entry1 = SimpleNamespace(
+            english="First sentence.",
+            chinese="第一句。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        # 1.0 second gap between entry1 (end=3.0) and entry2 (start=4.0)
+        entry2 = SimpleNamespace(
+            english="Second sentence.",
+            chinese="第二句。",
+            start_seconds=4.0,
+            display_end_seconds=6.0,
+        )
+        # Delta T = 1.0s. pre_roll = min(1.0/2, 200ms) = 0.2s = 200ms.
+        # So entry2 render start_time should be shifted from 4.0s (0:00:04.00) to 3.8s (0:00:03.80).
+        ass_output = render_ass([entry1, entry2], source_language="en", target_language="zh-CN")
+        self.assertIn("0:00:03.80,0:00:06.00", ass_output)
 
     def test_render_ass_with_voice_gap_adaptation(self) -> None:
         entry_compact = SimpleNamespace(

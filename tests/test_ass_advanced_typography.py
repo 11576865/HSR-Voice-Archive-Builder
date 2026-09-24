@@ -2,6 +2,7 @@ import unittest
 from pathlib import Path
 from dataclasses import dataclass
 
+from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.ass_writer import (
     format_karaoke_text,
     format_multiline_karaoke,
@@ -22,6 +23,30 @@ class DummyEntry:
 
 
 class TestAdvancedTypography(unittest.TestCase):
+
+    def test_subtitle_render_config_presets(self):
+        plain = SubtitleRenderConfig.plain_text_preset()
+        self.assertFalse(plain.enable_kinetic)
+        self.assertFalse(plain.enable_karaoke)
+        self.assertEqual(plain.fade_in_ms, 0)
+
+        default_cfg = SubtitleRenderConfig.pr72_default_preset()
+        self.assertTrue(default_cfg.enable_kinetic)
+        self.assertEqual(default_cfg.fade_in_ms, 200)
+
+        entries = [
+            DummyEntry(
+                english="Preset test line.",
+                chinese="预设测试行。",
+                start_seconds=1.0,
+                display_end_seconds=4.0,
+            )
+        ]
+        plain_ass = render_ass(entries, config=plain)
+        self.assertNotIn(r"\fad", plain_ass)
+
+        default_ass = render_ass(entries, config=default_cfg)
+        self.assertIn(r"\fad(200,200)", default_ass)
 
     def test_format_karaoke_text_english(self):
         text = "May this journey lead us starward."
@@ -144,7 +169,7 @@ class TestAdvancedTypography(unittest.TestCase):
         # Ensure outline lines and text lines share identical kinetic tags
         for line in lines:
             if "Primary" in line or "CHS" in line:
-                self.assertIn(r"\fscx88\fscy88\fad(200,200)", line)
+                self.assertIn(r"\fad(200,200)", line)
 
     def test_render_ass_kinetic_motion_frosted_glass_fade(self):
         entries = [

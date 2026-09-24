@@ -409,7 +409,9 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
           <b style="font-size:13px;color:var(--text)">快捷预设 (Quick Presets)</b>
           <div class="actions" style="margin:0">
-            <button type="button" class="small" id="prevPresetDefault">默认标准</button>
+            <button type="button" class="small" id="prevPresetDefault">默认标准 (PR72)</button>
+            <button type="button" class="small" id="prevPresetPlain">纯净无特效 (Plain)</button>
+            <button type="button" class="small" id="prevPresetKaraoke">K歌律动 (Karaoke)</button>
             <button type="button" class="small" id="prevPresetLongText">长句自动换行</button>
             <button type="button" class="small danger" id="prevPresetCollision">碰撞/溢出压力测试</button>
           </div>
@@ -466,6 +468,8 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
 
       <!-- 16:9 Interactive Simulated Video Screen Canvas -->
       <div style="position:relative;width:100%;aspect-ratio:16 / 9;background:#080a0e;border-radius:10px;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 0 20px rgba(0,0,0,0.8)" id="previewCanvasContainer">
+        <!-- Lightweight HTML5 Canvas Subtitle Overlay -->
+        <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
         <!-- Overlay SVG -->
         <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none">
           <!-- Rendered dynamically via JS -->
@@ -1946,6 +1950,53 @@ function renderPreviewCanvasSvg(data, options) {
   });
 
   svg.innerHTML = elements.join('');
+
+  // Lightweight HTML5 Canvas Subtitle Rendering
+  renderCanvasSubtitleOverlay(data);
+}
+
+function renderCanvasSubtitleOverlay(data) {
+  const canvas = document.getElementById('assCanvasPreview');
+  if (!canvas || !data || !data.ok) return;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return;
+
+  ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+  const layout = data.layout;
+  if (!layout) return;
+
+  // Render Primary Subtitles on Canvas
+  (layout.primary_lines || []).forEach((line) => {
+    ctx.save();
+    ctx.font = `600 ${line.font_size}px "Noto Sans", Arial, sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'hanging';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#101010';
+    ctx.lineWidth = Math.max(2, line.font_size * 0.08);
+
+    const textY = line.bbox.y_min;
+    ctx.strokeText(line.text, line.x, textY);
+    ctx.fillText(line.text, line.x, textY);
+    ctx.restore();
+  });
+
+  // Render Chinese Subtitles on Canvas
+  (layout.chs_lines || []).forEach((line) => {
+    ctx.save();
+    ctx.font = `600 ${line.font_size}px "Microsoft YaHei", "Source Han Sans CN", "SimHei", sans-serif`;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'hanging';
+    ctx.fillStyle = '#ffffff';
+    ctx.strokeStyle = '#101010';
+    ctx.lineWidth = Math.max(2, line.font_size * 0.08);
+
+    const textY = line.bbox.y_min;
+    ctx.strokeText(line.text, line.x, textY);
+    ctx.fillText(line.text, line.x, textY);
+    ctx.restore();
+  });
 }
 
 // Attach event listeners for controls
@@ -1968,6 +2019,28 @@ function renderPreviewCanvasSvg(data, options) {
 document.getElementById('prevPresetDefault')?.addEventListener('click', () => {
   document.getElementById('prevChsText').value = "愿此行，终抵群星。";
   document.getElementById('prevPriText').value = "May this journey lead us starward.";
+  document.getElementById('prevChsSize').value = 52;
+  document.getElementById('prevPriSize').value = 42;
+  document.getElementById('prevCentralGap').value = 20;
+  document.getElementById('prevMarginH').value = 10;
+  document.getElementById('prevMarginV').value = 5;
+  updateLayoutPreview();
+});
+
+document.getElementById('prevPresetPlain')?.addEventListener('click', () => {
+  document.getElementById('prevChsText').value = "纯净文本模式：无动态淡入淡出，无卡拉OK。";
+  document.getElementById('prevPriText').value = "Plain text preset: No kinetic fade motion, no karaoke tags.";
+  document.getElementById('prevChsSize').value = 52;
+  document.getElementById('prevPriSize').value = 42;
+  document.getElementById('prevCentralGap').value = 20;
+  document.getElementById('prevMarginH').value = 10;
+  document.getElementById('prevMarginV').value = 5;
+  updateLayoutPreview();
+});
+
+document.getElementById('prevPresetKaraoke')?.addEventListener('click', () => {
+  document.getElementById('prevChsText').value = "K歌律动模式：自动嵌入 \\k 逐字时间轴标签。";
+  document.getElementById('prevPriText').value = "Karaoke preset: Automatically embeds \\k word-level timing tags.";
   document.getElementById('prevChsSize').value = 52;
   document.getElementById('prevPriSize').value = 42;
   document.getElementById('prevCentralGap').value = 20;

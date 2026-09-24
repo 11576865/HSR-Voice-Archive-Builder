@@ -6,6 +6,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Iterable
 
+from .config import SubtitleRenderConfig
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
 from .measure import measure_line_height, measure_text_width
@@ -226,10 +227,11 @@ def render_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
-    enable_karaoke: bool = False,
-    enable_frosted_glass: bool = False,
-    enable_multi_layer_outline: bool = False,
-    enable_kinetic: bool = True,
+    config: SubtitleRenderConfig | None = None,
+    enable_karaoke: bool | None = None,
+    enable_frosted_glass: bool | None = None,
+    enable_multi_layer_outline: bool | None = None,
+    enable_kinetic: bool | None = None,
     kinetic_options: dict[str, Any] | None = None,
 ) -> str:
     header = """[Script Info]
@@ -249,8 +251,19 @@ Style: Card,Noto Sans,10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
+    cfg = config or SubtitleRenderConfig()
+    use_karaoke = cfg.enable_karaoke if enable_karaoke is None else enable_karaoke
+    use_frosted_glass = cfg.enable_frosted_glass if enable_frosted_glass is None else enable_frosted_glass
+    use_multi_layer_outline = cfg.enable_multi_layer_outline if enable_multi_layer_outline is None else enable_multi_layer_outline
+    use_kinetic = cfg.enable_kinetic if enable_kinetic is None else enable_kinetic
+    k_opts = dict(cfg.kinetic_options)
+    if kinetic_options is not None:
+        k_opts.update(kinetic_options)
+
     dialogues: list[str] = []
     overflow_records: list[dict[str, object]] = []
+
+    prev_end_sec: float | None = None
 
     for entry in entries:
         raw_source = getattr(entry, "english", getattr(entry, "source_text", ""))
@@ -293,23 +306,28 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             })
             continue
 
-        k_opts = kinetic_options or {}
+        # Project 2 Pre-roll audio-aware fade calculation
+        actual_start_sec = start_sec
+        fade_in_ms = cfg.fade_in_ms
+        fade_out_ms = cfg.fade_out_ms
 
-        if enable_frosted_glass:
+        if cfg.use_audio_aware_fade and prev_end_sec is not None:
+            delta_t_sec = start_sec - prev_end_sec
+            if delta_t_sec > 0:
+                pre_roll_sec = min(delta_t_sec / 2.0, fade_in_ms / 1000.0)
+                actual_start_sec = max(prev_end_sec, start_sec - pre_roll_sec)
+
+        start_time = _ass_time(actual_start_sec)
+        duration_sec = max(0.01, end_sec - actual_start_sec)
+        prev_end_sec = end_sec
+
+        if use_frosted_glass:
             if layout.primary_lines:
                 res_pri = generate_frosted_glass_card(layout.primary_lines)
                 if res_pri:
                     card_tag = res_pri[0]
-                    if enable_kinetic:
-                        duration_ms = max(100, int(round(duration_sec * 1000)))
-                        if voice_gap_sec is not None:
-                            base_fade = 80 if voice_gap_sec < 0.3 else (300 if voice_gap_sec > 1.0 else 150)
-                        else:
-                            base_fade = 200
-                        max_anim_ms = max(30, int(duration_ms * 0.25))
-                        t_in = min(base_fade, max_anim_ms)
-                        t_out = min(base_fade, max_anim_ms)
-                        card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({t_in},{t_out})", 1)
+                    if use_kinetic:
+                        card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({fade_in_ms},{fade_out_ms})", 1)
                     dialogues.append(
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
@@ -317,27 +335,21 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 res_chs = generate_frosted_glass_card(layout.chs_lines)
                 if res_chs:
                     card_tag = res_chs[0]
-                    if enable_kinetic:
-                        duration_ms = max(100, int(round(duration_sec * 1000)))
-                        if voice_gap_sec is not None:
-                            base_fade = 80 if voice_gap_sec < 0.3 else (300 if voice_gap_sec > 1.0 else 150)
-                        else:
-                            base_fade = 200
-                        max_anim_ms = max(30, int(duration_ms * 0.25))
-                        t_in = min(base_fade, max_anim_ms)
-                        t_out = min(base_fade, max_anim_ms)
-                        card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({t_in},{t_out})", 1)
+                    if use_kinetic:
+                        card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({fade_in_ms},{fade_out_ms})", 1)
                     dialogues.append(
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
 
         if layout.primary_lines:
             pos0 = layout.primary_lines[0]
-            if enable_kinetic:
+            if use_kinetic:
                 pri_motion_tags = generate_kinetic_tags(
                     duration_sec,
                     x=pos0.x,
                     y=pos0.y,
+                    fade_in_ms=fade_in_ms,
+                    fade_out_ms=fade_out_ms,
                     entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
                     voice_gap_seconds=voice_gap_sec,
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
@@ -346,14 +358,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
-            if enable_multi_layer_outline:
+            if use_multi_layer_outline:
                 pri_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.primary_lines)
                 out_text = f"{pos_prefix}\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{pri_plain}"
                 dialogues.append(
                     f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{out_text}"
                 )
 
-            if enable_karaoke:
+            if use_karaoke:
                 pri_text = format_multiline_karaoke(
                     layout.primary_lines,
                     duration_sec,
@@ -369,11 +381,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if layout.chs_lines:
             pos0 = layout.chs_lines[0]
-            if enable_kinetic:
+            if use_kinetic:
                 chs_motion_tags = generate_kinetic_tags(
                     duration_sec,
                     x=pos0.x,
                     y=pos0.y,
+                    fade_in_ms=fade_in_ms,
+                    fade_out_ms=fade_out_ms,
                     entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
                     voice_gap_seconds=voice_gap_sec,
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
@@ -382,14 +396,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
-            if enable_multi_layer_outline:
+            if use_multi_layer_outline:
                 chs_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.chs_lines)
                 out_text = f"{pos_prefix}\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{chs_plain}"
                 dialogues.append(
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
 
-            if enable_karaoke:
+            if use_karaoke:
                 chs_text = format_multiline_karaoke(
                     layout.chs_lines,
                     duration_sec,
@@ -428,10 +442,11 @@ def write_ass(
     source_language: str = "en",
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
-    enable_karaoke: bool = False,
-    enable_frosted_glass: bool = False,
-    enable_multi_layer_outline: bool = False,
-    enable_kinetic: bool = True,
+    config: SubtitleRenderConfig | None = None,
+    enable_karaoke: bool | None = None,
+    enable_frosted_glass: bool | None = None,
+    enable_multi_layer_outline: bool | None = None,
+    enable_kinetic: bool | None = None,
     kinetic_options: dict[str, Any] | None = None,
 ) -> None:
     report_path = overflow_report_path or (path.parent / "ass_layout_overflow_report.json")
@@ -442,6 +457,7 @@ def write_ass(
             source_language=source_language,
             target_language=target_language,
             overflow_report_path=report_path,
+            config=config,
             enable_karaoke=enable_karaoke,
             enable_frosted_glass=enable_frosted_glass,
             enable_multi_layer_outline=enable_multi_layer_outline,
