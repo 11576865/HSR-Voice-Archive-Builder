@@ -435,6 +435,9 @@ def discover_source_candidates() -> list[dict[str, Any]]:
     """List likely local voice-package archives without opening or uploading them."""
     home = Path.home()
     roots = [
+        home / "Downloads",
+        home / "Download",
+        home / "OneDrive" / "Downloads",
         home / "storage" / "downloads",
         home / "storage" / "shared" / "Download",
         Path("/storage/emulated/0/Download"),
@@ -482,6 +485,9 @@ def _candidate_roots(source: Path) -> list[Path]:
     home = Path.home()
     roots = [
         source.parent if source.is_file() else source,
+        home / "Downloads",
+        home / "Download",
+        home / "OneDrive" / "Downloads",
         home / "storage" / "downloads",
         home / "storage" / "shared" / "Download",
         Path("/storage/emulated/0/Download"),
