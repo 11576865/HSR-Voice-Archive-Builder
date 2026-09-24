@@ -59,13 +59,22 @@ The Termux path uses the lightweight stdlib server and native 7-Zip path documen
 
 ### Windows
 
-Run:
+1. Install Python 3.11 or newer and FFmpeg, and make sure both `python --version` (or `py -3 --version`) and `ffmpeg -version` work in a new Command Prompt. Git is only needed if you plan to clone or update with Git.
+2. Download this repository with **Code → Download ZIP**, extract the ZIP, and open the extracted project folder. Or use:
 
-```text
-run_windows.bat
-```
+   ```powershell
+   git clone https://github.com/11576865/HSR-Voice-Archive-Builder.git
+   cd HSR-Voice-Archive-Builder
+   ```
 
-For LAN control from another device, use the corresponding `*_lan` launcher and open the tokenized URL printed by the host.
+3. Double-click `run_windows.bat` in that folder, or run `.\run_windows.bat` from PowerShell. The launcher checks Python and installs missing Python packages from `requirements.txt` on first start. Keep the console window open while using the dashboard.
+4. Open `http://127.0.0.1:8765/` on the same computer if the browser does not open automatically. The hosted GitHub Pages site is a launcher; processing takes place in this local dashboard.
+
+Place the voice-package archives in your Windows `Downloads` folder for automatic discovery, or choose their local file paths manually. Termux project paths such as `/storage/emulated/0/Download/...` do not point to Windows files. Copy the source packages to this computer and create or relink the project using their Windows paths.
+
+If the console reports that port 8765 is occupied, start with `python -m app.launch --port 8766` (or `py -3 -m app.launch --port 8766`) and open the URL it prints. Run `python -m app.preflight` to inspect dependencies and FFmpeg. If the console closes after an error, run the batch file from an open Command Prompt so the message remains visible.
+
+For LAN control from a phone or another device, run `run_windows_lan.bat` and use the tokenized URL printed by the host. Audio processing and project files remain on the Windows computer.
 
 ## Project flow
 
