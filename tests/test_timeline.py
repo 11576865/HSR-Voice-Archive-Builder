@@ -46,6 +46,18 @@ class TimelineTests(unittest.TestCase):
             200,
         )
 
+    def test_voice_gap_seconds_in_resolved_timeline(self) -> None:
+        base = [
+            {"index": 1, "filename": "1.wav", "group": "ch1", "source_frames": 100},
+            {"index": 2, "filename": "2.wav", "group": "ch1", "source_frames": 100},
+            {"index": 3, "filename": "3.wav", "group": "ch2", "source_frames": 100},
+        ]
+        res = resolve_timeline(base, 100, intro_gap=1.0, same_group_gap=0.5, group_gap=2.0)
+        timings = res["entry_timings"]
+        self.assertEqual(timings[0]["voice_gap_seconds"], 0.5)
+        self.assertEqual(timings[1]["voice_gap_seconds"], 2.0)
+        self.assertEqual(timings[2]["voice_gap_seconds"], 0.0)
+
     def test_empty_timeline_fails(self) -> None:
         with self.assertRaisesRegex(ValueError, "at least one"):
             resolve_timeline([], 48000)

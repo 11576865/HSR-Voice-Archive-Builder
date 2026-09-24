@@ -267,6 +267,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         end_time = _ass_time(end_sec)
         duration_sec = max(0.01, end_sec - start_sec)
         word_alignments = getattr(entry, "word_alignments", getattr(entry, "words", None))
+        voice_gap_sec = getattr(entry, "voice_gap_seconds", getattr(entry, "voice_gap", None))
+        if voice_gap_sec is not None:
+            voice_gap_sec = float(voice_gap_sec)
 
         layout = solve_subtitle_layout(
             english_text=clean_source,
@@ -299,9 +302,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     card_tag = res_pri[0]
                     if enable_kinetic:
                         duration_ms = max(100, int(round(duration_sec * 1000)))
+                        if voice_gap_sec is not None:
+                            base_fade = 80 if voice_gap_sec < 0.3 else (300 if voice_gap_sec > 1.0 else 150)
+                        else:
+                            base_fade = 200
                         max_anim_ms = max(30, int(duration_ms * 0.25))
-                        t_in = min(200, max_anim_ms)
-                        t_out = min(200, max_anim_ms)
+                        t_in = min(base_fade, max_anim_ms)
+                        t_out = min(base_fade, max_anim_ms)
                         card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({t_in},{t_out})", 1)
                     dialogues.append(
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
@@ -312,9 +319,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     card_tag = res_chs[0]
                     if enable_kinetic:
                         duration_ms = max(100, int(round(duration_sec * 1000)))
+                        if voice_gap_sec is not None:
+                            base_fade = 80 if voice_gap_sec < 0.3 else (300 if voice_gap_sec > 1.0 else 150)
+                        else:
+                            base_fade = 200
                         max_anim_ms = max(30, int(duration_ms * 0.25))
-                        t_in = min(200, max_anim_ms)
-                        t_out = min(200, max_anim_ms)
+                        t_in = min(base_fade, max_anim_ms)
+                        t_out = min(base_fade, max_anim_ms)
                         card_tag = card_tag.replace("{\\an7", f"{{\\an7\\fad({t_in},{t_out})", 1)
                     dialogues.append(
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
@@ -328,6 +339,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     x=pos0.x,
                     y=pos0.y,
                     entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
+                    voice_gap_seconds=voice_gap_sec,
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{pri_motion_tags}"
@@ -363,6 +375,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     x=pos0.x,
                     y=pos0.y,
                     entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
+                    voice_gap_seconds=voice_gap_sec,
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{chs_motion_tags}"

@@ -69,6 +69,7 @@ def resolve_timeline(
             next_start = audio_end
             display_end = audio_end
 
+        gap_seconds = gap_samples / sample_rate
         segments.append({
             "type": "voice",
             "entry_id": int(row.get("index", position + 1)),
@@ -77,12 +78,14 @@ def resolve_timeline(
             "start_sample": start,
             "end_sample": audio_end,
             "duration_samples": frames,
+            "voice_gap_seconds": gap_seconds,
         })
         timings.append({
             "start_sample": start,
             "audio_end_sample": audio_end,
             "display_end_sample": display_end,
             "next_start_sample": next_start,
+            "voice_gap_seconds": gap_seconds,
         })
         if gap_samples:
             segments.append({
@@ -178,12 +181,15 @@ def write_resolved_timeline(
                 "end_seconds": start / sample_rate,
                 "duration_seconds": (start - previous_end) / sample_rate,
             })
+        next_start = int(row["next_start_sample"])
+        audio_end = int(row["audio_end_sample"])
         segments.append({
             "type": "voice",
             **row,
             "start_seconds": start / sample_rate,
-            "end_seconds": int(row["audio_end_sample"]) / sample_rate,
+            "end_seconds": audio_end / sample_rate,
             "duration_seconds": int(row["source_frames"]) / sample_rate,
+            "voice_gap_seconds": max(0.0, next_start - audio_end) / sample_rate,
         })
         previous_end = int(row["audio_end_sample"])
         previous_group = current_group
