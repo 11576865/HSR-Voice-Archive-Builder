@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -196,6 +197,10 @@ def _resolve_project(project_id: str) -> ProjectConfig:
         return _active_config()
 
     raise RuntimeError(f"Project not found: {project_id}")
+
+
+configure_project_resolver(_resolve_project)
+app.include_router(gpt_sovits_router)
 
 
 def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
