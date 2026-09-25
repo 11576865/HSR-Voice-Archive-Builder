@@ -34,6 +34,8 @@ reference_annotations.json
 <Character>_ReferencePack/
   audio/*.wav
   reference_catalog.json
+  REFERENCE_INDEX.txt
+  REFERENCE_INDEX.md
   rejected.csv
   README_REFERENCE_PACK.txt
 ```
