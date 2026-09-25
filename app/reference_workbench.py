@@ -137,7 +137,7 @@ def decorate_subtitles(
         subtitle["reference_key"] = key
         subtitle["reference_selected"] = bool(ann.get("selected", False))
         subtitle["reference_emotion"] = normalize_reference_emotion(ann.get("emotion"))
-        subtitle["reference_intensity"] = float(ann.get("intensity", 0.5) or 0.5)
+        subtitle["reference_intensity"] = float(ann.get("intensity") if ann.get("intensity") is not None else 0.5)
         subtitle["reference_quality"] = normalize_reference_quality(ann.get("quality"))
     return subtitles
 
@@ -325,7 +325,7 @@ def export_reference_pack(
             "duration_seconds": round(duration, 3),
             "recommended_duration": recommended,
             "emotion": normalize_reference_emotion(annotation.get("emotion")),
-            "intensity": float(annotation.get("intensity", 0.5) or 0.5),
+            "intensity": float(annotation.get("intensity") if annotation.get("intensity") is not None else 0.5),
             "quality": normalize_reference_quality(annotation.get("quality")),
         })
 

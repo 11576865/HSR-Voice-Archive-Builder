@@ -363,7 +363,7 @@ def _clone_input_path(config: ProjectConfig, value: str) -> str:
     # remain relative. Other relative inputs are intentionally rebound to the
     # original absolute location rather than silently duplicating user data.
     if path.parts and path.parts[0] == ".generated":
-        return str(path)
+        return path.as_posix()
     resolved = resolve_project_path(config, value)
     return str(resolved) if resolved is not None else value
 

@@ -179,6 +179,22 @@ class ReferenceWorkbenchTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "No reference audio has been selected"):
                 export_reference_pack(cfg, out, speaker="March7th")
 
+    def test_zero_intensity_is_preserved_in_review_and_reference_pack(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg, out = self.make_project(root)
+            save_reference_annotation(
+                cfg, out,
+                {"id": 1, "selected": True, "emotion": "other", "intensity": 0.0, "quality": "C"},
+            )
+            subtitle = decorate_subtitles(
+                cfg, out, [{"id": 1, "source_member_id": "chapter_a/line.wav"}]
+            )[0]
+            self.assertEqual(subtitle["reference_intensity"], 0.0)
+            report = export_reference_pack(cfg, out)
+            catalog = json.loads(Path(report["catalog"]).read_text(encoding="utf-8"))
+            self.assertEqual(catalog["references"][0]["intensity"], 0.0)
+
     def test_legacy_reference_values_are_normalized_without_touching_training_data(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

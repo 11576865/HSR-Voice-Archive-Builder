@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import tempfile
 import unittest
+import wave
 from pathlib import Path
 
 from fastapi.testclient import TestClient
@@ -155,6 +156,42 @@ class TestSubtitleAPI(unittest.TestCase):
             subs_time = resp_time.json()["subtitles"]
             self.assertEqual(len(subs_time), 1)
             self.assertEqual(subs_time[0]["id"], 2)
+
+    def test_reference_audio_route_returns_original_wav_by_member_id(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "output"
+            output.mkdir()
+            wavs = root / "wavs"
+            for chapter, frames in (("first", 8000), ("second", 16000)):
+                path = wavs / chapter / "line.wav"
+                path.parent.mkdir(parents=True)
+                with wave.open(str(path), "wb") as audio:
+                    audio.setnchannels(1)
+                    audio.setsampwidth(2)
+                    audio.setframerate(8000)
+                    audio.writeframes(b"\x00\x00" * frames)
+            (output / "manifest.json").write_text(
+                json.dumps({"entries": [{
+                    "index": 2,
+                    "filename": "line.wav",
+                    "source_member_id": "second/line.wav",
+                }]}),
+                encoding="utf-8",
+            )
+            cfg = create_project(
+                root, name="audio_route", index_csv="index.csv",
+                wav_source="wavs", output_dir="output",
+            )
+            _set_active(cfg)
+
+            resp = self.client.get(
+                "/api/project/active/subtitles/2/audio", headers=self.headers
+            )
+            self.assertEqual(resp.status_code, 200)
+            self.assertTrue(resp.headers["content-type"].startswith("audio/wav"))
+            self.assertEqual(resp.content, (wavs / "second" / "line.wav").read_bytes())
+            self.assertTrue(resp.content.startswith(b"RIFF"))
 
 
 if __name__ == "__main__":

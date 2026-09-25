@@ -559,7 +559,7 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
                 <span id="subReferenceSelectedBadge" class="badge" style="margin-left:8px">未选为参考</span>
               </summary>
               <div class="sub-reference-body" style="padding-top:8px">
-                <audio id="subOriginalAudio" controls preload="none" style="width:100%;margin-top:4px"></audio>
+                <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
                 <div id="subAudioStatus" class="small muted" style="margin-top:5px">展开此工具后加载当前字幕对应的原始 WAV。</div>
                 <div class="row3" style="margin-top:8px">
                   <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
@@ -1529,6 +1529,8 @@ let subtitleSavePromise=null;
 let subtitleEditorComposing=false;
 let referenceAudioObjectUrl=null;
 let referenceAudioAbortController=null;
+let referenceAudioKey=null;
+let referenceAudioLabel='';
 let referenceSavePromise=null;
 
 function subtitleKey(sub){return String(sub?.id??'');}
@@ -1588,6 +1590,8 @@ function highlightText(str,query){
 }
 
 function clearReferenceAudio(){
+  referenceAudioKey=null;
+  referenceAudioLabel='';
   if(referenceAudioAbortController){referenceAudioAbortController.abort();referenceAudioAbortController=null;}
   const audio=document.getElementById('subOriginalAudio');
   if(audio){audio.pause();audio.removeAttribute('src');audio.load();}
@@ -1595,9 +1599,13 @@ function clearReferenceAudio(){
 }
 
 async function loadReferenceAudio(sub){
+  const key=sub?(currentProject?.root||currentProject?.name||'active')+'|'+String(sub.id)+'|'+(sub.source_member_id||sub.filename||''):null;
+  if(key&&key===referenceAudioKey)return;
   clearReferenceAudio();
   const status=document.getElementById('subAudioStatus');
   if(!sub){if(status)status.textContent='选择字幕后加载对应的原始 WAV。';return}
+  referenceAudioKey=key;
+  referenceAudioLabel=sub.source_member_id||sub.filename||'WAV';
   const controller=new AbortController();
   referenceAudioAbortController=controller;
   if(status)status.textContent='正在读取原始 WAV…';
@@ -1614,12 +1622,21 @@ async function loadReferenceAudio(sub){
     const blob=await r.blob();
     if(!blob.size)throw new Error('后端返回了空音频文件');
     if(controller.signal.aborted||String(currentSubtitle()?.id)!==String(sub.id))return;
+    if(blob.size<12)throw new Error('返回的 WAV 文件过短');
+    const header=new Uint8Array(await blob.slice(0,12).arrayBuffer());
+    const signature=String.fromCharCode(...header);
+    if(!((signature.startsWith('RIFF')||signature.startsWith('RF64'))&&signature.slice(8,12)==='WAVE')){
+      throw new Error('返回内容不是 WAV 文件');
+    }
+    if(controller.signal.aborted||String(currentSubtitle()?.id)!==String(sub.id))return;
     referenceAudioObjectUrl=URL.createObjectURL(blob);
     const audio=document.getElementById('subOriginalAudio');
     if(audio){audio.src=referenceAudioObjectUrl;audio.load();}
-    if(status)status.textContent='原始语音已就绪 · '+(sub.source_member_id||sub.filename||'WAV');
+    if(status)status.textContent='正在解析 WAV 时长…';
   }catch(x){
     if(x?.name==='AbortError')return;
+    if(referenceAudioKey!==key)return;
+    referenceAudioKey=null;
     if(status)status.textContent='原始语音不可用：'+shortError(x);
   }finally{
     if(referenceAudioAbortController===controller)referenceAudioAbortController=null;
@@ -2037,6 +2054,29 @@ subtitleEditor.addEventListener('blur',()=>{
 document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
 document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
+const originalAudio=document.getElementById('subOriginalAudio');
+originalAudio.addEventListener('loadedmetadata',()=>{
+  if(!referenceAudioObjectUrl||originalAudio.src!==referenceAudioObjectUrl)return;
+  const status=document.getElementById('subAudioStatus');
+  if(Number.isFinite(originalAudio.duration)&&originalAudio.duration>0){
+    status.textContent='原始语音已加载（'+originalAudio.duration.toFixed(1)+' 秒），正在准备播放 · '+referenceAudioLabel;
+  }else{
+    status.textContent='原始语音未能读取有效时长（0 秒）；请检查 WAV 编码是否受浏览器支持。';
+  }
+});
+originalAudio.addEventListener('canplay',()=>{
+  if(!referenceAudioObjectUrl||originalAudio.src!==referenceAudioObjectUrl)return;
+  const status=document.getElementById('subAudioStatus');
+  if(Number.isFinite(originalAudio.duration)&&originalAudio.duration>0){
+    status.textContent='原始语音已就绪（'+originalAudio.duration.toFixed(1)+' 秒）· '+referenceAudioLabel;
+  }
+});
+originalAudio.addEventListener('error',()=>{
+  if(!referenceAudioObjectUrl||originalAudio.src!==referenceAudioObjectUrl)return;
+  referenceAudioKey=null;
+  const status=document.getElementById('subAudioStatus');
+  status.textContent='原始语音无法播放（媒体错误 '+(originalAudio.error?.code||'未知')+'）：浏览器无法解码该 WAV，请检查文件编码。';
+});
 document.getElementById('subReferenceCard').addEventListener('toggle',(event)=>{
   const details=event.currentTarget;
   if(details.open){

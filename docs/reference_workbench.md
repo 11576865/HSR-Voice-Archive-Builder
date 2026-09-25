@@ -44,6 +44,8 @@ The workbench resolves audio by `source_member_id` first. This is important beca
 
 The browser cannot attach the control token directly to an `<audio>` element request, so the existing frontend intentionally fetches the protected audio endpoint with the control header, converts the response to a Blob URL, and binds that Blob URL to the player. The dashboard Content Security Policy therefore explicitly allows `media-src 'self' blob:`. The reference tool loads audio only when the advanced section is expanded and releases the Blob URL again when collapsed.
 
+The player preloads WAV metadata and shows “ready” only after the browser can play a clip with a positive duration. An empty/non-WAV response, a 0-second duration, or a decoder failure is shown explicitly instead of being reported as ready. Re-rendering the same subtitle does not interrupt an already loaded clip.
+
 When the configured WAV source is a ZIP or 7z archive, the preview endpoint extracts it into the project state directory under `.state/reference-preview/` and reuses that extraction while the source fingerprint is unchanged.
 
 ## Annotation file
@@ -58,7 +60,7 @@ Example entry:
 
 ```json
 {
-  "schema_version": 1,
+  "schema_version": 2,
   "entries": {
     "member:chapter5/vo_001.wav": {
       "subtitle_id": "42",
