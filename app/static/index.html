@@ -553,6 +553,43 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
               <div id="subSourceFileMeta" class="small muted" style="margin-top:6px">源文件：—</div>
             </div>
 
+            <div class="sub-ref-card" id="subReferenceCard">
+              <div class="sub-ref-label">
+                <span>原始语音与参考标注 (Reference Audio)</span>
+                <span id="subReferenceSelectedBadge" class="badge">未选为参考</span>
+              </div>
+              <audio id="subOriginalAudio" controls preload="none" style="width:100%;margin-top:4px"></audio>
+              <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后加载对应的原始 WAV。</div>
+              <div class="row3" style="margin-top:8px">
+                <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
+                <div>
+                  <label for="subReferenceEmotion" style="margin-top:0">情绪标签</label>
+                  <input id="subReferenceEmotion" list="referenceEmotionSuggestions" placeholder="例如 surprised / sad">
+                  <datalist id="referenceEmotionSuggestions">
+                    <option value="neutral"><option value="happy"><option value="surprised">
+                    <option value="sad"><option value="angry"><option value="fear">
+                  </datalist>
+                </div>
+                <div>
+                  <label for="subReferenceQuality" style="margin-top:0">参考质量</label>
+                  <select id="subReferenceQuality">
+                    <option value="">未标记</option>
+                    <option value="good">Good</option>
+                    <option value="ok">OK</option>
+                    <option value="poor">Poor</option>
+                  </select>
+                </div>
+              </div>
+              <div style="margin-top:8px">
+                <div style="display:flex;justify-content:space-between;gap:8px">
+                  <label for="subReferenceIntensity" style="margin:0">情绪强度</label>
+                  <span id="subReferenceIntensityValue" class="small muted">0.50</span>
+                </div>
+                <input id="subReferenceIntensity" type="range" min="0" max="1" step="0.05" value="0.5">
+              </div>
+              <div id="subReferenceSaveStatus" class="small muted" style="margin-top:5px" role="status" aria-live="polite"></div>
+            </div>
+
             <div class="sub-ref-card">
               <div class="sub-ref-label">官方中文参考 (Official Reference)</div>
               <div id="subOfficialText" class="sub-ref-content">愿此行，终抵群星。</div>
@@ -583,15 +620,19 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
     </section>
 
     <section class="card hidden" id="gptSovitsCard">
-      <h2>GPT-SoVITS训练集导出</h2>
-      <p class="small muted">从已完成归档的 WAV 与最终校对文本生成数据集；训练请在 GPT-SoVITS WebUI 手动完成。</p>
+      <h2>GPT-SoVITS 资产导出</h2>
+      <p class="small muted">训练集使用归档中的原始语音与官方源文本；参考语音包使用你在字幕工作台中人工试听并标注的条目。两者互不替代。</p>
       <div class="grid two">
         <div><label for="gptSovitsSpeaker">角色</label><input id="gptSovitsSpeaker" autocomplete="off"></div>
         <div><label for="gptSovitsLanguage">语言</label><select id="gptSovitsLanguage"><option value="en">English</option></select></div>
       </div>
       <label for="gptSovitsOutput">输出目录</label><input id="gptSovitsOutput" readonly>
-      <div class="actions"><button type="button" class="success" id="gptSovitsExportBtn">导出训练集</button></div>
+      <div class="actions">
+        <button type="button" class="success" id="gptSovitsExportBtn">导出训练集</button>
+        <button type="button" id="referencePackExportBtn">导出参考语音包</button>
+      </div>
       <div id="gptSovitsResult" class="small muted" role="status" aria-live="polite"></div>
+      <div id="referencePackResult" class="small muted" role="status" aria-live="polite" style="margin-top:5px"></div>
     </section>
 
     <section class="card hidden" id="updateCard">
@@ -699,6 +740,25 @@ document.getElementById('gptSovitsExportBtn').onclick=async()=>{
       ' · Rejected: '+report.rejected+' · Output: '+report.output;
   }catch(error){
     status.textContent='导出失败：'+String(error.message||error);
+  }finally{button.disabled=false}
+};
+document.getElementById('referencePackExportBtn').onclick=async()=>{
+  const button=document.getElementById('referencePackExportBtn');
+  const status=document.getElementById('referencePackResult');
+  if(!currentProject){status.textContent='请先选择项目。';return}
+  const speaker=document.getElementById('gptSovitsSpeaker').value.trim();
+  if(!speaker){status.textContent='请填写角色名。';return}
+  button.disabled=true;
+  status.textContent='正在复制已人工选中的参考语音并生成 catalog…';
+  try{
+    const query=new URLSearchParams({speaker});
+    const result=await api('/api/project/active/export/reference-pack?'+query,{method:'POST'});
+    const report=result.report||{};
+    status.textContent='Reference Pack Export Complete · Selected: '+report.selected+
+      ' · Exported: '+report.exported+' · Rejected: '+report.rejected+
+      ' · 3–10 秒范围外: '+report.outside_recommended_duration+' · Output: '+report.output;
+  }catch(error){
+    status.textContent='参考语音包导出失败：'+String(error.message||error);
   }finally{button.disabled=false}
 };
 document.getElementById('gptSovitsSpeaker').addEventListener('input',()=>{
@@ -1456,6 +1516,9 @@ let subtitleSearchTimer=null;
 let subtitleAutosaveTimer=null;
 let subtitleSavePromise=null;
 let subtitleEditorComposing=false;
+let referenceAudioObjectUrl=null;
+let referenceAudioAbortController=null;
+let referenceSavePromise=null;
 
 function subtitleKey(sub){return String(sub?.id??'');}
 
@@ -1511,6 +1574,108 @@ function highlightText(str,query){
     if(i%2===1)return '<mark class="search-hl">'+escapeHtml(part)+'</mark>';
     return escapeHtml(part);
   }).join('');
+}
+
+function clearReferenceAudio(){
+  if(referenceAudioAbortController){referenceAudioAbortController.abort();referenceAudioAbortController=null;}
+  const audio=document.getElementById('subOriginalAudio');
+  if(audio){audio.pause();audio.removeAttribute('src');audio.load();}
+  if(referenceAudioObjectUrl){URL.revokeObjectURL(referenceAudioObjectUrl);referenceAudioObjectUrl=null;}
+}
+
+async function loadReferenceAudio(sub){
+  clearReferenceAudio();
+  const status=document.getElementById('subAudioStatus');
+  if(!sub){if(status)status.textContent='选择字幕后加载对应的原始 WAV。';return}
+  const controller=new AbortController();
+  referenceAudioAbortController=controller;
+  if(status)status.textContent='正在读取原始 WAV…';
+  try{
+    const project=encodeURIComponent(currentProject?.name||'active');
+    const r=await fetch('/api/project/'+project+'/subtitles/'+encodeURIComponent(sub.id)+'/audio',{
+      headers:headers(),cache:'no-store',signal:controller.signal
+    });
+    if(!r.ok){
+      let detail='HTTP '+r.status;
+      try{const j=await r.json();detail=j.error||detail}catch(e){}
+      throw new Error(detail);
+    }
+    const blob=await r.blob();
+    if(controller.signal.aborted||String(currentSubtitle()?.id)!==String(sub.id))return;
+    referenceAudioObjectUrl=URL.createObjectURL(blob);
+    const audio=document.getElementById('subOriginalAudio');
+    if(audio){audio.src=referenceAudioObjectUrl;audio.load();}
+    if(status)status.textContent='原始语音已就绪 · '+(sub.source_member_id||sub.filename||'WAV');
+  }catch(x){
+    if(x?.name==='AbortError')return;
+    if(status)status.textContent='原始语音不可用：'+shortError(x);
+  }finally{
+    if(referenceAudioAbortController===controller)referenceAudioAbortController=null;
+  }
+}
+
+function renderReferenceControls(sub){
+  const selected=document.getElementById('subReferenceSelected');
+  const emotion=document.getElementById('subReferenceEmotion');
+  const intensity=document.getElementById('subReferenceIntensity');
+  const intensityValue=document.getElementById('subReferenceIntensityValue');
+  const quality=document.getElementById('subReferenceQuality');
+  const badge=document.getElementById('subReferenceSelectedBadge');
+  const disabled=!sub;
+  for(const el of [selected,emotion,intensity,quality])if(el)el.disabled=disabled;
+  if(!sub){
+    if(selected)selected.checked=false;
+    if(emotion)emotion.value='';
+    if(intensity)intensity.value='0.5';
+    if(intensityValue)intensityValue.textContent='0.50';
+    if(quality)quality.value='';
+    if(badge){badge.textContent='未选为参考';badge.style.color='var(--muted)';}
+    return;
+  }
+  const value=Math.max(0,Math.min(1,Number(sub.reference_intensity??0.5)));
+  if(selected)selected.checked=!!sub.reference_selected;
+  if(emotion)emotion.value=sub.reference_emotion||'';
+  if(intensity)intensity.value=String(value);
+  if(intensityValue)intensityValue.textContent=value.toFixed(2);
+  if(quality)quality.value=sub.reference_quality||'';
+  if(badge){
+    badge.textContent=sub.reference_selected?'已选为参考':'未选为参考';
+    badge.style.color=sub.reference_selected?'var(--ok)':'var(--muted)';
+  }
+}
+
+async function saveReferenceAnnotation(){
+  const sub=currentSubtitle();
+  if(!currentProject||!sub)return false;
+  const selected=!!document.getElementById('subReferenceSelected')?.checked;
+  const emotion=document.getElementById('subReferenceEmotion')?.value?.trim()||'';
+  const intensity=Number(document.getElementById('subReferenceIntensity')?.value||0.5);
+  const quality=document.getElementById('subReferenceQuality')?.value||'';
+  const status=document.getElementById('subReferenceSaveStatus');
+  sub.reference_selected=selected;
+  sub.reference_emotion=emotion;
+  sub.reference_intensity=intensity;
+  sub.reference_quality=quality;
+  renderReferenceControls(sub);
+  renderSubtitleList();
+  if(status)status.textContent='正在保存参考标注…';
+  const request=api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/reference-annotations',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({id:sub.id,selected,emotion,intensity,quality})
+  });
+  referenceSavePromise=request;
+  try{
+    await request;
+    if(referenceSavePromise===request&&status)status.textContent='参考标注已保存。';
+    return true;
+  }catch(x){
+    if(status)status.textContent='参考标注保存失败：'+shortError(x);
+    setLog(String(x));
+    return false;
+  }finally{
+    if(referenceSavePromise===request)referenceSavePromise=null;
+  }
 }
 
 async function fetchSubtitles(){
@@ -1595,6 +1760,7 @@ function renderSubtitleList(){
         ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
         : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
+    const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(sub.reference_emotion?' · '+escapeHtml(sub.reference_emotion):'')+'</span>':'';
     const rawPreview=sub.final_chs||sub.source_text||'—';
     const highlightedPreview=highlightText(rawPreview,q);
     const highlightedId=highlightText(sub.id,q);
@@ -1604,7 +1770,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+srcTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -1666,6 +1832,9 @@ function renderActiveSubtitle(){
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
+    renderReferenceControls(null);
+    clearReferenceAudio();
+    const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
     return;
   }
 
@@ -1678,7 +1847,7 @@ function renderActiveSubtitle(){
   srcEl.textContent=sub.source_text||'—';
   srcEl.className=sub.source_text?'sub-ref-content':'sub-ref-content empty';
   document.getElementById('subSourceLangBadge').textContent=(sub.source_language||'EN').toUpperCase();
-  document.getElementById('subSourceFileMeta').textContent='源文件：'+(sub.filename||'未记录');
+  document.getElementById('subSourceFileMeta').textContent='源文件：'+(sub.source_member_id||sub.filename||'未记录');
 
   const offEl=document.getElementById('subOfficialText');
   offEl.textContent=sub.official_chs||'无官方中文参考';
@@ -1699,6 +1868,9 @@ function renderActiveSubtitle(){
   document.getElementById('subPrevBtn').disabled=activeSubIndex<=0;
   document.getElementById('subNextBtn').disabled=activeSubIndex>=loadedSubtitles.length-1;
   updateCharCounter();
+  renderReferenceControls(sub);
+  const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
+  loadReferenceAudio(sub);
 }
 
 function updateCharCounter(){
@@ -1845,6 +2017,14 @@ subtitleEditor.addEventListener('blur',()=>{
 document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
 document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
+document.getElementById('subReferenceSelected').onchange=saveReferenceAnnotation;
+document.getElementById('subReferenceEmotion').onchange=saveReferenceAnnotation;
+document.getElementById('subReferenceQuality').onchange=saveReferenceAnnotation;
+document.getElementById('subReferenceIntensity').oninput=(e)=>{
+  const value=Number(e.target.value||0.5);
+  document.getElementById('subReferenceIntensityValue').textContent=value.toFixed(2);
+};
+document.getElementById('subReferenceIntensity').onchange=saveReferenceAnnotation;
 
 
 /* Subtitle Layout Real-Time Preview Workspace JS Logic */
