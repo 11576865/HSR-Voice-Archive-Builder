@@ -183,6 +183,7 @@ More detail on translation QA, budgets, checkpoint behavior, source relinking, a
 
 - [Architecture](docs/architecture.md)
 - [Reliability and recovery](docs/reliability.md)
+- [Reference audio workbench](docs/reference_workbench.md)
 - [Termux notes](docs/termux.md)
 - [ASS layout engine](docs/layout_engine.md)
 - [Changelog](CHANGELOG.md)
