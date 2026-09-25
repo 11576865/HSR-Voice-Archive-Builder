@@ -41,6 +41,94 @@ _LEGACY_QUALITY_MAP = {
     "c": "C",
 }
 
+QUALITY_DISPLAY_MAP = {
+    "unrated": "Unrated",
+    "a": "A: Recommended reference",
+    "b": "B: Usable",
+    "c": "C: Not recommended",
+}
+
+
+def generate_reference_index_txt(catalog_payload: dict[str, Any]) -> str:
+    references = catalog_payload.get("references", [])
+    if not isinstance(references, list):
+        return ""
+    blocks: list[str] = []
+    for item in references:
+        if not isinstance(item, dict):
+            continue
+        wav_file = Path(str(item.get("audio") or "")).name
+        if not wav_file and item.get("id"):
+            wav_file = f"{item['id']}.wav"
+        original_source = str(item.get("source_member_id") or item.get("filename") or "")
+        text = str(item.get("text") or "")
+        emotion = str(item.get("emotion") or "unmarked")
+        try:
+            intensity_val = float(item.get("intensity", 0.5))
+        except (TypeError, ValueError):
+            intensity_val = 0.5
+        intensity = f"{intensity_val:.2f}"
+        raw_quality = str(item.get("quality") or "unrated").strip()
+        quality = QUALITY_DISPLAY_MAP.get(raw_quality.lower(), raw_quality)
+        try:
+            duration_val = float(item.get("duration_seconds", 0.0))
+        except (TypeError, ValueError):
+            duration_val = 0.0
+        duration = f"{duration_val:.1f}s"
+
+        block = (
+            f"File:\n{wav_file}\n\n"
+            f"Original Source:\n{original_source}\n\n"
+            f"Text:\n{text}\n\n"
+            f"Emotion:\n{emotion}\n\n"
+            f"Intensity:\n{intensity}\n\n"
+            f"Quality:\n{quality}\n\n"
+            f"Duration:\n{duration}"
+        )
+        blocks.append(block)
+
+    return "\n\n".join(blocks) + ("\n" if blocks else "")
+
+
+def generate_reference_index_md(catalog_payload: dict[str, Any]) -> str:
+    references = catalog_payload.get("references", [])
+    if not isinstance(references, list):
+        return "| File | Emotion | Intensity | Quality | Duration | Text |\n|------|---------|-----------|---------|----------|------|\n"
+    lines: list[str] = [
+        "| File | Emotion | Intensity | Quality | Duration | Text |",
+        "|------|---------|-----------|---------|----------|------|",
+    ]
+    for item in references:
+        if not isinstance(item, dict):
+            continue
+        wav_file = Path(str(item.get("audio") or "")).name
+        if not wav_file and item.get("id"):
+            wav_file = f"{item['id']}.wav"
+        emotion = str(item.get("emotion") or "unmarked")
+        try:
+            intensity_val = float(item.get("intensity", 0.5))
+        except (TypeError, ValueError):
+            intensity_val = 0.5
+        intensity = f"{intensity_val:.2f}"
+        raw_quality = str(item.get("quality") or "unrated").strip()
+        quality = QUALITY_DISPLAY_MAP.get(raw_quality.lower(), raw_quality)
+        try:
+            duration_val = float(item.get("duration_seconds", 0.0))
+        except (TypeError, ValueError):
+            duration_val = 0.0
+        duration = f"{duration_val:.1f}s"
+        raw_text = str(item.get("text") or "")
+        text = (
+            raw_text.replace("\r\n", " ")
+            .replace("\n", " ")
+            .replace("\r", " ")
+            .replace("|", "\\|")
+        )
+
+        lines.append(f"| {wav_file} | {emotion} | {intensity} | {quality} | {duration} | {text} |")
+
+    return "\n".join(lines) + ("\n" if lines else "")
+
 
 def normalize_reference_emotion(value: object) -> str:
     emotion = str(value or "").strip().lower()
@@ -329,17 +417,26 @@ def export_reference_pack(
             "quality": normalize_reference_quality(annotation.get("quality")),
         })
 
+    catalog_payload = {
+        "schema_version": SCHEMA_VERSION,
+        "speaker": name,
+        "source_project": config.name,
+        "references": catalog,
+    }
     (staging / "reference_catalog.json").write_text(
         json.dumps(
-            {
-                "schema_version": SCHEMA_VERSION,
-                "speaker": name,
-                "source_project": config.name,
-                "references": catalog,
-            },
+            catalog_payload,
             ensure_ascii=False,
             indent=2,
         ),
+        encoding="utf-8",
+    )
+    (staging / "REFERENCE_INDEX.txt").write_text(
+        generate_reference_index_txt(catalog_payload),
+        encoding="utf-8",
+    )
+    (staging / "REFERENCE_INDEX.md").write_text(
+        generate_reference_index_md(catalog_payload),
         encoding="utf-8",
     )
     with (staging / "rejected.csv").open("w", encoding="utf-8-sig", newline="") as stream:

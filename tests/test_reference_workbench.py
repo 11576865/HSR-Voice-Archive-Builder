@@ -10,6 +10,8 @@ from app.project import create_project
 from app.reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
+    generate_reference_index_md,
+    generate_reference_index_txt,
     load_reference_annotations,
     resolve_reference_audio,
     save_reference_annotation,
@@ -171,6 +173,72 @@ class ReferenceWorkbenchTests(unittest.TestCase):
             self.assertEqual(reference["intensity"], 0.75)
             self.assertEqual(reference["quality"], "A")
             self.assertTrue(reference["recommended_duration"])
+
+            # Verify human-readable index files
+            txt_path = destination / "REFERENCE_INDEX.txt"
+            md_path = destination / "REFERENCE_INDEX.md"
+            self.assertTrue(txt_path.is_file())
+            self.assertTrue(md_path.is_file())
+
+            txt_content = txt_path.read_text(encoding="utf-8")
+            self.assertIn("File:\n000001.wav", txt_content)
+            self.assertIn("Original Source:\nchapter_b/line.wav", txt_content)
+            self.assertIn("Text:\nSecond official line.", txt_content)
+            self.assertIn("Emotion:\nsurprised", txt_content)
+            self.assertIn("Intensity:\n0.75", txt_content)
+            self.assertIn("Quality:\nA: Recommended reference", txt_content)
+            self.assertIn("Duration:\n6.0s", txt_content)
+
+            md_content = md_path.read_text(encoding="utf-8")
+            self.assertIn("| File | Emotion | Intensity | Quality | Duration | Text |", md_content)
+            self.assertIn("| 000001.wav | surprised | 0.75 | A: Recommended reference | 6.0s | Second official line. |", md_content)
+
+    def test_reference_index_generators_handle_quality_and_escaping(self) -> None:
+        catalog_payload = {
+            "references": [
+                {
+                    "id": "000001",
+                    "audio": "audio/000001.wav",
+                    "source_member_id": "xxx.wav",
+                    "text": "Hello | world!\nLine 2",
+                    "emotion": "happy",
+                    "intensity": 0.8,
+                    "quality": "unrated",
+                    "duration_seconds": 3.245,
+                },
+                {
+                    "id": "000002",
+                    "audio": "audio/000002.wav",
+                    "source_member_id": "yyy.wav",
+                    "text": "Normal text",
+                    "emotion": "sad",
+                    "intensity": 0.2,
+                    "quality": "B",
+                    "duration_seconds": 4.11,
+                },
+                {
+                    "id": "000003",
+                    "audio": "audio/000003.wav",
+                    "source_member_id": "zzz.wav",
+                    "text": "Low quality text",
+                    "emotion": "angry",
+                    "intensity": 0.9,
+                    "quality": "C",
+                    "duration_seconds": 1.5,
+                },
+            ]
+        }
+        txt = generate_reference_index_txt(catalog_payload)
+        md = generate_reference_index_md(catalog_payload)
+
+        self.assertIn("Quality:\nUnrated", txt)
+        self.assertIn("Quality:\nB: Usable", txt)
+        self.assertIn("Quality:\nC: Not recommended", txt)
+        self.assertIn("Duration:\n3.2s", txt)
+
+        self.assertIn("| 000001.wav | happy | 0.80 | Unrated | 3.2s | Hello \\| world! Line 2 |", md)
+        self.assertIn("| 000002.wav | sad | 0.20 | B: Usable | 4.1s | Normal text |", md)
+        self.assertIn("| 000003.wav | angry | 0.90 | C: Not recommended | 1.5s | Low quality text |", md)
 
     def test_reference_pack_requires_human_selection(self) -> None:
         with tempfile.TemporaryDirectory() as td:
