@@ -224,12 +224,18 @@ def export_reference_pack(
         raise ValueError("Invalid speaker name")
 
     annotations = load_reference_annotations(config)
-    selected = [item for item in annotations.values() if bool(item.get("selected"))]
+    selected = [
+        (key, item)
+        for key, item in annotations.items()
+        if bool(item.get("selected"))
+    ]
     if not selected:
         raise ValueError("No reference audio has been selected")
 
     entries = _load_manifest_entries(output_dir)
     by_key = {_annotation_key(entry): entry for entry in entries}
+    root = _preview_root(config)
+    members = collect_wav_members(root)
     destination = output_dir / f"{name}_ReferencePack"
     staging = output_dir / f".{name}_ReferencePack.tmp"
     if staging.exists():
@@ -241,14 +247,7 @@ def export_reference_pack(
     rejected: list[dict[str, str]] = []
     outside_recommended = 0
 
-    for annotation in selected:
-        key = (
-            f"member:{str(annotation.get('source_member_id') or '').replace(chr(92), '/').strip()}"
-            if str(annotation.get("source_member_id") or "").strip()
-            else f"logical:{str(annotation.get('logical_id') or '').strip()}"
-            if str(annotation.get("logical_id") or "").strip()
-            else f"id:{str(annotation.get('subtitle_id') or '')}"
-        )
+    for key, annotation in selected:
         entry = by_key.get(key)
         if entry is None:
             rejected.append({
@@ -258,7 +257,13 @@ def export_reference_pack(
             })
             continue
         try:
-            audio, _ = resolve_reference_audio(config, output_dir, _entry_id(entry))
+            audio, _resolved_member = resolve_member_wav(
+                members,
+                str(entry.get("filename") or ""),
+                str(entry.get("source_member_id") or ""),
+            )
+            if audio is None or not audio.is_file():
+                raise FileNotFoundError(entry.get("source_member_id") or entry.get("filename") or "")
             info = parse_wav_pcm(audio)
             duration = info.frames / info.sample_rate
         except Exception:
