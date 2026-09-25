@@ -459,6 +459,7 @@ def get_project_subtitles(
         item = {
             "id": item_id,
             "filename": str(entry.get("filename", "") or ""),
+            "source_member_id": str(entry.get("source_member_id", "") or ""),
             "logical_id": str(entry.get("logical_id", "") or ""),
             "start": start,
             "end": end,
