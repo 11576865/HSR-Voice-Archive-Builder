@@ -20,6 +20,12 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
+from .reference_workbench import (
+    decorate_subtitles,
+    export_reference_pack,
+    resolve_reference_audio,
+    save_reference_annotation,
+)
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
@@ -243,6 +249,7 @@ def api_get_project_subtitles(
             end_time=effective_end,
             selector=selector,
         )
+        subtitles = decorate_subtitles(config, output_dir, subtitles)
         return {"ok": True, "subtitles": subtitles}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
@@ -270,6 +277,54 @@ async def api_post_project_subtitles(
 
         result = update_project_subtitles(config, output_dir, updates)
         return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/project/{project_id}/subtitles/{item_id}/audio")
+def api_get_project_subtitle_audio(project_id: str, item_id: str):
+    try:
+        config = _resolve_project(project_id)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        audio, _entry = resolve_reference_audio(config, output_dir, item_id)
+        return FileResponse(audio, media_type="audio/wav", filename=audio.name)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/{project_id}/reference-annotations")
+async def api_post_reference_annotation(project_id: str, request: Request):
+    try:
+        config = _resolve_project(project_id)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Reference annotation payload must be an object")
+        result = save_reference_annotation(config, output_dir, body)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/{project_id}/export/reference-pack")
+def api_export_reference_pack(
+    project_id: str,
+    speaker: str = Query(""),
+):
+    try:
+        config = _resolve_project(project_id)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        report = export_reference_pack(config, output_dir, speaker=speaker)
+        return {"ok": True, "report": report}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 

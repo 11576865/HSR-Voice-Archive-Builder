@@ -22,6 +22,12 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
+from .reference_workbench import (
+    decorate_subtitles,
+    export_reference_pack,
+    resolve_reference_audio,
+    save_reference_annotation,
+)
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
@@ -322,6 +328,22 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
             return
+        if path.startswith("/api/project/") and "/subtitles/" in path and path.endswith("/audio"):
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            item_id = path.split("/subtitles/", 1)[1][:-len("/audio")].strip("/")
+            if not item_id:
+                raise ValueError("Subtitle id is required")
+            audio, _entry = resolve_reference_audio(config, output, item_id)
+            self._send_bytes(
+                200,
+                audio.read_bytes(),
+                "audio/wav",
+                extra_headers={"Content-Disposition": f'inline; filename="{audio.name}"'},
+            )
+            return
         if "/subtitles" in path and path.startswith("/api/project/"):
             query = parse_qs(urlsplit(self.path).query)
             q = (query.get("q") or [None])[-1]
@@ -347,6 +369,7 @@ class Handler(BaseHTTPRequestHandler):
                 end_time=effective_end,
                 selector=selector,
             )
+            subtitles = decorate_subtitles(config, output, subtitles)
             self._json({"ok": True, "subtitles": subtitles})
             return
         if path == "/api/review/file":
@@ -440,6 +463,33 @@ class Handler(BaseHTTPRequestHandler):
             config = _active_config()
             result = import_text_recovery(config, data.get("recovery_text", ""))
             self._json({"ok": True, "result": result, "project": project_summary(config)})
+            return
+
+        if path.startswith("/api/project/") and path.endswith("/reference-annotations"):
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            update = {
+                "id": data.get("id", ""),
+                "selected": _bool(data.get("selected")),
+                "emotion": data.get("emotion", ""),
+                "intensity": _float(data.get("intensity"), 0.5),
+                "quality": data.get("quality", ""),
+            }
+            result = save_reference_annotation(config, output, update)
+            self._json({"ok": True, "result": result})
+            return
+
+        if path.startswith("/api/project/") and path.endswith("/export/reference-pack"):
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            query = parse_qs(urlsplit(self.path).query)
+            speaker = (query.get("speaker") or [""])[-1]
+            report = export_reference_pack(config, output, speaker=speaker)
+            self._json({"ok": True, "report": report})
             return
 
         if "/subtitles" in path and path.startswith("/api/project/"):
