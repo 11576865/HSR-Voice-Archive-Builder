@@ -83,7 +83,7 @@ class ReferenceWorkbenchTests(unittest.TestCase):
                     "selected": True,
                     "emotion": "surprised",
                     "intensity": 0.8,
-                    "quality": "good",
+                    "quality": "A",
                 },
             )
 
@@ -93,7 +93,7 @@ class ReferenceWorkbenchTests(unittest.TestCase):
             self.assertTrue(annotation["selected"])
             self.assertEqual(annotation["emotion"], "surprised")
             self.assertEqual(annotation["intensity"], 0.8)
-            self.assertEqual(annotation["quality"], "good")
+            self.assertEqual(annotation["quality"], "A")
 
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["entries"][1]["source_text"], "Second official line.")
@@ -110,7 +110,7 @@ class ReferenceWorkbenchTests(unittest.TestCase):
                     "selected": True,
                     "emotion": "neutral",
                     "intensity": 0.4,
-                    "quality": "ok",
+                    "quality": "B",
                 },
             )
             subtitles = decorate_subtitles(
@@ -127,7 +127,7 @@ class ReferenceWorkbenchTests(unittest.TestCase):
             self.assertTrue(subtitles[0]["reference_selected"])
             self.assertEqual(subtitles[0]["reference_emotion"], "neutral")
             self.assertEqual(subtitles[0]["reference_intensity"], 0.4)
-            self.assertEqual(subtitles[0]["reference_quality"], "ok")
+            self.assertEqual(subtitles[0]["reference_quality"], "B")
 
     def test_audio_resolution_uses_source_member_id_for_duplicate_basenames(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -149,7 +149,7 @@ class ReferenceWorkbenchTests(unittest.TestCase):
                     "selected": True,
                     "emotion": "surprised",
                     "intensity": 0.75,
-                    "quality": "good",
+                    "quality": "A",
                 },
             )
 
@@ -169,6 +169,7 @@ class ReferenceWorkbenchTests(unittest.TestCase):
             self.assertEqual(reference["text"], "Second official line.")
             self.assertEqual(reference["emotion"], "surprised")
             self.assertEqual(reference["intensity"], 0.75)
+            self.assertEqual(reference["quality"], "A")
             self.assertTrue(reference["recommended_duration"])
 
     def test_reference_pack_requires_human_selection(self) -> None:
@@ -177,6 +178,41 @@ class ReferenceWorkbenchTests(unittest.TestCase):
             cfg, out = self.make_project(root)
             with self.assertRaisesRegex(ValueError, "No reference audio has been selected"):
                 export_reference_pack(cfg, out, speaker="March7th")
+
+    def test_legacy_reference_values_are_normalized_without_touching_training_data(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            cfg, out = self.make_project(root)
+            legacy = {
+                "schema_version": 1,
+                "entries": {
+                    "member:chapter_a/line.wav": {
+                        "subtitle_id": "1",
+                        "source_member_id": "chapter_a/line.wav",
+                        "logical_id": "chapter-a-line",
+                        "filename": "line.wav",
+                        "selected": True,
+                        "emotion": "melancholy",
+                        "intensity": 0.6,
+                        "quality": "good",
+                    }
+                },
+            }
+            (root / "reference_annotations.json").write_text(
+                json.dumps(legacy, ensure_ascii=False),
+                encoding="utf-8",
+            )
+
+            subtitles = decorate_subtitles(
+                cfg,
+                out,
+                [{"id": 1, "source_member_id": "chapter_a/line.wav", "logical_id": "chapter-a-line"}],
+            )
+            self.assertEqual(subtitles[0]["reference_emotion"], "other")
+            self.assertEqual(subtitles[0]["reference_quality"], "A")
+
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["entries"][0]["source_text"], "First official line.")
 
     def test_invalid_annotation_values_are_rejected(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -191,7 +227,20 @@ class ReferenceWorkbenchTests(unittest.TestCase):
                         "selected": True,
                         "emotion": "neutral",
                         "intensity": 1.5,
-                        "quality": "good",
+                        "quality": "A",
+                    },
+                )
+
+            with self.assertRaisesRegex(ValueError, "Quality"):
+                save_reference_annotation(
+                    cfg,
+                    out,
+                    {
+                        "id": 1,
+                        "selected": True,
+                        "emotion": "neutral",
+                        "intensity": 0.5,
+                        "quality": "excellent",
                     },
                 )
 
