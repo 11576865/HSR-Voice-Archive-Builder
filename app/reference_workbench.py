@@ -16,8 +16,45 @@ from .project import ProjectConfig, resolve_project_path
 from .wavpcm import parse_wav_pcm
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 ANNOTATIONS_FILENAME = "reference_annotations.json"
+
+REFERENCE_EMOTIONS = {
+    "unmarked",
+    "neutral",
+    "happy",
+    "sad",
+    "angry",
+    "fear",
+    "surprised",
+    "other",
+}
+REFERENCE_QUALITIES = {"unrated", "A", "B", "C"}
+_LEGACY_QUALITY_MAP = {
+    "": "unrated",
+    "unrated": "unrated",
+    "good": "A",
+    "ok": "B",
+    "poor": "C",
+    "a": "A",
+    "b": "B",
+    "c": "C",
+}
+
+
+def normalize_reference_emotion(value: object) -> str:
+    emotion = str(value or "").strip().lower()
+    if not emotion:
+        return "unmarked"
+    return emotion if emotion in REFERENCE_EMOTIONS else "other"
+
+
+def normalize_reference_quality(value: object) -> str:
+    quality = str(value or "").strip()
+    normalized = _LEGACY_QUALITY_MAP.get(quality.lower())
+    if normalized is None:
+        raise ValueError("Quality must be one of: unrated, A, B, C")
+    return normalized
 
 
 def _annotation_path(config: ProjectConfig) -> Path:
@@ -99,9 +136,9 @@ def decorate_subtitles(
         ann = annotations.get(key, {})
         subtitle["reference_key"] = key
         subtitle["reference_selected"] = bool(ann.get("selected", False))
-        subtitle["reference_emotion"] = str(ann.get("emotion", "") or "")
+        subtitle["reference_emotion"] = normalize_reference_emotion(ann.get("emotion"))
         subtitle["reference_intensity"] = float(ann.get("intensity", 0.5) or 0.5)
-        subtitle["reference_quality"] = str(ann.get("quality", "") or "")
+        subtitle["reference_quality"] = normalize_reference_quality(ann.get("quality"))
     return subtitles
 
 
@@ -117,18 +154,16 @@ def save_reference_annotation(
     key = _annotation_key(entry)
 
     selected = bool(update.get("selected", False))
-    emotion = str(update.get("emotion", "") or "").strip()
-    if len(emotion) > 64:
-        raise ValueError("Emotion tag is too long")
+    emotion = normalize_reference_emotion(update.get("emotion"))
+    if emotion not in REFERENCE_EMOTIONS:
+        raise ValueError("Invalid reference emotion")
     try:
         intensity = float(update.get("intensity", 0.5))
     except (TypeError, ValueError) as exc:
         raise ValueError("Intensity must be a number") from exc
     if not 0.0 <= intensity <= 1.0:
         raise ValueError("Intensity must be between 0 and 1")
-    quality = str(update.get("quality", "") or "").strip().lower()
-    if quality not in {"", "good", "ok", "poor"}:
-        raise ValueError("Quality must be one of: good, ok, poor")
+    quality = normalize_reference_quality(update.get("quality"))
 
     entries = load_reference_annotations(config)
     annotation = {
@@ -289,9 +324,9 @@ def export_reference_pack(
             "language": config.source_text_language or "en",
             "duration_seconds": round(duration, 3),
             "recommended_duration": recommended,
-            "emotion": str(annotation.get("emotion") or ""),
+            "emotion": normalize_reference_emotion(annotation.get("emotion")),
             "intensity": float(annotation.get("intensity", 0.5) or 0.5),
-            "quality": str(annotation.get("quality") or ""),
+            "quality": normalize_reference_quality(annotation.get("quality")),
         })
 
     (staging / "reference_catalog.json").write_text(

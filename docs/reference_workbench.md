@@ -20,11 +20,12 @@ manifest entry
         |
         v
 Subtitle Review Editor
+  - expand the advanced GPT-SoVITS reference tool
   - play original WAV
   - mark selected/not selected
-  - add free-form emotion tag
-  - set 0..1 intensity
-  - mark reference quality
+  - choose a controlled emotion label
+  - set 0..1 emotion intensity
+  - rate reference quality
         |
         v
 reference_annotations.json
@@ -37,9 +38,11 @@ reference_annotations.json
   README_REFERENCE_PACK.txt
 ```
 
-## Audio identity
+## Audio identity and playback
 
 The workbench resolves audio by `source_member_id` first. This is important because voice packages may contain identical WAV basenames in different folders. A basename is only used when it is unique.
+
+The browser cannot attach the control token directly to an `<audio>` element request, so the existing frontend intentionally fetches the protected audio endpoint with the control header, converts the response to a Blob URL, and binds that Blob URL to the player. The dashboard Content Security Policy therefore explicitly allows `media-src 'self' blob:`. The reference tool loads audio only when the advanced section is expanded and releases the Blob URL again when collapsed.
 
 When the configured WAV source is a ZIP or 7z archive, the preview endpoint extracts it into the project state directory under `.state/reference-preview/` and reuses that extraction while the source fingerprint is unchanged.
 
@@ -65,22 +68,48 @@ Example entry:
       "selected": true,
       "emotion": "surprised",
       "intensity": 0.8,
-      "quality": "good"
+      "quality": "A"
     }
   }
 }
 ```
 
-Emotion is intentionally free-form. The UI offers common suggestions but does not force every character into the same emotion vocabulary.
+Emotion is a controlled value:
+
+- `unmarked`
+- `neutral`
+- `happy`
+- `sad`
+- `angry`
+- `fear`
+- `surprised`
+- `other`
+
+`other` is the compatibility bucket for performances that do not fit the current taxonomy.
+
+Reference quality is also controlled:
+
+- `unrated` — not reviewed yet
+- `A` — recommended reference
+- `B` — usable
+- `C` — not recommended
+
+Older annotations remain readable: blank/good/ok/poor are normalized to unrated/A/B/C when loaded.
+
+Emotion intensity remains numeric from 0.0 to 1.0. It describes how strongly the reference performance expresses the selected emotion, not the emotion category itself. The UI explains the approximate scale from neutral/minimal expression to strong expression.
 
 ## Reference Pack export
 
-The dashboard's GPT-SoVITS asset section provides two independent actions:
+The dashboard keeps two independent asset flows. They share source WAV identity where appropriate, but their metadata remains separate.
+
+The GPT-SoVITS asset section provides two independent actions:
 
 - **Export training dataset**
 - **Export reference audio pack**
 
 The Reference Pack contains only entries with `selected=true`.
+
+Reference emotion, intensity, and quality are never written into the GPT-SoVITS training dataset export. Training metadata and reference-annotation metadata remain separate by design.
 
 The catalog preserves:
 

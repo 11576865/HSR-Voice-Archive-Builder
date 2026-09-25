@@ -553,42 +553,53 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
               <div id="subSourceFileMeta" class="small muted" style="margin-top:6px">源文件：—</div>
             </div>
 
-            <div class="sub-ref-card" id="subReferenceCard">
-              <div class="sub-ref-label">
-                <span>原始语音与参考标注 (Reference Audio)</span>
-                <span id="subReferenceSelectedBadge" class="badge">未选为参考</span>
-              </div>
-              <audio id="subOriginalAudio" controls preload="none" style="width:100%;margin-top:4px"></audio>
-              <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后加载对应的原始 WAV。</div>
-              <div class="row3" style="margin-top:8px">
-                <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
-                <div>
-                  <label for="subReferenceEmotion" style="margin-top:0">情绪标签</label>
-                  <input id="subReferenceEmotion" list="referenceEmotionSuggestions" placeholder="例如 surprised / sad">
-                  <datalist id="referenceEmotionSuggestions">
-                    <option value="neutral"><option value="happy"><option value="surprised">
-                    <option value="sad"><option value="angry"><option value="fear">
-                  </datalist>
+            <details class="sub-ref-card" id="subReferenceCard">
+              <summary id="subReferenceSummary">
+                GPT-SoVITS 参考语音标注（高级）
+                <span id="subReferenceSelectedBadge" class="badge" style="margin-left:8px">未选为参考</span>
+              </summary>
+              <div class="sub-reference-body" style="padding-top:8px">
+                <audio id="subOriginalAudio" controls preload="none" style="width:100%;margin-top:4px"></audio>
+                <div id="subAudioStatus" class="small muted" style="margin-top:5px">展开此工具后加载当前字幕对应的原始 WAV。</div>
+                <div class="row3" style="margin-top:8px">
+                  <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
+                  <div>
+                    <label for="subReferenceEmotion" style="margin-top:0">情绪标签</label>
+                    <select id="subReferenceEmotion" title="受控情绪分类；Other 用于当前分类无法覆盖的表演状态。">
+                      <option value="unmarked">Unmarked</option>
+                      <option value="neutral">Neutral</option>
+                      <option value="happy">Happy</option>
+                      <option value="sad">Sad</option>
+                      <option value="angry">Angry</option>
+                      <option value="fear">Fear</option>
+                      <option value="surprised">Surprised</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label for="subReferenceQuality" style="margin-top:0">参考质量</label>
+                    <select id="subReferenceQuality" title="A 为优先参考，B 为可用，C 为不建议用于常规参考。">
+                      <option value="unrated">Unrated</option>
+                      <option value="A">A: Recommended reference</option>
+                      <option value="B">B: Usable</option>
+                      <option value="C">C: Not recommended</option>
+                    </select>
+                  </div>
                 </div>
-                <div>
-                  <label for="subReferenceQuality" style="margin-top:0">参考质量</label>
-                  <select id="subReferenceQuality">
-                    <option value="">未标记</option>
-                    <option value="good">Good</option>
-                    <option value="ok">OK</option>
-                    <option value="poor">Poor</option>
-                  </select>
+                <div style="margin-top:8px">
+                  <div style="display:flex;justify-content:space-between;gap:8px">
+                    <label for="subReferenceIntensity" style="margin:0" title="情绪强度描述参考语音中该情绪的表现程度，不是情绪类别，也不保证生成语音达到相同强度。">情绪强度</label>
+                    <span id="subReferenceIntensityValue" class="small muted">0.50</span>
+                  </div>
+                  <input id="subReferenceIntensity" type="range" min="0" max="1" step="0.05" value="0.5"
+                    title="0.00≈基本无明显情绪；0.25≈轻微；0.50≈中等；0.75≈明显；1.00≈强烈。">
+                  <div class="small muted" style="margin-top:4px">
+                    0.00 基本无明显情绪 · 0.25 轻微 · 0.50 中等 · 0.75 明显 · 1.00 强烈。该值描述参考语音的表演强度。
+                  </div>
                 </div>
+                <div id="subReferenceSaveStatus" class="small muted" style="margin-top:5px" role="status" aria-live="polite"></div>
               </div>
-              <div style="margin-top:8px">
-                <div style="display:flex;justify-content:space-between;gap:8px">
-                  <label for="subReferenceIntensity" style="margin:0">情绪强度</label>
-                  <span id="subReferenceIntensityValue" class="small muted">0.50</span>
-                </div>
-                <input id="subReferenceIntensity" type="range" min="0" max="1" step="0.05" value="0.5">
-              </div>
-              <div id="subReferenceSaveStatus" class="small muted" style="margin-top:5px" role="status" aria-live="polite"></div>
-            </div>
+            </details>
 
             <div class="sub-ref-card">
               <div class="sub-ref-label">官方中文参考 (Official Reference)</div>
@@ -1601,6 +1612,7 @@ async function loadReferenceAudio(sub){
       throw new Error(detail);
     }
     const blob=await r.blob();
+    if(!blob.size)throw new Error('后端返回了空音频文件');
     if(controller.signal.aborted||String(currentSubtitle()?.id)!==String(sub.id))return;
     referenceAudioObjectUrl=URL.createObjectURL(blob);
     const audio=document.getElementById('subOriginalAudio');
@@ -1625,19 +1637,19 @@ function renderReferenceControls(sub){
   for(const el of [selected,emotion,intensity,quality])if(el)el.disabled=disabled;
   if(!sub){
     if(selected)selected.checked=false;
-    if(emotion)emotion.value='';
+    if(emotion)emotion.value='unmarked';
     if(intensity)intensity.value='0.5';
     if(intensityValue)intensityValue.textContent='0.50';
-    if(quality)quality.value='';
+    if(quality)quality.value='unrated';
     if(badge){badge.textContent='未选为参考';badge.style.color='var(--muted)';}
     return;
   }
   const value=Math.max(0,Math.min(1,Number(sub.reference_intensity??0.5)));
   if(selected)selected.checked=!!sub.reference_selected;
-  if(emotion)emotion.value=sub.reference_emotion||'';
+  if(emotion)emotion.value=sub.reference_emotion||'unmarked';
   if(intensity)intensity.value=String(value);
   if(intensityValue)intensityValue.textContent=value.toFixed(2);
-  if(quality)quality.value=sub.reference_quality||'';
+  if(quality)quality.value=sub.reference_quality||'unrated';
   if(badge){
     badge.textContent=sub.reference_selected?'已选为参考':'未选为参考';
     badge.style.color=sub.reference_selected?'var(--ok)':'var(--muted)';
@@ -1760,7 +1772,8 @@ function renderSubtitleList(){
         ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
         : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
-    const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(sub.reference_emotion?' · '+escapeHtml(sub.reference_emotion):'')+'</span>':'';
+    const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
+    const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
     const rawPreview=sub.final_chs||sub.source_text||'—';
     const highlightedPreview=highlightText(rawPreview,q);
     const highlightedId=highlightText(sub.id,q);
@@ -1870,7 +1883,14 @@ function renderActiveSubtitle(){
   updateCharCounter();
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
-  loadReferenceAudio(sub);
+  const refDetails=document.getElementById('subReferenceCard');
+  if(refDetails?.open){
+    loadReferenceAudio(sub);
+  }else{
+    clearReferenceAudio();
+    const audioStatus=document.getElementById('subAudioStatus');
+    if(audioStatus)audioStatus.textContent='展开此工具后加载当前字幕对应的原始 WAV。';
+  }
 }
 
 function updateCharCounter(){
@@ -2017,6 +2037,16 @@ subtitleEditor.addEventListener('blur',()=>{
 document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
 document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
+document.getElementById('subReferenceCard').addEventListener('toggle',(event)=>{
+  const details=event.currentTarget;
+  if(details.open){
+    loadReferenceAudio(currentSubtitle());
+  }else{
+    clearReferenceAudio();
+    const status=document.getElementById('subAudioStatus');
+    if(status)status.textContent='展开此工具后加载当前字幕对应的原始 WAV。';
+  }
+});
 document.getElementById('subReferenceSelected').onchange=saveReferenceAnnotation;
 document.getElementById('subReferenceEmotion').onchange=saveReferenceAnnotation;
 document.getElementById('subReferenceQuality').onchange=saveReferenceAnnotation;
