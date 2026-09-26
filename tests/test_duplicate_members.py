@@ -324,6 +324,79 @@ class SchemaMemberIdTests(unittest.TestCase):
 
 
 class BuilderMemberResolutionTests(unittest.TestCase):
+    def test_missing_index_wav_is_skipped_and_reported(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            write_wav(wavs / "present.wav", 800)
+            labs = root / "labs"
+            labs.mkdir()
+            index = root / "index.csv"
+            bilingual = root / "bilingual.csv"
+            write_csv(
+                index,
+                ["序号", "分组", "文件名", "来源", "来源细分", "来源成员路径", "英文文本", "SHA-256"],
+                [
+                    {"序号": "1", "分组": "g", "文件名": "present.wav", "来源": "", "来源细分": "",
+                     "来源成员路径": "present.wav", "英文文本": "Present.", "SHA-256": ""},
+                    {"序号": "2", "分组": "带变量语音 - Placeholder", "文件名": "missing.wav", "来源": "", "来源细分": "",
+                     "来源成员路径": "带变量语音 - Placeholder/missing.wav", "英文文本": "Missing.", "SHA-256": ""},
+                ],
+            )
+            write_csv(
+                bilingual,
+                ["文件名", "来源成员路径", "中文", "ENGLISH"],
+                [
+                    {"文件名": "present.wav", "来源成员路径": "present.wav", "中文": "", "ENGLISH": "Present."},
+                    {"文件名": "missing.wav", "来源成员路径": "带变量语音 - Placeholder/missing.wav", "中文": "", "ENGLISH": "Missing."},
+                ],
+            )
+
+            entries, report = build_entries(index, bilingual, labs, wavs)
+
+            self.assertEqual([entry.filename for entry in entries], ["present.wav"])
+            self.assertEqual(report["count_index_rows"], 2)
+            self.assertEqual(report["count_total"], 1)
+            self.assertEqual(report["count_unavailable_wavs"], 1)
+            self.assertFalse(report["all_index_wavs_available"])
+            self.assertEqual(
+                report["unavailable_wavs"],
+                [{
+                    "filename": "missing.wav",
+                    "source_member_id": "带变量语音 - Placeholder/missing.wav",
+                    "group": "带变量语音 - Placeholder",
+                    "reason": "wav_not_present",
+                }],
+            )
+
+    def test_all_missing_index_wavs_still_fail(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            wavs.mkdir()
+            labs = root / "labs"
+            labs.mkdir()
+            index = root / "index.csv"
+            bilingual = root / "bilingual.csv"
+            write_csv(
+                index,
+                ["序号", "分组", "文件名", "来源", "来源细分", "来源成员路径", "英文文本", "SHA-256"],
+                [
+                    {"序号": "1", "分组": "g", "文件名": "missing.wav", "来源": "", "来源细分": "",
+                     "来源成员路径": "g/missing.wav", "英文文本": "Missing.", "SHA-256": ""},
+                ],
+            )
+            write_csv(
+                bilingual,
+                ["文件名", "来源成员路径", "中文", "ENGLISH"],
+                [
+                    {"文件名": "missing.wav", "来源成员路径": "g/missing.wav", "中文": "", "ENGLISH": "Missing."},
+                ],
+            )
+
+            with self.assertRaisesRegex(ValueError, "No usable WAV entries"):
+                build_entries(index, bilingual, labs, wavs)
+
     def test_build_entries_binds_rows_to_their_own_members(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
