@@ -9,6 +9,7 @@ from typing import Any
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
+from subtitle_layout.config import SubtitleRenderConfig
 
 
 @dataclass
@@ -34,12 +35,14 @@ class SubtitleEntryAdapter:
         chinese: str,
         start_seconds: float,
         display_end_seconds: float,
+        word_alignments: list[object] | None = None,
     ):
         self.id = item_id
         self.english = english
         self.chinese = chinese
         self.start_seconds = start_seconds
         self.display_end_seconds = display_end_seconds
+        self.word_alignments = word_alignments
 
 
 def _entry_id(entry: dict[str, Any]) -> int | str | None:
@@ -198,9 +201,35 @@ def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapt
                         entry.get("audio_end_seconds", 0.0),
                     )
                 ),
+                word_alignments=(
+                    entry.get("word_alignments")
+                    or entry.get("words")
+                    or None
+                ),
             )
         )
     return adapters
+
+
+def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
+    """Build the single render configuration used by ASS export."""
+    return SubtitleRenderConfig(
+        enable_karaoke=bool(config.subtitle_enable_karaoke),
+        enable_frosted_glass=bool(config.subtitle_enable_translucent_card),
+        enable_multi_layer_outline=bool(config.subtitle_enable_multi_layer_outline),
+        enable_kinetic=bool(config.subtitle_enable_kinetic),
+        chs_font=str(config.subtitle_chs_font or "汉仪旗黑"),
+        primary_font=str(config.subtitle_primary_font or "Noto Sans"),
+        base_chs_size=max(12, min(120, int(config.subtitle_chs_size))),
+        base_primary_size=max(12, min(120, int(config.subtitle_primary_size))),
+        margin_horizontal_percent=max(
+            0.0, min(0.40, float(config.subtitle_margin_horizontal_percent))
+        ),
+        margin_vertical_percent=max(
+            0.0, min(0.40, float(config.subtitle_margin_vertical_percent))
+        ),
+        min_central_gap=max(0.0, min(200.0, float(config.subtitle_min_central_gap))),
+    )
 
 
 def invalidate_subtitle_stages(config: ProjectConfig) -> None:
@@ -219,6 +248,7 @@ def refresh_subtitle_artifacts_from_settings(
     source_language: str = "en",
     target_language: str = "zh-CN",
     generate_ass: bool = False,
+    render_config: SubtitleRenderConfig | None = None,
     manifest_data: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     """Apply human overrides as a derived layer without mutating source provenance."""
@@ -257,6 +287,7 @@ def refresh_subtitle_artifacts_from_settings(
             ass_file,
             source_language=source_language,
             target_language=target_language,
+            config=render_config,
         )
     else:
         ass_file.unlink(missing_ok=True)
@@ -290,6 +321,7 @@ def refresh_subtitle_artifacts(
             (output_dir / "HSR_Voice_Archive.ass").is_file()
             or bool(getattr(config, "generate_ass", False))
         ),
+        render_config=subtitle_render_config(config),
         manifest_data=manifest_data,
     )
 

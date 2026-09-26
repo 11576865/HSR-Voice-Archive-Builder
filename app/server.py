@@ -19,7 +19,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -326,6 +326,59 @@ def api_export_reference_pack(
             raise ValueError("Project output directory is not configured")
         report = export_reference_pack(config, output_dir, speaker=speaker)
         return {"ok": True, "report": report}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/settings")
+async def api_subtitle_layout_settings(request: Request):
+    try:
+        config = _active_config()
+        assert_project_idle(config.root)
+        try:
+            data = await request.json()
+        except Exception:
+            form = await request.form()
+            data = dict(form)
+        if not isinstance(data, dict):
+            raise ValueError("Subtitle settings payload must be an object")
+
+        def as_bool(name: str, default: bool) -> bool:
+            value = data.get(name, default)
+            if isinstance(value, bool):
+                return value
+            return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+        preset = str(data.get("preset", config.subtitle_preset) or "standard").strip().lower()
+        if preset not in {"standard", "plain", "karaoke", "custom"}:
+            preset = "custom"
+
+        update_project(
+            config,
+            subtitle_preset=preset,
+            subtitle_chs_font=str(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑").strip(),
+            subtitle_primary_font=str(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans").strip(),
+            subtitle_chs_size=max(12, min(120, int(data.get("base_chs_size", config.subtitle_chs_size)))),
+            subtitle_primary_size=max(12, min(120, int(data.get("base_primary_size", config.subtitle_primary_size)))),
+            subtitle_margin_horizontal_percent=max(
+                0.0, min(0.40, float(data.get("margin_horizontal_percent", config.subtitle_margin_horizontal_percent)))
+            ),
+            subtitle_margin_vertical_percent=max(
+                0.0, min(0.40, float(data.get("margin_vertical_percent", config.subtitle_margin_vertical_percent)))
+            ),
+            subtitle_min_central_gap=max(
+                0.0, min(200.0, float(data.get("min_central_gap", config.subtitle_min_central_gap)))
+            ),
+            subtitle_enable_karaoke=as_bool("enable_karaoke", config.subtitle_enable_karaoke),
+            subtitle_enable_translucent_card=as_bool(
+                "enable_translucent_card", config.subtitle_enable_translucent_card
+            ),
+            subtitle_enable_multi_layer_outline=as_bool(
+                "enable_multi_layer_outline", config.subtitle_enable_multi_layer_outline
+            ),
+            subtitle_enable_kinetic=as_bool("enable_kinetic", config.subtitle_enable_kinetic),
+        )
+        return {"ok": True, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -1183,6 +1236,7 @@ def api_output_ass():
                 source_language=config.source_text_language or "en",
                 target_language=config.target_language or "zh-CN",
                 generate_ass=True,
+                render_config=subtitle_render_config(config),
             )
             report_progress("render", "ASS 字幕已生成", 1, 1)
             return result

@@ -17,6 +17,15 @@ class SubtitleRenderConfig:
     fade_out_ms: int = 200
     use_audio_aware_fade: bool = True
 
+    # Layout settings are shared by preview and ASS export.
+    chs_font: str = "汉仪旗黑"
+    primary_font: str = "Noto Sans"
+    base_chs_size: int = 52
+    base_primary_size: int = 42
+    margin_horizontal_percent: float = 0.10
+    margin_vertical_percent: float = 0.05
+    min_central_gap: float = 20.0
+
     @classmethod
     def plain_text_preset(cls) -> SubtitleRenderConfig:
         """Standard plain text rendering without dynamic kinetic motion, frosted glass, or karaoke."""

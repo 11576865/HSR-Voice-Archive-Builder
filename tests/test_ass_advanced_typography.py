@@ -1,3 +1,4 @@
+import tempfile
 import unittest
 from pathlib import Path
 from dataclasses import dataclass
@@ -8,6 +9,7 @@ from subtitle_layout.ass_writer import (
     format_multiline_karaoke,
     generate_frosted_glass_card,
     render_ass,
+    write_ass,
 )
 from subtitle_layout.layout_solver import SubtitleLinePos
 from subtitle_layout.safe_area import DEFAULT_SAFE_AREA
@@ -48,19 +50,17 @@ class TestAdvancedTypography(unittest.TestCase):
         default_ass = render_ass(entries, config=default_cfg)
         self.assertIn(r"\fad(200,200)", default_ass)
 
-    def test_format_karaoke_text_english(self):
-        text = "May this journey lead us starward."
-        formatted = format_karaoke_text(text, duration_sec=2.0, is_cjk=False)
-        self.assertIn(r"{\k", formatted)
-        self.assertIn("May ", formatted)
-        self.assertIn("starward.", formatted)
-
-    def test_format_karaoke_text_cjk(self):
-        text = "愿此行，终抵群星。"
-        formatted = format_karaoke_text(text, duration_sec=2.0, is_cjk=True)
-        self.assertIn(r"{\k", formatted)
-        self.assertIn("愿", formatted)
-        self.assertIn("星", formatted)
+    def test_karaoke_without_word_timing_degrades_to_plain_text(self):
+        english = "May this journey lead us starward."
+        chinese = "愿此行，终抵群星。"
+        self.assertEqual(
+            format_karaoke_text(english, duration_sec=2.0, is_cjk=False),
+            english,
+        )
+        self.assertEqual(
+            format_karaoke_text(chinese, duration_sec=2.0, is_cjk=True),
+            chinese,
+        )
 
     def test_format_karaoke_explicit_word_alignments(self):
         alignments = [
@@ -94,6 +94,14 @@ class TestAdvancedTypography(unittest.TestCase):
                 chinese="愿此行，终抵群星。",
                 start_seconds=1.0,
                 display_end_seconds=4.0,
+                word_alignments=[
+                    {"word": "May ", "start": 0.0, "end": 0.4},
+                    {"word": "this ", "start": 0.4, "end": 0.8},
+                    {"word": "journey ", "start": 0.8, "end": 1.4},
+                    {"word": "lead ", "start": 1.4, "end": 1.8},
+                    {"word": "us ", "start": 1.8, "end": 2.1},
+                    {"word": "starward.", "start": 2.1, "end": 3.0},
+                ],
             )
         ]
         ass_content = render_ass(
@@ -109,6 +117,58 @@ class TestAdvancedTypography(unittest.TestCase):
         self.assertIn(r"{\k", ass_content)
         self.assertIn("Dialogue: 0,", ass_content)
         self.assertIn("Dialogue: 1,", ass_content)
+
+    def test_render_config_controls_layout_and_style_header(self):
+        entry = DummyEntry(
+            english="Custom layout.",
+            chinese="自定义排版。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        cfg = SubtitleRenderConfig(
+            chs_font="Test CHS",
+            primary_font="Test Primary",
+            base_chs_size=58,
+            base_primary_size=46,
+            margin_horizontal_percent=0.15,
+            margin_vertical_percent=0.08,
+            min_central_gap=30.0,
+            enable_kinetic=False,
+        )
+        ass_content = render_ass([entry], config=cfg)
+        self.assertIn("Style: CHS,Test CHS,58", ass_content)
+        self.assertIn("Style: Primary,Test Primary,46", ass_content)
+        self.assertIn(r"{\an2\pos(960,525)\fs46}", ass_content)
+        self.assertIn(r"{\an8\pos(960,555)\fs58}", ass_content)
+
+    def test_write_ass_rejects_partial_output_and_removes_stale_file(self):
+        ok = DummyEntry(
+            english="Short.",
+            chinese="短句。",
+            start_seconds=1.0,
+            display_end_seconds=2.0,
+        )
+        bad = DummyEntry(
+            english="This is an extremely long primary sentence with oversized font size that causes top overflow." * 3,
+            chinese="这是一句极长且字号巨大的中文字幕，第一行第二行第三行不断向下堆叠增长直到碰撞。" * 3,
+            start_seconds=3.0,
+            display_end_seconds=5.0,
+        )
+        cfg = SubtitleRenderConfig(
+            base_chs_size=64,
+            base_primary_size=54,
+            margin_horizontal_percent=0.25,
+            margin_vertical_percent=0.20,
+            min_central_gap=150.0,
+        )
+        with tempfile.TemporaryDirectory() as td:
+            target = Path(td) / "archive.ass"
+            target.write_text("stale", encoding="utf-8")
+            report = Path(td) / "overflow.json"
+            with self.assertRaisesRegex(ValueError, "No partial ASS was produced"):
+                write_ass([ok, bad], target, config=cfg, overflow_report_path=report)
+            self.assertFalse(target.exists())
+            self.assertTrue(report.is_file())
 
     def test_render_ass_toggle_flags(self):
         entries = [

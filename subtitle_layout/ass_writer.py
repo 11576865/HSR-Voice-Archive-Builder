@@ -54,67 +54,28 @@ def format_karaoke_text(
     word_alignments: list[object] | None = None,
     is_cjk: bool = False,
 ) -> str:
-    """Format subtitle text with ASS word-level karaoke timing tags (\\k<centiseconds>)."""
-    if not text or duration_sec <= 0:
+    """Apply ASS karaoke tags only when explicit word-level timing is available."""
+    if not text or duration_sec <= 0 or not word_alignments:
         return text
 
-    total_cs = max(1, round(duration_sec * 100))
+    formatted_tokens: list[str] = []
+    for item in word_alignments:
+        word = ""
+        duration = 0.0
+        if isinstance(item, dict):
+            word = str(item.get("word", ""))
+            start = float(item.get("start", 0.0))
+            end = float(item.get("end", 0.0))
+            duration = float(item.get("duration", max(0.0, end - start)))
+        elif hasattr(item, "word"):
+            word = str(getattr(item, "word", ""))
+            start = float(getattr(item, "start", 0.0))
+            end = float(getattr(item, "end", 0.0))
+            duration = float(getattr(item, "duration", max(0.0, end - start)))
+        if word and duration > 0:
+            formatted_tokens.append(f"{{\\k{max(1, round(duration * 100))}}}{word}")
 
-    if word_alignments:
-        formatted_tokens: list[str] = []
-        for item in word_alignments:
-            word = ""
-            cs = 0
-            if isinstance(item, dict):
-                word = str(item.get("word", ""))
-                start = float(item.get("start", 0.0))
-                end = float(item.get("end", 0.0))
-                dur = float(item.get("duration", max(0.0, end - start)))
-                cs = max(1, round(dur * 100))
-            elif hasattr(item, "word"):
-                word = str(getattr(item, "word", ""))
-                start = float(getattr(item, "start", 0.0))
-                end = float(getattr(item, "end", 0.0))
-                dur = float(getattr(item, "duration", max(0.0, end - start)))
-                cs = max(1, round(dur * 100))
-            if word and cs > 0:
-                formatted_tokens.append(f"{{\\k{cs}}}{word}")
-        if formatted_tokens:
-            return "".join(formatted_tokens)
-
-    if is_cjk:
-        tokens = list(text)
-    else:
-        words = text.split(" ")
-        tokens = []
-        for i, w in enumerate(words):
-            if not w and i > 0:
-                continue
-            suffix = " " if i < len(words) - 1 else ""
-            tokens.append(w + suffix)
-
-    tokens = [t for t in tokens if t]
-    if not tokens:
-        return text
-
-    weights = [max(1, len(t.strip())) for t in tokens]
-    total_weight = sum(weights) or len(tokens)
-
-    centiseconds: list[int] = []
-    accumulated_cs = 0
-    for idx, weight in enumerate(weights):
-        if idx == len(weights) - 1:
-            cs = max(1, total_cs - accumulated_cs)
-        else:
-            cs = max(1, round(total_cs * (weight / total_weight)))
-            accumulated_cs += cs
-        centiseconds.append(cs)
-
-    formatted_parts: list[str] = []
-    for token, cs in zip(tokens, centiseconds):
-        formatted_parts.append(f"{{\\k{cs}}}{token}")
-
-    return "".join(formatted_parts)
+    return "".join(formatted_tokens) if formatted_tokens else text
 
 
 def generate_frosted_glass_card(
@@ -124,7 +85,7 @@ def generate_frosted_glass_card(
     pad_y: int = 12,
     radius: int = 16,
 ) -> tuple[str, tuple[int, int, int, int]] | None:
-    """Generate ASS vector card drawing (\\p1) for a frosted glass backdrop behind text lines."""
+    """Generate a translucent ASS vector backdrop card (no blur is applied)."""
     if not lines:
         return None
 
@@ -196,29 +157,18 @@ def format_multiline_karaoke(
     word_alignments: list[object] | None = None,
     is_cjk: bool = False,
 ) -> str:
-    """Format multiline subtitle positions into karaoke-tagged ASS text."""
+    """Apply karaoke only when timings can be mapped without inventing timing."""
     if not lines:
         return ""
-    if len(lines) == 1:
-        return format_karaoke_text(
-            getattr(lines[0], "text", str(lines[0])),
-            duration_sec,
-            word_alignments,
-            is_cjk=is_cjk,
-        )
-
-    total_chars = sum(max(1, len(getattr(pos, "text", str(pos)))) for pos in lines)
-    formatted_lines: list[str] = []
-    accumulated_sec = 0.0
-    for idx, pos in enumerate(lines):
-        txt = getattr(pos, "text", str(pos))
-        if idx == len(lines) - 1:
-            line_dur = max(0.01, duration_sec - accumulated_sec)
-        else:
-            line_dur = max(0.01, duration_sec * (len(txt) / total_chars))
-            accumulated_sec += line_dur
-        formatted_lines.append(format_karaoke_text(txt, line_dur, None, is_cjk=is_cjk))
-    return "\\N".join(formatted_lines)
+    plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in lines)
+    if not word_alignments or len(lines) != 1:
+        return plain
+    return format_karaoke_text(
+        getattr(lines[0], "text", str(lines[0])),
+        duration_sec,
+        word_alignments,
+        is_cjk=is_cjk,
+    )
 
 
 def render_ass(
@@ -234,7 +184,10 @@ def render_ass(
     enable_kinetic: bool | None = None,
     kinetic_options: dict[str, Any] | None = None,
 ) -> str:
-    header = """[Script Info]
+    cfg = config or SubtitleRenderConfig()
+    margin_h = round(1920 * max(0.0, min(0.40, float(cfg.margin_horizontal_percent))))
+    margin_v = round(1080 * max(0.0, min(0.40, float(cfg.margin_vertical_percent))))
+    header = f"""[Script Info]
 Title: HSR Voice Archive
 ScriptType: v4.00+
 PlayResX: 1920
@@ -244,14 +197,13 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,汉仪旗黑,52,&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,192,192,54,1
-Style: Primary,Noto Sans,42,&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,192,192,54,1
-Style: Card,Noto Sans,10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: CHS,{cfg.chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
+Style: Primary,{cfg.primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
+Style: Card,{cfg.primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    cfg = config or SubtitleRenderConfig()
     use_karaoke = cfg.enable_karaoke if enable_karaoke is None else enable_karaoke
     use_frosted_glass = cfg.enable_frosted_glass if enable_frosted_glass is None else enable_frosted_glass
     use_multi_layer_outline = cfg.enable_multi_layer_outline if enable_multi_layer_outline is None else enable_multi_layer_outline
@@ -259,6 +211,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     k_opts = dict(cfg.kinetic_options)
     if kinetic_options is not None:
         k_opts.update(kinetic_options)
+
+    margin_h_pct = max(0.0, min(0.40, float(cfg.margin_horizontal_percent)))
+    margin_v_pct = max(0.0, min(0.40, float(cfg.margin_vertical_percent)))
+    safe_area = SafeArea(
+        canvas_width=1920,
+        canvas_height=1080,
+        margin_left_percent=margin_h_pct,
+        margin_right_percent=margin_h_pct,
+        margin_top_percent=margin_v_pct,
+        margin_bottom_percent=margin_v_pct,
+    )
 
     dialogues: list[str] = []
     overflow_records: list[dict[str, object]] = []
@@ -289,6 +252,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             chinese_text=clean_target,
             source_language=source_language,
             target_language=target_language,
+            base_chs_size=int(cfg.base_chs_size),
+            base_primary_size=int(cfg.base_primary_size),
+            safe_area=safe_area,
+            min_central_gap=float(cfg.min_central_gap),
         )
 
         if layout.failed:
@@ -323,7 +290,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if use_frosted_glass:
             if layout.primary_lines:
-                res_pri = generate_frosted_glass_card(layout.primary_lines)
+                res_pri = generate_frosted_glass_card(layout.primary_lines, safe_area=safe_area)
                 if res_pri:
                     card_tag = res_pri[0]
                     if use_kinetic:
@@ -332,7 +299,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
             if layout.chs_lines:
-                res_chs = generate_frosted_glass_card(layout.chs_lines)
+                res_chs = generate_frosted_glass_card(layout.chs_lines, safe_area=safe_area)
                 if res_chs:
                     card_tag = res_chs[0]
                     if use_kinetic:
@@ -424,12 +391,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             encoding="utf-8",
         )
 
+    if overflow_records:
+        report_hint = str(overflow_report_path) if overflow_report_path is not None else "overflow report"
+        raise ValueError(
+            f"ASS rendering blocked: {len(overflow_records)} subtitle entries failed layout. "
+            f"No partial ASS was produced. See {report_hint} for details."
+        )
     if not dialogues:
-        if overflow_records:
-            raise ValueError(
-                f"ASS rendering failed for all entries ({len(overflow_records)} overflow errors). "
-                f"See {overflow_report_path} for details."
-            )
         raise ValueError("ASS rendering produced no dialogue lines")
 
     return header + "\n".join(dialogues) + "\n"
@@ -450,9 +418,8 @@ def write_ass(
     kinetic_options: dict[str, Any] | None = None,
 ) -> None:
     report_path = overflow_report_path or (path.parent / "ass_layout_overflow_report.json")
-    _atomic_write(
-        path,
-        render_ass(
+    try:
+        rendered = render_ass(
             entries,
             source_language=source_language,
             target_language=target_language,
@@ -463,6 +430,8 @@ def write_ass(
             enable_multi_layer_outline=enable_multi_layer_outline,
             enable_kinetic=enable_kinetic,
             kinetic_options=kinetic_options,
-        ),
-        encoding="utf-8-sig",
-    )
+        )
+    except Exception:
+        path.unlink(missing_ok=True)
+        raise
+    _atomic_write(path, rendered, encoding="utf-8-sig")
