@@ -447,10 +447,10 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_min_central_gap=max(
                     0.0, min(200.0, _float(data.get("min_central_gap"), config.subtitle_min_central_gap))
                 ),
-                subtitle_enable_karaoke=_bool(data.get("enable_karaoke")),
-                subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card")),
-                subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline")),
-                subtitle_enable_kinetic=_bool(data.get("enable_kinetic")),
+                subtitle_enable_karaoke=_bool(data.get("enable_karaoke", str(config.subtitle_enable_karaoke))),
+                subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
+                subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline", str(config.subtitle_enable_multi_layer_outline))),
+                subtitle_enable_kinetic=_bool(data.get("enable_kinetic", str(config.subtitle_enable_kinetic))),
             )
             self._json({"ok": True, "project": project_summary(config)})
             return
