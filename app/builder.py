@@ -586,7 +586,7 @@ def build_entries(
     cursor = 0
     entries: list[Entry] = []
     mismatched_hashes: list[str] = []
-    missing_wavs: list[str] = []
+    unavailable_wavs: list[dict[str, str]] = []
     official_count = 0
     incremental_official_count = 0
     translated_count = 0
@@ -602,7 +602,14 @@ def build_entries(
             raise ValueError(f"Missing bilingual row: {member_id or filename}")
         wav, resolved_member = resolve_member_wav(wav_members, filename, member_id)
         if wav is None:
-            missing_wavs.append(member_id or filename)
+            unavailable_wavs.append(
+                {
+                    "filename": filename,
+                    "source_member_id": member_id,
+                    "group": str(row.get("分组", "") or ""),
+                    "reason": "wav_not_present",
+                }
+            )
             continue
         if not member_id:
             member_id = resolved_member
@@ -742,8 +749,6 @@ def build_entries(
             json.dumps(normalized_wavs, ensure_ascii=False, indent=2),
         )
 
-    if missing_wavs:
-        raise FileNotFoundError(f"Missing {len(missing_wavs)} WAVs, first: {missing_wavs[0]}")
     if mismatched_hashes:
         raise ValueError(f"SHA-256 mismatch for {len(mismatched_hashes)} WAVs, first: {mismatched_hashes[0]}")
     if sample_rate is None or channels is None or sample_width is None:
@@ -800,7 +805,11 @@ def build_entries(
     cursor = int(resolved["total_samples"])
 
     report = {
+        "count_index_rows": len(full),
         "count_total": len(entries),
+        "count_unavailable_wavs": len(unavailable_wavs),
+        "unavailable_wavs": unavailable_wavs,
+        "all_index_wavs_available": not unavailable_wavs,
         "count_official_chs_lab": official_count,
         "count_official_chs_exact": official_match["exact"],
         "count_official_chs_structural": official_match["structural"],
