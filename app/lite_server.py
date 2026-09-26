@@ -956,7 +956,29 @@ class Handler(BaseHTTPRequestHandler):
                 report_progress("resolve", f"已可靠定位 {len(resolved['targets'])}/{len(targets)} 条新增语音", len(targets), len(targets))
                 atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
                 if not resolved["targets"]:
-                    raise RuntimeError("新增条目均无法可靠映射到 Hugging Face 音频；未修改项目")
+                    report = {
+                        "index_new": len(targets),
+                        "resolved": 0,
+                        "unresolved": resolved["unresolved"],
+                        "audio_available": 0,
+                        "audio_unavailable": len(resolved["unresolved"]),
+                        "downloaded_or_existing": 0,
+                        "failed": [],
+                        "project_updated": False,
+                        "rebuild_required": False,
+                        "applied_filenames": [],
+                    }
+                    atomic_write_text(
+                        output / "update_apply_report.json",
+                        json.dumps(report, ensure_ascii=False, indent=2),
+                    )
+                    report_progress(
+                        "resolve",
+                        f"检查完成：{len(resolved['unresolved'])} 条索引新增当前暂无可用音频，项目未修改",
+                        len(targets),
+                        len(targets),
+                    )
+                    return report
                 incoming = generated / "incremental_audio"
                 downloaded = download_resolved_audio(
                     resolved, incoming,
@@ -1027,7 +1049,7 @@ class Handler(BaseHTTPRequestHandler):
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
                 update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
