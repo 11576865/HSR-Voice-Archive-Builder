@@ -113,6 +113,8 @@ The GPT-SoVITS asset section provides two independent actions:
 
 The Reference Pack contains only entries with `selected=true`.
 
+The English training export requires an English source-text language and does not accept an explicitly non-English primary audio language. `auto` audio language remains possible, but the export report flags it as unconfirmed. Each copied sample is listed in `sample_provenance.csv` with its package member identity, transcript, and SHA-256. A WAV that differs from the completed archive's hash is recorded in `rejected.csv` instead of being exported with stale text.
+
 Reference emotion, intensity, and quality are never written into the GPT-SoVITS training dataset export. Training metadata and reference-annotation metadata remain separate by design.
 
 The catalog preserves:

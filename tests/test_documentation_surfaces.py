@@ -3,13 +3,15 @@ from __future__ import annotations
 import unittest
 from pathlib import Path
 
+from app.version import APP_VERSION
+
 
 class DocumentationSurfaceTests(unittest.TestCase):
     def test_readme_is_compact_and_current(self) -> None:
         root = Path(__file__).resolve().parents[1]
         readme = (root / "README.md").read_text(encoding="utf-8")
 
-        self.assertIn("Current development version:** v0.9-L", readme)
+        self.assertIn(f"Current development version:** v{APP_VERSION}", readme)
         self.assertIn("continuous.flac", readme)
         self.assertIn("ASS and black MKV are on-demand finished outputs", readme)
         self.assertIn("confirmed incremental `Chinese(PRC)` text as official Chinese target text", readme)
@@ -21,7 +23,7 @@ class DocumentationSurfaceTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         page = (root / "docs" / "index.html").read_text(encoding="utf-8")
 
-        self.assertIn("v0.9-L", page)
+        self.assertIn(f"v{APP_VERSION}", page)
         self.assertIn("星穹铁道角色语音归档工具", page)
         self.assertIn("进入本机控制台", page)
         self.assertIn("Termux 日常启动", page)

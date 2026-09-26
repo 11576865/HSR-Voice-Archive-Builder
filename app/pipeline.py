@@ -21,6 +21,7 @@ from .builder import (
 )
 from .credentials import translation_default_model
 from .identity import parse_voice_identity
+from .publishing import preserve_published_archive
 from .human_review import HumanReviewRequired, write_review_txt
 from .semantic_quality import SEMANTIC_QA_VERSION
 from .schema import write_legacy_inputs
@@ -1513,7 +1514,9 @@ def build_project_v02(
     # Keep extraction/work files on the output filesystem instead of the OS
     # temp drive. On Windows/Android the system temp partition is often much
     # smaller than the drive selected for an archive project.
-    with tempfile.TemporaryDirectory(prefix=".hsr-work-", dir=out_dir.parent) as td:
+    with preserve_published_archive(out_dir, state_dir), tempfile.TemporaryDirectory(
+        prefix=".hsr-work-", dir=out_dir.parent
+    ) as td:
         work = Path(td)
         wav_root: Path | None = None
         metadata = _stage_entries(load_stage(
@@ -1807,6 +1810,12 @@ def build_project_v02(
                 rebuilt_stages.append("audio")
             write_manifest(entries, report, out_dir, generate_ass=generate_ass)
             _augment_outputs(entries, report, out_dir)
+            refresh_subtitle_artifacts_from_settings(
+                out_dir,
+                source_language=source_text_language,
+                target_language=target_language,
+                generate_ass=generate_ass,
+            )
             save_stage(
                 state_dir,
                 STAGE_FILES["manifest"],

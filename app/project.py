@@ -10,6 +10,7 @@ from pathlib import Path
 from typing import Any
 
 from .credentials import translation_default_model
+from .publishing import BUILD_MARKER
 
 PROJECT_FILENAME = ".hsr-voice-project.json"
 STATE_DIR = Path.home() / ".hsr-voice-archive-builder"
@@ -589,6 +590,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     report_file = output / "build_report.json"
     final_stage_file = state / "stages" / "final_report.json"
     legacy_final_stage_file = output / "stages" / "final_report.json"
+    interrupted_build = (output / BUILD_MARKER).exists()
     report: dict[str, Any] = {}
     if report_file.is_file():
         try:
@@ -712,9 +714,10 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "output_path": str(output),
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
-        "build_complete": report_file.is_file() and (
+        "build_complete": not interrupted_build and report_file.is_file() and (
             final_stage_file.is_file() or legacy_final_stage_file.is_file()
         ),
+        "interrupted_build": interrupted_build,
         "report": report,
         "outputs": outputs,
         "output_groups": output_groups,

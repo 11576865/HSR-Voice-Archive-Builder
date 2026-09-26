@@ -666,6 +666,8 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
         <div class="stat existing"><b id="uExisting">—</b><span>已存在</span></div>
         <div class="stat variant"><b id="uVariant">—</b><span>已有台词变量</span></div>
         <div class="stat new"><b id="uNew">—</b><span>索引新增</span></div>
+        <div class="stat variant"><b id="uChanged">—</b><span>已有条目变化</span></div>
+        <div class="stat"><b id="uAmbiguous">—</b><span>待确认身份</span></div>
         <div class="stat"><b id="uRows">—</b><span>候选总数</span></div>
       </div>
     </section>
@@ -748,7 +750,8 @@ document.getElementById('gptSovitsExportBtn').onclick=async()=>{
     const result=await api('/api/project/active/export/gpt-sovits?'+query,{method:'POST'});
     const report=result.report||{};
     status.textContent='GPT-SoVITS Dataset Export Complete · Samples: '+report.exported+
-      ' · Rejected: '+report.rejected+' · Output: '+report.output;
+      ' · Rejected: '+report.rejected+' · Output: '+report.output+
+      (report.audio_language_confirmed?'':' · 主音频语言未明确标记，请核对语音内容。');
   }catch(error){
     status.textContent='导出失败：'+String(error.message||error);
   }finally{button.disabled=false}
@@ -973,10 +976,12 @@ function fillProject(p){
   const r=p.report||{},has=!!p.build_complete;
   const reviewPending=!!p.outputs?.['semantic_review_required.txt']?.exists;
   document.getElementById('reviewPanel').classList.toggle('hidden',!reviewPending);
-  document.getElementById('manifestState').textContent=has?'完整构建已完成':'尚未完成';
+  const missingWavs=Number(r.count_unavailable_wavs||0),missingText=Number(r.count_missing_target_text||0);
+  const hasGaps=has&&(missingWavs>0||missingText>0);
+  document.getElementById('manifestState').textContent=has?(hasGaps?'构建完成，存在缺项':'完整构建已完成'):'尚未完成';
   const hint=document.getElementById('archiveHint');
-  hint.textContent=reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':has?'构建流程已完整结束；下方统计和成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
-  hint.className='notice '+(reviewPending?'warn':has?'ok':'');
+  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方统计和成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
+  hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
   document.getElementById('archiveStats').classList.toggle('hidden',!has);
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
   document.getElementById('statTotal').textContent=n(r.count_total);
@@ -1075,19 +1080,21 @@ function showPlan(plan){
   document.getElementById('uExisting').textContent=n(c.exact_existing);
   document.getElementById('uVariant').textContent=n(c.variant_of_existing);
   document.getElementById('uNew').textContent=n(c.new_logical);
+  document.getElementById('uChanged').textContent=n(c.changed_existing);
+  document.getElementById('uAmbiguous').textContent=n(c.ambiguous);
   document.getElementById('uRows').textContent=n(plan.remote_rows??plan.candidate_unique_count);
   const result=document.getElementById('updateResult');
   if(result){
     if(plan.remote_rows!==undefined){
       const role=plan.character||plan.queried_character||'未识别';
-      result.textContent='已按角色“'+role+'”读取 '+n(plan.remote_rows)+' 条远程记录；发现真正新增 '+n(c.new_logical)+' 条。这里只生成检查结果，尚未下载音频。';
+      result.textContent='已按角色“'+role+'”读取 '+n(plan.remote_rows)+' 条远程记录；索引新增 '+n(c.new_logical)+' 条，已有条目变化 '+n(c.changed_existing)+' 条，待确认 '+n(c.ambiguous)+' 条。当前下载操作只处理新增条目；变化及待确认条目需核对检查结果。';
     }else{
-      result.textContent='本地候选清单已扫描；发现真正新增 '+n(c.new_logical)+' 条。';
+      result.textContent='本地候选清单已扫描；新增成员 '+n(c.new_logical)+' 条，待确认 '+n(c.ambiguous)+' 条。';
     }
   }
   const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn');
   button.disabled=additions<1||!!plan.applied;
-  setRunReport(plan.applied?'增量更新已应用':additions>0?'检查到新增语音':'没有新增语音',result?.textContent||'',false);
+  setRunReport(plan.applied?'增量更新已应用':additions>0?'检查到新增语音':Number(c.changed_existing||0)+Number(c.ambiguous||0)>0?'检查到待处理变化':'没有新增语音',result?.textContent||'',false);
   setLog(plan);
 }
 let quickPlanState=null;
@@ -1936,7 +1943,7 @@ async function saveSubtitleItemInBackground(targetSub){
   renderSubtitleList();
   setSubtitleSaveUi('saving','正在保存条目 #'+sentId+'，并更新 SRT / ASS…');
 
-  const saveOp=(async()=>{
+  const saveOp=async()=>{
     try{
       const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
         method:'POST',
@@ -1964,12 +1971,12 @@ async function saveSubtitleItemInBackground(targetSub){
       renderSubtitleEditState();
       renderSubtitleList();
     }
-  })();
+  };
 
   const prevPromise=subtitleSavePromise;
   subtitleSavePromise=(async()=>{
     if(prevPromise){try{await prevPromise}catch(e){}}
-    return await saveOp;
+    return await saveOp();
   })();
 
   return subtitleSavePromise;

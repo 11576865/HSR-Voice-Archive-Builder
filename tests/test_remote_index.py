@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import io
+import json
 import os
 import tempfile
 import unittest
@@ -15,9 +16,51 @@ from app.remote_index import (
     _workbook_cache_paths,
     fetch_ai_hobbyist_index_for_filenames_cached,
     get_ai_hobbyist_workbook,
+    remote_update_plan,
 )
+from app.diff import classify_names
 
 TEST_URL = "https://example.test/Indexs/EN.xlsx"
+
+
+class UpdatePlanIdentityTests(unittest.TestCase):
+    def test_relative_member_paths_remain_distinct(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            manifest = Path(td) / "manifest.json"
+            manifest.write_text(json.dumps({"entries": [{
+                "filename": "voice.wav", "source_member_id": "chapter_a/voice.wav"
+            }]}), encoding="utf-8")
+            plan = classify_names(manifest, ["chapter_a/voice.wav", "chapter_b/voice.wav"])
+            self.assertEqual(plan["exact_existing"], ["chapter_a/voice.wav"])
+            self.assertEqual(plan["new_logical"], ["chapter_b/voice.wav"])
+            self.assertEqual(plan["candidate_unique_count"], 2)
+
+    def test_remote_source_and_hash_revisions_are_reported_without_download(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            manifest = Path(td) / "manifest.json"
+            manifest.write_text(json.dumps({"entries": [{
+                "filename": "voice.wav", "source_text": "Old text", "sha256": "a" * 64
+            }]}), encoding="utf-8")
+            plan = remote_update_plan(manifest, [{
+                "filename": "voice.wav", "english": "New text", "hash": "b" * 64,
+                "character": "Test",
+            }])
+            self.assertEqual(plan["counts"]["changed_existing"], 1)
+            self.assertEqual(plan["counts"]["new_logical"], 0)
+            self.assertEqual(
+                plan["changed_existing"][0]["changes"], ["source_text", "audio_sha256"]
+            )
+
+    def test_conflicting_remote_rows_require_review(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            manifest = Path(td) / "manifest.json"
+            manifest.write_text(json.dumps({"entries": []}), encoding="utf-8")
+            plan = remote_update_plan(manifest, [
+                {"filename": "voice.wav", "english": "First", "hash": "a", "character": "Test"},
+                {"filename": "voice.wav", "english": "Other", "hash": "b", "character": "Test"},
+            ])
+            self.assertEqual(plan["counts"]["new_logical"], 0)
+            self.assertEqual(plan["counts"]["ambiguous"], 1)
 
 
 def make_workbook_bytes() -> bytes:
