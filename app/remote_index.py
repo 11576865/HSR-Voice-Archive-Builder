@@ -6,6 +6,7 @@ import http.client
 import json
 import logging
 import os
+import re
 import socket
 import ssl
 import tempfile
@@ -630,15 +631,81 @@ def remote_update_plan(
     from .diff import classify_names
 
     result = classify_names(manifest_path, [row["filename"] for row in records])
-    details = {row["filename"]: row for row in records}
+    details = {Path(row["filename"]).name: row for row in records}
+    by_filename: dict[str, list[dict[str, str]]] = {}
+    for row in records:
+        by_filename.setdefault(Path(row["filename"]).name, []).append(row)
+
+    # One basename with conflicting upstream records cannot be resolved to a
+    # single existing/new audio member just by taking the last workbook row.
+    conflicts = {
+        name for name, candidates in by_filename.items()
+        if len({(str(row.get("hash") or "").lower(), str(row.get("english") or ""))
+                for row in candidates}) > 1
+    }
+    if conflicts:
+        for key in ("exact_existing", "new_logical"):
+            result[key] = [name for name in result[key] if Path(str(name)).name not in conflicts]
+        result["variant_of_existing"] = [
+            item for item in result["variant_of_existing"]
+            if Path(str(item["candidate"])).name not in conflicts
+        ]
+        result["ambiguous"].extend({
+            "candidate": name, "reason": "conflicting_remote_rows",
+            "records": by_filename[name],
+        } for name in sorted(conflicts))
+
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+    manifest_entries = manifest.get("entries", []) if isinstance(manifest, dict) else manifest
+    existing_by_name: dict[str, list[dict[str, Any]]] = {}
+    for row in manifest_entries:
+        if isinstance(row, dict):
+            existing_by_name.setdefault(Path(str(row.get("filename") or "")).name, []).append(row)
+
+    changed: list[dict[str, Any]] = []
+    unchanged: list[str] = []
+    for name in result["exact_existing"]:
+        current = existing_by_name.get(Path(str(name)).name, [])
+        new = details.get(Path(str(name)).name, {})
+        if len(current) != 1 or not new:
+            unchanged.append(name)
+            continue
+        old = current[0]
+        changes = []
+        old_text = str(old.get("source_text") or old.get("english") or "").strip()
+        new_text = str(new.get("english") or "").strip()
+        if new_text and old_text != new_text:
+            changes.append("source_text")
+        old_hash = str(old.get("sha256") or "").strip().lower()
+        new_hash = str(new.get("hash") or "").strip().lower()
+        if (re.fullmatch(r"[0-9a-f]{64}", old_hash)
+                and re.fullmatch(r"[0-9a-f]{64}", new_hash)
+                and old_hash != new_hash):
+            changes.append("audio_sha256")
+        if changes:
+            changed.append({
+                "filename": name,
+                "changes": changes,
+                "previous": {"source_text": old_text, "sha256": old_hash},
+                "metadata": new,
+            })
+        else:
+            unchanged.append(name)
+    result["exact_existing"] = unchanged
+    result["changed_existing"] = changed
     for key in ("exact_existing", "new_logical"):
         result[key] = [
-            {"filename": name, "metadata": details.get(name, {})}
+            {"filename": name, "metadata": details.get(Path(str(name)).name, {})}
             if isinstance(name, str) else name
             for name in result[key]
         ]
     for item in result["variant_of_existing"]:
-        item["metadata"] = details.get(item["candidate"], {})
+        item["metadata"] = details.get(Path(str(item["candidate"])).name, {})
+
+    result["counts"] = {
+        key: len(result[key])
+        for key in ("exact_existing", "variant_of_existing", "new_logical", "changed_existing", "ambiguous")
+    }
 
     character_counts = Counter(
         str(row.get("character", "") or "").strip()

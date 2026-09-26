@@ -4,7 +4,8 @@ import argparse
 import csv
 import json
 import re
-from pathlib import Path
+from collections import Counter
+from pathlib import Path, PurePosixPath
 
 from .identity import parse_voice_identity
 
@@ -31,13 +32,13 @@ def candidate_names(path: Path) -> list[str]:
                         continue
                     if not value.lower().endswith(".wav"):
                         value += ".wav"
-                    names.append(Path(value).name)
+                    names.append(value.replace("\\", "/"))
                 return names
     names: list[str] = []
     for line in path.read_text(encoding="utf-8-sig").splitlines():
         match = _WAV_RE.search(line)
         if match:
-            names.append(Path(match.group("name")).name)
+            names.append(match.group("name").replace("\\", "/"))
     return names
 
 
@@ -45,6 +46,12 @@ def classify_names(current_manifest: Path, names: list[str]) -> dict[str, object
     payload = json.loads(current_manifest.read_text(encoding="utf-8-sig"))
     entries = payload["entries"] if isinstance(payload, dict) else payload
     exact = {str(e["filename"]) for e in entries}
+    members = {
+        str(e.get("source_member_id") or "").replace("\\", "/")
+        for e in entries
+        if str(e.get("source_member_id") or "").strip()
+    }
+    filename_counts = Counter(str(e.get("filename") or "") for e in entries)
     logical_to_files: dict[str, list[str]] = {}
     for name in exact:
         ident = parse_voice_identity(name)
@@ -54,15 +61,29 @@ def classify_names(current_manifest: Path, names: list[str]) -> dict[str, object
         "exact_existing": [],
         "variant_of_existing": [],
         "new_logical": [],
+        "ambiguous": [],
     }
     seen_candidates: set[str] = set()
     for raw_name in names:
-        name = Path(raw_name).name
-        if not name or name in seen_candidates:
+        candidate = str(raw_name).replace("\\", "/").strip()
+        parts = PurePosixPath(candidate).parts
+        if not parts or candidate.startswith("/") or any(part in {".", ".."} for part in parts):
+            result["ambiguous"].append({"candidate": candidate, "reason": "invalid_member_path"})  # type: ignore[union-attr]
             continue
-        seen_candidates.add(name)
+        name = PurePosixPath(candidate).name
+        if candidate in seen_candidates:
+            continue
+        seen_candidates.add(candidate)
         ident = parse_voice_identity(name)
-        if name in exact:
+        if "/" in candidate and candidate in members:
+            result["exact_existing"].append(candidate)  # type: ignore[union-attr]
+        elif "/" in candidate:
+            # A package-relative path identifies a distinct WAV even if its
+            # basename already occurs elsewhere in the archive.
+            result["new_logical"].append(candidate)  # type: ignore[union-attr]
+        elif name in exact and filename_counts[name] > 1:
+            result["ambiguous"].append({"candidate": name, "reason": "duplicate_basename"})  # type: ignore[union-attr]
+        elif name in exact:
             result["exact_existing"].append(name)  # type: ignore[union-attr]
         elif ident.logical_id in logical_to_files:
             result["variant_of_existing"].append({  # type: ignore[union-attr]

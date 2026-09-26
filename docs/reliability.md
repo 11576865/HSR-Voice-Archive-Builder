@@ -70,6 +70,8 @@ v0.9-B also writes a seven-file stage chain under `output/stages/`. Each stage i
 
 The journal and stage chain do **not** imply mid-stream FFmpeg resume. A fully encoded FLAC may be reused only when its recorded size and SHA-256 still match; an interrupted or modified encode restarts from the beginning.
 
+During a normal rebuild failure, v0.9-M restores the previously published manifest, corrected index, subtitles, continuous FLAC, optional black video, build report, and publication checkpoints. Translation checkpoints remain available for a retry. The large media files are preserved by same-filesystem hard links when supported, with a copy fallback. An abrupt process exit cannot run this rollback; the persisted `.build_in_progress` marker instead makes `build_complete=false` until a successful rebuild. Do not use a possibly mixed interrupted output as a completed archive.
+
 Reference:
 
 - https://fastapi.tiangolo.com/tutorial/background-tasks/

@@ -4,7 +4,7 @@ Local-first archive builder for **Honkai: Star Rail** character voice packages.
 
 It turns indexed voice resources into a reproducible archive with a continuous FLAC, timed subtitles, manifests, update metadata, and optional translation assistance. The browser UI is only a controller; source voice packages and finished audio remain on the processing device.
 
-**Current development version:** v0.9-L  
+**Current development version:** v0.9-M
 **Web entry:** https://11576865.github.io/HSR-Voice-Archive-Builder/
 
 > Unofficial processing utility. Do not commit extracted game audio or full game text datasets to this repository.
@@ -119,6 +119,8 @@ bash run_termux.sh
 
 The dashboard can check the configured remote source-text index for additions and resolve confirmed files against the Hugging Face voice dataset.
 
+The check separately reports new filenames, changed official source text or comparable SHA-256 values, and ambiguous identities. The download action adopts **new** records only. Existing text/audio changes and conflicting rows remain in the update plan for human review; they are never silently substituted. A local candidate list can retain package-relative paths, so two folders containing the same WAV basename remain distinct.
+
 For Simplified Chinese target projects:
 
 1. new primary-language audio is resolved and downloaded;
@@ -153,6 +155,8 @@ HSR_Voice_Archive_Black.mkv
 
 Internal checkpoints, QA state, translation usage, and stage recovery files live under the project `.state/` directory instead of the finished-output directory.
 
+A failed rebuild restores the previous finished archive and its publication checkpoints. A process that stops without running cleanup leaves a build marker, and the dashboard shows the output as interrupted until a successful rebuild. A successful build can still contain unavailable indexed WAVs or missing target text; the dashboard reports those counts separately from task completion.
+
 ## Subtitle review
 
 The dashboard includes a single-entry proofreading workspace.
@@ -162,7 +166,9 @@ The dashboard includes a single-entry proofreading workspace.
 - edits are stored as a non-destructive override layer;
 - official/API source provenance is preserved;
 - later full rebuilds re-apply saved overrides;
-- SRT and any already-generated ASS are refreshed from the same final text layer.
+- SRT and any already-generated ASS are refreshed from the same final text layer, including after a continuous-FLAC build or reuse.
+
+English GPT-SoVITS training export checks the project's source-text and declared audio languages. For projects whose primary audio language remains `auto`, it reports that the language was not independently confirmed. The export includes `sample_provenance.csv` and rejects source WAVs whose SHA-256 no longer matches the completed archive.
 
 ## Translation configuration
 
@@ -198,9 +204,10 @@ Install test dependencies and run:
 ```bash
 python -m pip install -r requirements-test.txt
 python -m unittest discover -s tests -v
+python -m pytest -q tests/test_gpt_sovits_export.py
 ```
 
-GitHub Actions validates Python 3.11, 3.12, 3.13, plus the lightweight Termux import surface.
+GitHub Actions validates Python 3.11, 3.12, 3.13, the GPT-SoVITS pytest tests, and the lightweight Termux import surface.
 
 The test suite uses synthetic fixtures; no game data is required.
 
