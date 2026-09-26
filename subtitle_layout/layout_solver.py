@@ -54,6 +54,8 @@ def solve_subtitle_layout(
 
     scale_attempts: list[int] = []
     last_failure_condition: str | None = None
+    last_pri_positions: list[SubtitleLinePos] = []
+    last_chs_positions: list[SubtitleLinePos] = []
 
     # 1. Preliminary semantic line-breaking at base font sizes
     chs_input = chinese_text or english_text
@@ -121,31 +123,30 @@ def solve_subtitle_layout(
             chs_block, pri_block, safe_area=safe_area, min_central_gap=min_central_gap
         )
 
+        pri_positions: list[SubtitleLinePos] = [
+            SubtitleLinePos(
+                text=line,
+                font_size=primary_size,
+                x=center_x,
+                y=y_center_top,
+                alignment=2,
+            )
+            for line in pri_broken
+        ]
+        chs_positions: list[SubtitleLinePos] = [
+            SubtitleLinePos(
+                text=line,
+                font_size=chs_size,
+                x=center_x,
+                y=y_center_bottom,
+                alignment=8,
+            )
+            for line in chs_broken
+        ]
+        last_pri_positions = pri_positions
+        last_chs_positions = chs_positions
+
         if not has_collision:
-            pri_positions: list[SubtitleLinePos] = []
-            for line in pri_broken:
-                pri_positions.append(
-                    SubtitleLinePos(
-                        text=line,
-                        font_size=primary_size,
-                        x=center_x,
-                        y=y_center_top,
-                        alignment=2,  # Bottom-Center alignment for Primary
-                    )
-                )
-
-            chs_positions: list[SubtitleLinePos] = []
-            for line in chs_broken:
-                chs_positions.append(
-                    SubtitleLinePos(
-                        text=line,
-                        font_size=chs_size,
-                        x=center_x,
-                        y=y_center_bottom,
-                        alignment=8,  # Top-Center alignment for Secondary
-                    )
-                )
-
             return SolvedLayout(
                 scale_factor=scale,
                 chs_lines=chs_positions,
@@ -160,8 +161,8 @@ def solve_subtitle_layout(
     # Rejection if all scaling attempts fail
     return SolvedLayout(
         scale_factor=SCALE_FACTORS[-1],
-        chs_lines=[],
-        primary_lines=[],
+        chs_lines=last_chs_positions,
+        primary_lines=last_pri_positions,
         failed=True,
         failed_condition=last_failure_condition or "OVERFLOW",
         scale_attempts=scale_attempts,
