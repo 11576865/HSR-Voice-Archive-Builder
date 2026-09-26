@@ -476,109 +476,113 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
       </details>
     </section>
 
-    <!-- Subtitle Layout Real-Time Preview Workspace -->
+    <!-- Subtitle Layout Workbench -->
     <section class="card" id="subtitleLayoutPreviewCard">
       <div class="topline">
-        <h2>字幕排版</h2>
+        <div>
+          <h2 style="margin-bottom:4px">字幕排版工作台</h2>
+          <div id="previewSaveStatus" class="small muted">当前为试调值；打开项目后可保存为 ASS 导出设置。</div>
+        </div>
         <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
           <span id="previewScaleBadge" class="badge">100%</span>
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
       </div>
-      <p class="small muted">调整文字和边距，预览双语字幕在视频画面中的位置。</p>
+      <p class="small muted">浏览器预览与 ASS 导出共用同一个排版求解器。浏览器只模拟文字几何；libass / FFmpeg 的实际字体栅格化仍可能有细微差异。</p>
 
-      <!-- Control Panel Controls & Inputs -->
       <div class="row" style="margin-bottom:12px">
         <div>
-          <label for="prevChsText">中文字幕</label>
+          <label for="prevChsText">中文字幕测试文本</label>
           <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
         </div>
         <div>
-          <label for="prevPriText">原文字幕</label>
+          <label for="prevPriText">原文字幕测试文本</label>
           <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
         </div>
       </div>
 
-      <!-- Presets & Sliders -->
-      <div class="preview-controls" style="background:var(--soft);padding:14px;border-radius:10px;border:1px solid var(--line);margin-bottom:14px">
-        <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <b style="font-size:13px;color:var(--text)">预设</b>
-          <div class="actions" style="margin:0">
+      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:12px">
+        <div style="background:var(--soft);padding:12px;border:1px solid var(--line);border-radius:10px">
+          <b>样式</b>
+          <label for="prevChsFont">中文字体</label>
+          <input id="prevChsFont" value="汉仪旗黑">
+          <label for="prevPriFont">原文字体</label>
+          <input id="prevPriFont" value="Noto Sans">
+          <div style="display:flex;justify-content:space-between;margin-top:8px">
+            <label for="prevChsSize" style="margin:0">中文基础字号</label>
+            <span id="prevChsSizeVal" class="small muted">52 px</span>
+          </div>
+          <input type="range" id="prevChsSize" min="38" max="64" value="52" step="1">
+          <div style="display:flex;justify-content:space-between">
+            <label for="prevPriSize" style="margin:0">原文基础字号</label>
+            <span id="prevPriSizeVal" class="small muted">42 px</span>
+          </div>
+          <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
+        </div>
+
+        <div style="background:var(--soft);padding:12px;border:1px solid var(--line);border-radius:10px">
+          <b>位置</b>
+          <div style="display:flex;justify-content:space-between;margin-top:8px">
+            <label for="prevCentralGap" style="margin:0">中央间隔</label>
+            <span id="prevCentralGapVal" class="small muted">20 px</span>
+          </div>
+          <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
+          <div style="display:flex;justify-content:space-between">
+            <label for="prevMarginH" style="margin:0">水平安全边距</label>
+            <span id="prevMarginHVal" class="small muted">10 % (192px)</span>
+          </div>
+          <input type="range" id="prevMarginH" min="0" max="30" value="10" step="1">
+          <div style="display:flex;justify-content:space-between">
+            <label for="prevMarginV" style="margin:0">垂直安全边距</label>
+            <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
+          </div>
+          <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
+        </div>
+
+        <div style="background:var(--soft);padding:12px;border:1px solid var(--line);border-radius:10px">
+          <b>特效</b>
+          <div class="actions" style="margin:8px 0">
             <button type="button" class="small" id="prevPresetDefault">标准</button>
             <button type="button" class="small" id="prevPresetPlain">纯净</button>
             <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
-            <button type="button" class="small" id="prevPresetLongText">长句自动换行</button>
-            <button type="button" class="small danger" id="prevPresetCollision">压力测试</button>
           </div>
-        </div>
-
-        <div class="row3" style="margin-bottom:12px">
-          <div>
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevChsSize" style="margin:0 0 3px">中文基础字号</label>
-              <span id="prevChsSizeVal" class="small muted">52 px</span>
-            </div>
-            <input type="range" id="prevChsSize" min="38" max="64" value="52" step="1">
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevPriSize" style="margin:0 0 3px">原文基础字号</label>
-              <span id="prevPriSizeVal" class="small muted">42 px</span>
-            </div>
-            <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevCentralGap" style="margin:0 0 3px">中央安全间隔</label>
-              <span id="prevCentralGapVal" class="small muted">20 px</span>
-            </div>
-            <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
-          </div>
-        </div>
-
-        <div class="row" style="margin-bottom:12px">
-          <div>
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevMarginH" style="margin:0 0 3px">水平安全边距 % (Margin H)</label>
-              <span id="prevMarginHVal" class="small muted">10 % (192px)</span>
-            </div>
-            <input type="range" id="prevMarginH" min="0" max="30" value="10" step="1">
-          </div>
-          <div>
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevMarginV" style="margin:0 0 3px">垂直安全边距 % (Margin V)</label>
-              <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
-            </div>
-            <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
-          </div>
-        </div>
-
-        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted)">
-          <b>图层辅助线：</b>
-          <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域 (Safe Area)</label>
-          <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔 (Central Gap)</label>
-          <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒 (Text Bounding Box)</label>
+          <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 淡入淡出 / 动态进入</label>
+          <label class="check"><input type="checkbox" id="prevEnableKaraoke"> K 歌高亮</label>
+          <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
+          <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层描边</label>
+          <div class="small muted" style="margin-top:7px">K 歌只有在条目带可信词级时间戳时才生成逐词 <code>\k</code>；否则降级为整句。半透明底板不包含背景模糊。</div>
         </div>
       </div>
 
-      <!-- 16:9 Interactive Simulated Video Screen Canvas -->
-      <div style="position:relative;width:100%;aspect-ratio:16 / 9;background:#080a0e;border-radius:10px;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 0 20px rgba(0,0,0,0.8)" id="previewCanvasContainer">
-        <!-- Lightweight HTML5 Canvas Subtitle Overlay -->
-        <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
-        <!-- Overlay SVG -->
-        <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none">
-          <!-- Rendered dynamically via JS -->
-        </svg>
-
-        <!-- Simulated Video Overlay UI -->
-        <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
-          <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080 FHD</span>
-          <span style="background:rgba(0,0,0,0.6);color:var(--ok);padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">60 FPS</span>
+      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+        <div class="actions" style="margin:0">
+          <button type="button" class="small" id="prevPresetLongText">检查长句</button>
+          <button type="button" class="small danger" id="prevPresetCollision">检查溢出</button>
         </div>
+        <div class="actions" style="margin:0">
+          <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
+          <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
+        </div>
+      </div>
 
-        <!-- Real-time Collision Banner Overlay -->
+      <details style="margin-bottom:12px">
+        <summary>辅助线与诊断显示（高级）</summary>
+        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
+          <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
+          <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
+          <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
+        </div>
+      </details>
+
+      <div style="position:relative;width:100%;aspect-ratio:16 / 9;background:#080a0e;border-radius:10px;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 0 20px rgba(0,0,0,0.8)" id="previewCanvasContainer">
+        <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
+        <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
+        <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
+          <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">浏览器几何预览</span>
+          <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
+        </div>
         <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
-          <span>⚠️ 布局碰撞/溢出预警：</span>
+          <span>布局失败：</span>
           <span id="previewCollisionReason">CENTRAL_COLLISION</span>
         </div>
       </div>
@@ -1069,6 +1073,7 @@ function fillProject(p){
   renderSourceHealth(p);
   if(!p)return;
   const c=p.config,f=document.getElementById('projectForm');
+  loadSubtitleLayoutSettings(c);
   const speaker=document.getElementById('gptSovitsSpeaker');
   if(!speaker.value||speaker.dataset.project!==p.root){
     speaker.value=p.name||'';
