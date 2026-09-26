@@ -2223,6 +2223,84 @@ document.getElementById('subReferenceIntensity').onchange=saveReferenceAnnotatio
 
 /* Subtitle Layout Real-Time Preview Workspace JS Logic */
 let previewDebounceTimer = null;
+let previewPreset = 'custom';
+let savedSubtitleSettings = null;
+
+function subtitleSettingsPayload(){
+  return {
+    preset: previewPreset,
+    chs_font: document.getElementById('prevChsFont')?.value?.trim() || '汉仪旗黑',
+    primary_font: document.getElementById('prevPriFont')?.value?.trim() || 'Noto Sans',
+    base_chs_size: parseInt(document.getElementById('prevChsSize')?.value || '52',10),
+    base_primary_size: parseInt(document.getElementById('prevPriSize')?.value || '42',10),
+    margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '10') / 100,
+    margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
+    min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
+    enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
+    enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
+    enable_multi_layer_outline: !!document.getElementById('prevEnableOutline')?.checked,
+    enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked
+  };
+}
+
+function loadSubtitleLayoutSettings(config){
+  if(!config)return;
+  const set=(id,value)=>{const el=document.getElementById(id);if(el&&value!==undefined&&value!==null)el.value=value;};
+  const check=(id,value)=>{const el=document.getElementById(id);if(el)el.checked=!!value;};
+  previewPreset=config.subtitle_preset||'standard';
+  set('prevChsFont',config.subtitle_chs_font||'汉仪旗黑');
+  set('prevPriFont',config.subtitle_primary_font||'Noto Sans');
+  set('prevChsSize',config.subtitle_chs_size??52);
+  set('prevPriSize',config.subtitle_primary_size??42);
+  set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.10)*100);
+  set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
+  set('prevCentralGap',config.subtitle_min_central_gap??20);
+  check('prevEnableKaraoke',config.subtitle_enable_karaoke);
+  check('prevEnableCard',config.subtitle_enable_translucent_card);
+  check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
+  check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
+  savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
+  const status=document.getElementById('previewSaveStatus');
+  if(status){status.textContent='当前显示项目已保存的 ASS 设置。';status.className='small status-ok';}
+  updateLayoutPreview();
+}
+
+function markSubtitleSettingsDirty(){
+  const status=document.getElementById('previewSaveStatus');
+  if(!status)return;
+  if(!currentProject){
+    status.textContent='当前只有试调值；打开项目后才能保存并用于 ASS 导出。';
+    status.className='small muted';
+    return;
+  }
+  const dirty=JSON.stringify(subtitleSettingsPayload())!==savedSubtitleSettings;
+  status.textContent=dirty?'有未保存的试调值；ASS 导出仍使用上次保存的设置。':'当前设置已保存，将用于 ASS 导出。';
+  status.className='small '+(dirty?'status-warn':'status-ok');
+}
+
+async function saveSubtitleLayoutSettings(){
+  const status=document.getElementById('previewSaveStatus');
+  if(!currentProject){
+    if(status){status.textContent='请先打开项目。';status.className='small status-bad';}
+    return false;
+  }
+  try{
+    if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
+    const j=await api('/api/subtitle-layout/settings',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(subtitleSettingsPayload())
+    });
+    fillProject(j.project);
+    savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
+    if(status){status.textContent='字幕设置已保存；后续 ASS 导出将读取这份设置。';status.className='small status-ok';}
+    return true;
+  }catch(err){
+    if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
+    setLog(String(err));
+    return false;
+  }
+}
 
 async function updateLayoutPreview() {
   const chsText = document.getElementById('prevChsText')?.value || '';
@@ -2261,6 +2339,8 @@ async function updateLayoutPreview() {
         margin_left_percent: marginH / 100.0,
         margin_top_percent: marginV / 100.0,
         min_central_gap: centralGap,
+        source_language: currentProject?.config?.source_text_language || 'en',
+        target_language: currentProject?.config?.target_language || 'zh-CN',
       })
     });
 
@@ -2362,7 +2442,7 @@ function renderPreviewCanvasSvg(data, options) {
     }
 
     const textY = bbox.y_min + line.font_size * 0.82;
-    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="Noto Sans, Arial, sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
+    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="${escapeHtml(document.getElementById('prevPriFont')?.value || 'Noto Sans')}, Arial, sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
   });
 
   // Chinese Subtitles (Bottom block, growing downward)
@@ -2377,7 +2457,7 @@ function renderPreviewCanvasSvg(data, options) {
     }
 
     const textY = bbox.y_min + line.font_size * 0.82;
-    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="'Microsoft YaHei', 'Source Han Sans CN', 'SimHei', sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
+    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="${escapeHtml(document.getElementById('prevChsFont')?.value || 'Microsoft YaHei')}, 'Microsoft YaHei', sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
   });
 
   svg.innerHTML = elements.join('');
@@ -2400,7 +2480,7 @@ function renderCanvasSubtitleOverlay(data) {
   // Render Primary Subtitles on Canvas
   (layout.primary_lines || []).forEach((line) => {
     ctx.save();
-    ctx.font = `600 ${line.font_size}px "Noto Sans", Arial, sans-serif`;
+    ctx.font = `600 ${line.font_size}px "${document.getElementById("prevPriFont")?.value || "Noto Sans"}", Arial, sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'hanging';
     ctx.fillStyle = '#ffffff';
@@ -2416,7 +2496,7 @@ function renderCanvasSubtitleOverlay(data) {
   // Render Chinese Subtitles on Canvas
   (layout.chs_lines || []).forEach((line) => {
     ctx.save();
-    ctx.font = `600 ${line.font_size}px "Microsoft YaHei", "Source Han Sans CN", "SimHei", sans-serif`;
+    ctx.font = `600 ${line.font_size}px "${document.getElementById("prevChsFont")?.value || "Microsoft YaHei"}", "Microsoft YaHei", sans-serif`;
     ctx.textAlign = 'center';
     ctx.textBaseline = 'hanging';
     ctx.fillStyle = '#ffffff';
@@ -2430,79 +2510,81 @@ function renderCanvasSubtitleOverlay(data) {
   });
 }
 
-// Attach event listeners for controls
-['prevChsText', 'prevPriText'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', scheduleLayoutPreviewUpdate);
+// Workbench event wiring
+['prevChsText','prevPriText'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input',scheduleLayoutPreviewUpdate);
 });
 
-['prevChsSize', 'prevPriSize', 'prevCentralGap', 'prevMarginH', 'prevMarginV'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('input', scheduleLayoutPreviewUpdate);
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('input',()=>{
+    previewPreset='custom';
+    markSubtitleSettingsDirty();
+    scheduleLayoutPreviewUpdate();
+  });
 });
 
-['prevShowSafeArea', 'prevShowCentralGap', 'prevShowBBox'].forEach(id => {
-  const el = document.getElementById(id);
-  if (el) el.addEventListener('change', updateLayoutPreview);
+['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',()=>{
+    previewPreset='custom';
+    markSubtitleSettingsDirty();
+    updateLayoutPreview();
+  });
 });
 
-// Preset Buttons
-document.getElementById('prevPresetDefault')?.addEventListener('click', () => {
-  document.getElementById('prevChsText').value = "愿此行，终抵群星。";
-  document.getElementById('prevPriText').value = "May this journey lead us starward.";
-  document.getElementById('prevChsSize').value = 52;
-  document.getElementById('prevPriSize').value = 42;
-  document.getElementById('prevCentralGap').value = 20;
-  document.getElementById('prevMarginH').value = 10;
-  document.getElementById('prevMarginV').value = 5;
+['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',updateLayoutPreview);
+});
+
+function applySubtitlePreset(name){
+  previewPreset=name;
+  const standard=()=>{
+    document.getElementById('prevChsFont').value='汉仪旗黑';
+    document.getElementById('prevPriFont').value='Noto Sans';
+    document.getElementById('prevChsSize').value=52;
+    document.getElementById('prevPriSize').value=42;
+    document.getElementById('prevCentralGap').value=20;
+    document.getElementById('prevMarginH').value=10;
+    document.getElementById('prevMarginV').value=5;
+    document.getElementById('prevEnableKinetic').checked=true;
+    document.getElementById('prevEnableKaraoke').checked=false;
+    document.getElementById('prevEnableCard').checked=false;
+    document.getElementById('prevEnableOutline').checked=false;
+  };
+  standard();
+  if(name==='plain')document.getElementById('prevEnableKinetic').checked=false;
+  if(name==='karaoke')document.getElementById('prevEnableKaraoke').checked=true;
+  markSubtitleSettingsDirty();
+  updateLayoutPreview();
+}
+
+document.getElementById('prevPresetDefault')?.addEventListener('click',()=>applySubtitlePreset('standard'));
+document.getElementById('prevPresetPlain')?.addEventListener('click',()=>applySubtitlePreset('plain'));
+document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>applySubtitlePreset('karaoke'));
+
+document.getElementById('prevPresetLongText')?.addEventListener('click',()=>{
+  document.getElementById('prevChsText').value='在这个广袤无垠的宇宙中，我们终将踏上属于自己的旅程，无论前路多么坎坷与漫长，星光终会照亮每一个勇敢前行的灵魂。';
+  document.getElementById('prevPriText').value='In this vast and boundless universe, we will eventually embark on our own journey, regardless of how treacherous and long the road ahead may be, starward light will illuminate every brave soul.';
   updateLayoutPreview();
 });
 
-document.getElementById('prevPresetPlain')?.addEventListener('click', () => {
-  document.getElementById('prevChsText').value = "纯净文本模式：无动态淡入淡出，无卡拉OK。";
-  document.getElementById('prevPriText').value = "Plain text preset: No kinetic fade motion, no karaoke tags.";
-  document.getElementById('prevChsSize').value = 52;
-  document.getElementById('prevPriSize').value = 42;
-  document.getElementById('prevCentralGap').value = 20;
-  document.getElementById('prevMarginH').value = 10;
-  document.getElementById('prevMarginV').value = 5;
+document.getElementById('prevPresetCollision')?.addEventListener('click',()=>{
+  document.getElementById('prevChsText').value='这是一句极长且字号巨大的中文字幕，第一行、第二行、第三行、第四行不断向下堆叠增长，直到侵入中央安全间隔区并突破底部安全边界。';
+  document.getElementById('prevPriText').value='This is an extremely long primary sentence with oversized base font size that breaks into multiple lines and grows upward rapidly until top boundary overflow occurs.';
+  document.getElementById('prevChsSize').value=64;
+  document.getElementById('prevPriSize').value=54;
+  document.getElementById('prevCentralGap').value=100;
+  document.getElementById('prevMarginH').value=30;
+  document.getElementById('prevMarginV').value=20;
+  previewPreset='custom';
+  markSubtitleSettingsDirty();
   updateLayoutPreview();
 });
 
-document.getElementById('prevPresetKaraoke')?.addEventListener('click', () => {
-  document.getElementById('prevChsText').value = "K歌律动模式：自动嵌入 \\k 逐字时间轴标签。";
-  document.getElementById('prevPriText').value = "Karaoke preset: Automatically embeds \\k word-level timing tags.";
-  document.getElementById('prevChsSize').value = 52;
-  document.getElementById('prevPriSize').value = 42;
-  document.getElementById('prevCentralGap').value = 20;
-  document.getElementById('prevMarginH').value = 10;
-  document.getElementById('prevMarginV').value = 5;
-  updateLayoutPreview();
+document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
+document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
+  if(await saveSubtitleLayoutSettings())await startAssExport();
 });
 
-document.getElementById('prevPresetLongText')?.addEventListener('click', () => {
-  document.getElementById('prevChsText').value = "在这个广袤无垠的宇宙中，我们终将踏上属于自己的旅程，无论前路多么坎坷与漫长，星光终会照亮每一个勇敢前行的灵魂。";
-  document.getElementById('prevPriText').value = "In this vast and boundless universe, we will eventually embark on our own journey, regardless of how treacherous and long the road ahead may be, starward light will illuminate every brave soul.";
-  document.getElementById('prevChsSize').value = 52;
-  document.getElementById('prevPriSize').value = 42;
-  document.getElementById('prevCentralGap').value = 20;
-  document.getElementById('prevMarginH').value = 10;
-  document.getElementById('prevMarginV').value = 5;
-  updateLayoutPreview();
-});
-
-document.getElementById('prevPresetCollision')?.addEventListener('click', () => {
-  document.getElementById('prevChsText').value = "这是一句极长且字号巨大的中文字幕，第一行、第二行、第三行、第四行不断向下堆叠增长，直到侵入中央安全间隔区并突破底部安全边界。";
-  document.getElementById('prevPriText').value = "This is an extremely long primary sentence with oversized base font size that breaks into multiple lines and grows upward rapidly until top boundary overflow occurs.";
-  document.getElementById('prevChsSize').value = 64;
-  document.getElementById('prevPriSize').value = 54;
-  document.getElementById('prevCentralGap').value = 100;
-  document.getElementById('prevMarginH').value = 30;
-  document.getElementById('prevMarginV').value = 20;
-  updateLayoutPreview();
-});
-
-// Initial trigger
 updateLayoutPreview();
 
 document.getElementById('refreshBtn').onclick=refresh;
