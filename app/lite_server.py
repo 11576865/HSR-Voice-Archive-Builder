@@ -21,7 +21,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -423,6 +423,36 @@ class Handler(BaseHTTPRequestHandler):
                 language=(query.get("language") or [data.get("language", "en")])[-1],
             )
             self._json({"ok": True, "report": report})
+            return
+
+        if path == "/api/subtitle-layout/settings":
+            config = _active_config()
+            assert_project_idle(config.root)
+            preset = (data.get("preset", config.subtitle_preset) or "standard").strip().lower()
+            if preset not in {"standard", "plain", "karaoke", "custom"}:
+                preset = "custom"
+            update_project(
+                config,
+                subtitle_preset=preset,
+                subtitle_chs_font=(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑").strip(),
+                subtitle_primary_font=(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans").strip(),
+                subtitle_chs_size=max(12, min(120, _int(data.get("base_chs_size"), config.subtitle_chs_size))),
+                subtitle_primary_size=max(12, min(120, _int(data.get("base_primary_size"), config.subtitle_primary_size))),
+                subtitle_margin_horizontal_percent=max(
+                    0.0, min(0.40, _float(data.get("margin_horizontal_percent"), config.subtitle_margin_horizontal_percent))
+                ),
+                subtitle_margin_vertical_percent=max(
+                    0.0, min(0.40, _float(data.get("margin_vertical_percent"), config.subtitle_margin_vertical_percent))
+                ),
+                subtitle_min_central_gap=max(
+                    0.0, min(200.0, _float(data.get("min_central_gap"), config.subtitle_min_central_gap))
+                ),
+                subtitle_enable_karaoke=_bool(data.get("enable_karaoke")),
+                subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card")),
+                subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline")),
+                subtitle_enable_kinetic=_bool(data.get("enable_kinetic")),
+            )
+            self._json({"ok": True, "project": project_summary(config)})
             return
 
         if path == "/api/subtitle-layout/preview":
@@ -1073,6 +1103,7 @@ class Handler(BaseHTTPRequestHandler):
                     source_language=config.source_text_language or "en",
                     target_language=config.target_language or "zh-CN",
                     generate_ass=True,
+                    render_config=subtitle_render_config(config),
                 )
                 report_progress("render", "ASS 字幕已生成", 1, 1)
                 return result
