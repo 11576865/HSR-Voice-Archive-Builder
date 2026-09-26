@@ -88,6 +88,91 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
 }
 .skip-link{position:absolute;top:-60px;left:10px;background:var(--blue);color:#fff;padding:8px 14px;border-radius:6px;z-index:1000;font-weight:650;text-decoration:none;transition:top .2s ease}
 .skip-link:focus{top:10px;outline:2px solid #86b7ff}
+/* Task-oriented workbench. The existing panels stay in the DOM so their
+   state and event handlers survive moving between workspaces. */
+:root{--bg:#101316;--card:#181d20;--soft:#20272a;--line:#344044;--text:#f0f2ed;--muted:#a4b0ae;--accent:#386c6c;--blue:#8dc7c2;--ok:#70c996}
+body{background:var(--bg);line-height:1.52}
+header{max-width:1220px;padding:23px 24px 17px;align-items:center;border-bottom:1px solid var(--line)}
+header h1{font-size:20px;letter-spacing:-.025em;font-weight:700}
+header .sub{margin-top:3px;font-size:12px}
+header #mode{font-size:11px}
+.workspace-nav{position:sticky;top:0;z-index:30;display:flex;gap:3px;max-width:1220px;margin:auto;padding:0 20px;background:var(--bg);border-bottom:1px solid var(--line);overflow-x:auto;scrollbar-width:none}
+.workspace-nav::-webkit-scrollbar{display:none}
+.workspace-nav button{flex:0 0 auto;background:none;border:0;border-bottom:2px solid transparent;border-radius:0;min-height:49px;padding:0 15px;color:var(--muted);font-size:13px;font-weight:600;white-space:nowrap}
+.workspace-nav button[aria-current="page"]{color:var(--text);border-bottom-color:var(--blue)}
+.workspace-nav button:hover{color:var(--text);background:#ffffff0a}
+.workspace-nav button:disabled{background:none!important;border-color:transparent!important;color:#667276!important;opacity:1}
+main{max-width:1220px;padding:24px 24px 70px}
+.grid{grid-template-columns:minmax(0,1fr) minmax(260px,310px);gap:22px}
+.stack{gap:16px}.card{border-radius:8px;padding:22px;box-shadow:none}
+.card>h2,.card .topline h2{font-size:21px;letter-spacing:-.02em;margin:0}
+.card>.small.muted,.card>p.small.muted{max-width:68ch;margin:8px 0 20px}
+.badge{background:transparent;border-color:var(--line);color:var(--muted)}
+button{font-weight:600;border-radius:6px}button.primary,button.success{background:#376c61;border-color:#568b78;color:#f7fff7}
+input,select,textarea{border-radius:6px}
+.sub-workspace{grid-template-columns:minmax(200px,260px) minmax(0,1fr);gap:12px}
+.sub-sidebar,.sub-main{border-radius:6px;background:transparent}
+.sub-sidebar{min-height:0}.sub-list{gap:2px;padding:4px}.sub-item{padding:9px 10px;border-radius:4px;background:transparent}
+.sub-item.active{border-color:#5c9d96;background:#22403d}
+.sub-main{gap:13px;padding:18px}.sub-current-header{gap:8px}.sub-current-header #subCurrentIndexTag{font-size:15px;color:var(--text)}
+.sub-edit-area{gap:5px}.sub-edit-header label{color:var(--text);font-size:13px}
+.sub-textarea{min-height:112px;padding:12px;border:1px solid #6eaaa2;background:#121a1b;font-size:16px}
+.sub-textarea:focus{border-color:#a5d9ce;box-shadow:0 0 0 3px #8dc7c22e}
+.sub-references{display:grid;gap:0!important;border-top:1px solid var(--line)}
+.sub-ref-card{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:11px 0}
+.sub-ref-label{font-size:12px;letter-spacing:0;margin-bottom:4px}.sub-ref-content{font-size:14px;line-height:1.55}
+#subSourceFileMeta{font-size:11px}.sub-ref-card:has(#subApiText.empty){display:none}
+#subReferenceCard{order:4}#subReferenceCard summary{font-size:12px;font-weight:600;color:var(--muted)}
+.sub-nav-bar{padding-top:10px}.sub-nav-bar button{background:transparent}
+#subtitleLayoutPreviewCard{display:flex;flex-direction:column}
+#subtitleLayoutPreviewCard #previewCanvasContainer{order:1;margin:14px 0 18px;border-radius:5px}
+#subtitleLayoutPreviewCard>.row{order:2}
+#subtitleLayoutPreviewCard>.preview-controls{order:3;background:transparent!important;border:0!important;border-top:1px solid var(--line)!important;border-radius:0!important;padding:16px 0 0!important}
+#subtitleLayoutPreviewCard #previewHeaderBadges{margin-left:auto}
+#gptSovitsCard .grid.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+#gptSovitsOutput{background:transparent;color:var(--muted)}
+#updateStats{grid-template-columns:repeat(3,minmax(0,1fr))}
+body[data-workspace="project"] #subtitleLayoutPreviewCard,body[data-workspace="project"] #subtitleReviewCard,body[data-workspace="project"] #gptSovitsCard,body[data-workspace="project"] #updateCard{display:none!important}
+body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
+body[data-workspace="review"] #subtitleLayoutPreviewCard,body[data-workspace="review"] #gptSovitsCard,body[data-workspace="review"] #updateCard{display:none!important}
+body[data-workspace="layout"] #subtitleReviewCard,body[data-workspace="layout"] #gptSovitsCard,body[data-workspace="layout"] #updateCard{display:none!important}
+body[data-workspace="export"] #subtitleReviewCard,body[data-workspace="export"] #subtitleLayoutPreviewCard,body[data-workspace="export"] #updateCard{display:none!important}
+body[data-workspace="update"] #subtitleReviewCard,body[data-workspace="update"] #subtitleLayoutPreviewCard,body[data-workspace="update"] #gptSovitsCard{display:none!important}
+body:not([data-workspace="project"]) .grid{display:block;max-width:1020px;margin:auto}
+body:not([data-workspace="project"]) #primaryStack{display:block}
+@media(max-width:820px){
+  header{padding:14px 17px 12px;gap:7px}header h1{font-size:18px}header .sub{display:none}
+  .workspace-nav{padding:0 10px}.workspace-nav button{min-height:46px;padding:0 12px}
+  main{padding:16px 12px calc(70px + env(safe-area-inset-bottom))}
+  .grid{display:block}.stack{gap:12px}.card{padding:17px;border-radius:6px}
+  #sideStack{margin-top:12px}
+  #subtitleReviewCard>.row3{grid-template-columns:1fr 1fr;gap:8px}
+  #subtitleReviewCard>.row3>div:first-child{grid-column:1/-1}
+  #subtitleReviewCard>.row3 label{margin:4px 0}
+  .sub-workspace{display:flex;flex-direction:column;gap:10px}
+  .sub-sidebar{max-height:130px;min-height:0}
+  .sub-sidebar-header{padding:7px 10px}
+  .sub-list{flex-direction:row;overflow-x:auto;overflow-y:hidden;min-height:75px;gap:5px}
+  .sub-item{flex:0 0 170px;min-height:0;max-height:70px;overflow:hidden}
+  .sub-item-preview{white-space:nowrap;text-overflow:ellipsis;overflow:hidden}
+  .sub-main{padding:12px;border:0;border-top:1px solid var(--line)}
+  .sub-current-header{flex-wrap:nowrap;align-items:center}.sub-current-header>div:first-child{display:flex;align-items:center;flex-wrap:wrap}
+  .sub-time-badge{margin:0!important}.sub-edit-area{margin-top:2px}
+  #subtitleLayoutPreviewCard>.preview-controls .row3{grid-template-columns:1fr}
+  #updateStats{grid-template-columns:repeat(2,minmax(0,1fr))}
+}
+@media(max-width:480px){
+  header{align-items:center;flex-direction:row}header #mode{max-width:110px;text-align:center}
+  #versionBadge{display:none}
+  .card>.topline{gap:8px}.card .topline h2,.card>h2{font-size:19px}
+  #subtitleReviewCard{padding:15px 13px}
+  #subtitleReviewCard>.small.muted{margin:4px 0 11px}
+  #subtitleReviewCard>.row3{margin-bottom:9px!important}
+  .sub-ref-content{font-size:14px}
+  #gptSovitsCard .grid.two{grid-template-columns:1fr}
+  #previewHeaderBadges{gap:4px!important}#previewHeaderBadges .badge{font-size:10px;padding:3px 5px}
+  #subtitleLayoutPreviewCard>.row{grid-template-columns:1fr}
+}
 </style>
 </head>
 <body>
@@ -96,6 +181,13 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
   <div><h1>HSR Voice Archive Builder <span class="badge" id="versionBadge">正在读取版本…</span></h1><div class="sub">浏览器负责交互，本机负责计算。控制台不上传原始语音资源。</div></div>
   <div id="mode" class="badge">正在连接本地后端…</div>
 </header>
+<nav class="workspace-nav" aria-label="工作区">
+  <button type="button" data-workspace-target="project" aria-current="page">项目</button>
+  <button type="button" data-workspace-target="review">字幕校对</button>
+  <button type="button" data-workspace-target="layout">字幕排版</button>
+  <button type="button" data-workspace-target="export">资产导出</button>
+  <button type="button" data-workspace-target="update">增量更新</button>
+</nav>
 <main id="mainContent">
 <div class="grid">
   <div class="stack" id="primaryStack">
@@ -387,36 +479,36 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
     <!-- Subtitle Layout Real-Time Preview Workspace -->
     <section class="card" id="subtitleLayoutPreviewCard">
       <div class="topline">
-        <h2>字幕排版实时预览控制台 (Subtitle Layout Preview)</h2>
+        <h2>字幕排版</h2>
         <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
-          <span id="previewScaleBadge" class="badge">Scale: 100%</span>
-          <span id="previewStatusBadge" class="badge" style="color:var(--ok)">✓ 正常 OK</span>
+          <span id="previewScaleBadge" class="badge">100%</span>
+          <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
       </div>
-      <p class="small muted">所见即所得 (WYSIWYG) 控制面板：调节排版参数、安全边距与间隔，实时预览 1920×1080 视频画面的双语字幕堆叠、分行断点与碰撞预警。</p>
+      <p class="small muted">调整文字和边距，预览双语字幕在视频画面中的位置。</p>
 
       <!-- Control Panel Controls & Inputs -->
       <div class="row" style="margin-bottom:12px">
         <div>
-          <label for="prevChsText">中文字幕 (Chinese Subtitle)</label>
+          <label for="prevChsText">中文字幕</label>
           <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
         </div>
         <div>
-          <label for="prevPriText">原文/英文字幕 (Primary Subtitle)</label>
+          <label for="prevPriText">原文字幕</label>
           <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
         </div>
       </div>
 
       <!-- Presets & Sliders -->
-      <div style="background:var(--soft);padding:14px;border-radius:10px;border:1px solid var(--line);margin-bottom:14px">
+      <div class="preview-controls" style="background:var(--soft);padding:14px;border-radius:10px;border:1px solid var(--line);margin-bottom:14px">
         <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px">
-          <b style="font-size:13px;color:var(--text)">快捷预设 (Quick Presets)</b>
+          <b style="font-size:13px;color:var(--text)">预设</b>
           <div class="actions" style="margin:0">
-            <button type="button" class="small" id="prevPresetDefault">默认标准 (PR72)</button>
-            <button type="button" class="small" id="prevPresetPlain">纯净无特效 (Plain)</button>
-            <button type="button" class="small" id="prevPresetKaraoke">K歌律动 (Karaoke)</button>
+            <button type="button" class="small" id="prevPresetDefault">标准</button>
+            <button type="button" class="small" id="prevPresetPlain">纯净</button>
+            <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
             <button type="button" class="small" id="prevPresetLongText">长句自动换行</button>
-            <button type="button" class="small danger" id="prevPresetCollision">碰撞/溢出压力测试</button>
+            <button type="button" class="small danger" id="prevPresetCollision">压力测试</button>
           </div>
         </div>
 
@@ -494,9 +586,9 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
 
     <section class="card hidden" id="subtitleReviewCard">
       <div class="topline">
-        <h2>字幕审查编辑器 (Subtitle Review Editor)</h2>
+        <h2>字幕校对</h2>
       </div>
-      <p class="small muted">专为人类校对与中文修正设计的单条校对工作台。只有“最终中文”可编辑，时间轴与原文不可修改。停止输入约 1 秒后会自动保存；切换条目时未保存的修改会在后台自动保存。</p>
+      <p class="small muted">逐条修正中文。停止输入约 1 秒后会自动保存。</p>
 
       <div class="row3" style="margin-bottom:12px">
         <div>
@@ -504,7 +596,7 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
           <input id="subSearchQuery" type="search" autocomplete="off" placeholder="搜索台词、角色、中英文…">
         </div>
         <div>
-          <label>时间范围 (如 03:20 -- 05:40)</label>
+          <label>时间范围</label>
           <input id="subTimeRange" placeholder="例: 03:20 -- 05:40">
         </div>
         <div>
@@ -536,17 +628,17 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
         <div class="sub-main" id="subMainWorkspace">
           <div class="sub-current-header">
             <div>
-              <b id="subCurrentIndexTag" style="font-size:16px;color:var(--blue)">字幕 #1</b>
+              <b id="subCurrentIndexTag">字幕 #1</b>
               <span id="subTimeBadge" class="badge sub-time-badge" style="margin-left:8px">00:00.0 - 00:00.0</span>
             </div>
             <div id="subStatusBadge"></div>
           </div>
 
           <!-- Read-only references -->
-          <div style="display:grid;gap:10px">
+          <div class="sub-references" style="display:grid;gap:10px">
             <div class="sub-ref-card">
               <div class="sub-ref-label">
-                <span>原文 (Source Subtitle)</span>
+                <span>原文</span>
                 <span id="subSourceLangBadge" class="badge">EN</span>
               </div>
               <div id="subSourceText" class="sub-ref-content">May this journey lead us starward.</div>
@@ -602,12 +694,12 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
             </details>
 
             <div class="sub-ref-card">
-              <div class="sub-ref-label">官方中文参考 (Official Reference)</div>
+              <div class="sub-ref-label">官方中文</div>
               <div id="subOfficialText" class="sub-ref-content">愿此行，终抵群星。</div>
             </div>
 
             <div class="sub-ref-card">
-              <div class="sub-ref-label">API 翻译参考 (API Translation Reference)</div>
+              <div class="sub-ref-label">API 翻译</div>
               <div id="subApiText" class="sub-ref-content">—</div>
             </div>
           </div>
@@ -615,7 +707,7 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
           <!-- Editable Final Chinese Textarea -->
           <div class="sub-edit-area">
             <div class="sub-edit-header">
-              <label for="subFinalEditor">最终中文字幕 (Final Chinese) — 可编辑</label>
+              <label for="subFinalEditor">最终中文字幕</label>
               <span id="subCharCounter" class="small muted">0 字</span>
             </div>
             <textarea id="subFinalEditor" class="sub-textarea" placeholder="在此输入修饰后的最终中文字幕…"></textarea>
@@ -708,6 +800,22 @@ mark.search-hl{background:rgba(240,166,64,0.35);color:#fff;border-radius:2px;pad
 </main>
 <script>
 const injectedToken=__HSR_API_TOKEN_JSON__;
+const workspaceButtons=[...document.querySelectorAll('[data-workspace-target]')];
+const reviewEditor=document.querySelector('#subMainWorkspace .sub-edit-area');
+const reviewReferences=document.querySelector('#subMainWorkspace .sub-references');
+if(reviewEditor&&reviewReferences)reviewReferences.before(reviewEditor);
+function showWorkspace(name,{scroll=true}={}){
+  if(!['project','review','layout','export','update'].includes(name))name='project';
+  document.body.dataset.workspace=name;
+  for(const button of workspaceButtons){
+    if(button.dataset.workspaceTarget===name)button.setAttribute('aria-current','page');
+    else button.removeAttribute('aria-current');
+  }
+  if(name==='layout'&&typeof updateLayoutPreview==='function')requestAnimationFrame(updateLayoutPreview);
+  if(scroll)window.scrollTo({top:0,behavior:'instant'});
+}
+for(const button of workspaceButtons)button.addEventListener('click',()=>showWorkspace(button.dataset.workspaceTarget));
+showWorkspace('project',{scroll:false});
 const token=typeof injectedToken==="string"?injectedToken:"";
 if(location.search){history.replaceState(null,'',location.pathname)}
 const headers=()=>token?{'X-HSR-Token':token}:{};
@@ -948,6 +1056,10 @@ function outputDescription(name){
 
 function fillProject(p){
   currentProject=p;
+  for(const button of workspaceButtons){
+    if(['review','export','update'].includes(button.dataset.workspaceTarget))button.disabled=!p;
+  }
+  if(!p&&['review','export','update'].includes(document.body.dataset.workspace))showWorkspace('project');
   document.getElementById('noProject').classList.toggle('hidden',!!p);
   document.getElementById('projectForm').classList.toggle('hidden',!p);
   document.getElementById('archiveCard').classList.toggle('hidden',!p);
