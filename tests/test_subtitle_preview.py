@@ -7,6 +7,8 @@ from fastapi.testclient import TestClient
 from app.security import api_token
 from app.server import app as fastapi_app
 from subtitle_layout.preview import preview_subtitle_layout
+from subtitle_layout.layout_solver import solve_subtitle_layout
+from subtitle_layout.safe_area import SafeArea
 
 
 class SubtitlePreviewUnitTests(unittest.TestCase):
@@ -38,6 +40,44 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertIn("total_span", res["parallax"])
         self.assertIn("parallax_ratio", res["parallax"])
 
+    def test_preview_matches_export_solver_geometry(self):
+        safe_area = SafeArea(
+            margin_left_percent=0.15,
+            margin_right_percent=0.15,
+            margin_top_percent=0.08,
+            margin_bottom_percent=0.08,
+        )
+        solved = solve_subtitle_layout(
+            "A moderately long source subtitle used for solver parity.",
+            "一条用于检查求解器一致性的中文字幕。",
+            base_chs_size=58,
+            base_primary_size=46,
+            safe_area=safe_area,
+            min_central_gap=30.0,
+        )
+        preview = preview_subtitle_layout(
+            english_text="A moderately long source subtitle used for solver parity.",
+            chinese_text="一条用于检查求解器一致性的中文字幕。",
+            base_chs_size=58,
+            base_primary_size=46,
+            margin_left_percent=0.15,
+            margin_top_percent=0.08,
+            min_central_gap=30.0,
+        )
+        self.assertEqual(preview["layout"]["scale_factor"], solved.scale_factor)
+        self.assertEqual(
+            [row["text"] for row in preview["layout"]["primary_lines"]],
+            [row.text for row in solved.primary_lines],
+        )
+        self.assertEqual(
+            [row["font_size"] for row in preview["layout"]["primary_lines"]],
+            [row.font_size for row in solved.primary_lines],
+        )
+        self.assertEqual(
+            [row["text"] for row in preview["layout"]["chs_lines"]],
+            [row.text for row in solved.chs_lines],
+        )
+
     def test_custom_margins_and_gap(self):
         res = preview_subtitle_layout(
             margin_left_percent=0.15,
@@ -63,6 +103,7 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertTrue(res["layout"]["failed"])
         self.assertIsNotNone(res["layout"]["failed_condition"])
+        self.assertTrue(res["layout"]["primary_lines"] or res["layout"]["chs_lines"])
 
     def test_fastapi_endpoint(self):
         response = self.client.post(
