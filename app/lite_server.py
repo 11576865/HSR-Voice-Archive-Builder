@@ -1147,6 +1147,10 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/update/apply-remote":
             config = _active_config()
+            if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
+                raise ValueError(
+                    "Remote update downloads are not enabled for this game's provider yet."
+                )
             paths = _project_paths(config)
             output, source, index = paths["output"], paths["wavs"], paths["index"]
             if output is None or source is None or index is None:
