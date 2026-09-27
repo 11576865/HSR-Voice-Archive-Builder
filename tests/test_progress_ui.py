@@ -285,6 +285,29 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("confirmedCount=loadedSubtitles.filter(sub=>sub.confirmed).length", html)
         self.assertIn("confirmedCount+' 已确认'", html)
 
+    def test_application_shell_v3_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("/* Application shell v3", html)
+        self.assertIn("--rail-width:132px", html)
+        self.assertIn("--topbar-height:56px", html)
+        self.assertIn("position:fixed;left:0;top:var(--topbar-height);bottom:0", html)
+        self.assertIn("margin:0 0 0 var(--rail-width)", html)
+        self.assertIn("grid-template-columns:minmax(0,1fr) 292px", html)
+        self.assertIn('@media(max-width:960px)', html)
+        self.assertIn(':root{--rail-width:0px}', html)
+        self.assertIn('class="workspace-index">01</span><span>档案</span>', html)
+        self.assertIn('class="workspace-index">02</span><span>校对</span>', html)
+        self.assertIn('class="workspace-index">03</span><span>排版</span>', html)
+        self.assertIn('class="workspace-index">04</span><span>导出</span>', html)
+        self.assertIn('class="workspace-index">05</span><span>更新</span>', html)
+        self.assertIn("本地归档工作台 · 音频 / 字幕 / 增量更新", html)
+        self.assertIn(".card{", html)
+        self.assertIn("border-radius:4px", html)
+        self.assertIn(".job-center-copy{flex-direction:row", html)
+
     def test_project_overview_job_center_and_artifact_browser_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
