@@ -9,6 +9,7 @@ class SubtitleRenderConfig:
     """Consolidated configuration for subtitle rendering pipeline and visual styles."""
 
     enable_karaoke: bool = False
+    karaoke_mode: str = "k"
     enable_frosted_glass: bool = False
     enable_multi_layer_outline: bool = False
     enable_kinetic: bool = True
@@ -28,6 +29,12 @@ class SubtitleRenderConfig:
     soft_entry_scale_percent: float = 98.0
     soft_entry_blur: float = 1.5
     soft_entry_ms: int = 160
+
+    # Optional low-priority archive metadata overlay.
+    enable_archive_hud: bool = False
+    archive_character: str = ""
+    archive_hud_font_size: int = 22
+    archive_hud_opacity: float = 0.72
 
     # Layout settings are shared by preview and ASS export.
     chs_font: str = "汉仪旗黑"
