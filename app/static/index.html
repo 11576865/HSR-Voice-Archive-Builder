@@ -2898,7 +2898,7 @@ subtitleEditor.addEventListener('blur',()=>{
 document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
 document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
-document.addEventListener('keydown',(e)=>{
+document.getElementById('subtitleReviewCard').addEventListener('keydown',(e)=>{
   if(document.body.dataset.workspace!=='review'||document.activeElement===subtitleEditor)return;
   if(e.altKey&&e.code==='Space'){e.preventDefault();toggleCurrentSubtitleAudio()}
   else if(e.altKey&&e.key.toLowerCase()==='n'){e.preventDefault();goToNextAttentionSubtitle()}
