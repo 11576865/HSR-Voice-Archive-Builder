@@ -208,6 +208,7 @@ class SubtitleSettingsApiTests(unittest.TestCase):
                 "margin_vertical_percent": 0.08,
                 "min_central_gap": 30,
                 "enable_karaoke": True,
+                "karaoke_mode": "kf",
                 "enable_translucent_card": True,
                 "enable_multi_layer_outline": True,
                 "enable_kinetic": False,
@@ -222,6 +223,9 @@ class SubtitleSettingsApiTests(unittest.TestCase):
                 "soft_entry_scale_percent": 97.5,
                 "soft_entry_blur": 1.7,
                 "soft_entry_ms": 170,
+                "enable_archive_hud": True,
+                "archive_hud_font_size": 24,
+                "archive_hud_opacity": 0.66,
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -235,6 +239,7 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(saved.subtitle_margin_vertical_percent, 0.08)
         self.assertEqual(saved.subtitle_min_central_gap, 30.0)
         self.assertTrue(saved.subtitle_enable_karaoke)
+        self.assertEqual(saved.subtitle_karaoke_mode, "kf")
         self.assertTrue(saved.subtitle_enable_translucent_card)
         self.assertTrue(saved.subtitle_enable_multi_layer_outline)
         self.assertFalse(saved.subtitle_enable_kinetic)
@@ -249,6 +254,9 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(saved.subtitle_soft_entry_scale_percent, 97.5)
         self.assertEqual(saved.subtitle_soft_entry_blur, 1.7)
         self.assertEqual(saved.subtitle_soft_entry_ms, 170)
+        self.assertTrue(saved.subtitle_enable_archive_hud)
+        self.assertEqual(saved.subtitle_archive_hud_font_size, 24)
+        self.assertEqual(saved.subtitle_archive_hud_opacity, 0.66)
 
     def test_settings_endpoint_rejects_ass_delimiter_in_font_name(self):
         response = self.client.post(
