@@ -1691,13 +1691,23 @@ document.getElementById('panelCollapseSecondaryBtn')?.addEventListener('click',(
 });
 updatePanelModeButtons();
 if(panelCollapseMode==='manual')applyManualPanelState();
-const panelAttentionObserver=new MutationObserver(()=>{
+const panelAttentionObserver=new MutationObserver(mutations=>{
+  const meaningful=mutations.some(mutation=>{
+    if(mutation.target?.id!=='archiveCard')return true;
+    if(mutation.type!=='attributes'||mutation.attributeName!=='class')return false;
+    const wasHidden=String(mutation.oldValue||'').split(/\s+/).includes('hidden');
+    const isHidden=mutation.target.classList.contains('hidden');
+    return wasHidden!==isHidden;
+  });
+  if(!meaningful)return;
   if(panelCollapseMode==='auto')applyAutoPanelState(document.body.dataset.workspace||'project');
   else updatePanelTiers(document.body.dataset.workspace||'project');
 });
-for(const target of [document.getElementById('failureSummary'),document.getElementById('activeJobState'),document.getElementById('archiveCard')]){
+for(const target of [document.getElementById('failureSummary'),document.getElementById('activeJobState')]){
   if(target)panelAttentionObserver.observe(target,{attributes:true,childList:true,subtree:true,characterData:true});
 }
+const archivePanel=document.getElementById('archiveCard');
+if(archivePanel)panelAttentionObserver.observe(archivePanel,{attributes:true,attributeFilter:['class'],attributeOldValue:true});
 
 function showWorkspace(name,{scroll=true}={}){
   if(!['project','review','layout','export','update'].includes(name))name='project';
