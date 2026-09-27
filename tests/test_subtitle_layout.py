@@ -186,8 +186,8 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(layout.primary_lines[0].alignment, 2)
         self.assertEqual(layout.chs_lines[0].font_size, 52)
         self.assertEqual(layout.primary_lines[0].font_size, 42)
-        self.assertEqual(layout.chs_lines[0].y, 550)
-        self.assertEqual(layout.primary_lines[0].y, 530)
+        self.assertEqual(layout.chs_lines[0].y, 645)
+        self.assertEqual(layout.primary_lines[0].y, 625)
 
     def test_multiline_backslash_N_joining(self) -> None:
         entry = SimpleNamespace(
