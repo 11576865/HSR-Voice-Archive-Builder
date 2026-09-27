@@ -815,7 +815,6 @@ class Handler(BaseHTTPRequestHandler):
                     state_dir=paths["state"],
                     review_official_target=config.review_official_target,
                     game_id=getattr(config, "game_id", "honkai-star-rail"),
-                game_id=getattr(config, "game_id", "honkai-star-rail"),
                     recovery_callback=auto_recovery,
                 )
                 auto_recovery("build-complete")
@@ -1040,7 +1039,6 @@ class Handler(BaseHTTPRequestHandler):
                     state_dir=paths["state"],
                     review_official_target=config.review_official_target,
                     game_id=getattr(config, "game_id", "honkai-star-rail"),
-                game_id=getattr(config, "game_id", "honkai-star-rail"),
                 )
 
             job = create_job(
