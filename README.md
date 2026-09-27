@@ -170,6 +170,18 @@ The dashboard includes a single-entry proofreading workspace.
 
 English GPT-SoVITS training export checks the project's source-text and declared audio languages. For projects whose primary audio language remains `auto`, it reports that the language was not independently confirmed. The export includes `sample_provenance.csv` and rejects source WAVs whose SHA-256 no longer matches the completed archive.
 
+## ASS layout, timing, and Karaoke
+
+ASS is an on-demand presentation layer generated from the same resolved Timeline and final subtitle text as SRT. The layout workbench uses a 1920×1080 canvas with 3% horizontal safe margins, 5% vertical safe margins, a protected central gap, and a 60/40 source-to-Chinese vertical region split after the gap is reserved.
+
+The workbench can tune fonts, size, outline, shadow, blur, translucent-card opacity, fade timing, restrained soft-entry transforms, Karaoke mode, and optional Archive HUD metadata. Browser geometry preview can load the processing host's installed font through the local backend; FFmpeg/libass remains the final rendering authority.
+
+Advanced Karaoke never invents word timing. `\k`, `\kf`, and dynamic `\clip + \t` highlighting are emitted only when complete monotonic word-level timing matches the source text and fits inside the source-audio duration. Timing imported through the workbench is stored separately in `output/word_alignments.json`; it is fingerprinted against source text/duration and is attached to ASS rendering in memory without changing canonical manifest text provenance.
+
+The Sync panel reports usable, missing, and invalid alignments. When Karaoke is enabled, the workbench prefers an aligned project subtitle for FFmpeg/libass preview and can render an intermediate percentage of its real duration to inspect the sweep.
+
+See [ASS layout engine](docs/layout_engine.md) for the cache schema, validation rules, layer model, and preview behavior.
+
 ## Translation configuration
 
 Translation is optional and only used when target text is missing or when explicitly enabled official-text review requires it.
