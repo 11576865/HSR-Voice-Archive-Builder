@@ -389,11 +389,11 @@ class QuickBuildUiTests(unittest.TestCase):
         )
         self.assertIn('overflow-y:auto;', html)
         self.assertIn(
-            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  display:block!important;\n  background:var(--surface-primary)!important;',
+            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  display:block!important;\n  background:var(--layout-shell)!important;',
             html,
         )
         self.assertIn(
-            '.preview-workbench .preview-stage{\n  width:100%!important;\n  margin:0!important;\n  aspect-ratio:16/9;\n  background:#05070b!important;',
+            '.preview-workbench .preview-stage{\n  width:100%!important;\n  margin:0!important;\n  aspect-ratio:16/9;\n  background:var(--layout-canvas)!important;',
             html,
         )
         self.assertIn('class="sub-workspace proofreading-workspace"', html)
@@ -401,6 +401,45 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-actions"', html)
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
+
+    def test_layout_light_theme_has_authoritative_tokens(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("/* Subtitle layout workbench theme + geometry v9", html)
+        self.assertIn("--layout-shell:var(--surface-primary)", html)
+        self.assertIn("--layout-inspector:var(--surface-utility)", html)
+        self.assertIn("--layout-input:var(--surface-input)", html)
+        self.assertIn("--layout-canvas:#05070b", html)
+        self.assertIn(':root[data-theme="light"]{\n  --layout-shell:#ffffff;', html)
+        self.assertIn("--layout-inspector:#f5f8fb", html)
+        self.assertIn("--layout-input:#ffffff", html)
+        self.assertIn("background:var(--layout-inspector)!important", html)
+        self.assertIn("background:var(--layout-input)!important", html)
+        self.assertIn("color:var(--layout-text)!important", html)
+        self.assertIn("border-color:var(--layout-border)!important", html)
+
+        # The video canvas is intentionally dark in both themes.
+        self.assertIn("background:var(--layout-canvas)!important", html)
+
+        # Legacy dark workbench surfaces must no longer be authoritative.
+        self.assertNotIn(
+            'body[data-workspace="review"] .card,body[data-workspace="layout"] .card{background:#15191c',
+            html,
+        )
+        self.assertNotIn(
+            '.preview-copy-fields{grid-area:copy;grid-template-columns:1fr!important;padding:14px 16px 4px;margin:0!important;background:#121619}',
+            html,
+        )
+        self.assertNotIn(
+            '.preview-controls{grid-area:controls;display:block!important;margin:0!important;padding:0 16px;background:#121619}',
+            html,
+        )
+        self.assertNotIn(
+            '.preview-actions{grid-area:actions;display:block!important;margin:0!important;padding:8px 16px 14px;background:#121619}',
+            html,
+        )
 
     def test_theme_coherence_and_single_layer_utility_drawer_contract(self) -> None:
         html = (
