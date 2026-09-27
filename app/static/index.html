@@ -498,13 +498,234 @@ th{font-size:10px;text-transform:uppercase;letter-spacing:.04em}
   .card{padding:14px}
   .project-overview-head h3{font-size:21px}
 }
+
+/* High-contrast collapsible shell v4 --------------------------------------- */
+:root{
+  --bg:#070a0e;
+  --card:#10161d;
+  --soft:#171f28;
+  --line:#2a3541;
+  --line-strong:#415262;
+  --text:#f4f7fa;
+  --muted:#8997a5;
+  --accent:#57d5c0;
+  --accent-strong:#8ce8d9;
+  --blue:#72c9ef;
+  --ok:#69d19a;
+  --warn:#e3ad5f;
+  --bad:#e67b83;
+  --purple:#b49cdd;
+  --rail-width:148px;
+  --topbar-height:64px;
+  --shadow-main:0 20px 54px rgba(0,0,0,.26);
+}
+body{
+  background:
+    radial-gradient(circle at 72% -20%,rgba(87,213,192,.075),transparent 31rem),
+    linear-gradient(180deg,#090d12 0,#070a0e 34rem);
+  color:var(--text);
+}
+header{
+  height:var(--topbar-height);
+  padding:0 20px;
+  background:rgba(7,10,14,.94);
+  border-bottom:1px solid #24303a;
+  backdrop-filter:blur(18px) saturate(1.15);
+}
+.app-brand{display:flex;align-items:center;gap:11px;min-width:0}
+.app-brand-mark{
+  width:34px;height:34px;display:grid;place-items:center;flex:0 0 auto;
+  border:1px solid #3b4c59;background:#101820;color:var(--accent-strong);
+  font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.09em;
+  box-shadow:inset 0 0 0 1px #57d5c00b;
+}
+header h1{font-size:15px;font-weight:700;letter-spacing:-.015em}
+header h1::before{display:none}
+header .sub{margin:2px 0 0;color:#657483;font:600 9px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.075em}
+header #versionBadge{margin-left:5px;color:#9eabb8}
+.header-tools{display:flex;align-items:center;justify-content:flex-end;gap:10px;min-width:0}
+.panel-mode-control{
+  display:flex;align-items:center;gap:2px;padding:3px;
+  border:1px solid #28343e;background:#0b1015;
+}
+.panel-mode-control button{
+  min-height:28px;padding:4px 8px;border:0;border-radius:1px;background:transparent;
+  color:#788794;font:600 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace;
+}
+.panel-mode-control button:hover:not(:disabled){background:#151d24;color:#dce4eb}
+.panel-mode-control button[aria-pressed="true"]{background:#1a2929;color:var(--accent-strong)}
+.panel-mode-divider{width:1px;height:16px;margin:0 2px;background:#26323b}
+header #mode{
+  flex:0 1 auto;max-width:210px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  background:#0c1217;border-color:#2b3741;color:#98a6b2;
+}
+.workspace-nav{
+  width:var(--rail-width);padding:14px 8px;background:#090d11;border-right-color:#222c35;
+}
+.workspace-nav::before{
+  content:"WORKSPACES";display:block;padding:5px 12px 9px;color:#4f5e6a;
+  font:700 8px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.13em;
+}
+.workspace-nav button{
+  min-height:50px;padding:7px 10px 7px 12px;grid-template-columns:27px 1fr;
+  color:#71808d;border:1px solid transparent;
+}
+.workspace-nav button:hover{background:#10171d;color:#cbd5dd;border-color:#1f2a33}
+.workspace-nav button[aria-current="page"]{
+  background:linear-gradient(90deg,#162521,#111a1c);
+  color:#f3f7f6;border-color:#274139;
+}
+.workspace-nav button[aria-current="page"]::after{background:var(--accent);top:7px;bottom:7px}
+.workspace-nav .workspace-index{color:#43515c;font-size:9px}
+.workspace-nav button[aria-current="page"] .workspace-index{color:var(--accent-strong)}
+.job-center-bar{
+  top:var(--topbar-height);margin-left:var(--rail-width);
+  background:#0b1015;border-bottom-color:#26313a;
+}
+.job-center-toggle{padding-left:22px;padding-right:22px}
+.job-center-dot{box-shadow:0 0 0 4px rgba(87,213,192,.08)}
+.job-center-fill{background:linear-gradient(90deg,#2f8f7f,var(--accent))}
+main{margin-left:var(--rail-width);padding:22px 24px 74px}
+.grid{max-width:1640px;grid-template-columns:minmax(0,1fr) 310px;gap:18px}
+.stack{gap:14px}
+.card{
+  position:relative;background:#0f151b;border:1px solid #293540;border-radius:3px;
+  padding:19px;box-shadow:none;transition:border-color .16s ease,background-color .16s ease,box-shadow .16s ease,opacity .16s ease;
+}
+.card[data-ui-tier="primary"]{
+  background:linear-gradient(180deg,#141c24,#111820);
+  border-color:#40515f;box-shadow:var(--shadow-main);
+}
+.card[data-ui-tier="primary"]::before{
+  content:"";position:absolute;left:-1px;top:18px;bottom:18px;width:2px;background:var(--accent);
+}
+.card[data-ui-tier="secondary"]{background:#0e1419;border-color:#26323c}
+.card[data-ui-tier="utility"]{background:#0a0f13;border-color:#202a32}
+.card[data-ui-tier="attention"]{border-color:#755a33;box-shadow:0 0 0 1px rgba(227,173,95,.08)}
+.card[data-ui-tier="attention"]::before{background:var(--warn)}
+.card.ui-collapsible.ui-collapsed{background:#0b1014;border-color:#222c34;box-shadow:none}
+.card.ui-collapsible.ui-collapsed::before{top:9px;bottom:9px;opacity:.55}
+.card.ui-collapsible.ui-collapsed > *:not(.ui-collapse-head):not(.topline){display:none!important}
+.ui-collapse-head{display:flex!important;align-items:center;gap:10px;min-height:34px;margin-bottom:0!important}
+.ui-collapse-head h2{min-width:0}
+.ui-collapse-head .panel-collapse-toggle{margin-left:auto}
+.panel-collapse-toggle{
+  flex:0 0 auto;width:30px;min-height:28px!important;padding:0!important;border:1px solid #2b3842!important;
+  background:#0b1116!important;color:#81909c!important;font:700 13px/1 ui-monospace,SFMono-Regular,Consolas,monospace!important;
+}
+.panel-collapse-toggle:hover{color:var(--accent-strong)!important;border-color:#496258!important;background:#101a1b!important}
+.card.ui-collapsed .panel-collapse-toggle{color:#a3afb9!important}
+.card.ui-collapsed .topline,.card.ui-collapsed .ui-collapse-head{padding-bottom:0!important;border-bottom:0!important}
+.card[data-ui-tier="primary"] .topline h2,.card[data-ui-tier="primary"] .ui-collapse-head h2{color:#f7fafc}
+.card[data-ui-tier="secondary"] .topline h2,.card[data-ui-tier="secondary"] .ui-collapse-head h2{color:#cbd4dc}
+.card[data-ui-tier="utility"] .topline h2,.card[data-ui-tier="utility"] .ui-collapse-head h2{color:#9ba8b3}
+.card .topline h2,.ui-collapse-head h2{font-size:16px;font-weight:690;letter-spacing:-.012em}
+.badge{background:#0a1014;border-color:#2c3943;color:#96a3ae}
+input,select,textarea{
+  background:#0b1116;border-color:#2d3944;color:#f0f4f7;
+}
+input:hover,select:hover,textarea:hover{border-color:#40505d}
+input:focus-visible,select:focus-visible,textarea:focus-visible{
+  outline:1px solid var(--accent);border-color:var(--accent);box-shadow:0 0 0 3px rgba(87,213,192,.08);
+}
+button{
+  background:#151d24;border-color:#34424d;color:#dce4ea;border-radius:3px;
+}
+button:hover:not(:disabled){background:#1c2730;border-color:#4a5c69}
+button.primary,button.success{
+  background:#267b6b;border-color:#349985;color:#f8fffd;
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.07);
+}
+button.primary:hover:not(:disabled),button.success:hover:not(:disabled){background:#2d8e7b;border-color:#46af99}
+.notice{background:#0c1217;border-color:#293640}
+.notice.warn{background:#18130d;border-color:#654b29}
+.notice.bad{background:#1a1012;border-color:#653a3e}
+.notice.ok{background:#0d1712;border-color:#315d45}
+.stat,.overview-metric,.overview-panel,.artifact-card,.update-filter,.update-change,.update-diff-side{
+  border-radius:2px!important;
+}
+.stat{background:#0b1116;border-color:#26323d}
+.stat b{font-weight:650}
+.project-overview-head h3{color:#f7fafc;font-size:27px}
+.project-status{font-weight:650}
+.overview-metrics{background:#26323b;border-color:#26323b}
+.overview-metric{background:#0c1318}
+.overview-panel{background:#0c1217;border-color:#26323c}
+.artifact-card{background:#0b1116;border-color:#26323c}
+.artifact-card:hover{border-color:#465965}
+.update-filter[aria-pressed="true"]{background:#162622;border-color:#4a897c}
+.update-review-list{background:#26323c;border-color:#26323c}
+.update-change{background:#0b1116}
+.update-diff-side{background:#080d11}
+#subtitleReviewCard,#subtitleLayoutPreviewCard,#updateCard,#gptSovitsCard{border-color:#3c4c59}
+.proofreading-workspace .sub-sidebar{background:#0a0f13}
+.proofreading-workspace .sub-main{background:#10171d}
+.proofreading-workspace .sub-item.active{background:#16302a;border-left-color:var(--accent)}
+.proofreading-workspace .sub-textarea{background:#080d11;border-left-color:#4eaa99}
+.preview-copy-fields,.preview-controls,.preview-actions,#libassPreviewStatus,.preview-advanced{background:#0b1116}
+.preview-stage{background:#030507}
+.inspector-group{border-top-color:#26323b}
+#sideStack .card{background:#090e12}
+#progressCard{border-color:#293742}
+#progressCard[data-ui-tier="attention"]{background:#16120d;border-color:#72542f}
+pre{background:#06090c;border-color:#202a32;color:#c6d0d8}
+table{background:transparent}
+th{color:#748390}
+td{border-bottom-color:#222c34}
+details summary{color:#a6b2bc}
+body[data-panel-mode="auto"] #panelAutoModeBtn,
+body[data-panel-mode="manual"] #panelManualModeBtn{background:#1a2929;color:var(--accent-strong)}
+body[data-panel-mode="auto"] #panelExpandAllBtn,
+body[data-panel-mode="auto"] #panelCollapseSecondaryBtn{opacity:.45}
+@media(max-width:1100px){
+  .panel-mode-control button:nth-of-type(3),.panel-mode-control button:nth-of-type(4){display:none}
+}
+@media(max-width:960px){
+  header{height:58px;padding:0 12px}
+  .app-brand-mark{width:30px;height:30px}
+  header .sub{display:none}
+  .header-tools{gap:6px}
+  .panel-mode-control{padding:2px}
+  .panel-mode-control button{min-height:27px;padding:4px 6px}
+  header #mode{max-width:128px}
+  .workspace-nav{top:58px}
+  .workspace-nav::before{display:none}
+  .job-center-bar{margin-left:0}
+  main{margin-left:0}
+}
+@media(max-width:640px){
+  .app-brand h1{font-size:12px}
+  .app-brand-mark{display:none}
+  header #versionBadge{display:none}
+  .panel-mode-control button{font-size:9px}
+  .panel-mode-divider,.panel-mode-control button:nth-of-type(3),.panel-mode-control button:nth-of-type(4){display:none}
+  header #mode{max-width:92px}
+  .card{padding:14px}
+  .card[data-ui-tier="primary"]{box-shadow:none}
+}
+
 </style>
 </head>
 <body>
 <a href="#mainContent" class="skip-link">跳过导航进入主内容</a>
 <header>
-  <div><h1>HSR Voice Archive Builder <span class="badge" id="versionBadge">正在读取版本…</span></h1><div class="sub">本地归档工作台 · 音频 / 字幕 / 增量更新</div></div>
-  <div id="mode" class="badge">正在连接本地后端…</div>
+  <div class="app-brand">
+    <div class="app-brand-mark" aria-hidden="true">HSR</div>
+    <div>
+      <h1>Voice Archive Builder <span class="badge" id="versionBadge">正在读取版本…</span></h1>
+      <div class="sub">LOCAL ARCHIVE WORKBENCH · AUDIO / SUBTITLE / UPDATE</div>
+    </div>
+  </div>
+  <div class="header-tools">
+    <div class="panel-mode-control" id="panelModeControl" aria-label="面板折叠模式">
+      <button type="button" id="panelAutoModeBtn" aria-pressed="true" title="按当前工作区自动展开主面板、折叠次要面板">Auto</button>
+      <button type="button" id="panelManualModeBtn" aria-pressed="false" title="手动控制每个面板的折叠状态">Manual</button>
+      <span class="panel-mode-divider" aria-hidden="true"></span>
+      <button type="button" id="panelExpandAllBtn" title="展开当前工作区全部面板">全部展开</button>
+      <button type="button" id="panelCollapseSecondaryBtn" title="保留主工作面，折叠次要与诊断面板">收起次要</button>
+    </div>
+    <div id="mode" class="badge">正在连接本地后端…</div>
+  </div>
 </header>
 <nav class="workspace-nav" aria-label="工作区">
   <button type="button" data-workspace-target="project" aria-current="page"><span class="workspace-index">01</span><span>档案</span></button>
@@ -1286,6 +1507,198 @@ const workspaceButtons=[...document.querySelectorAll('[data-workspace-target]')]
 const reviewEditor=document.querySelector('#subMainWorkspace .sub-edit-area');
 const reviewReferences=document.querySelector('#subMainWorkspace .sub-references');
 if(reviewEditor&&reviewReferences)reviewReferences.before(reviewEditor);
+
+const PANEL_MODE_KEY='hsr-ui-panel-mode-v1';
+const PANEL_STATE_KEY='hsr-ui-panel-state-v1';
+let panelCollapseMode=localStorage.getItem(PANEL_MODE_KEY)==='manual'?'manual':'auto';
+let savedPanelState={};
+try{savedPanelState=JSON.parse(localStorage.getItem(PANEL_STATE_KEY)||'{}')||{}}catch(e){savedPanelState={}}
+const panelTitleMap={
+  archiveCard:'构建结果',
+  subtitleReviewCard:'字幕校对',
+  subtitleLayoutPreviewCard:'字幕排版',
+  gptSovitsCard:'GPT-SoVITS 导出',
+  updateCard:'增量更新',
+  progressCard:'任务中心',
+  diagnosticCard:'诊断'
+};
+const workspacePrimaryPanels={
+  project:new Set(['projectCard']),
+  review:new Set(['subtitleReviewCard']),
+  layout:new Set(['subtitleLayoutPreviewCard']),
+  export:new Set(['gptSovitsCard']),
+  update:new Set(['updateCard'])
+};
+function directChildWithClass(panel,className){
+  return [...panel.children].find(el=>el.classList?.contains(className))||null;
+}
+function directHeading(panel){
+  const top=directChildWithClass(panel,'topline');
+  if(top){
+    const h=top.querySelector('h2,h3');
+    if(h)return h;
+  }
+  return [...panel.children].find(el=>/^H[23]$/.test(el.tagName))||null;
+}
+function panelKeyFor(panel,index){
+  if(panel.id)return panel.id;
+  const heading=directHeading(panel)?.textContent?.trim()||'';
+  if(heading==='项目')return 'projectCard';
+  return 'panel-'+index;
+}
+function panelFallbackTitle(panel,key){
+  const heading=directHeading(panel)?.textContent?.trim();
+  if(heading)return heading;
+  if(panelTitleMap[key])return panelTitleMap[key];
+  const summary=panel.querySelector('details>summary');
+  return summary?.textContent?.trim()||'辅助面板';
+}
+const collapsiblePanels=[
+  ...document.querySelectorAll('#primaryStack > section.card,#sideStack > section.card')
+];
+function saveManualPanelState(){
+  const state={};
+  for(const panel of collapsiblePanels)state[panel.dataset.uiPanelKey]=panel.classList.contains('ui-collapsed');
+  localStorage.setItem(PANEL_STATE_KEY,JSON.stringify(state));
+}
+function setPanelCollapsed(panel,collapsed,{save=false}={}){
+  if(!panel)return;
+  panel.classList.toggle('ui-collapsed',!!collapsed);
+  const button=panel.querySelector('.panel-collapse-toggle');
+  if(button){
+    button.setAttribute('aria-expanded',collapsed?'false':'true');
+    button.textContent=collapsed?'▸':'▾';
+    const title=panel.dataset.uiPanelTitle||'面板';
+    button.title=(collapsed?'展开 ':'折叠 ')+title;
+    button.setAttribute('aria-label',(collapsed?'展开 ':'折叠 ')+title);
+  }
+  if(save&&panelCollapseMode==='manual')saveManualPanelState();
+}
+function enhanceCollapsiblePanels(){
+  collapsiblePanels.forEach((panel,index)=>{
+    const key=panelKeyFor(panel,index);
+    panel.dataset.uiPanelKey=key;
+    panel.dataset.uiPanelTitle=panelFallbackTitle(panel,key);
+    panel.classList.add('ui-collapsible');
+    let head=directChildWithClass(panel,'topline');
+    if(head){
+      head.classList.add('ui-collapse-head');
+    }else{
+      const heading=directHeading(panel);
+      head=document.createElement('div');
+      head.className='ui-collapse-head';
+      if(heading){
+        panel.insertBefore(head,heading);
+        head.appendChild(heading);
+      }else{
+        const title=document.createElement('h2');
+        title.textContent=panel.dataset.uiPanelTitle;
+        head.appendChild(title);
+        panel.insertBefore(head,panel.firstChild);
+      }
+    }
+    if(!head.querySelector('.panel-collapse-toggle')){
+      const toggle=document.createElement('button');
+      toggle.type='button';
+      toggle.className='panel-collapse-toggle';
+      toggle.addEventListener('click',()=>{
+        setPanelMode('manual');
+        setPanelCollapsed(panel,!panel.classList.contains('ui-collapsed'),{save:true});
+      });
+      head.appendChild(toggle);
+    }
+  });
+}
+function taskNeedsAttention(){
+  const failure=document.getElementById('failureSummary');
+  if(failure&&!failure.classList.contains('hidden'))return true;
+  const state=document.getElementById('activeJobState')?.textContent||'';
+  return !!state&&!/没有运行中的构建|等待任务|尚无任务/.test(state);
+}
+function updatePanelTiers(workspace){
+  const primary=workspacePrimaryPanels[workspace]||new Set();
+  for(const panel of collapsiblePanels){
+    const key=panel.dataset.uiPanelKey;
+    let tier=primary.has(key)?'primary':(panel.closest('#sideStack')?'utility':'secondary');
+    if(key==='archiveCard'&&workspace==='project'&&!panel.classList.contains('hidden'))tier='secondary';
+    if(key==='progressCard'&&taskNeedsAttention())tier='attention';
+    panel.dataset.uiTier=tier;
+  }
+}
+function applyAutoDetails(){
+  document.querySelectorAll('.update-advanced,.preview-advanced,#archiveCard details,#primaryStack>section:first-child details').forEach(detail=>{
+    if(detail.id!=='runReportDetails')detail.open=false;
+  });
+  const runReport=document.getElementById('runReportDetails');
+  if(runReport)runReport.open=taskNeedsAttention();
+  const diagnostic=document.getElementById('diagnosticLog');
+  if(diagnostic&&taskNeedsAttention())diagnostic.open=true;
+}
+function applyAutoPanelState(workspace=document.body.dataset.workspace||'project'){
+  updatePanelTiers(workspace);
+  const primary=workspacePrimaryPanels[workspace]||new Set();
+  for(const panel of collapsiblePanels){
+    const key=panel.dataset.uiPanelKey;
+    let open=primary.has(key);
+    if(workspace==='project'&&key==='archiveCard'&&!panel.classList.contains('hidden'))open=true;
+    if(key==='progressCard')open=taskNeedsAttention();
+    if(key==='diagnosticCard')open=false;
+    setPanelCollapsed(panel,!open);
+  }
+  applyAutoDetails();
+}
+function applyManualPanelState(){
+  updatePanelTiers(document.body.dataset.workspace||'project');
+  for(const panel of collapsiblePanels){
+    const key=panel.dataset.uiPanelKey;
+    if(Object.prototype.hasOwnProperty.call(savedPanelState,key)){
+      setPanelCollapsed(panel,!!savedPanelState[key]);
+    }
+  }
+}
+function updatePanelModeButtons(){
+  document.body.dataset.panelMode=panelCollapseMode;
+  const auto=document.getElementById('panelAutoModeBtn');
+  const manual=document.getElementById('panelManualModeBtn');
+  if(auto)auto.setAttribute('aria-pressed',panelCollapseMode==='auto'?'true':'false');
+  if(manual)manual.setAttribute('aria-pressed',panelCollapseMode==='manual'?'true':'false');
+}
+function setPanelMode(mode){
+  panelCollapseMode=mode==='manual'?'manual':'auto';
+  localStorage.setItem(PANEL_MODE_KEY,panelCollapseMode);
+  updatePanelModeButtons();
+  if(panelCollapseMode==='auto')applyAutoPanelState();
+  else applyManualPanelState();
+}
+enhanceCollapsiblePanels();
+document.getElementById('panelAutoModeBtn')?.addEventListener('click',()=>setPanelMode('auto'));
+document.getElementById('panelManualModeBtn')?.addEventListener('click',()=>setPanelMode('manual'));
+document.getElementById('panelExpandAllBtn')?.addEventListener('click',()=>{
+  setPanelMode('manual');
+  for(const panel of collapsiblePanels){
+    if(!panel.classList.contains('hidden'))setPanelCollapsed(panel,false);
+  }
+  saveManualPanelState();
+});
+document.getElementById('panelCollapseSecondaryBtn')?.addEventListener('click',()=>{
+  setPanelMode('manual');
+  updatePanelTiers(document.body.dataset.workspace||'project');
+  for(const panel of collapsiblePanels){
+    if(panel.classList.contains('hidden'))continue;
+    setPanelCollapsed(panel,panel.dataset.uiTier!=='primary'&&panel.dataset.uiTier!=='attention');
+  }
+  saveManualPanelState();
+});
+updatePanelModeButtons();
+if(panelCollapseMode==='manual')applyManualPanelState();
+const panelAttentionObserver=new MutationObserver(()=>{
+  if(panelCollapseMode==='auto')applyAutoPanelState(document.body.dataset.workspace||'project');
+  else updatePanelTiers(document.body.dataset.workspace||'project');
+});
+for(const target of [document.getElementById('failureSummary'),document.getElementById('activeJobState'),document.getElementById('archiveCard')]){
+  if(target)panelAttentionObserver.observe(target,{attributes:true,childList:true,subtree:true,characterData:true});
+}
+
 function showWorkspace(name,{scroll=true}={}){
   if(!['project','review','layout','export','update'].includes(name))name='project';
   document.body.dataset.workspace=name;
@@ -1293,6 +1706,8 @@ function showWorkspace(name,{scroll=true}={}){
     if(button.dataset.workspaceTarget===name)button.setAttribute('aria-current','page');
     else button.removeAttribute('aria-current');
   }
+  updatePanelTiers(name);
+  if(panelCollapseMode==='auto')requestAnimationFrame(()=>applyAutoPanelState(name));
   if(name==='layout'&&typeof updateLayoutPreview==='function')requestAnimationFrame(updateLayoutPreview);
   if(scroll)window.scrollTo({top:0,behavior:'instant'});
 }
