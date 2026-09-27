@@ -34,6 +34,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
 
     return SubtitleRenderConfig(
         enable_karaoke=as_bool("enable_karaoke", False),
+        karaoke_mode=(str(data.get("karaoke_mode", "k") or "k").lower() if str(data.get("karaoke_mode", "k") or "k").lower() in {"k", "kf", "clip"} else "k"),
         enable_frosted_glass=as_bool("enable_translucent_card", False),
         enable_multi_layer_outline=as_bool("enable_multi_layer_outline", False),
         enable_kinetic=as_bool("enable_kinetic", True),
@@ -50,6 +51,10 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         ),
         soft_entry_blur=max(0.0, min(5.0, float(data.get("soft_entry_blur", 1.5)))),
         soft_entry_ms=max(0, min(1000, int(data.get("soft_entry_ms", 160)))),
+        enable_archive_hud=as_bool("enable_archive_hud", False),
+        archive_character=str(data.get("archive_character", "") or "").strip(),
+        archive_hud_font_size=max(12, min(48, int(data.get("archive_hud_font_size", 22)))),
+        archive_hud_opacity=max(0.1, min(1.0, float(data.get("archive_hud_opacity", 0.72)))),
         chs_font=validate_ass_font_name(data.get("chs_font", "汉仪旗黑")),
         primary_font=validate_ass_font_name(data.get("primary_font", "Noto Sans")),
         base_chs_size=max(12, min(120, int(data.get("base_chs_size", 52)))),
