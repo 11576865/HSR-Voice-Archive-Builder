@@ -38,6 +38,8 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("run_termux.sh", page)
         self.assertIn("requirements-termux.txt", (root / "run_termux.sh").read_text(encoding="utf-8"))
         self.assertIn("127.0.0.1:8765", page)
+        self.assertIn('href="http://127.0.0.1:8765/"', page)
+        self.assertIn("打开本地 Web UI", page)
         self.assertIn("continuous.flac", page)
         self.assertIn("ASS / libass", page)
         self.assertIn("Incremental Update", page)
