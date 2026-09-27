@@ -49,10 +49,14 @@ def solve_subtitle_layout(
     same_chinese = source_language == target_language == "zh-CN"
     center_x = safe_area.canvas_width // 2
 
-    # Central boundary coordinates
-    y_center = safe_area.canvas_height / 2.0
-    y_center_top = round(y_center - min_central_gap / 2.0)
-    y_center_bottom = round(y_center + min_central_gap / 2.0)
+    # Central boundary coordinates.
+    # After reserving the central gap, allocate the remaining safe-area height
+    # 60% to the primary/source subtitle region above the gap and 40% to the
+    # Chinese target subtitle region below it.
+    available_height = max(0.0, safe_area.max_printable_height - min_central_gap)
+    primary_region_height = available_height * 0.60
+    y_center_top = round(safe_area.y_min + primary_region_height)
+    y_center_bottom = round(y_center_top + min_central_gap)
 
     scale_attempts: list[int] = []
     last_failure_condition: str | None = None
