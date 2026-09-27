@@ -101,15 +101,67 @@ def format_karaoke_text(
     duration_sec: float,
     word_alignments: list[object] | None = None,
     is_cjk: bool = False,
+    mode: str = "k",
 ) -> str:
     """Apply ASS karaoke tags only for complete, monotonic word-level timing."""
     validated = _validated_word_alignments(text, duration_sec, word_alignments)
     if not validated:
         return text
+    tag = "kf" if str(mode).lower() == "kf" else "k"
     return "".join(
-        f"{{\\k{max(1, round(duration * 100))}}}{word}"
+        f"{{\\{tag}{max(1, round(duration * 100))}}}{word}"
         for word, duration in validated
     )
+
+
+def generate_clip_karaoke_overlay(
+    line: object,
+    duration_sec: float,
+    word_alignments: list[object] | None,
+    *,
+    font_path: str | None = None,
+) -> str | None:
+    """Build a progressive rectangular clip overlay from verified word timing.
+
+    This is intentionally limited to one rendered line. Multi-line subtitles
+    fall back to ordinary text instead of inventing a sweep path.
+    """
+    text = getattr(line, "text", str(line))
+    validated = _validated_word_alignments(text, duration_sec, word_alignments)
+    if not validated:
+        return None
+
+    bbox = getattr(line, "bbox", None)
+    if bbox is None:
+        return None
+    x1 = round(float(getattr(bbox, "x_min", 0)))
+    x2 = round(float(getattr(bbox, "x_max", 0)))
+    y1 = round(float(getattr(bbox, "y_min", 0)) - 4)
+    y2 = round(float(getattr(bbox, "y_max", 0)) + 4)
+    if x2 <= x1 or y2 <= y1:
+        return None
+
+    font_size = int(getattr(line, "font_size", 42))
+    widths = [
+        max(1.0, measure_text_width(word, font_size, font_path))
+        for word, _duration in validated
+    ]
+    total_width = sum(widths)
+    if total_width <= 0:
+        return None
+
+    tags = [f"\\clip({x1},{y1},{x1},{y2})"]
+    elapsed_ms = 0
+    covered_width = 0.0
+    for (word, word_duration), width in zip(validated, widths, strict=True):
+        start_ms = elapsed_ms
+        elapsed_ms += max(1, round(word_duration * 1000))
+        covered_width += width
+        reveal_x = x1 + round((x2 - x1) * min(1.0, covered_width / total_width))
+        tags.append(
+            f"\\t({start_ms},{elapsed_ms},\\clip({x1},{y1},{reveal_x},{y2}))"
+        )
+    return "".join(tags)
 
 
 def _fmt_num(value: float) -> str:
@@ -228,6 +280,7 @@ def format_multiline_karaoke(
     duration_sec: float,
     word_alignments: list[object] | None = None,
     is_cjk: bool = False,
+    mode: str = "k",
 ) -> str:
     """Apply karaoke only when timings can be mapped without inventing timing."""
     if not lines:
@@ -240,6 +293,7 @@ def format_multiline_karaoke(
         duration_sec,
         word_alignments,
         is_cjk=is_cjk,
+        mode=mode,
     )
 
 
@@ -276,11 +330,15 @@ Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour,
 Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,{margin_h},{margin_h},{margin_v},1
 Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,{margin_h},{margin_h},{margin_v},1
 Style: Card,{primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: Archive,{primary_font},{int(cfg.archive_hud_font_size)},&H{_ass_alpha_for_opacity(cfg.archive_hud_opacity)}FFFFFF,&HFFFFFFFF,&H80000000,&HFF000000,0,0,0,0,100,100,0,0,1,1,0,7,{margin_h},{margin_h},{margin_v},1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
     use_karaoke = cfg.enable_karaoke if enable_karaoke is None else enable_karaoke
+    karaoke_mode = str(getattr(cfg, "karaoke_mode", "k") or "k").lower()
+    if karaoke_mode not in {"k", "kf", "clip"}:
+        karaoke_mode = "k"
     use_frosted_glass = cfg.enable_frosted_glass if enable_frosted_glass is None else enable_frosted_glass
     use_multi_layer_outline = cfg.enable_multi_layer_outline if enable_multi_layer_outline is None else enable_multi_layer_outline
     use_kinetic = cfg.enable_kinetic if enable_kinetic is None else enable_kinetic
@@ -366,6 +424,30 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         duration_sec = max(0.01, end_sec - actual_start_sec)
         prev_end_sec = end_sec
 
+        if cfg.enable_archive_hud:
+            character = _clean_ass_text(
+                getattr(entry, "character", "") or cfg.archive_character
+            ).strip()
+            chapter = _clean_ass_text(getattr(entry, "group", "")).strip()
+            entry_id = _clean_ass_text(
+                getattr(entry, "index", getattr(entry, "id", ""))
+            ).strip()
+            hud_parts = []
+            if character:
+                hud_parts.append(character.upper())
+            if chapter:
+                hud_parts.append(chapter)
+            if entry_id:
+                hud_parts.append(f"#{entry_id}")
+            if hud_parts:
+                hud_text = " · ".join(hud_parts)
+                hud_x = round(safe_area.x_min + 10)
+                hud_y = round(safe_area.y_min + 8)
+                dialogues.append(
+                    f"Dialogue: 5,{start_time},{end_time},Archive,,0,0,0,,"
+                    f"{{\\an7\\pos({hud_x},{hud_y})}}{hud_text}"
+                )
+
         if use_frosted_glass:
             if layout.primary_lines:
                 res_pri = generate_frosted_glass_card(layout.primary_lines, safe_area=safe_area, font_path=primary_font_path, opacity=cfg.card_opacity)
@@ -424,12 +506,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{out_text}"
                 )
 
-            if use_karaoke:
+            pri_alignments = word_alignments if not source_language.startswith("zh") else None
+            if use_karaoke and karaoke_mode in {"k", "kf"}:
                 pri_text = format_multiline_karaoke(
                     layout.primary_lines,
                     duration_sec,
-                    word_alignments=word_alignments if not source_language.startswith("zh") else None,
+                    word_alignments=pri_alignments,
                     is_cjk=source_language.startswith("zh"),
+                    mode=karaoke_mode,
                 )
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
@@ -437,6 +521,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             dialogues.append(
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
             )
+            if use_karaoke and karaoke_mode == "clip" and len(layout.primary_lines) == 1:
+                clip_tags = generate_clip_karaoke_overlay(
+                    layout.primary_lines[0],
+                    duration_sec,
+                    pri_alignments,
+                    font_path=primary_font_path,
+                )
+                if clip_tags:
+                    clip_text = getattr(layout.primary_lines[0], "text", str(layout.primary_lines[0]))
+                    overlay = (
+                        f"{pos_prefix}\\fs{pos0.font_size}\\1c&H00E8FF&"
+                        f"\\bord0\\shad0{clip_tags}}}{clip_text}"
+                    )
+                    dialogues.append(
+                        f"Dialogue: 3,{start_time},{end_time},Primary,,0,0,0,,{overlay}"
+                    )
 
         if layout.chs_lines:
             pos0 = layout.chs_lines[0]
@@ -476,12 +576,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
 
-            if use_karaoke:
+            chs_alignments = word_alignments if source_language.startswith("zh") else None
+            if use_karaoke and karaoke_mode in {"k", "kf"}:
                 chs_text = format_multiline_karaoke(
                     layout.chs_lines,
                     duration_sec,
-                    word_alignments=word_alignments if source_language.startswith("zh") else None,
+                    word_alignments=chs_alignments,
                     is_cjk=True,
+                    mode=karaoke_mode,
                 )
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
@@ -489,6 +591,22 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
+            if use_karaoke and karaoke_mode == "clip" and len(layout.chs_lines) == 1:
+                clip_tags = generate_clip_karaoke_overlay(
+                    layout.chs_lines[0],
+                    duration_sec,
+                    chs_alignments,
+                    font_path=chs_font_path,
+                )
+                if clip_tags:
+                    clip_text = getattr(layout.chs_lines[0], "text", str(layout.chs_lines[0]))
+                    overlay = (
+                        f"{pos_prefix}\\fs{pos0.font_size}\\1c&H00E8FF&"
+                        f"\\bord0\\shad0{clip_tags}}}{clip_text}"
+                    )
+                    dialogues.append(
+                        f"Dialogue: 4,{start_time},{end_time},CHS,,0,0,0,,{overlay}"
+                    )
 
     if overflow_report_path is not None:
         _atomic_write(
