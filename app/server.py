@@ -1059,10 +1059,6 @@ def api_project_build():
     try:
         assert_no_active_build()
         config = _active_config()
-        if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
-            raise ValueError(
-                "Remote update downloads are not enabled for this game's provider yet."
-            )
         paths = _project_paths(config)
         if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
             raise ValueError("Project index, WAV source, and output directory are required")
@@ -1244,6 +1240,10 @@ def api_update_apply_remote():
     """Download reliably resolved additions, adopt a combined source, and leave rebuild explicit."""
     try:
         config = _active_config()
+        if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
+            raise ValueError(
+                "Remote update downloads are not enabled for this game's provider yet."
+            )
         paths = _project_paths(config)
         output, source, index = paths["output"], paths["wavs"], paths["index"]
         if output is None or source is None or index is None:
