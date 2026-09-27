@@ -13,6 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .ass_preview import preview_config_from_payload, render_ass_preview_png
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -54,6 +55,7 @@ from .project import (
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
+from subtitle_layout.fonts import validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -434,8 +436,8 @@ class Handler(BaseHTTPRequestHandler):
             update_project(
                 config,
                 subtitle_preset=preset,
-                subtitle_chs_font=(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑").strip(),
-                subtitle_primary_font=(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans").strip(),
+                subtitle_chs_font=validate_ass_font_name(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑"),
+                subtitle_primary_font=validate_ass_font_name(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans"),
                 subtitle_chs_size=max(12, min(120, _int(data.get("base_chs_size"), config.subtitle_chs_size))),
                 subtitle_primary_size=max(12, min(120, _int(data.get("base_primary_size"), config.subtitle_primary_size))),
                 subtitle_margin_horizontal_percent=max(
@@ -476,8 +478,27 @@ class Handler(BaseHTTPRequestHandler):
                 margin_left_percent=margin_left_percent,
                 margin_top_percent=margin_top_percent,
                 min_central_gap=min_central_gap,
+                chs_font=data.get("chs_font") or "汉仪旗黑",
+                primary_font=data.get("primary_font") or "Noto Sans",
             )
             self._json(result)
+            return
+
+        if path == "/api/subtitle-layout/render-preview":
+            config = preview_config_from_payload(data)
+            png = render_ass_preview_png(
+                english_text=data.get("english_text", ""),
+                chinese_text=data.get("chinese_text", ""),
+                source_language=data.get("source_language", "en") or "en",
+                target_language=data.get("target_language", "zh-CN") or "zh-CN",
+                config=config,
+            )
+            self._send_bytes(
+                200,
+                png,
+                "image/png",
+                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
+            )
             return
 
         if path == "/api/recovery/status":
