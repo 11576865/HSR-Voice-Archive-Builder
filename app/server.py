@@ -22,6 +22,7 @@ from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
+from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -314,7 +315,84 @@ def api_get_project_word_alignments(project_id: str):
         output_dir = paths.get("output")
         if output_dir is None:
             raise ValueError("Project output directory is not configured")
-        return {"ok": True, "diagnostics": alignment_diagnostics(output_dir)}
+        return {
+            "ok": True,
+            "diagnostics": alignment_diagnostics(output_dir),
+            "local_provider": local_alignment_provider_status(),
+        }
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
+
+
+@app.post("/api/project/{project_id}/word-alignments/generate")
+async def api_generate_project_word_alignments(project_id: str, request: Request):
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        if not (output_dir / "manifest.json").is_file():
+            raise FileNotFoundError("请先完成档案构建")
+
+        try:
+            body = await request.json()
+        except Exception:
+            body = {}
+        if not isinstance(body, dict):
+            body = {}
+
+        raw_ids = body.get("item_ids") or []
+        if not isinstance(raw_ids, list):
+            raise ValueError("item_ids must be an array")
+        item_ids = [str(value) for value in raw_ids if str(value).strip()]
+        force = bool(body.get("force", False))
+
+        provider = local_alignment_provider_status()
+        if not provider.get("available"):
+            missing = ", ".join(provider.get("missing_packages") or [])
+            raise RuntimeError(
+                "本地强制对齐不可用"
+                + (f"：缺少 {missing}" if missing else "")
+                + "。可选安装：python -m pip install whisperx"
+            )
+
+        def run(report_progress):
+            result = generate_local_word_alignments(
+                config,
+                output_dir,
+                item_ids=item_ids or None,
+                force=force,
+                report_progress=report_progress,
+            )
+            report_progress("refresh", "正在刷新字幕成品", 0, 1)
+            refreshed = refresh_subtitle_artifacts_from_settings(
+                output_dir,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                generate_ass=(
+                    (output_dir / "HSR_Voice_Archive.ass").is_file()
+                    or bool(getattr(config, "generate_ass", False))
+                ),
+                render_config=subtitle_render_config(config),
+                strict_ass=False,
+            )
+            report_progress("refresh", "词级时间与字幕成品已刷新", 1, 1)
+            result["refreshed"] = refreshed
+            return result
+
+        job = create_job(
+            "word-align",
+            run,
+            with_progress=True,
+            project_root=config.root,
+            project_name=config.name,
+        )
+        return {"ok": True, "job": job.id, "provider": provider}
     except Exception as exc:
         return JSONResponse(
             {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
