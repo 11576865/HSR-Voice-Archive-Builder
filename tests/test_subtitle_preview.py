@@ -1,12 +1,17 @@
 from __future__ import annotations
 
 import json
+import tempfile
 import unittest
+from pathlib import Path
 from fastapi.testclient import TestClient
 
 from app.security import api_token
-from app.server import app as fastapi_app
+from app.server import app as fastapi_app, _clear_active, _set_active
+from app.project import create_project, load_project
 from subtitle_layout.preview import preview_subtitle_layout
+from subtitle_layout.layout_solver import solve_subtitle_layout
+from subtitle_layout.safe_area import SafeArea
 
 
 class SubtitlePreviewUnitTests(unittest.TestCase):
@@ -38,6 +43,44 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertIn("total_span", res["parallax"])
         self.assertIn("parallax_ratio", res["parallax"])
 
+    def test_preview_matches_export_solver_geometry(self):
+        safe_area = SafeArea(
+            margin_left_percent=0.15,
+            margin_right_percent=0.15,
+            margin_top_percent=0.08,
+            margin_bottom_percent=0.08,
+        )
+        solved = solve_subtitle_layout(
+            "A moderately long source subtitle used for solver parity.",
+            "一条用于检查求解器一致性的中文字幕。",
+            base_chs_size=58,
+            base_primary_size=46,
+            safe_area=safe_area,
+            min_central_gap=30.0,
+        )
+        preview = preview_subtitle_layout(
+            english_text="A moderately long source subtitle used for solver parity.",
+            chinese_text="一条用于检查求解器一致性的中文字幕。",
+            base_chs_size=58,
+            base_primary_size=46,
+            margin_left_percent=0.15,
+            margin_top_percent=0.08,
+            min_central_gap=30.0,
+        )
+        self.assertEqual(preview["layout"]["scale_factor"], solved.scale_factor)
+        self.assertEqual(
+            [row["text"] for row in preview["layout"]["primary_lines"]],
+            [row.text for row in solved.primary_lines],
+        )
+        self.assertEqual(
+            [row["font_size"] for row in preview["layout"]["primary_lines"]],
+            [row.font_size for row in solved.primary_lines],
+        )
+        self.assertEqual(
+            [row["text"] for row in preview["layout"]["chs_lines"]],
+            [row.text for row in solved.chs_lines],
+        )
+
     def test_custom_margins_and_gap(self):
         res = preview_subtitle_layout(
             margin_left_percent=0.15,
@@ -63,6 +106,7 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertTrue(res["layout"]["failed"])
         self.assertIsNotNone(res["layout"]["failed_condition"])
+        self.assertTrue(res["layout"]["primary_lines"] or res["layout"]["chs_lines"])
 
     def test_fastapi_endpoint(self):
         response = self.client.post(
@@ -87,6 +131,63 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertIn("central_gap", data)
         self.assertIn("parallax", data)
         self.assertIn("layout", data)
+
+
+class SubtitleSettingsApiTests(unittest.TestCase):
+    def setUp(self) -> None:
+        self.token = api_token()
+        self.client = TestClient(fastapi_app, base_url="http://127.0.0.1:8765")
+        self.headers = {"X-HSR-Token": self.token}
+        self.tempdir = tempfile.TemporaryDirectory()
+        root = Path(self.tempdir.name)
+        (root / "index.csv").write_text("filename,english\nvoice.wav,Hello\n", encoding="utf-8")
+        (root / "wavs").mkdir()
+        config = create_project(
+            root,
+            name="subtitle-settings-test",
+            index_csv="index.csv",
+            wav_source="wavs",
+        )
+        _set_active(config)
+        self.root = root
+
+    def tearDown(self) -> None:
+        _clear_active()
+        self.tempdir.cleanup()
+
+    def test_settings_endpoint_persists_render_configuration(self):
+        response = self.client.post(
+            "/api/subtitle-layout/settings",
+            headers=self.headers,
+            json={
+                "preset": "karaoke",
+                "chs_font": "Test CHS",
+                "primary_font": "Test Primary",
+                "base_chs_size": 58,
+                "base_primary_size": 46,
+                "margin_horizontal_percent": 0.15,
+                "margin_vertical_percent": 0.08,
+                "min_central_gap": 30,
+                "enable_karaoke": True,
+                "enable_translucent_card": True,
+                "enable_multi_layer_outline": True,
+                "enable_kinetic": False,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        saved = load_project(self.root)
+        self.assertEqual(saved.subtitle_preset, "karaoke")
+        self.assertEqual(saved.subtitle_chs_font, "Test CHS")
+        self.assertEqual(saved.subtitle_primary_font, "Test Primary")
+        self.assertEqual(saved.subtitle_chs_size, 58)
+        self.assertEqual(saved.subtitle_primary_size, 46)
+        self.assertEqual(saved.subtitle_margin_horizontal_percent, 0.15)
+        self.assertEqual(saved.subtitle_margin_vertical_percent, 0.08)
+        self.assertEqual(saved.subtitle_min_central_gap, 30.0)
+        self.assertTrue(saved.subtitle_enable_karaoke)
+        self.assertTrue(saved.subtitle_enable_translucent_card)
+        self.assertTrue(saved.subtitle_enable_multi_layer_outline)
+        self.assertFalse(saved.subtitle_enable_kinetic)
 
 
 if __name__ == "__main__":

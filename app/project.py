@@ -48,6 +48,18 @@ class ProjectConfig:
     make_flac: bool = True
     chapter_order: bool = False
     generate_ass: bool = False
+    subtitle_preset: str = "standard"
+    subtitle_chs_font: str = "汉仪旗黑"
+    subtitle_primary_font: str = "Noto Sans"
+    subtitle_chs_size: int = 52
+    subtitle_primary_size: int = 42
+    subtitle_margin_horizontal_percent: float = 0.10
+    subtitle_margin_vertical_percent: float = 0.05
+    subtitle_min_central_gap: float = 20.0
+    subtitle_enable_karaoke: bool = False
+    subtitle_enable_translucent_card: bool = False
+    subtitle_enable_multi_layer_outline: bool = False
+    subtitle_enable_kinetic: bool = True
     translate_missing: bool = True
     review_official_target: bool = False
     translation_model: str = field(default_factory=translation_default_model)
