@@ -469,6 +469,7 @@ class Handler(BaseHTTPRequestHandler):
                     0.0, min(200.0, _float(data.get("min_central_gap"), config.subtitle_min_central_gap))
                 ),
                 subtitle_enable_karaoke=_bool(data.get("enable_karaoke", str(config.subtitle_enable_karaoke))),
+                subtitle_karaoke_mode=((data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() if (data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() in {"k", "kf", "clip"} else "k"),
                 subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
                 subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline", str(config.subtitle_enable_multi_layer_outline))),
                 subtitle_enable_kinetic=_bool(data.get("enable_kinetic", str(config.subtitle_enable_kinetic))),
@@ -483,6 +484,9 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_soft_entry_scale_percent=max(90.0, min(100.0, _float(data.get("soft_entry_scale_percent"), config.subtitle_soft_entry_scale_percent))),
                 subtitle_soft_entry_blur=max(0.0, min(5.0, _float(data.get("soft_entry_blur"), config.subtitle_soft_entry_blur))),
                 subtitle_soft_entry_ms=max(0, min(1000, _int(data.get("soft_entry_ms"), config.subtitle_soft_entry_ms))),
+                subtitle_enable_archive_hud=_bool(data.get("enable_archive_hud", str(config.subtitle_enable_archive_hud))),
+                subtitle_archive_hud_font_size=max(12, min(48, _int(data.get("archive_hud_font_size"), config.subtitle_archive_hud_font_size))),
+                subtitle_archive_hud_opacity=max(0.1, min(1.0, _float(data.get("archive_hud_opacity"), config.subtitle_archive_hud_opacity))),
             )
             self._json({"ok": True, "project": project_summary(config)})
             return
