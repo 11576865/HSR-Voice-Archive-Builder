@@ -390,12 +390,24 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('<option value="clip">动态裁剪扫光（\\clip + \\t）</option>', html)
         self.assertIn('id="wordAlignmentStatus"', html)
         self.assertIn('id="refreshWordAlignmentBtn"', html)
+        self.assertIn('id="generateWordAlignmentBtn"', html)
         self.assertIn('id="importWordAlignmentBtn"', html)
         self.assertIn('id="wordAlignmentFile"', html)
+        self.assertIn('id="wordAlignmentProviderStatus"', html)
+        self.assertIn("async function generateLocalWordAlignments()", html)
+        self.assertIn("'/word-alignments/generate'", html)
+        self.assertIn("python -m pip install whisperx", html)
         self.assertIn('id="prevKaraokePreviewTime"', html)
         self.assertIn('id="prevKaraokePreviewTimeVal"', html)
         self.assertIn("async function loadWordAlignmentDiagnostics()", html)
         self.assertIn("async function importWordAlignmentFile(file)", html)
+        self.assertIn("async function loadWordAlignmentDiagnostics()", html)
+        self.assertIn("local_provider", (
+            Path(__file__).resolve().parents[1] / "app" / "server.py"
+        ).read_text(encoding="utf-8"))
+        self.assertIn("generate_local_word_alignments", (
+            Path(__file__).resolve().parents[1] / "app" / "local_word_alignment.py"
+        ).read_text(encoding="utf-8"))
         self.assertIn("'/word-alignments'", html)
         self.assertIn("word_alignments:Array.isArray(layoutStressSample?.word_alignments)", html)
         self.assertIn("preview_duration_seconds:previewDuration", html)
