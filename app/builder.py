@@ -1242,7 +1242,10 @@ def build_chapter_flac_collection(
         tempfile.mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
     )
     backup = output_dir.with_name(f".{output_dir.name}.previous")
-    shutil.rmtree(backup, ignore_errors=True)
+    # A process may have stopped after moving the previous collection aside
+    # but before promoting staging. Recover that last good publication first.
+    if backup.exists() and not output_dir.exists():
+        backup.replace(output_dir)
     outputs: list[dict[str, object]] = []
     total_duration = 0.0
     try:
@@ -1309,6 +1312,10 @@ def build_chapter_flac_collection(
 
         had_previous = output_dir.exists()
         if had_previous:
+            # Staging is fully verified now. If an older stranded backup still
+            # exists while the current publication is healthy, it can finally
+            # be superseded by the current publication.
+            shutil.rmtree(backup, ignore_errors=True)
             output_dir.replace(backup)
         try:
             staging.replace(output_dir)
