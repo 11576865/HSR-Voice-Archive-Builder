@@ -619,6 +619,7 @@ def api_project_create(
     reference_language: str = Form("auto"),
     remote_character: str = Form(""),
     chapter_order: bool = Form(False),
+    generate_chapter_flac: bool = Form(False),
     translate_missing: bool = Form(True),
     review_official_target: bool = Form(False),
 ):
