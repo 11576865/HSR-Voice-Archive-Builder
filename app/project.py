@@ -61,6 +61,17 @@ class ProjectConfig:
     subtitle_enable_translucent_card: bool = False
     subtitle_enable_multi_layer_outline: bool = False
     subtitle_enable_kinetic: bool = True
+    subtitle_fade_in_ms: int = 200
+    subtitle_fade_out_ms: int = 200
+    subtitle_use_audio_aware_fade: bool = True
+    subtitle_outline_width: float = 3.0
+    subtitle_shadow_depth: float = 2.0
+    subtitle_blur_radius: float = 0.0
+    subtitle_card_opacity: float = 0.62
+    subtitle_enable_soft_entry: bool = False
+    subtitle_soft_entry_scale_percent: float = 98.0
+    subtitle_soft_entry_blur: float = 1.5
+    subtitle_soft_entry_ms: int = 160
     translate_missing: bool = True
     review_official_target: bool = False
     translation_model: str = field(default_factory=translation_default_model)
