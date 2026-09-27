@@ -1217,11 +1217,7 @@ def build_chapter_flac_collection(
     group_gap: float = 3.00,
     compression_level: int = 8,
 ) -> dict[str, object]:
-    """Build one verified continuous FLAC per safely classified major group.
-
-    Entries that cannot be assigned by the same major-group classifier used by
-    chapter ordering are reported but never guessed into a neighboring file.
-    """
+    """Build and atomically publish one verified continuous FLAC per major group."""
     if not entries:
         raise ValueError("No entries")
 
@@ -1241,83 +1237,95 @@ def build_chapter_flac_collection(
             continue
         grouped[group_id].append(entry)
 
-    output_dir.mkdir(parents=True, exist_ok=True)
-    expected_names: set[str] = set()
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
+    )
+    backup = output_dir.with_name(f".{output_dir.name}.previous")
+    shutil.rmtree(backup, ignore_errors=True)
     outputs: list[dict[str, object]] = []
     total_duration = 0.0
+    try:
+        for ordinal, group_id in enumerate(
+            sorted(grouped, key=major_group_sort_key), start=1
+        ):
+            group_entries = grouped[group_id]
+            local_entries = _retime_entries_for_collection(
+                group_entries,
+                intro_gap=intro_gap,
+                same_group_gap=same_group_gap,
+                group_gap=group_gap,
+            )
+            filename = f"{ordinal:02d}_{_chapter_output_slug(group_id)}.flac"
+            staging_flac = staging / filename
+            final_flac = output_dir / filename
+            audio_report = build_continuous_flac(
+                local_entries,
+                wav_root,
+                staging_flac,
+                compression_level=compression_level,
+            )
+            duration = local_entries[-1].next_start_sample / local_entries[0].sample_rate
+            total_duration += duration
+            outputs.append(
+                {
+                    "ordinal": ordinal,
+                    "group_id": group_id,
+                    "entry_count": len(local_entries),
+                    "duration_seconds": duration,
+                    "first_entry_index": local_entries[0].index,
+                    "last_entry_index": local_entries[-1].index,
+                    "first_filename": local_entries[0].filename,
+                    "last_filename": local_entries[-1].filename,
+                    "sample_rate": local_entries[0].sample_rate,
+                    "channels": local_entries[0].channels,
+                    "sample_width_bits": local_entries[0].sample_width_bits,
+                    "path": str(final_flac),
+                    "file_sha256": sha256_file(staging_flac),
+                    **{
+                        **audio_report,
+                        "flac_path": str(final_flac),
+                    },
+                }
+            )
 
-    for ordinal, group_id in enumerate(sorted(grouped, key=major_group_sort_key), start=1):
-        group_entries = grouped[group_id]
-        local_entries = _retime_entries_for_collection(
-            group_entries,
-            intro_gap=intro_gap,
-            same_group_gap=same_group_gap,
-            group_gap=group_gap,
-        )
-        filename = f"{ordinal:02d}_{_chapter_output_slug(group_id)}.flac"
-        expected_names.add(filename)
-        out_flac = output_dir / filename
-        audio_report = build_continuous_flac(
-            local_entries,
-            wav_root,
-            out_flac,
-            compression_level=compression_level,
-        )
-        duration = (
-            local_entries[-1].next_start_sample / local_entries[0].sample_rate
-            if local_entries
-            else 0.0
-        )
-        total_duration += duration
-        outputs.append(
-            {
-                "ordinal": ordinal,
-                "group_id": group_id,
-                "entry_count": len(local_entries),
-                "duration_seconds": duration,
-                "first_entry_index": local_entries[0].index,
-                "last_entry_index": local_entries[-1].index,
-                "first_filename": local_entries[0].filename,
-                "last_filename": local_entries[-1].filename,
-                "sample_rate": local_entries[0].sample_rate,
-                "channels": local_entries[0].channels,
-                "sample_width_bits": local_entries[0].sample_width_bits,
-                "path": str(out_flac),
-                "file_sha256": sha256_file(out_flac),
-                **audio_report,
-            }
+        manifest = {
+            "schema_version": 1,
+            "classification": "extract_major_group",
+            "intro_gap_seconds": float(intro_gap),
+            "same_group_gap_seconds": float(same_group_gap),
+            "group_gap_seconds": float(group_gap),
+            "chapter_count": len(outputs),
+            "chapter_entry_count": sum(int(row["entry_count"]) for row in outputs),
+            "chapter_duration_seconds": total_duration,
+            "unassigned_count": len(unassigned),
+            "unassigned": unassigned,
+            "outputs": outputs,
+        }
+        atomic_write_text(
+            staging / "chapter_flac_manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2),
         )
 
-    # Remove stale files from a prior classification after all replacements have
-    # succeeded. Unknown/unassigned voices are never represented as a guessed
-    # chapter file.
-    for existing in output_dir.glob("*.flac"):
-        if existing.name not in expected_names:
-            existing.unlink(missing_ok=True)
+        had_previous = output_dir.exists()
+        if had_previous:
+            output_dir.replace(backup)
+        try:
+            staging.replace(output_dir)
+        except BaseException:
+            if had_previous and backup.exists() and not output_dir.exists():
+                backup.replace(output_dir)
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
 
-    manifest = {
-        "schema_version": 1,
-        "classification": "extract_major_group",
-        "intro_gap_seconds": float(intro_gap),
-        "same_group_gap_seconds": float(same_group_gap),
-        "group_gap_seconds": float(group_gap),
-        "chapter_count": len(outputs),
-        "chapter_entry_count": sum(int(row["entry_count"]) for row in outputs),
-        "chapter_duration_seconds": total_duration,
-        "unassigned_count": len(unassigned),
-        "unassigned": unassigned,
-        "outputs": outputs,
-    }
-    atomic_write_text(
-        output_dir / "chapter_flac_manifest.json",
-        json.dumps(manifest, ensure_ascii=False, indent=2),
-    )
     return {
         "chapter_flac_enabled": True,
         "chapter_flac_directory": str(output_dir),
         "chapter_flac_manifest": str(output_dir / "chapter_flac_manifest.json"),
         "chapter_flac_count": len(outputs),
-        "chapter_flac_entry_count": manifest["chapter_entry_count"],
+        "chapter_flac_entry_count": sum(int(row["entry_count"]) for row in outputs),
         "chapter_flac_duration_seconds": total_duration,
         "chapter_flac_unassigned_count": len(unassigned),
         "chapter_flac_unassigned": unassigned,
