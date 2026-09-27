@@ -53,15 +53,15 @@ def _normalized_alignment_text(value: str) -> str:
     return "".join(str(value or "").split())
 
 
-def _validated_word_alignments(
+def _validated_word_alignment_details(
     text: str,
     duration_sec: float,
     word_alignments: list[object] | None,
-) -> list[tuple[str, float]] | None:
+) -> list[tuple[str, float, float, float]] | None:
     if not text or duration_sec <= 0 or not word_alignments:
         return None
 
-    tokens: list[tuple[str, float]] = []
+    tokens: list[tuple[str, float, float, float]] = []
     previous_end = 0.0
     covered = ""
     for item in word_alignments:
@@ -89,11 +89,22 @@ def _validated_word_alignments(
             return None
         previous_end = end
         covered += word
-        tokens.append((word, duration))
+        tokens.append((word, start, end, duration))
 
     if _normalized_alignment_text(covered) != _normalized_alignment_text(text):
         return None
     return tokens
+
+
+def _validated_word_alignments(
+    text: str,
+    duration_sec: float,
+    word_alignments: list[object] | None,
+) -> list[tuple[str, float]] | None:
+    details = _validated_word_alignment_details(text, duration_sec, word_alignments)
+    if not details:
+        return None
+    return [(word, duration) for word, _start, _end, duration in details]
 
 
 def format_karaoke_text(
@@ -127,8 +138,8 @@ def generate_clip_karaoke_overlay(
     fall back to ordinary text instead of inventing a sweep path.
     """
     text = getattr(line, "text", str(line))
-    validated = _validated_word_alignments(text, duration_sec, word_alignments)
-    if not validated:
+    details = _validated_word_alignment_details(text, duration_sec, word_alignments)
+    if not details:
         return None
 
     bbox = getattr(line, "bbox", None)
@@ -144,22 +155,21 @@ def generate_clip_karaoke_overlay(
     font_size = int(getattr(line, "font_size", 42))
     widths = [
         max(1.0, measure_text_width(word, font_size, font_path))
-        for word, _duration in validated
+        for word, _start, _end, _duration in details
     ]
     total_width = sum(widths)
     if total_width <= 0:
         return None
 
     tags = [f"\\clip({x1},{y1},{x1},{y2})"]
-    elapsed_ms = 0
     covered_width = 0.0
-    for (word, word_duration), width in zip(validated, widths, strict=True):
-        start_ms = elapsed_ms
-        elapsed_ms += max(1, round(word_duration * 1000))
+    for (word, start, end, _word_duration), width in zip(details, widths, strict=True):
+        start_ms = max(0, round(start * 1000))
+        end_ms = max(start_ms + 1, round(end * 1000))
         covered_width += width
         reveal_x = x1 + round((x2 - x1) * min(1.0, covered_width / total_width))
         tags.append(
-            f"\\t({start_ms},{elapsed_ms},\\clip({x1},{y1},{reveal_x},{y2}))"
+            f"\\t({start_ms},{end_ms},\\clip({x1},{y1},{reveal_x},{y2}))"
         )
     return "".join(tags)
 
