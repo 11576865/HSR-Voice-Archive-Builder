@@ -1749,10 +1749,194 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
     bottom:auto!important;
     z-index:auto!important;
     width:100%!important;
-    margin-top:8px!important;
+    margin-top:6px!important;
     padding:0!important;
     background:transparent!important;
     border-top:0!important;
+  }
+}
+
+/* Mobile density + editor authority v11 -----------------------------------
+   Keep touch targets usable while reducing stacked vertical chrome. The final
+   subtitle editor gets deliberately more room than the surrounding metadata. */
+.proof-step-editor .sub-textarea{
+  min-height:180px;
+}
+
+@media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px){
+  body[data-workspace="review"] main,
+  body[data-workspace="layout"] main{
+    padding:8px 6px calc(46px + env(safe-area-inset-bottom))!important;
+  }
+
+  #subtitleReviewCard>.topline,
+  #subtitleLayoutPreviewCard>.topline{
+    padding:10px 12px 8px!important;
+  }
+
+  #subtitleReviewCard>p.small.muted,
+  #subtitleLayoutPreviewCard>p.small.muted{
+    padding-left:12px!important;
+    padding-right:12px!important;
+    margin-top:6px!important;
+    margin-bottom:8px!important;
+  }
+
+  .proofreading-filters{
+    padding:0 12px 10px!important;
+    gap:6px!important;
+  }
+
+  #subtitleSaveStatus{
+    padding:6px 12px!important;
+  }
+
+  .proofreading-workspace .sub-sidebar{
+    max-height:118px!important;
+  }
+
+  .proofreading-workspace .sub-sidebar-header{
+    padding:6px 9px!important;
+  }
+
+  .proofreading-workspace .sub-list{
+    padding:3px!important;
+    gap:3px!important;
+  }
+
+  .proofreading-workspace .sub-item{
+    flex-basis:150px!important;
+    padding:6px 8px!important;
+  }
+
+  .proofreading-workspace .sub-main,
+  .sub-main{
+    padding:8px!important;
+    gap:7px!important;
+  }
+
+  .proof-step{
+    padding:9px!important;
+  }
+
+  .proof-step-kicker{
+    margin-bottom:4px!important;
+  }
+
+  .proof-step-audio .reference-annotation{
+    margin-top:6px!important;
+    padding-top:6px!important;
+  }
+
+  .sub-audio-card{
+    padding:6px 0 8px!important;
+  }
+
+  .sub-audio-card audio{
+    height:32px!important;
+  }
+
+  .proof-step-editor .sub-textarea,
+  #subFinalEditor{
+    min-height:230px!important;
+    padding:10px 12px!important;
+    font-size:16px!important;
+    line-height:1.55!important;
+  }
+
+  .proof-editor-meta{
+    gap:5px!important;
+  }
+
+  .proofreading-nav-actions{
+    gap:5px!important;
+    margin-top:6px!important;
+  }
+
+  .proofreading-nav-actions button,
+  .proofreading-actions button{
+    min-height:36px!important;
+    padding:6px 8px!important;
+  }
+
+  .preview-inspector .preview-copy-fields{
+    padding:9px 10px 4px!important;
+  }
+
+  .preview-inspector .preview-controls{
+    padding:0 10px!important;
+  }
+
+  .preview-inspector .inspector-group{
+    padding:9px 0!important;
+  }
+
+  .preview-inspector .inspector-group>b{
+    margin-bottom:6px!important;
+  }
+
+  .preview-inspector .inspector-group label{
+    margin-top:5px!important;
+  }
+
+  .preview-inspector input,
+  .preview-inspector select{
+    min-height:36px!important;
+    padding-top:6px!important;
+    padding-bottom:6px!important;
+  }
+
+  .preview-inspector input[type="range"]{
+    min-height:18px!important;
+    padding:0!important;
+  }
+
+  .preview-inspector .font-picker-row{
+    gap:5px!important;
+  }
+
+  .preview-inspector .font-picker-row .font-browse-btn{
+    min-height:36px!important;
+    padding:5px 8px!important;
+  }
+
+  .preview-inspector .inspector-help{
+    margin-top:4px!important;
+  }
+
+  .preview-inspector .preview-actions{
+    padding:6px 10px 10px!important;
+  }
+
+  .preview-inspector #libassPreviewStatus{
+    padding:7px 10px!important;
+  }
+
+  .preview-inspector .preview-advanced{
+    padding:4px 10px 10px!important;
+  }
+
+  .preview-inspector .layout-corpus-status{
+    margin:5px 0 2px!important;
+    padding:6px 7px!important;
+  }
+}
+
+@media (max-width:560px){
+  .workspace-nav{
+    height:40px!important;
+    padding:0 3px!important;
+  }
+
+  .workspace-nav button{
+    min-height:39px!important;
+    padding:0 7px!important;
+    font-size:11px!important;
+  }
+
+  .job-center-toggle{
+    min-height:34px!important;
+    padding:4px 8px!important;
   }
 }
 </style>
