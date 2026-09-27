@@ -46,6 +46,14 @@ def write_index(path: Path) -> None:
 
 
 class QuickBuildUiTests(unittest.TestCase):
+    def test_control_surface_has_svg_favicon(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "app" / "static" / "index.html").read_text(encoding="utf-8")
+        svg = (root / "app" / "static" / "favicon.svg").read_text(encoding="utf-8")
+        self.assertIn('rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=1"', html)
+        self.assertIn('viewBox="0 0 32 32"', svg)
+        self.assertNotIn("<text", svg)
+
     def test_common_timing_settings_are_visible_before_first_build(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
