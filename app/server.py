@@ -562,12 +562,18 @@ async def api_subtitle_layout_render_preview(request: Request):
         if not isinstance(data, dict):
             raise ValueError("Subtitle preview payload must be an object")
         config = preview_config_from_payload(data)
+        word_alignments = data.get("word_alignments")
+        if not isinstance(word_alignments, list):
+            word_alignments = None
         png = render_ass_preview_png(
             english_text=str(data.get("english_text") or ""),
             chinese_text=str(data.get("chinese_text") or ""),
             source_language=str(data.get("source_language") or "en"),
             target_language=str(data.get("target_language") or "zh-CN"),
             config=config,
+            word_alignments=word_alignments,
+            duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
+            timestamp=float(data.get("preview_timestamp") or 1.0),
         )
         return Response(
             content=png,
