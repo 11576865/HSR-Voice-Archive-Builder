@@ -1912,6 +1912,8 @@ if __name__ == "__main__":
     p.add_argument("--no-flac", action="store_true")
     p.add_argument("--chapter-order", action="store_true",
                    help="Order the main archive (FLAC + subtitles) by story chapter")
+    p.add_argument("--chapter-flac", action="store_true",
+                   help="Also generate one verified continuous FLAC per major story group")
     p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
@@ -1935,6 +1937,7 @@ if __name__ == "__main__":
         intro_gap=a.intro_gap,
         make_flac=not a.no_flac,
         chapter_order=a.chapter_order,
+        generate_chapter_flac=a.chapter_flac,
         generate_ass=a.generate_ass,
         translate_missing=a.translate_missing,
         review_official_target=a.review_official_target,
