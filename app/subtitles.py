@@ -9,6 +9,7 @@ from typing import Any
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
+from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
 
@@ -337,6 +338,10 @@ def refresh_subtitle_artifacts_from_settings(
         write_csv_rows(output_dir / "manifest.csv", entries, list(entries[0].keys()))
     _sync_corrected_csv(output_dir, entries)
 
+    # Word timing is a derived, non-destructive layer. It is attached only in
+    # memory after manifest/csv persistence so an external alignment cache never
+    # becomes source provenance or mutates the canonical archive manifest.
+    apply_cached_word_alignments(entries, output_dir)
     adapters = _subtitle_adapters(entries)
     source_language = source_language or "en"
     target_language = target_language or "zh-CN"
@@ -509,6 +514,11 @@ def get_project_subtitles(
         return []
 
     entries = data.get("entries", [])
+    if isinstance(entries, list):
+        apply_cached_word_alignments(
+            [entry for entry in entries if isinstance(entry, dict)],
+            output_dir,
+        )
     overrides_file = output_dir / "subtitles_overrides.json"
     overrides: dict[str, dict[str, Any]] = {}
     review_state = load_subtitle_review_state(output_dir)
@@ -587,6 +597,13 @@ def get_project_subtitles(
             "confirmed": bool(review_state.get(str_id, False)),
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
+            "word_alignment": dict(entry.get("_word_alignment") or {}),
+            "word_alignment_ready": bool(
+                (entry.get("_word_alignment") or {}).get("valid")
+            ),
+            "word_alignment_reason": str(
+                (entry.get("_word_alignment") or {}).get("reason") or "missing"
+            ),
         }
         subtitles.append(item)
 
@@ -601,6 +618,10 @@ def get_project_subtitles(
             subtitles = [s for s in subtitles if bool(s["api_chs"])]
         elif sel in ("overflow", "layout_overflow"):
             subtitles = [s for s in subtitles if s.get("layout_overflow")]
+        elif sel in ("karaoke_ready", "aligned", "word_aligned"):
+            subtitles = [s for s in subtitles if s.get("word_alignment_ready")]
+        elif sel in ("karaoke_missing", "unaligned", "word_alignment_missing"):
+            subtitles = [s for s in subtitles if not s.get("word_alignment_ready")]
         elif sel in ("unreviewed", "needs_review"):
             subtitles = [s for s in subtitles if not s.get("confirmed")]
         elif sel in ("confirmed", "reviewed"):
