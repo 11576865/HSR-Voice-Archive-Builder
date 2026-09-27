@@ -17,6 +17,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
+from .game_profiles import remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
@@ -1058,6 +1059,10 @@ def api_project_build():
     try:
         assert_no_active_build()
         config = _active_config()
+        if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
+            raise ValueError(
+                "Remote update downloads are not enabled for this game's provider yet."
+            )
         paths = _project_paths(config)
         if paths["index"] is None or paths["wavs"] is None or paths["output"] is None:
             raise ValueError("Project index, WAV source, and output directory are required")
@@ -1166,6 +1171,11 @@ def api_update_check_remote(
 ):
     try:
         config = _active_config()
+        if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
+            raise ValueError(
+                "Remote update checks are not enabled for this game's provider yet. "
+                "Local WAV+LAB archive building remains supported."
+            )
         requested_character = character.strip()
         remote_index_url = remote_index_url.strip() or config.remote_index_url
         characters = remote_character_candidates(config, requested_character)
