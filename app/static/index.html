@@ -228,6 +228,26 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .quick-plan{margin-top:12px;background:#111318;color:var(--text);border:1px solid var(--line);max-height:none}
 #sideStack #progressCard{border-left:2px solid #536166}
 @media(max-width:820px){.job-center-bar{top:49px;margin:0 14px}.overview-metrics{grid-template-columns:1fr 1fr}.overview-panels{grid-template-columns:1fr}.artifact-browser{grid-template-columns:1fr}}
+
+.update-toolbar{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:14px;align-items:end;padding-bottom:14px;border-bottom:1px solid var(--line)}
+.update-toolbar label{margin-top:0}.update-toolbar .actions{margin:0}
+.update-stats{grid-template-columns:repeat(6,minmax(0,1fr));margin-top:14px}
+.update-filter{display:block;text-align:left;width:100%;min-height:78px;border-radius:0;background:var(--soft);padding:12px}
+.update-filter[aria-pressed="true"]{outline:1px solid var(--blue);background:#1b2d2d}
+.update-filter b{font-size:22px}.update-filter span{display:block;margin-top:4px}
+.update-review-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-top:16px;padding:12px 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
+.update-review-head .actions{margin:0}
+.update-review-list{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);margin-top:10px}
+.update-change{background:#13191b;padding:12px 14px;display:grid;gap:8px}
+.update-change-top{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}
+.update-change-title{font-size:13px;font-weight:700;overflow-wrap:anywhere}.update-change-badges{display:flex;gap:5px;flex-wrap:wrap;justify-content:flex-end}
+.update-change-meta{font-size:11px;color:var(--muted);display:flex;gap:10px;flex-wrap:wrap}
+.update-change-diff{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.update-diff-side{background:#0f1416;border:1px solid #283235;padding:9px 10px;min-width:0}.update-diff-label{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin-bottom:4px}.update-diff-text{font-size:12px;line-height:1.5;white-space:pre-wrap;overflow-wrap:anywhere}
+.update-change-detail{font-size:12px;color:var(--muted);line-height:1.5}.update-empty{padding:22px;color:var(--muted);text-align:center;background:#13191b}
+.update-advanced{margin-top:14px}
+@media(max-width:1000px){.update-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:640px){.update-toolbar{grid-template-columns:1fr}.update-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.update-change-diff{grid-template-columns:1fr}.update-review-head{flex-direction:column}}
 body[data-workspace="project"] #subtitleLayoutPreviewCard,body[data-workspace="project"] #subtitleReviewCard,body[data-workspace="project"] #gptSovitsCard,body[data-workspace="project"] #updateCard{display:none!important}
 body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
 body[data-workspace="review"] #subtitleLayoutPreviewCard,body[data-workspace="review"] #gptSovitsCard,body[data-workspace="review"] #updateCard{display:none!important}
@@ -935,29 +955,55 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
     </section>
 
     <section class="card hidden" id="updateCard">
-      <h2>增量更新</h2>
-      <p class="small muted">先检查索引中是否出现新的语音记录，再从 Hugging Face 精确定位并下载可确认的音频。下载不会覆盖旧 WAV；角色身份由快速扫描自动保存。</p>
-      <div>
-        <h3>远程索引</h3>
-        <label>自动识别的角色</label><input id="remoteCharacter" readonly>
-        <p class="small muted">程序优先使用远程表格中识别到的角色名；旧项目会在检查时自动修正英文文件标识与中文角色名不一致的问题。</p>
-        <div class="actions"><button id="scanRemoteBtn">检查新增语音</button><button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button></div>
+      <div class="topline">
+        <div>
+          <h2>增量更新审查</h2>
+          <p class="small muted" style="margin:4px 0 0">先读取远程索引，再逐类检查新增、内容变化和身份冲突。只有明确的新增条目会自动下载；已有条目变化不会静默覆盖。</p>
+        </div>
+        <span id="updatePlanState" class="badge">尚未检查</span>
       </div>
-      <div id="updateResult" class="small muted" style="margin-top:10px" role="status" aria-live="polite">尚未检查。</div>
-      <details style="margin-top:14px">
+
+      <div class="update-toolbar">
+        <div>
+          <label>自动识别的角色</label>
+          <input id="remoteCharacter" readonly>
+        </div>
+        <div class="actions">
+          <button id="scanRemoteBtn">检查远程索引</button>
+          <button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button>
+        </div>
+      </div>
+      <div id="updateResult" class="small muted" role="status" aria-live="polite">尚未检查。</div>
+
+      <div id="updateStats" class="stats update-stats">
+        <button type="button" class="stat existing update-filter" data-update-filter="exact_existing"><b id="uExisting">—</b><span>已存在</span></button>
+        <button type="button" class="stat variant update-filter" data-update-filter="variant_of_existing"><b id="uVariant">—</b><span>已有台词变量</span></button>
+        <button type="button" class="stat new update-filter" data-update-filter="new_logical"><b id="uNew">—</b><span>索引新增</span></button>
+        <button type="button" class="stat variant update-filter" data-update-filter="changed_existing"><b id="uChanged">—</b><span>已有条目变化</span></button>
+        <button type="button" class="stat update-filter" data-update-filter="ambiguous"><b id="uAmbiguous">—</b><span>待确认身份</span></button>
+        <button type="button" class="stat update-filter" data-update-filter="all"><b id="uRows">—</b><span>候选总数</span></button>
+      </div>
+
+      <div class="update-review-head">
+        <div>
+          <b id="updateReviewTitle">全部变化</b>
+          <div id="updateReviewMeta" class="small muted">运行检查后显示逐项详情。</div>
+        </div>
+        <div class="actions">
+          <button type="button" id="updateOnlyActionableBtn">只看需处理</button>
+          <button type="button" id="updateCopySummaryBtn">复制摘要</button>
+        </div>
+      </div>
+      <div id="updateReviewList" class="update-review-list">
+        <div class="update-empty">尚未加载更新计划。</div>
+      </div>
+
+      <details class="update-advanced">
         <summary>手动导入候选清单（高级）</summary>
-        <p class="small muted">只在你已经有额外的 TXT、JSON 或 CSV 文件时使用。普通的远程更新不需要填写。</p>
+        <p class="small muted">只在你已经有额外的 TXT、JSON 或 CSV 文件时使用。普通远程更新不需要填写。</p>
         <label>候选清单路径</label><input id="candidatePath" placeholder="pending.txt / new_index.csv">
         <div class="actions"><button id="scanLocalBtn">扫描本地清单</button></div>
       </details>
-      <div id="updateStats" class="stats" style="margin-top:14px">
-        <div class="stat existing"><b id="uExisting">—</b><span>已存在</span></div>
-        <div class="stat variant"><b id="uVariant">—</b><span>已有台词变量</span></div>
-        <div class="stat new"><b id="uNew">—</b><span>索引新增</span></div>
-        <div class="stat variant"><b id="uChanged">—</b><span>已有条目变化</span></div>
-        <div class="stat"><b id="uAmbiguous">—</b><span>待确认身份</span></div>
-        <div class="stat"><b id="uRows">—</b><span>候选总数</span></div>
-      </div>
     </section>
   </div>
 
@@ -1524,8 +1570,106 @@ function fillProject(p){
     if(p)fetchSubtitles();
   }
 }
+let currentUpdatePlan=null;
+let currentUpdateFilter='all';
+let updateOnlyActionable=false;
+
+function updateItemFilename(item){
+  if(typeof item==='string')return item;
+  return String(item?.filename||item?.candidate||'');
+}
+function updateItemMetadata(item){
+  return (item&&typeof item==='object'&&item.metadata&&typeof item.metadata==='object')?item.metadata:{};
+}
+function updateCategoryLabel(key){
+  return {
+    exact_existing:'已存在',
+    variant_of_existing:'已有台词变量',
+    new_logical:'索引新增',
+    changed_existing:'已有条目变化',
+    ambiguous:'待确认身份',
+  }[key]||key;
+}
+function updatePlanEntries(plan){
+  const keys=['new_logical','changed_existing','ambiguous','variant_of_existing','exact_existing'];
+  const rows=[];
+  for(const key of keys){
+    for(const item of (plan?.[key]||[]))rows.push({category:key,item});
+  }
+  return rows;
+}
+function renderUpdateReview(){
+  const list=document.getElementById('updateReviewList'),title=document.getElementById('updateReviewTitle'),meta=document.getElementById('updateReviewMeta');
+  if(!list||!title||!meta)return;
+  if(!currentUpdatePlan){
+    list.innerHTML='<div class="update-empty">尚未加载更新计划。</div>';
+    title.textContent='全部变化';meta.textContent='运行检查后显示逐项详情。';return;
+  }
+  let rows=updatePlanEntries(currentUpdatePlan);
+  if(currentUpdateFilter!=='all')rows=rows.filter(row=>row.category===currentUpdateFilter);
+  if(updateOnlyActionable)rows=rows.filter(row=>['new_logical','changed_existing','ambiguous','variant_of_existing'].includes(row.category));
+  title.textContent=currentUpdateFilter==='all'?'全部变化':updateCategoryLabel(currentUpdateFilter);
+  meta.textContent='显示 '+rows.length+' 项'+(updateOnlyActionable?' · 已隐藏无需处理的已存在条目':'');
+  for(const button of document.querySelectorAll('.update-filter')){
+    button.setAttribute('aria-pressed',button.dataset.updateFilter===currentUpdateFilter?'true':'false');
+  }
+  if(!rows.length){list.innerHTML='<div class="update-empty">当前筛选没有条目。</div>';return}
+  list.innerHTML='';
+  for(const row of rows){
+    const {category,item}=row;
+    const filename=updateItemFilename(item)||'未命名条目';
+    const md=updateItemMetadata(item);
+    const card=document.createElement('article');card.className='update-change';
+    const badges=['<span class="badge">'+escapeHtml(updateCategoryLabel(category))+'</span>'];
+    if(category==='changed_existing'&&Array.isArray(item?.changes)){
+      for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'文本变化':change==='audio_sha256'?'音频变化':change)+'</span>');
+    }
+    const top='<div class="update-change-top"><div class="update-change-title">'+escapeHtml(filename)+'</div><div class="update-change-badges">'+badges.join('')+'</div></div>';
+    const metaBits=[];
+    if(md.character)metaBits.push('角色 '+md.character);
+    if(md.battle)metaBits.push('战斗语音 '+md.battle);
+    if(md.hash)metaBits.push('SHA '+String(md.hash).slice(0,12)+'…');
+    let body='';
+    if(category==='changed_existing'){
+      const oldText=String(item?.previous?.source_text||'');
+      const newText=String(md.english||'');
+      body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div>';
+      if(item?.changes?.includes('audio_sha256'))body+='<div class="update-change-detail">音频 SHA-256 与当前档案不同。该变化不会在“应用新增”时自动覆盖。</div>';
+    }else if(category==='variant_of_existing'){
+      const existing=Array.isArray(item?.existing)?item.existing.join('、'):'—';
+      body='<div class="update-change-detail">候选属于已有逻辑语音的另一个文件变量。当前已有：'+escapeHtml(existing)+'</div>';
+      if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
+    }else if(category==='ambiguous'){
+      body='<div class="update-change-detail">无法安全确定身份：'+escapeHtml(item?.reason||'unknown')+'。不会自动下载或归入现有条目。</div>';
+    }else if(category==='new_logical'){
+      body='<div class="update-change-detail">远程索引中首次出现的逻辑语音。应用更新时将尝试精确定位并下载。</div>';
+      if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
+    }else{
+      body='<div class="update-change-detail">当前档案中已存在同一条目，远程元数据没有可比较的变化。</div>';
+    }
+    card.innerHTML=top+(metaBits.length?'<div class="update-change-meta">'+metaBits.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+body;
+    list.appendChild(card);
+  }
+}
+function updatePlanSummaryText(plan){
+  const c=plan?.counts||{};
+  const role=plan?.character||plan?.queried_character||'未识别';
+  return [
+    '角色：'+role,
+    '候选总数：'+n(plan?.remote_rows??plan?.candidate_unique_count),
+    '新增：'+n(c.new_logical),
+    '已有变化：'+n(c.changed_existing),
+    '已有变量：'+n(c.variant_of_existing),
+    '待确认：'+n(c.ambiguous),
+    '已存在：'+n(c.exact_existing),
+  ].join('\n');
+}
+
 function showPlan(plan){
+  currentUpdatePlan=plan;
   const c=plan.counts||{};
+  const state=document.getElementById('updatePlanState');
+  if(state)state.textContent=plan.applied?'已应用':'检查完成';
   document.getElementById('uExisting').textContent=n(c.exact_existing);
   document.getElementById('uVariant').textContent=n(c.variant_of_existing);
   document.getElementById('uNew').textContent=n(c.new_logical);
@@ -1544,6 +1688,7 @@ function showPlan(plan){
   const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn');
   button.disabled=additions<1||!!plan.applied;
   setRunReport(plan.applied?'增量更新已应用':additions>0?'检查到新增语音':Number(c.changed_existing||0)+Number(c.ambiguous||0)>0?'检查到待处理变化':'没有新增语音',result?.textContent||'',false);
+  renderUpdateReview();
   setLog(plan);
 }
 let quickPlanState=null;
@@ -1856,6 +2001,21 @@ async function watchJob(id){
   };
   await poll();
 }
+
+for(const button of document.querySelectorAll('.update-filter')){
+  button.addEventListener('click',()=>{currentUpdateFilter=button.dataset.updateFilter||'all';renderUpdateReview()});
+}
+document.getElementById('updateOnlyActionableBtn').onclick=()=>{
+  updateOnlyActionable=!updateOnlyActionable;
+  document.getElementById('updateOnlyActionableBtn').textContent=updateOnlyActionable?'显示全部':'只看需处理';
+  renderUpdateReview();
+};
+document.getElementById('updateCopySummaryBtn').onclick=()=>{
+  if(!currentUpdatePlan){setLog('尚未加载更新计划。');return}
+  copyTextValue(updatePlanSummaryText(currentUpdatePlan)).then(()=>{
+    const result=document.getElementById('updateResult');if(result)result.textContent='更新摘要已复制。';
+  }).catch(e=>setLog(String(e)));
+};
 
 document.getElementById('quickRefreshBtn').onclick=async()=>{quickPlanState=null;document.getElementById('quickBuildBtn').disabled=true;document.getElementById('quickPlan').textContent='正在扫描本机文件…';await loadQuickCandidates()};
 document.getElementById('quickScanBtn').onclick=async()=>{try{await quickScan()}catch(x){setLog(String(x));document.getElementById('quickBuildBtn').disabled=true}};
