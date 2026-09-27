@@ -118,7 +118,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('id="openOutputBtn"', html)
         self.assertIn("自行或交给智能体编辑", html)
         self.assertIn("重新构建不会预先清空 output", html)
-        self.assertIn("Final Products（最终成品）", html)
+        self.assertIn('id="artifactBrowser" class="artifact-browser"', html)
+        self.assertIn('id="artifactCount" class="badge"', html)
         self.assertIn("Archive / Build Records（档案与构建记录）", html)
         self.assertIn("Project Resources（项目资源）", html)
         self.assertIn("Runtime State（运行状态，高级）", html)
@@ -236,6 +237,33 @@ class QuickBuildUiTests(unittest.TestCase):
         mobile_pos = html.index('.sub-workspace{grid-template-columns:minmax(0,1fr);min-height:0}')
         self.assertGreater(mobile_pos, desktop_pos)
         self.assertNotIn('.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}', html)
+
+    def test_project_overview_job_center_and_artifact_browser_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="jobCenterBar" class="job-center-bar"', html)
+        self.assertIn('id="projectOverview" class="project-overview hidden"', html)
+        self.assertIn('id="projectSettingsPanel" class="project-settings hidden"', html)
+        self.assertIn('id="overviewBuildBtn"', html)
+        self.assertIn('id="overviewReviewBtn"', html)
+        self.assertIn('id="overviewUpdateBtn"', html)
+        self.assertIn('id="overviewArtifactsBtn"', html)
+        self.assertIn('id="artifactBrowser" class="artifact-browser"', html)
+        self.assertIn("renderProjectOverview(p)", html)
+        self.assertIn("renderArtifactBrowser(p,finalProducts,outputMap)", html)
+        self.assertIn("renderJobCenterBar(active,projectJobs)", html)
+        self.assertIn("copyTextValue(path)", html)
+        self.assertIn("data.set('generate_chapter_flac',e.target.elements.generate_chapter_flac?.checked?'true':'false')", html)
+
+        create_start = html.index('<form id="createForm">')
+        create_end = html.index('</form>', create_start)
+        create_form = html[create_start:create_end]
+        self.assertEqual(create_form.count('name="generate_chapter_flac"'), 1)
+
+        self.assertNotIn('background:#fafafa', html)
+        self.assertNotIn('border-bottom:1px solid #eee', html)
 
     def test_workbench_visual_structure_uses_canvas_and_inspector_hierarchy(self) -> None:
         html = (

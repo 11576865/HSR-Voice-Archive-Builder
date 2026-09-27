@@ -160,7 +160,7 @@ def _build_progress_card_template() -> str:
     """Build a standalone progress card fragment with canonical element ids."""
     return (
         '<section id="progressCard" class="card" role="region" aria-label="处理进度">\n'
-        '  <div class="topline"><h2>当前进度</h2><span id="progressTitle" class="muted"></span></div>\n'
+        '  <div class="topline"><h2>任务中心</h2><span id="progressTitle" class="muted"></span></div>\n'
         '  <div id="progressTrack" class="progress-track" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar" class="progress-bar"></div></div>\n'
         '  <p id="progressDesc" class="small muted"></p>\n'
         '  <div id="progressMeta" class="small muted"></div>\n'
