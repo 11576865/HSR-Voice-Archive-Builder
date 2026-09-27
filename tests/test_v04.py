@@ -8,7 +8,7 @@ import wave
 import zipfile
 from pathlib import Path
 
-from app.builder import Entry, build_continuous_flac, extract_archive
+from app.builder import Entry, build_chapter_flac_collection, build_continuous_flac, extract_archive
 
 
 def write_pcm_wav(path: Path, samples: list[int], sample_rate: int = 8000) -> None:
@@ -21,12 +21,12 @@ def write_pcm_wav(path: Path, samples: list[int], sample_rate: int = 8000) -> No
         wf.writeframes(raw)
 
 
-def entry(index: int, filename: str, frames: int, start: int, next_start: int) -> Entry:
+def entry(index: int, filename: str, frames: int, start: int, next_start: int, group: str = "g") -> Entry:
     sr = 8000
     audio_end = start + frames
     return Entry(
         index=index,
-        group="g",
+        group=group,
         filename=filename,
         source="test",
         source_detail="",
@@ -75,6 +75,54 @@ class V04ReliabilityTests(unittest.TestCase):
                     os.environ.pop("HSR_MAX_EXTRACT_BYTES", None)
                 else:
                     os.environ["HSR_MAX_EXTRACT_BYTES"] = old
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
+    def test_chapter_flac_collection_uses_local_timelines_and_reports_unassigned(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            wavs.mkdir()
+            for name, samples in (
+                ("c2.wav", [100, -100] * 80),
+                ("c1.wav", [200, -200] * 80),
+                ("mystery.wav", [300, -300] * 80),
+            ):
+                write_pcm_wav(wavs / name, samples)
+            frames = 160
+            entries = [
+                entry(2, "c2.wav", frames, 0, frames, "chapter2_1"),
+                entry(1, "c1.wav", frames, 0, frames, "chapter1_4"),
+                entry(3, "mystery.wav", frames, 0, frames, "unknown"),
+            ]
+
+            report = build_chapter_flac_collection(
+                entries,
+                wavs,
+                root / "chapter_flac",
+                intro_gap=1.0,
+                same_group_gap=0.25,
+                group_gap=0.5,
+            )
+
+            self.assertEqual(report["chapter_flac_count"], 2)
+            self.assertEqual(report["chapter_flac_entry_count"], 2)
+            self.assertEqual(report["chapter_flac_unassigned_count"], 1)
+            outputs = report["chapter_flac_outputs"]
+            self.assertEqual([row["group_id"] for row in outputs], ["chapter1", "chapter2"])
+            self.assertEqual(
+                [Path(row["path"]).name for row in outputs],
+                ["01_chapter1.flac", "02_chapter2.flac"],
+            )
+            for row in outputs:
+                self.assertTrue(Path(row["path"]).is_file())
+                self.assertTrue(row["lossless_pcm_verified"])
+                self.assertEqual(row["pcm_frames_written"], 8000 + frames)
+                self.assertEqual(len(row["file_sha256"]), 64)
+            manifest = root / "chapter_flac" / "chapter_flac_manifest.json"
+            self.assertTrue(manifest.is_file())
+            payload = __import__("json").loads(manifest.read_text(encoding="utf-8"))
+            self.assertEqual(payload["unassigned"][0]["filename"], "mystery.wav")
+            self.assertFalse((root / "chapter_flac" / "03_unknown.flac").exists())
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
     def test_flac_is_streamed_verified_and_atomically_promoted(self) -> None:
