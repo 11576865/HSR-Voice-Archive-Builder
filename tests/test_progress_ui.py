@@ -121,7 +121,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="submitReviewBtn"', html)
         self.assertIn("x.job.state==='awaiting_input'", html)
         self.assertIn('id="runReportDetails"', html)
-        self.assertIn('id="blackVideoBtn"', html)
+        self.assertNotIn('id="blackVideoBtn"', html)
+        self.assertIn("label:'生成黑屏 MKV',primary:true,action:startBlackVideo", html)
         self.assertIn("'/api/output/black-video'", html)
         self.assertNotIn('id="openOutputBtn"', html)
         self.assertIn("自行或交给智能体编辑", html)
@@ -146,7 +147,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("删除项目不会删除该恢复包", html)
         self.assertIn("上一代恢复包", html)
         self.assertIn("后端可能拒绝删除", html)
-        self.assertIn('id="assOutputBtn"', html)
+        self.assertNotIn('id="assOutputBtn"', html)
+        self.assertIn("label:'生成 ASS',primary:true,action:startAssExport", html)
         self.assertIn("'/api/output/ass'", html)
         self.assertNotIn('id="archiveStats"', html)
         self.assertNotIn("增量官方中文</span>", html)
@@ -886,9 +888,10 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn(
-            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})",
+            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})",
             html,
         )
+        self.assertNotIn("confirmed:!!targetSub.confirmed", html)
         self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
         self.assertIn('id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"', html)
         self.assertIn('id="quickGroupGap" type="number" min="0" step="0.01" value="3.00"', html)
