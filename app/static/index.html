@@ -615,7 +615,10 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <label>字幕来源 / 状态</label>
           <select id="subSelector">
             <option value="all">全部字幕</option>
+            <option value="unreviewed">未人工确认</option>
+            <option value="confirmed">已人工确认</option>
             <option value="modified">已修改字幕</option>
+            <option value="overflow">ASS 排版失败</option>
             <option value="official">官方中文字幕</option>
             <option value="api">API 翻译中文字幕</option>
           </select>
@@ -646,6 +649,12 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
             <div id="subStatusBadge"></div>
           </div>
 
+          <div class="sub-ref-card" id="subAudioCard" style="margin-top:10px">
+            <div class="sub-ref-label">原始语音</div>
+            <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
+            <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后自动加载对应的原始 WAV。</div>
+          </div>
+
           <!-- Read-only references -->
           <div class="sub-references" style="display:grid;gap:10px">
             <div class="sub-ref-card">
@@ -663,8 +672,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
                 <span id="subReferenceSelectedBadge" class="badge" style="margin-left:8px">未选为参考</span>
               </summary>
               <div class="sub-reference-body" style="padding-top:8px">
-                <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
-                <div id="subAudioStatus" class="small muted" style="margin-top:5px">展开此工具后加载当前字幕对应的原始 WAV。</div>
+                <div class="small muted">这里仅保存 GPT-SoVITS 参考语音标注；原始 WAV 播放已移到校对主区域。</div>
                 <div class="row3" style="margin-top:8px">
                   <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
                   <div>
@@ -723,6 +731,17 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
               <span id="subCharCounter" class="small muted">0 字</span>
             </div>
             <textarea id="subFinalEditor" class="sub-textarea" placeholder="在此输入修饰后的最终中文字幕…"></textarea>
+            <div class="actions" style="margin-top:8px">
+              <button type="button" class="secondary" id="subUseOfficialBtn">采用官方中文</button>
+              <button type="button" class="secondary" id="subUseApiBtn">采用 API 翻译</button>
+              <button type="button" class="secondary" id="subResetBtn">恢复原始目标文本</button>
+              <button type="button" class="success" id="subConfirmBtn">确认当前字幕</button>
+            </div>
+            <div id="subLayoutDiagnostic" class="small muted" style="margin-top:8px">ASS 排版：尚未检查。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="secondary" id="subOpenLayoutBtn">在排版工作台检查当前条目</button>
+              <button type="button" class="secondary" id="subNextAttentionBtn">下一条未确认 / 异常字幕</button>
+            </div>
           </div>
 
           <!-- Navigation controls -->
