@@ -381,6 +381,27 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_theme_switcher_and_collapse_regression_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        for choice in ("light", "dark", "system"):
+            self.assertIn(f'data-theme-choice="{choice}"', html)
+        self.assertIn("hsr-ui-theme-v1", html)
+        self.assertIn("prefers-color-scheme: dark", html)
+        self.assertIn(':root[data-theme="light"]', html)
+        self.assertIn("function applyTheme(", html)
+        self.assertIn("systemThemeQuery.addEventListener('change'", html)
+
+        # Regression guards for the first collapsible-shell implementation.
+        self.assertIn("savedPanelState=state;", html)
+        self.assertIn("let autoPinnedPanelKey=null", html)
+        self.assertIn("autoPinnedPanelKey='progressCard'", html)
+        self.assertIn("preservePanelPin=false", html)
+        self.assertIn("lastTaskAttentionState=taskNeedsAttention()", html)
+        self.assertIn("nextAttention!==lastTaskAttentionState", html)
+
     def test_high_contrast_shell_and_panel_collapse_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
