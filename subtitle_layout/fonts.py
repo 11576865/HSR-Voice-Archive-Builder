@@ -54,6 +54,14 @@ def _normalized_name(value: str) -> str:
     return "".join(ch.casefold() for ch in value if ch.isalnum())
 
 
+_BROWSER_FONT_MIME_TYPES = {
+    ".ttf": "font/ttf",
+    ".otf": "font/otf",
+    ".ttc": "font/collection",
+}
+_MAX_BROWSER_FONT_BYTES = 64 * 1024 * 1024
+
+
 @functools.lru_cache(maxsize=1)
 def _installed_font_families() -> tuple[str, ...]:
     """Return host font family names without exposing filesystem paths."""
@@ -153,3 +161,30 @@ def resolve_font_path(font_name: str) -> str | None:
         except OSError:
             continue
     return str(best.resolve()) if best is not None else None
+
+
+def resolve_browser_font_file(font_name: str) -> tuple[Path, str]:
+    """Resolve one installed host font for same-origin browser preview.
+
+    The caller supplies only a validated family name. Filesystem paths are
+    resolved internally and are never accepted from the browser.
+    """
+    name = validate_ass_font_name(font_name)
+    resolved = resolve_font_path(name)
+    if not resolved:
+        raise FileNotFoundError(f"Installed font family could not be resolved: {name}")
+
+    path = Path(resolved).resolve()
+    if not path.is_file():
+        raise FileNotFoundError(f"Resolved font file is unavailable: {name}")
+
+    mime = _BROWSER_FONT_MIME_TYPES.get(path.suffix.casefold())
+    if mime is None:
+        raise ValueError(f"Unsupported browser font format: {path.suffix or 'unknown'}")
+
+    size = path.stat().st_size
+    if size <= 0:
+        raise ValueError("Resolved font file is empty")
+    if size > _MAX_BROWSER_FONT_BYTES:
+        raise ValueError("Resolved font file is too large for browser preview")
+    return path, mime
