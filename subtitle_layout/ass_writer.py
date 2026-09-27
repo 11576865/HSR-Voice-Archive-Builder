@@ -112,6 +112,39 @@ def format_karaoke_text(
     )
 
 
+def _fmt_num(value: float) -> str:
+    text = f"{float(value):.2f}".rstrip("0").rstrip(".")
+    return text or "0"
+
+
+def _ass_alpha_for_opacity(opacity: float) -> str:
+    clamped = max(0.0, min(1.0, float(opacity)))
+    alpha = round((1.0 - clamped) * 255)
+    return f"{alpha:02X}"
+
+
+def _soft_entry_tags(cfg: SubtitleRenderConfig, duration_sec: float) -> str:
+    if not cfg.enable_soft_entry:
+        return ""
+    duration_ms = max(100, int(round(duration_sec * 1000)))
+    entry_ms = min(max(0, int(cfg.soft_entry_ms)), max(0, duration_ms // 2))
+    if entry_ms <= 0:
+        return ""
+
+    start_scale = max(90.0, min(100.0, float(cfg.soft_entry_scale_percent)))
+    base_blur = max(0.0, min(5.0, float(cfg.blur_radius)))
+    start_blur = max(base_blur, max(0.0, min(5.0, float(cfg.soft_entry_blur))))
+
+    tags = (
+        f"\\fscx{_fmt_num(start_scale)}"
+        f"\\fscy{_fmt_num(start_scale)}"
+        f"\\blur{_fmt_num(start_blur)}"
+        f"\\t(0,{entry_ms},"
+        f"\\fscx100\\fscy100\\blur{_fmt_num(base_blur)})"
+    )
+    return tags
+
+
 def generate_frosted_glass_card(
     lines: list[object],
     safe_area: SafeArea = DEFAULT_SAFE_AREA,
@@ -119,6 +152,7 @@ def generate_frosted_glass_card(
     pad_x: int = 24,
     pad_y: int = 12,
     radius: int = 16,
+    opacity: float = 0.62,
 ) -> tuple[str, tuple[int, int, int, int]] | None:
     """Generate a translucent ASS vector backdrop card (no blur is applied)."""
     if not lines:
@@ -182,7 +216,8 @@ def generate_frosted_glass_card(
         f"b {x1_i} {y1_i} {x1_i + r} {y1_i} {x1_i + r} {y1_i}"
     )
 
-    card_text = f"{{\\an7\\pos(0,0)\\p1\\1a&H60&\\1c&H101010&\\3a&HFF&\\4a&HFF&}}{path}\\p0"
+    alpha = _ass_alpha_for_opacity(opacity)
+    card_text = f"{{\\an7\\pos(0,0)\\p1\\1a&H{alpha}&\\1c&H101010&\\3a&HFF&\\4a&HFF&}}{path}\\p0"
     return card_text, (x1_i, y1_i, x2_i, y2_i)
 
 
@@ -236,8 +271,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
-Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
+Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,{margin_h},{margin_h},{margin_v},1
+Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,{margin_h},{margin_h},{margin_v},1
 Style: Card,{primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
@@ -331,7 +366,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if use_frosted_glass:
             if layout.primary_lines:
-                res_pri = generate_frosted_glass_card(layout.primary_lines, safe_area=safe_area, font_path=primary_font_path)
+                res_pri = generate_frosted_glass_card(layout.primary_lines, safe_area=safe_area, font_path=primary_font_path, opacity=cfg.card_opacity)
                 if res_pri:
                     card_tag = res_pri[0]
                     if use_kinetic:
@@ -340,7 +375,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
             if layout.chs_lines:
-                res_chs = generate_frosted_glass_card(layout.chs_lines, safe_area=safe_area, font_path=chs_font_path)
+                res_chs = generate_frosted_glass_card(layout.chs_lines, safe_area=safe_area, font_path=chs_font_path, opacity=cfg.card_opacity)
                 if res_chs:
                     card_tag = res_chs[0]
                     if use_kinetic:
@@ -366,9 +401,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
+            soft_entry_tags = _soft_entry_tags(cfg, duration_sec)
+            base_blur_tag = (
+                f"\\blur{_fmt_num(cfg.blur_radius)}"
+                if float(cfg.blur_radius) > 0 and not soft_entry_tags
+                else ""
+            )
             if use_multi_layer_outline:
                 pri_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.primary_lines)
-                out_text = f"{pos_prefix}\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{pri_plain}"
+                outer_bord = max(float(cfg.outline_width) + 3.0, float(cfg.outline_width) * 1.8)
+                outer_shadow = max(float(cfg.shadow_depth), 3.0)
+                outer_blur = max(float(cfg.blur_radius), 0.6)
+                out_text = (
+                    f"{pos_prefix}\\fs{pos0.font_size}"
+                    f"\\bord{_fmt_num(outer_bord)}\\3c&H000000&\\3a&H40&"
+                    f"\\shad{_fmt_num(outer_shadow)}\\4c&H000000&"
+                    f"\\blur{_fmt_num(outer_blur)}}}{pri_plain}"
+                )
                 dialogues.append(
                     f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{out_text}"
                 )
@@ -382,7 +431,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
-            dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}}}{pri_text}"
+            dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{pri_text}"
             dialogues.append(
                 f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{dialogue_text}"
             )
@@ -404,9 +453,23 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
+            soft_entry_tags = _soft_entry_tags(cfg, duration_sec)
+            base_blur_tag = (
+                f"\\blur{_fmt_num(cfg.blur_radius)}"
+                if float(cfg.blur_radius) > 0 and not soft_entry_tags
+                else ""
+            )
             if use_multi_layer_outline:
                 chs_plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in layout.chs_lines)
-                out_text = f"{pos_prefix}\\fs{pos0.font_size}\\bord6\\3c&H000000&\\3a&H40&\\shad3\\4c&H000000&}}{chs_plain}"
+                outer_bord = max(float(cfg.outline_width) + 3.0, float(cfg.outline_width) * 1.8)
+                outer_shadow = max(float(cfg.shadow_depth), 3.0)
+                outer_blur = max(float(cfg.blur_radius), 0.6)
+                out_text = (
+                    f"{pos_prefix}\\fs{pos0.font_size}"
+                    f"\\bord{_fmt_num(outer_bord)}\\3c&H000000&\\3a&H40&"
+                    f"\\shad{_fmt_num(outer_shadow)}\\4c&H000000&"
+                    f"\\blur{_fmt_num(outer_blur)}}}{chs_plain}"
+                )
                 dialogues.append(
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
@@ -420,7 +483,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 )
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
-            dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}}}{chs_text}"
+            dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
