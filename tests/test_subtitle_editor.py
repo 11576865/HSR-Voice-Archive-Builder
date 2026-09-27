@@ -7,10 +7,10 @@ from pathlib import Path
 
 from fastapi.testclient import TestClient
 
-from app.project import create_project
+from app.project import create_project, update_project
 from app.security import api_token
 from app.server import app, _set_active, _clear_active
-from app.subtitles import parse_time_range_str, refresh_subtitle_artifacts
+from app.subtitles import parse_time_range_str, refresh_subtitle_artifacts, update_project_subtitles
 
 
 class TestSubtitleEditor(unittest.TestCase):
@@ -326,6 +326,62 @@ class TestSubtitleEditor(unittest.TestCase):
             rebuilt_saved = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(rebuilt_saved["entries"][0]["target_text"], "规矩就是用来打破的！")
             self.assertEqual(rebuilt_saved["entries"][0]["final_chs"], "规则，就是用来打破的！")
+
+    def test_edit_stays_saved_and_srt_refreshes_when_existing_ass_becomes_invalid(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "output"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "manifest.json").write_text(
+                json.dumps(
+                    {
+                        "entries": [
+                            {
+                                "index": 1,
+                                "filename": "line.wav",
+                                "start_seconds": 1.0,
+                                "display_end_seconds": 4.0,
+                                "source_text": "Short source.",
+                                "target_text": "短句。",
+                            }
+                        ]
+                    },
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            cfg = create_project(
+                root,
+                name="ass_failure_edit_consistency",
+                index_csv="index.csv",
+                wav_source="wavs",
+                output_dir="output",
+            )
+            update_project(
+                cfg,
+                subtitle_chs_size=64,
+                subtitle_primary_size=54,
+                subtitle_margin_horizontal_percent=0.25,
+                subtitle_margin_vertical_percent=0.20,
+                subtitle_min_central_gap=150.0,
+            )
+            ass_path = out / "HSR_Voice_Archive.ass"
+            ass_path.write_text("stale ASS", encoding="utf-8")
+            long_text = "这是一个会触发布局溢出的超长中文字幕。" * 40
+
+            result = update_project_subtitles(
+                cfg,
+                out,
+                [{"id": 1, "final_chs": long_text}],
+            )
+
+            self.assertEqual(result["updated_count"], 1)
+            self.assertTrue(result["ass_error"])
+            self.assertFalse(ass_path.exists())
+            srt = (out / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
+            self.assertIn(long_text, srt)
+            manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
+            self.assertEqual(manifest["entries"][0]["final_chs"], long_text)
 
 
 if __name__ == "__main__":
