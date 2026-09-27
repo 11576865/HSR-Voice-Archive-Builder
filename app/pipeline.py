@@ -13,6 +13,7 @@ from pathlib import Path
 from .builder import (
     Entry,
     atomic_write_text,
+    build_chapter_flac_collection,
     build_continuous_flac,
     build_entries,
     ensure_dir_or_extract,
@@ -1409,6 +1410,7 @@ def build_project_v02(
     intro_gap: float = 9.0,
     make_flac: bool = True,
     chapter_order: bool = False,
+    generate_chapter_flac: bool = False,
     generate_ass: bool = False,
     translate_missing: bool = False,
     translation_model: str = translation_default_model(),
@@ -1485,6 +1487,7 @@ def build_project_v02(
         "group_gap": group_gap,
         "make_flac": make_flac,
         "chapter_order": chapter_order,
+        "generate_chapter_flac": bool(generate_chapter_flac),
         "generate_ass": generate_ass,
         "translate_missing": translate_missing,
         "review_official_target": bool(review_official_target),
@@ -1793,6 +1796,31 @@ def build_project_v02(
                     entries, wav_root, out_dir / "continuous.flac"
                 )
                 audio_artifacts = [out_dir / "continuous.flac"]
+
+                chapter_dir = out_dir / "chapter_flac"
+                if generate_chapter_flac:
+                    chapter_report = build_chapter_flac_collection(
+                        entries,
+                        wav_root,
+                        chapter_dir,
+                        intro_gap=intro_gap,
+                        same_group_gap=same_group_gap,
+                        group_gap=group_gap,
+                    )
+                    audio_report.update(chapter_report)
+                    audio_artifacts.append(chapter_dir / "chapter_flac_manifest.json")
+                    for item in chapter_report.get("chapter_flac_outputs", []):
+                        if isinstance(item, dict) and item.get("path"):
+                            audio_artifacts.append(Path(str(item["path"])))
+                else:
+                    if chapter_dir.exists():
+                        shutil.rmtree(chapter_dir)
+                    audio_report.update({
+                        "chapter_flac_enabled": False,
+                        "chapter_flac_count": 0,
+                        "chapter_flac_entry_count": 0,
+                        "chapter_flac_unassigned_count": 0,
+                    })
 
                 # A previous black MKV contains the old FLAC. Invalidate it
                 # only after the replacement FLAC has encoded and verified.
