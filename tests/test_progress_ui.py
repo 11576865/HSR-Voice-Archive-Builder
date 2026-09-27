@@ -185,7 +185,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("compositionstart", html)
         self.assertIn("compositionend", html)
         self.assertNotIn("保存并下一条", html)
-        self.assertIn("停止输入约 1 秒后会自动保存", html)
+        self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn('<details class="sub-ref-card" id="subReferenceCard">', html)
         self.assertNotIn('<details class="sub-ref-card" id="subReferenceCard" open', html)
@@ -757,7 +757,7 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("compositionstart", html)
         self.assertIn("compositionend", html)
         self.assertNotIn("保存并下一条", html)
-        self.assertIn("停止输入约 1 秒后会自动保存", html)
+        self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn(
             "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})",
