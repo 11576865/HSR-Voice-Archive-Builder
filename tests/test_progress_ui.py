@@ -491,6 +491,38 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("--diagnostic:#a78bfa", html)
         self.assertIn("--network:#2dd4bf", html)
 
+    def test_desktop_workspace_width_authority(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("/* Workspace width authority v10", html)
+        self.assertIn('@media (min-width:1201px)', html)
+        self.assertIn(
+            'body[data-workspace="project"] .grid{\n    width:min(100%,1640px)!important;',
+            html,
+        )
+        self.assertIn(
+            'body[data-workspace="review"] .grid{\n    width:min(100%,1760px)!important;',
+            html,
+        )
+        self.assertIn(
+            'body[data-workspace="layout"] .grid{\n    width:100%!important;\n    max-width:none!important;',
+            html,
+        )
+        self.assertIn(
+            '--layout-inspector-width:clamp(340px,20vw,430px)',
+            html,
+        )
+        self.assertIn(
+            'body[data-workspace="export"] .grid{\n    width:min(100%,1760px)!important;',
+            html,
+        )
+        self.assertIn(
+            'body[data-workspace="update"] .grid{\n    width:min(100%,1900px)!important;',
+            html,
+        )
+
     def test_mobile_single_column_workbench_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
