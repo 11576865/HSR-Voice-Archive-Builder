@@ -72,7 +72,7 @@ def preview_subtitle_layout(
     target_language: str = "zh-CN",
     base_chs_size: int = DEFAULT_BASE_FONT_SIZE_CHS,
     base_primary_size: int = DEFAULT_BASE_FONT_SIZE_PRIMARY,
-    margin_left_percent: float = 0.10,
+    margin_left_percent: float = 0.03,
     margin_top_percent: float = 0.05,
     min_central_gap: float = 20.0,
     chs_font: str = "汉仪旗黑",
