@@ -3016,7 +3016,9 @@ async function loadFontBrowser(query=''){
     for(const family of families){
       const button=document.createElement('button');
       button.type='button';button.className='font-browser-item';
-      button.innerHTML='<span>'+escapeHtml(family)+'</span><span class="font-browser-sample" style="font-family:'+JSON.stringify(family)+'">Aa 中 123</span>';
+      const name=document.createElement('span');name.textContent=family;
+      const sample=document.createElement('span');sample.className='font-browser-sample';sample.textContent='Aa 中 123';sample.style.fontFamily=family;
+      button.append(name,sample);
       button.onclick=()=>{
         const input=document.getElementById(fontBrowserTargetId||'');
         if(input){input.value=family;input.dispatchEvent(new Event('input',{bubbles:true}))}
@@ -3296,10 +3298,6 @@ function renderPreviewCanvasSvg(data, options) {
   }
 
   let elements = [];
-
-  elements.push('<rect width="1920" height="1080" fill="#0b0e14" />');
-  elements.push('<rect width="1920" height="1080" fill="url(#bgGradient)" opacity="0.3" />');
-  elements.push('<defs><linearGradient id="bgGradient" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#161c28"/><stop offset="100%" stop-color="#080a0f"/></linearGradient></defs>');
 
   // Center Y reference line
   elements.push('<line x1="0" y1="540" x2="1920" y2="540" stroke="#303846" stroke-width="1" stroke-dasharray="4 4" />');
