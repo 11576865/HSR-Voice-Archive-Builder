@@ -3555,65 +3555,6 @@ function renderSubtitleEditState(){
   badge.innerHTML=parts.join(' ');
 }
 
-function subtitleDiffOps(before,after){
-  const a=[...String(before||'')],b=[...String(after||'')];
-  if(a.length>500||b.length>500){
-    return a.join('')===b.join('')?[{kind:'same',text:a.join('')}]:[
-      {kind:'del',text:a.join('')},{kind:'add',text:b.join('')}
-    ];
-  }
-  const dp=Array.from({length:a.length+1},()=>new Uint16Array(b.length+1));
-  for(let i=a.length-1;i>=0;i--){
-    for(let j=b.length-1;j>=0;j--){
-      dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
-    }
-  }
-  const raw=[];let i=0,j=0;
-  while(i<a.length||j<b.length){
-    if(i<a.length&&j<b.length&&a[i]===b[j]){raw.push({kind:'same',text:a[i]});i++;j++}
-    else if(j<b.length&&(i>=a.length||dp[i][j+1]>=dp[i+1][j])){raw.push({kind:'add',text:b[j++]})}
-    else{raw.push({kind:'del',text:a[i++]})}
-  }
-  const merged=[];
-  for(const op of raw){
-    const last=merged[merged.length-1];
-    if(last&&last.kind===op.kind)last.text+=op.text;
-    else merged.push({...op});
-  }
-  return merged;
-}
-
-function renderSubtitleDiff(){
-  const panel=document.getElementById('subDiffPanel'),body=document.getElementById('subDiffBody'),state=document.getElementById('subDiffState');
-  const sub=currentSubtitle();
-  if(!panel||!body||!state)return;
-  if(!sub){
-    state.textContent='—';body.className='sub-diff-body muted';body.textContent='选择字幕后显示最终文本与参考文本的字符级差异。';return;
-  }
-  const candidates=[
-    ['官方',sub.official_chs],
-    ['API',sub.api_chs],
-    ['原始',sub.original_chs],
-  ];
-  const [label,baseline]=candidates.find(([,value])=>String(value||'').length)||['原始',''];
-  const finalText=String(sub.final_chs||'');
-  const before=String(baseline||'');
-  if(before===finalText){
-    state.textContent='与'+label+'一致';
-    body.className='sub-diff-body';
-    body.innerHTML='<div class="sub-diff-row"><span class="sub-diff-label">'+label+'</span><span class="sub-diff-text">'+escapeHtml(finalText||'—')+'</span></div>';
-    return;
-  }
-  state.textContent='已修改 · 对比'+label;
-  const ops=subtitleDiffOps(before,finalText);
-  const beforeHtml=ops.map(op=>op.kind==='add'?'':op.kind==='del'?'<del>'+escapeHtml(op.text)+'</del>':escapeHtml(op.text)).join('');
-  const afterHtml=ops.map(op=>op.kind==='del'?'':op.kind==='add'?'<ins>'+escapeHtml(op.text)+'</ins>':escapeHtml(op.text)).join('');
-  body.className='sub-diff-body';
-  body.innerHTML=
-    '<div class="sub-diff-row"><span class="sub-diff-label">'+label+'</span><span class="sub-diff-text">'+(beforeHtml||'—')+'</span></div>'+
-    '<div class="sub-diff-row"><span class="sub-diff-label">最终</span><span class="sub-diff-text">'+(afterHtml||'—')+'</span></div>';
-}
-
 function subtitleInitialText(sub){
   return String(sub?.official_chs||sub?.api_chs||sub?.original_chs||'');
 }
@@ -3645,7 +3586,6 @@ function renderActiveSubtitle(){
     for(const id of ['subUseOfficialBtn','subUseApiBtn','subResetBtn','subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
       const button=document.getElementById(id);if(button)button.disabled=true;
     }
-    renderSubtitleDiff();
         const diag=document.getElementById('subLayoutDiagnostic');
     if(diag){diag.textContent='ASS 排版：尚未检查。';diag.className='small muted';}
     renderReferenceControls(null);
@@ -3688,7 +3628,6 @@ function renderActiveSubtitle(){
   document.getElementById('subPrevBtn').disabled=activeSubIndex<=0;
   document.getElementById('subNextBtn').disabled=activeSubIndex>=loadedSubtitles.length-1;
   updateCharCounter();
-  renderSubtitleDiff();
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
   for(const id of ['subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
@@ -3808,7 +3747,6 @@ function applySubtitleCandidate(value){
   syncEditorToMemory();
   updateCharCounter();
   renderSubtitleEditState();
-  renderSubtitleDiff();
   renderSubtitleList();
   scheduleSubtitleAutosave();
 }
@@ -3923,7 +3861,6 @@ subtitleEditor.addEventListener('keydown',(e)=>{
 subtitleEditor.oninput=()=>{
   syncEditorToMemory();
   updateCharCounter();
-  renderSubtitleDiff();
   renderSubtitleList();
   renderSubtitleEditState();
   scheduleSubtitleAutosave();
@@ -3936,7 +3873,6 @@ subtitleEditor.addEventListener('compositionend',()=>{
   subtitleEditorComposing=false;
   syncEditorToMemory();
   updateCharCounter();
-  renderSubtitleDiff();
   renderSubtitleList();
   renderSubtitleEditState();
   scheduleSubtitleAutosave();
