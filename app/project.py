@@ -58,6 +58,7 @@ class ProjectConfig:
     subtitle_margin_vertical_percent: float = 0.05
     subtitle_min_central_gap: float = 20.0
     subtitle_enable_karaoke: bool = False
+    subtitle_karaoke_mode: str = "k"
     subtitle_enable_translucent_card: bool = False
     subtitle_enable_multi_layer_outline: bool = False
     subtitle_enable_kinetic: bool = True
@@ -72,6 +73,9 @@ class ProjectConfig:
     subtitle_soft_entry_scale_percent: float = 98.0
     subtitle_soft_entry_blur: float = 1.5
     subtitle_soft_entry_ms: int = 160
+    subtitle_enable_archive_hud: bool = False
+    subtitle_archive_hud_font_size: int = 22
+    subtitle_archive_hud_opacity: float = 0.72
     translate_missing: bool = True
     review_official_target: bool = False
     translation_model: str = field(default_factory=translation_default_model)
