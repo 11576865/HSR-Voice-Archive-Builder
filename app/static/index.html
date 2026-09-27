@@ -1506,6 +1506,126 @@ mark.search-hl{
   #sideStack .utility-card{padding:10px!important}
 }
 
+
+/* Subtitle layout workbench theme + geometry v8 -------------------------- */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+  display:block!important;
+  background:var(--surface-primary)!important;
+  color:var(--text)!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{
+  background:var(--surface-subtle)!important;
+  border-bottom-color:var(--line)!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
+  background:var(--surface-primary)!important;
+  color:var(--muted)!important;
+}
+.preview-workbench{
+  position:relative;
+  min-width:0;
+  padding-right:350px;
+  background:var(--surface-primary);
+}
+.preview-workbench .preview-stage{
+  width:100%!important;
+  margin:0!important;
+  aspect-ratio:16/9;
+  background:#05070b!important;
+  border:0!important;
+  border-radius:0!important;
+  overflow:hidden;
+}
+.preview-inspector{
+  position:absolute;
+  top:0;
+  right:0;
+  bottom:0;
+  width:350px;
+  min-width:0;
+  overflow-x:hidden;
+  overflow-y:auto;
+  overscroll-behavior:contain;
+  scrollbar-gutter:stable;
+  border-left:1px solid var(--line);
+  background:var(--surface-utility)!important;
+  color:var(--text)!important;
+}
+.preview-inspector .preview-copy-fields,
+.preview-inspector .preview-controls,
+.preview-inspector .preview-actions,
+.preview-inspector #libassPreviewStatus,
+.preview-inspector .preview-advanced{
+  width:100%!important;
+  margin:0!important;
+  background:transparent!important;
+  color:var(--text)!important;
+}
+.preview-inspector .preview-copy-fields{
+  padding:14px 16px 6px!important;
+}
+.preview-inspector .preview-controls{
+  padding:0 16px!important;
+}
+.preview-inspector .preview-actions{
+  padding:8px 16px 14px!important;
+}
+.preview-inspector #libassPreviewStatus{
+  padding:10px 16px!important;
+  border-top:1px solid var(--line)!important;
+}
+.preview-inspector .preview-advanced{
+  padding:6px 16px 14px!important;
+  border-top:1px solid var(--line)!important;
+}
+.preview-inspector .inspector-group{
+  border-top-color:var(--line)!important;
+}
+.preview-inspector .inspector-group>b{
+  color:var(--text-soft)!important;
+}
+.preview-inspector label{
+  color:var(--text-soft);
+}
+.preview-inspector input,
+.preview-inspector select{
+  background:var(--surface-input)!important;
+  color:var(--text)!important;
+  border-color:var(--line)!important;
+}
+.preview-inspector .preview-background-controls{
+  border-top-color:var(--line)!important;
+}
+
+@media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+    display:flex!important;
+    flex-direction:column!important;
+  }
+  .preview-workbench{
+    display:flex;
+    flex-direction:column;
+    width:100%;
+    padding-right:0;
+    background:var(--surface-primary);
+  }
+  .preview-workbench .preview-stage{
+    order:1;
+    width:100%!important;
+    border-bottom:1px solid var(--line)!important;
+  }
+  .preview-inspector{
+    position:static;
+    order:2;
+    width:100%;
+    max-height:none;
+    overflow:visible;
+    border-left:0;
+    border-top:1px solid var(--line);
+    background:var(--surface-utility)!important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -1903,115 +2023,135 @@ mark.search-hl{
       </div>
       <p class="small muted">浏览器预览与 ASS 导出共用同一个排版求解器。浏览器只模拟文字几何；libass / FFmpeg 的实际字体栅格化仍可能有细微差异。</p>
 
-      <div class="row preview-copy-fields">
-        <div>
-          <label for="prevChsText">中文字幕</label>
-          <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
+      <div class="preview-workbench">
+  <div class="preview-stage" id="previewCanvasContainer">
+          <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
+          <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
+          <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
+          <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
+          <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
+          <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
+            <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">浏览器几何预览</span>
+            <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
+          </div>
+          <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
+            <span>布局失败：</span>
+            <span id="previewCollisionReason">CENTRAL_COLLISION</span>
+          </div>
         </div>
-        <div>
-          <label for="prevPriText">原文字幕</label>
-          <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
-        </div>
-      </div>
 
-      <div class="preview-controls">
-        <section class="inspector-group">
-          <b>样式</b>
-          <label for="prevChsFont">中文字体</label>
-          <div class="font-picker-row">
-            <input id="prevChsFont" value="汉仪旗黑" autocomplete="off">
-            <button type="button" class="secondary font-browse-btn" data-font-target="prevChsFont">浏览</button>
-          </div>
-          <label for="prevPriFont">原文字体</label>
-          <div class="font-picker-row">
-            <input id="prevPriFont" value="Noto Sans" autocomplete="off">
-            <button type="button" class="secondary font-browse-btn" data-font-target="prevPriFont">浏览</button>
-          </div>
-          <div id="fontResolveStatus" class="small muted inspector-help">字体名仍可直接输入；“浏览”只列出处理主机可发现的字体 family。</div>
-          <div style="display:flex;justify-content:space-between;margin-top:8px">
-            <label for="prevChsSize" style="margin:0">中文基础字号</label>
-            <span id="prevChsSizeVal" class="small muted">52 px</span>
-          </div>
-          <input type="range" id="prevChsSize" min="38" max="64" value="52" step="1">
-          <div style="display:flex;justify-content:space-between">
-            <label for="prevPriSize" style="margin:0">原文基础字号</label>
-            <span id="prevPriSizeVal" class="small muted">42 px</span>
-          </div>
-          <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
-        </section>
-
-        <section class="inspector-group">
-          <b>位置</b>
-          <div style="display:flex;justify-content:space-between;margin-top:8px">
-            <label for="prevCentralGap" style="margin:0">中央间隔</label>
-            <span id="prevCentralGapVal" class="small muted">20 px</span>
-          </div>
-          <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
-          <div style="display:flex;justify-content:space-between">
-            <label for="prevMarginH" style="margin:0">水平安全边距</label>
-            <span id="prevMarginHVal" class="small muted">10 % (192px)</span>
-          </div>
-          <input type="range" id="prevMarginH" min="0" max="30" value="10" step="1">
-          <div style="display:flex;justify-content:space-between">
-            <label for="prevMarginV" style="margin:0">垂直安全边距</label>
-            <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
-          </div>
-          <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
-        </section>
-
-        <section class="inspector-group">
-          <b>特效</b>
-          <div class="actions" style="margin:8px 0">
-            <button type="button" class="small" id="prevPresetDefault">标准</button>
-            <button type="button" class="small" id="prevPresetPlain">纯净</button>
-            <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
-          </div>
-          <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 淡入淡出 / 动态进入</label>
-          <label class="check"><input type="checkbox" id="prevEnableKaraoke"> K 歌高亮</label>
-          <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
-          <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层描边</label>
-          <div class="small muted inspector-help">K 歌只有在条目带可信词级时间戳时才生成逐词 <code>\k</code>；否则降级为整句。半透明底板不包含背景模糊。</div>
-        </section>
-      </div>
-
-      <div class="preview-actions">
-        <div class="actions" style="margin:0">
-          <button type="button" class="small" id="prevPresetLongText">检查长句</button>
-          <button type="button" class="small danger" id="prevPresetCollision">检查溢出</button>
-        </div>
-        <div class="actions" style="margin:0">
-          <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
-          <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
-          <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
-          <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
-        </div>
-      </div>
-      <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
-
-      <details class="preview-advanced">
-        <summary>辅助线与诊断显示（高级）</summary>
-        <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
-          <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
-          <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
-          <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
-        </div>
-        <div class="preview-background-controls">
+        <aside class="preview-inspector" aria-label="字幕排版参数与操作">
+  <div class="row preview-copy-fields">
           <div>
-            <label for="previewBackgroundMode">工作台背景</label>
-            <select id="previewBackgroundMode">
-              <option value="gradient">中性渐变</option>
-              <option value="black">纯黑</option>
-              <option value="grid">明暗网格</option>
-              <option value="image">本地图片</option>
-            </select>
+            <label for="prevChsText">中文字幕</label>
+            <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
           </div>
-          <div id="previewBackgroundFileWrap" class="hidden">
-            <label for="previewBackgroundFile">本地参考图片</label>
-            <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
+          <div>
+            <label for="prevPriText">原文字幕</label>
+            <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
           </div>
-          <div class="small muted">背景仅存在于当前浏览器会话，用于判断可读性；不会上传、保存到项目或进入 ASS/MKV。</div>
         </div>
-      </details>
+
+        <div class="preview-controls">
+          <section class="inspector-group">
+            <b>样式</b>
+            <label for="prevChsFont">中文字体</label>
+            <div class="font-picker-row">
+              <input id="prevChsFont" value="汉仪旗黑" autocomplete="off">
+              <button type="button" class="secondary font-browse-btn" data-font-target="prevChsFont">浏览</button>
+            </div>
+            <label for="prevPriFont">原文字体</label>
+            <div class="font-picker-row">
+              <input id="prevPriFont" value="Noto Sans" autocomplete="off">
+              <button type="button" class="secondary font-browse-btn" data-font-target="prevPriFont">浏览</button>
+            </div>
+            <div id="fontResolveStatus" class="small muted inspector-help">字体名仍可直接输入；“浏览”只列出处理主机可发现的字体 family。</div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px">
+              <label for="prevChsSize" style="margin:0">中文基础字号</label>
+              <span id="prevChsSizeVal" class="small muted">52 px</span>
+            </div>
+            <input type="range" id="prevChsSize" min="38" max="64" value="52" step="1">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevPriSize" style="margin:0">原文基础字号</label>
+              <span id="prevPriSizeVal" class="small muted">42 px</span>
+            </div>
+            <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
+          </section>
+
+          <section class="inspector-group">
+            <b>位置</b>
+            <div style="display:flex;justify-content:space-between;margin-top:8px">
+              <label for="prevCentralGap" style="margin:0">中央间隔</label>
+              <span id="prevCentralGapVal" class="small muted">20 px</span>
+            </div>
+            <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevMarginH" style="margin:0">水平安全边距</label>
+              <span id="prevMarginHVal" class="small muted">10 % (192px)</span>
+            </div>
+            <input type="range" id="prevMarginH" min="0" max="30" value="10" step="1">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevMarginV" style="margin:0">垂直安全边距</label>
+              <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
+            </div>
+            <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
+          </section>
+
+          <section class="inspector-group">
+            <b>特效</b>
+            <div class="actions" style="margin:8px 0">
+              <button type="button" class="small" id="prevPresetDefault">标准</button>
+              <button type="button" class="small" id="prevPresetPlain">纯净</button>
+              <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
+            </div>
+            <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 淡入淡出 / 动态进入</label>
+            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> K 歌高亮</label>
+            <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
+            <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层描边</label>
+            <div class="small muted inspector-help">K 歌只有在条目带可信词级时间戳时才生成逐词 <code>\k</code>；否则降级为整句。半透明底板不包含背景模糊。</div>
+          </section>
+        </div>
+
+        <div class="preview-actions">
+          <div class="actions" style="margin:0">
+            <button type="button" class="small" id="prevPresetLongText">检查长句</button>
+            <button type="button" class="small danger" id="prevPresetCollision">检查溢出</button>
+          </div>
+          <div class="actions" style="margin:0">
+            <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
+            <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
+            <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
+            <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
+          </div>
+        </div>
+        <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+
+        <details class="preview-advanced">
+          <summary>辅助线与诊断显示（高级）</summary>
+          <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
+          </div>
+          <div class="preview-background-controls">
+            <div>
+              <label for="previewBackgroundMode">工作台背景</label>
+              <select id="previewBackgroundMode">
+                <option value="gradient">中性渐变</option>
+                <option value="black">纯黑</option>
+                <option value="grid">明暗网格</option>
+                <option value="image">本地图片</option>
+              </select>
+            </div>
+            <div id="previewBackgroundFileWrap" class="hidden">
+              <label for="previewBackgroundFile">本地参考图片</label>
+              <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
+            </div>
+            <div class="small muted">背景仅存在于当前浏览器会话，用于判断可读性；不会上传、保存到项目或进入 ASS/MKV。</div>
+          </div>
+        </details>
+        </aside>
+      </div>
 
       <dialog id="fontBrowserDialog" class="font-browser-dialog">
         <form method="dialog" class="font-browser-shell">
@@ -2025,21 +2165,6 @@ mark.search-hl{
         </form>
       </dialog>
 
-      <div class="preview-stage" id="previewCanvasContainer">
-        <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
-        <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
-        <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
-        <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
-        <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
-        <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
-          <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">浏览器几何预览</span>
-          <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
-        </div>
-        <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
-          <span>布局失败：</span>
-          <span id="previewCollisionReason">CENTRAL_COLLISION</span>
-        </div>
-      </div>
     </section>
 
     <section class="card hidden" id="subtitleReviewCard">
