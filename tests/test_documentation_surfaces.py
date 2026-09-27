@@ -28,6 +28,8 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("进入本机控制台", page)
         self.assertIn("Termux 日常启动", page)
         self.assertIn("项目会生成什么", page)
+        self.assertIn('rel="icon" type="image/svg+xml" href="./favicon.svg?v=1"', page)
+        self.assertTrue((root / "docs" / "favicon.svg").is_file())
         self.assertLess(len(page), 12000)
 
         for stale in (
