@@ -47,8 +47,8 @@ class SubtitleLayoutTests(unittest.TestCase):
         )
         ass_output = render_ass([entry], source_language="en", target_language="zh-CN")
         self.assertIn("WrapStyle: 2", ass_output)
-        self.assertIn(r"{\an2\pos(960,530)", ass_output)
-        self.assertIn(r"{\an8\pos(960,550)", ass_output)
+        self.assertIn(r"{\an2\pos(960,625)", ass_output)
+        self.assertIn(r"{\an8\pos(960,645)", ass_output)
 
     def test_kinetic_tags_duration_capping(self) -> None:
         # Long duration line (2.0s = 2000ms): base 200ms entry and 200ms exit applied
@@ -204,8 +204,8 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(len(chs_dialogue), 1)
         self.assertIn(r"\N", primary_dialogue[0])
         self.assertIn(r"\N", chs_dialogue[0])
-        self.assertIn(r"{\an2\pos(960,530)", primary_dialogue[0])
-        self.assertIn(r"{\an8\pos(960,550)", chs_dialogue[0])
+        self.assertIn(r"{\an2\pos(960,625)", primary_dialogue[0])
+        self.assertIn(r"{\an8\pos(960,645)", chs_dialogue[0])
 
     def test_long_english_text_layout(self) -> None:
         english = "This is a very long sentence designed to test the automatic line breaking capabilities of the ASS subtitle layout engine when processing English text."
