@@ -39,7 +39,11 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("requirements-termux.txt", (root / "run_termux.sh").read_text(encoding="utf-8"))
         self.assertIn("127.0.0.1:8765", page)
         self.assertIn('href="http://127.0.0.1:8765/"', page)
-        self.assertIn("打开本地 Web UI", page)
+        self.assertIn("打开本地控制台", page)
+        self.assertIn("需先在当前设备启动服务", page)
+        self.assertIn(".workspace{border:0;background:transparent}", page)
+        self.assertIn("white-space:pre-wrap;overflow-wrap:anywhere;word-break:break-word;", page)
+        self.assertIn("grid-template-columns:1fr 1fr;gap:6px;padding:0 0 12px", page)
         self.assertIn("continuous.flac", page)
         self.assertIn("ASS / libass", page)
         self.assertIn("Incremental Update", page)
@@ -54,6 +58,7 @@ class DocumentationSurfaceTests(unittest.TestCase):
             "CURRENT WORKFLOW",
             "RUNTIME MODEL",
             "打开本机控制台",
+            "打开本地 Web UI",
             'href="#launch">启动',
             "把角色语音整理成可复现的本地档案",
         ):
