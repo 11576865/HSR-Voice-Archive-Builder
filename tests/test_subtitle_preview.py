@@ -277,6 +277,11 @@ class SubtitleSettingsApiTests(unittest.TestCase):
                 "chinese_text": "你好",
                 "chs_font": "Noto Sans",
                 "primary_font": "Noto Sans",
+                "word_alignments": [
+                    {"word": "Hello", "start": 0.0, "end": 0.8}
+                ],
+                "preview_duration_seconds": 2.5,
+                "preview_timestamp": 1.25,
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -284,6 +289,10 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(response.headers["x-hsr-preview-renderer"], "ffmpeg-libass")
         self.assertTrue(response.content.startswith(b"\x89PNG"))
         render_mock.assert_called_once()
+        kwargs = render_mock.call_args.kwargs
+        self.assertEqual(kwargs["word_alignments"][0]["word"], "Hello")
+        self.assertEqual(kwargs["duration_seconds"], 2.5)
+        self.assertEqual(kwargs["timestamp"], 1.25)
 
 
 if __name__ == "__main__":
