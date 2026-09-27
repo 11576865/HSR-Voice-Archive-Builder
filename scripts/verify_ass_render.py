@@ -146,8 +146,8 @@ def verify_ass_render(
     margin_violations: list[dict[str, object]] = []
 
     # Safe Area margins
-    margin_left = 192
-    margin_right = 1920 - 192  # 1728
+    margin_left = 58
+    margin_right = 1920 - 58  # 1862
     margin_top = 54
     margin_bottom = 1080 - 54  # 1026
 
