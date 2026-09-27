@@ -133,6 +133,55 @@ class TestAdvancedTypography(unittest.TestCase):
         self.assertGreaterEqual(y1, DEFAULT_SAFE_AREA.y_min)
         self.assertLessEqual(y2, DEFAULT_SAFE_AREA.y_max)
 
+    def test_card_opacity_is_configurable_without_changing_default(self):
+        lines = [
+            SubtitleLinePos(text="Opacity test.", font_size=42, x=960, y=486, alignment=2)
+        ]
+        default_card, _ = generate_frosted_glass_card(lines, safe_area=DEFAULT_SAFE_AREA)
+        half_card, _ = generate_frosted_glass_card(
+            lines, safe_area=DEFAULT_SAFE_AREA, opacity=0.5
+        )
+        self.assertIn(r"\1a&H60&", default_card)
+        self.assertIn(r"\1a&H7F&", half_card)
+
+    def test_render_ass_readability_and_soft_entry_controls(self):
+        entry = DummyEntry(
+            english="Soft entry.",
+            chinese="柔和进入。",
+            start_seconds=1.0,
+            display_end_seconds=4.0,
+        )
+        cfg = SubtitleRenderConfig(
+            enable_kinetic=False,
+            outline_width=4.5,
+            shadow_depth=1.5,
+            blur_radius=0.8,
+            enable_soft_entry=True,
+            soft_entry_scale_percent=98.0,
+            soft_entry_blur=1.5,
+            soft_entry_ms=160,
+        )
+        ass_content = render_ass([entry], config=cfg)
+        self.assertIn(",1,4.5,1.5,8,", ass_content)
+        self.assertIn(r"\fscx98\fscy98\blur1.5\t(0,160,\fscx100\fscy100\blur0.8)", ass_content)
+        self.assertNotIn(r"\fad", ass_content)
+
+    def test_render_ass_base_blur_without_soft_entry(self):
+        entry = DummyEntry(
+            english="Blur test.",
+            chinese="模糊测试。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+        )
+        cfg = SubtitleRenderConfig(
+            enable_kinetic=False,
+            blur_radius=0.7,
+            enable_soft_entry=False,
+        )
+        ass_content = render_ass([entry], config=cfg)
+        self.assertIn(r"\blur0.7", ass_content)
+        self.assertNotIn(r"\t(", ass_content)
+
     def test_render_ass_all_effects_enabled(self):
         entries = [
             DummyEntry(
