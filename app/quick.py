@@ -21,7 +21,7 @@ from .builder import (
     sha256_file,
 )
 from .credentials import credentials_status
-from .game_profiles import detect_game_profile
+from .game_profiles import detect_game_profile, genshin_voice_parts
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
 from .remote_index import (
@@ -563,6 +563,23 @@ def _index_candidates(source: Path, wav_names: set[str]) -> list[dict[str, Any]]
 
 
 def infer_character(wav_names: list[str]) -> dict[str, Any]:
+    genshin_characters = [
+        str(parts["character"]).casefold()
+        for name in wav_names
+        if (parts := genshin_voice_parts(name))
+    ]
+    if genshin_characters:
+        counts = Counter(genshin_characters)
+        token, count = counts.most_common(1)[0]
+        share = count / max(1, len(wav_names))
+        return {
+            "value": token,
+            "confidence": "high" if share >= 0.75 else ("medium" if share >= 0.4 else "low"),
+            "share": round(share, 4),
+            "top_candidates": counts.most_common(5),
+            "method": "genshin_filename_schema",
+        }
+
     counts: Counter[str] = Counter()
     total = max(1, len(wav_names))
     for name in wav_names:
