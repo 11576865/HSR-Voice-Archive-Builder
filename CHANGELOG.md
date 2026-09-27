@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Expanded the ASS workbench with configurable outline/shadow/blur, translucent-card opacity, independent fade timing, restrained `\t()` soft entry, `\k`/`\kf`/dynamic-clip Karaoke modes, and an optional Archive HUD. Browser preview now loads resolved host fonts instead of relying only on local browser font availability.
+- Added a non-destructive `word_alignments.json` sidecar with strict source-text/duration fingerprinting, monotonic/coverage validation, project and per-entry diagnostics, JSON import, and real word-timing injection into ASS export. The libass preview can render aligned project samples at a selected percentage of subtitle duration.
+- Updated subtitle geometry defaults to 3% horizontal safe margins and a 60/40 primary-to-Chinese vertical region split around the protected central gap; the geometry preview and ASS solver use the same boundary calculation.
+- Simplified duplicate dashboard controls and proofreading state UI, enlarged the final-Chinese editor, and tightened mobile workbench spacing.
+
 - v0.9-M restores the prior published audio/subtitle/manifest set and completion checkpoint after a failed rebuild, marks process-interrupted output as incomplete, and preserves human subtitle overrides after FLAC encoding or reuse.
 - Subtitle autosave now starts the next HTTP write only after the previous write has settled, preventing rapid entry navigation from racing the local override file.
 - Remote update plans now report changed source text or comparable audio SHA-256 separately from new rows, keep conflicting workbook records for review, and distinguish identical WAV basenames by their package-relative paths in local candidate scans. Existing rows remain read-only to the automatic download action.
