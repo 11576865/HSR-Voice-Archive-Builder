@@ -233,7 +233,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('id="subOpenLayoutBtn"', html)
         self.assertNotIn('id="subNextAttentionBtn"', html)
         self.assertIn('<option value="unreviewed">未人工确认</option>', html)
-        self.assertIn('<option value="overflow">ASS 排版失败</option>', html)
+        self.assertNotIn('<option value="overflow">ASS 排版失败</option>', html)
         self.assertNotIn("openCurrentSubtitleInLayout", html)
         self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
         self.assertIn('id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"', html)
