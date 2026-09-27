@@ -30,7 +30,7 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("Windows", page)
         self.assertIn("Android / Termux", page)
         self.assertIn("Python 3.11+", page)
-        self.assertIn("FFmpeg in PATH", page)
+        self.assertIn("FFmpeg PATH", page)
         self.assertIn(".\\run_windows.bat", page)
         self.assertIn("run_windows_lan.bat", page)
         self.assertIn("requirements.txt", page)
