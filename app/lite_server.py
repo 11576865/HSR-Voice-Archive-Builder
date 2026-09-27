@@ -23,6 +23,7 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
+from .word_alignment import alignment_diagnostics, import_word_alignments
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -350,6 +351,13 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
             return
+        if path.startswith("/api/project/") and path.endswith("/word-alignments"):
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            self._json({"ok": True, "diagnostics": alignment_diagnostics(output)})
+            return
         if path.startswith("/api/project/") and "/subtitles/" in path and path.endswith("/audio"):
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
@@ -436,6 +444,33 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path.startswith("/api/project/") and path.endswith("/word-alignments"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            raw_records = data.get("alignments") or data.get("entries") or "[]"
+            try:
+                records = json.loads(raw_records)
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Alignment import must contain valid JSON") from exc
+            payload = {"alignments": records}
+            result = import_word_alignments(output, payload)
+            refreshed = refresh_subtitle_artifacts_from_settings(
+                output,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                generate_ass=(
+                    (output / "HSR_Voice_Archive.ass").is_file()
+                    or bool(getattr(config, "generate_ass", False))
+                ),
+                render_config=subtitle_render_config(config),
+                strict_ass=False,
+            )
+            self._json({"ok": True, "result": result, "refreshed": refreshed})
+            return
+
         if path == "/api/project/active/export/gpt-sovits":
             query = parse_qs(urlsplit(self.path).query)
             report = export_project_dataset(
