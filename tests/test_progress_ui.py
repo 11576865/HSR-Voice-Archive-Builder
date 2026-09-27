@@ -389,11 +389,11 @@ class QuickBuildUiTests(unittest.TestCase):
         )
         self.assertIn('overflow-y:auto;', html)
         self.assertIn(
-            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  display:block!important;\n  background:var(--surface-primary)!important;',
+            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  display:block!important;\n  background:var(--layout-shell)!important;',
             html,
         )
         self.assertIn(
-            '.preview-workbench .preview-stage{\n  width:100%!important;\n  margin:0!important;\n  aspect-ratio:16/9;\n  background:#05070b!important;',
+            '.preview-workbench .preview-stage{\n  width:100%!important;\n  margin:0!important;\n  aspect-ratio:16/9;\n  background:var(--layout-canvas)!important;',
             html,
         )
         self.assertIn('class="sub-workspace proofreading-workspace"', html)
