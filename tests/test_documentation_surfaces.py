@@ -24,11 +24,14 @@ class DocumentationSurfaceTests(unittest.TestCase):
         page = (root / "docs" / "index.html").read_text(encoding="utf-8")
 
         self.assertIn(f"v{APP_VERSION}", page)
-        self.assertIn("星穹铁道角色语音归档工具", page)
+        self.assertIn("Voice Archive Builder", page)
+        self.assertIn("Local-first archive workbench", page)
         self.assertIn("进入本机控制台", page)
-        self.assertIn("Termux 日常启动", page)
-        self.assertIn("项目会生成什么", page)
-        self.assertLess(len(page), 12000)
+        self.assertIn("日常启动", page)
+        self.assertIn("成品", page)
+        self.assertIn('rel="icon" type="image/svg+xml" href="./favicon.svg?v=1"', page)
+        self.assertTrue((root / "docs" / "favicon.svg").is_file())
+        self.assertLess(len(page), 18000)
 
         for stale in (
             "v0.9-H",

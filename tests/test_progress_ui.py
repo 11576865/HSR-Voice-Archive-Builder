@@ -46,6 +46,14 @@ def write_index(path: Path) -> None:
 
 
 class QuickBuildUiTests(unittest.TestCase):
+    def test_control_surface_has_svg_favicon(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "app" / "static" / "index.html").read_text(encoding="utf-8")
+        svg = (root / "app" / "static" / "favicon.svg").read_text(encoding="utf-8")
+        self.assertIn('rel="icon" type="image/svg+xml" href="/static/favicon.svg?v=1"', html)
+        self.assertIn('viewBox="0 0 32 32"', svg)
+        self.assertNotIn("<text", svg)
+
     def test_common_timing_settings_are_visible_before_first_build(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
@@ -160,7 +168,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn("(Ctrl+Enter)", html)
         self.assertNotIn("(Alt+↑)", html)
         self.assertNotIn("(Alt+↓)", html)
-        self.assertNotIn("document.addEventListener('keydown'", html)
+        self.assertIn("document.addEventListener('keydown',event=>{if(event.key==='Escape')setUtilityDrawer(false)});", html)
         self.assertIn('interactive-widget=resizes-content', html)
         self.assertNotIn('@media(pointer:coarse)', html)
         self.assertIn('@media(prefers-reduced-motion:reduce)', html)
@@ -177,11 +185,12 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("compositionstart", html)
         self.assertIn("compositionend", html)
         self.assertNotIn("保存并下一条", html)
-        self.assertIn("停止输入约 1 秒后会自动保存", html)
+        self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
-        self.assertIn('<details class="sub-ref-card" id="subReferenceCard">', html)
-        self.assertNotIn('<details class="sub-ref-card" id="subReferenceCard" open', html)
-        self.assertIn('GPT-SoVITS 参考语音标注（高级）', html)
+        self.assertIn('<details class="sub-ref-card reference-annotation" id="subReferenceCard">', html)
+        self.assertNotIn('<details class="sub-ref-card reference-annotation" id="subReferenceCard" open', html)
+        self.assertIn('参考语音标注', html)
+        self.assertIn('选为 GPT-SoVITS 参考语音', html)
         self.assertIn('id="subOriginalAudio"', html)
         self.assertIn('id="subOriginalAudio" controls preload="metadata"', html)
         self.assertIn("originalAudio.addEventListener('loadedmetadata'", html)
@@ -200,7 +209,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('<option value="other">Other</option>', html)
         self.assertNotIn('referenceEmotionSuggestions', html)
         self.assertIn('id="subReferenceIntensity"', html)
-        self.assertIn('0.00 基本无明显情绪', html)
+        self.assertIn('id="subReferenceIntensityValue" class="small muted">0.50</span>', html)
+        self.assertIn('id="subReferenceIntensity" type="range" min="0" max="1" step="0.05" value="0.5"', html)
         self.assertIn('id="subReferenceQuality"', html)
         self.assertIn('A: Recommended reference', html)
         self.assertIn('B: Usable', html)
@@ -243,18 +253,14 @@ class QuickBuildUiTests(unittest.TestCase):
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('id="subDiffPanel" class="sub-diff-panel"', html)
-        self.assertIn('id="subDiffState" class="badge"', html)
+        # The later dense proofreading redesign removed the character diff panel
+        # but kept the productivity shortcuts and confirmation flow.
+        self.assertNotIn('id="subDiffPanel"', html)
+        self.assertNotIn("function renderSubtitleDiff()", html)
         self.assertIn('id="subShortcutHelp" class="sub-shortcuts"', html)
-        self.assertIn("function subtitleDiffOps(before,after)", html)
-        self.assertIn("function renderSubtitleDiff()", html)
-        self.assertIn("new Uint16Array(b.length+1)", html)
-        self.assertIn("<del>", html)
-        self.assertIn("<ins>", html)
         self.assertIn("function toggleCurrentSubtitleAudio()", html)
         self.assertIn("function confirmCurrentSubtitleFromShortcut()", html)
-        self.assertIn("document.getElementById('subtitleReviewCard').addEventListener('keydown'", html)
-        self.assertNotIn("document.addEventListener('keydown'", html)
+        self.assertIn("subtitleEditor.addEventListener('keydown'", html)
 
         self.assertIn("e.altKey&&e.key.toLowerCase()==='a'", html)
         self.assertIn("e.altKey&&e.key.toLowerCase()==='t'", html)
@@ -303,7 +309,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="workspace-index">03</span><span>排版</span>', html)
         self.assertIn('class="workspace-index">04</span><span>导出</span>', html)
         self.assertIn('class="workspace-index">05</span><span>更新</span>', html)
-        self.assertIn("本地归档工作台 · 音频 / 字幕 / 增量更新", html)
+        self.assertIn("LOCAL ARCHIVE WORKBENCH · AUDIO / SUBTITLE / UPDATE", html)
         self.assertIn(".card{", html)
         self.assertIn("border-radius:4px", html)
         self.assertIn(".job-center-copy{flex-direction:row", html)
@@ -590,7 +596,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("CURRENT", html)
         self.assertIn("REMOTE", html)
         self.assertIn("audio_sha256", html)
-        self.assertIn("不会在“应用新增”时自动覆盖", html)
+        self.assertIn("不会被“应用新增”静默覆盖", html)
         self.assertIn("不会自动下载或归入现有条目", html)
         self.assertIn("只有明确的新增条目会自动下载", html)
 
@@ -736,7 +742,7 @@ class TestProgressUI(unittest.TestCase):
     def test_index_html_contains_progress_ui(self) -> None:
         html = _INDEX_HTML_TEMPLATE
 
-        self.assertIn('id="progressCard" class="card" role="region" aria-label="处理进度"', html)
+        self.assertIn('id="progressCard" class="card utility-card" role="region" aria-label="处理进度"', html)
         self.assertIn('@media(prefers-reduced-motion:reduce)', html)
         self.assertIn('id="progressTrack" class="progress-track" role="progressbar"', html)
         self.assertIn('role="status" aria-live="polite"', html)
@@ -753,7 +759,7 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("compositionstart", html)
         self.assertIn("compositionend", html)
         self.assertNotIn("保存并下一条", html)
-        self.assertIn("停止输入约 1 秒后会自动保存", html)
+        self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn(
             "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})",
