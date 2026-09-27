@@ -119,7 +119,9 @@ def _fmt_num(value: float) -> str:
 
 def _ass_alpha_for_opacity(opacity: float) -> str:
     clamped = max(0.0, min(1.0, float(opacity)))
-    alpha = round((1.0 - clamped) * 255)
+    # Floor preserves the historical 62% default as &H60 while still
+    # mapping 0%/100% opacity to FF/00 exactly.
+    alpha = int((1.0 - clamped) * 255)
     return f"{alpha:02X}"
 
 
