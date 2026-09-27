@@ -37,6 +37,10 @@ class SubtitleEntryAdapter:
         start_seconds: float,
         display_end_seconds: float,
         word_alignments: list[object] | None = None,
+        group: str = "",
+        filename: str = "",
+        source_member_id: str = "",
+        character: str = "",
     ):
         self.id = item_id
         self.english = english
@@ -44,6 +48,10 @@ class SubtitleEntryAdapter:
         self.start_seconds = start_seconds
         self.display_end_seconds = display_end_seconds
         self.word_alignments = word_alignments
+        self.group = group
+        self.filename = filename
+        self.source_member_id = source_member_id
+        self.character = character
 
 
 def _entry_id(entry: dict[str, Any]) -> int | str | None:
@@ -231,6 +239,15 @@ def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapt
                     or entry.get("words")
                     or None
                 ),
+                group=str(entry.get("group", "") or ""),
+                filename=str(entry.get("filename", "") or ""),
+                source_member_id=str(entry.get("source_member_id", "") or ""),
+                character=str(
+                    entry.get("character")
+                    or entry.get("speaker")
+                    or entry.get("remote_character")
+                    or ""
+                ),
             )
         )
     return adapters
@@ -240,6 +257,11 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
     """Build the single render configuration used by ASS export."""
     return SubtitleRenderConfig(
         enable_karaoke=bool(config.subtitle_enable_karaoke),
+        karaoke_mode=(
+            str(config.subtitle_karaoke_mode or "k").lower()
+            if str(config.subtitle_karaoke_mode or "k").lower() in {"k", "kf", "clip"}
+            else "k"
+        ),
         enable_frosted_glass=bool(config.subtitle_enable_translucent_card),
         enable_multi_layer_outline=bool(config.subtitle_enable_multi_layer_outline),
         enable_kinetic=bool(config.subtitle_enable_kinetic),
@@ -254,6 +276,10 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         soft_entry_scale_percent=max(90.0, min(100.0, float(config.subtitle_soft_entry_scale_percent))),
         soft_entry_blur=max(0.0, min(5.0, float(config.subtitle_soft_entry_blur))),
         soft_entry_ms=max(0, min(1000, int(config.subtitle_soft_entry_ms))),
+        enable_archive_hud=bool(config.subtitle_enable_archive_hud),
+        archive_character=str(config.remote_character or "").strip(),
+        archive_hud_font_size=max(12, min(48, int(config.subtitle_archive_hud_font_size))),
+        archive_hud_opacity=max(0.1, min(1.0, float(config.subtitle_archive_hud_opacity))),
         chs_font=validate_ass_font_name(config.subtitle_chs_font or "汉仪旗黑"),
         primary_font=validate_ass_font_name(config.subtitle_primary_font or "Noto Sans"),
         base_chs_size=max(12, min(120, int(config.subtitle_chs_size))),
