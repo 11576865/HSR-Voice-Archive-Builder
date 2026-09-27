@@ -1722,7 +1722,12 @@ function markServerSubtitle(sub){
 function dirtyDrafts(){
   const drafts=new Map();
   for(const sub of loadedSubtitles){
-    if(sub?._dirty)drafts.set(subtitleKey(sub),{final_chs:sub.final_chs,modified:sub.modified,_savedFinal:sub._savedFinal});
+    if(sub?._dirty)drafts.set(subtitleKey(sub),{
+      final_chs:sub.final_chs,
+      modified:sub.modified,
+      confirmed:false,
+      _savedFinal:sub._savedFinal
+    });
   }
   return drafts;
 }
@@ -1889,6 +1894,7 @@ async function fetchSubtitles(){
       if(!draft)continue;
       sub.final_chs=draft.final_chs;
       sub.modified=true;
+      sub.confirmed=!!draft.confirmed;
       sub._savedFinal=draft._savedFinal;
       sub._dirty=true;
     }
@@ -2018,6 +2024,11 @@ function renderActiveSubtitle(){
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
+    for(const id of ['subUseOfficialBtn','subUseApiBtn','subResetBtn','subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
+      const button=document.getElementById(id);if(button)button.disabled=true;
+    }
+    const diag=document.getElementById('subLayoutDiagnostic');
+    if(diag){diag.textContent='ASS 排版：尚未检查。';diag.className='small muted';}
     renderReferenceControls(null);
     clearReferenceAudio();
     const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
@@ -2056,6 +2067,9 @@ function renderActiveSubtitle(){
   updateCharCounter();
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
+  for(const id of ['subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=false;
+  }
   const useOfficial=document.getElementById('subUseOfficialBtn');
   const useApi=document.getElementById('subUseApiBtn');
   const reset=document.getElementById('subResetBtn');
