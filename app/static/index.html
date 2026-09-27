@@ -2401,17 +2401,78 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           </section>
 
           <section class="inspector-group">
-            <b>特效</b>
+            <b>预设</b>
             <div class="actions" style="margin:8px 0">
               <button type="button" class="small" id="prevPresetDefault">标准</button>
               <button type="button" class="small" id="prevPresetPlain">纯净</button>
               <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
             </div>
-            <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 淡入淡出 / 动态进入</label>
-            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> K 歌高亮</label>
+          </section>
+
+          <section class="inspector-group">
+            <b>可读性增强</b>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevOutlineWidth" style="margin:0">描边宽度</label>
+              <span id="prevOutlineWidthVal" class="small muted">3.0</span>
+            </div>
+            <input type="range" id="prevOutlineWidth" min="0" max="8" value="3" step="0.25">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevShadowDepth" style="margin:0">阴影强度</label>
+              <span id="prevShadowDepthVal" class="small muted">2.0</span>
+            </div>
+            <input type="range" id="prevShadowDepth" min="0" max="8" value="2" step="0.25">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevBlurRadius" style="margin:0">柔化描边 / Blur</label>
+              <span id="prevBlurRadiusVal" class="small muted">0.0</span>
+            </div>
+            <input type="range" id="prevBlurRadius" min="0" max="2.5" value="0" step="0.1">
+            <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层柔和轮廓</label>
             <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
-            <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层描边</label>
-            <div class="small muted inspector-help">K 歌只有在条目带可信词级时间戳时才生成逐词 <code>\k</code>；否则降级为整句。半透明底板不包含背景模糊。</div>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevCardOpacity" style="margin:0">底板不透明度</label>
+              <span id="prevCardOpacityVal" class="small muted">62%</span>
+            </div>
+            <input type="range" id="prevCardOpacity" min="0" max="100" value="62" step="1">
+            <div class="small muted inspector-help"><code>\blur</code> 只柔化 ASS 字形、描边和轮廓，不会模糊底层视频画面。</div>
+          </section>
+
+          <section class="inspector-group">
+            <b>进入 / 退出</b>
+            <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 平滑淡入淡出</label>
+            <label class="check"><input type="checkbox" id="prevAudioAwareFade" checked> 根据相邻语音间隔自动调整 Fade</label>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevFadeIn" style="margin:0">淡入时长</label>
+              <span id="prevFadeInVal" class="small muted">200 ms</span>
+            </div>
+            <input type="range" id="prevFadeIn" min="0" max="600" value="200" step="10">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevFadeOut" style="margin:0">淡出时长</label>
+              <span id="prevFadeOutVal" class="small muted">200 ms</span>
+            </div>
+            <input type="range" id="prevFadeOut" min="0" max="600" value="200" step="10">
+            <label class="check"><input type="checkbox" id="prevEnableSoftEntry"> 柔和进入动画</label>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevSoftEntryScale" style="margin:0">起始缩放</label>
+              <span id="prevSoftEntryScaleVal" class="small muted">98%</span>
+            </div>
+            <input type="range" id="prevSoftEntryScale" min="94" max="100" value="98" step="0.5">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevSoftEntryBlur" style="margin:0">起始 Blur</label>
+              <span id="prevSoftEntryBlurVal" class="small muted">1.5</span>
+            </div>
+            <input type="range" id="prevSoftEntryBlur" min="0" max="3" value="1.5" step="0.1">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevSoftEntryMs" style="margin:0">进入时长</label>
+              <span id="prevSoftEntryMsVal" class="small muted">160 ms</span>
+            </div>
+            <input type="range" id="prevSoftEntryMs" min="60" max="400" value="160" step="10">
+            <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：轻微缩放与 Blur 在短时间内回到正常值，不加入弹跳。</div>
+          </section>
+
+          <section class="inspector-group">
+            <b>同步</b>
+            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 逐词高亮（<code>\k</code>）</label>
+            <div class="small muted inspector-help">只有条目带可信词级时间戳时才生成逐词高亮；否则保持普通整句字幕。</div>
           </section>
         </div>
 
