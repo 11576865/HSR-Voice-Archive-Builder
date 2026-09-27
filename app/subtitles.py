@@ -10,6 +10,7 @@ from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
 from subtitle_layout.config import SubtitleRenderConfig
+from subtitle_layout.fonts import validate_ass_font_name
 
 
 @dataclass
@@ -218,8 +219,8 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         enable_frosted_glass=bool(config.subtitle_enable_translucent_card),
         enable_multi_layer_outline=bool(config.subtitle_enable_multi_layer_outline),
         enable_kinetic=bool(config.subtitle_enable_kinetic),
-        chs_font=str(config.subtitle_chs_font or "汉仪旗黑"),
-        primary_font=str(config.subtitle_primary_font or "Noto Sans"),
+        chs_font=validate_ass_font_name(config.subtitle_chs_font or "汉仪旗黑"),
+        primary_font=validate_ass_font_name(config.subtitle_primary_font or "Noto Sans"),
         base_chs_size=max(12, min(120, int(config.subtitle_chs_size))),
         base_primary_size=max(12, min(120, int(config.subtitle_primary_size))),
         margin_horizontal_percent=max(
@@ -250,6 +251,7 @@ def refresh_subtitle_artifacts_from_settings(
     generate_ass: bool = False,
     render_config: SubtitleRenderConfig | None = None,
     manifest_data: dict[str, Any] | None = None,
+    strict_ass: bool = True,
 ) -> dict[str, Any]:
     """Apply human overrides as a derived layer without mutating source provenance."""
 
@@ -281,26 +283,37 @@ def refresh_subtitle_artifacts_from_settings(
     srt_file = output_dir / "HSR_Voice_Archive.srt"
     overflow_file = output_dir / "ass_layout_overflow_report.json"
 
-    if generate_ass:
-        write_ass(
-            adapters,
-            ass_file,
-            source_language=source_language,
-            target_language=target_language,
-            config=render_config,
-        )
-    else:
-        ass_file.unlink(missing_ok=True)
-        overflow_file.unlink(missing_ok=True)
-
+    # SRT is independent from ASS layout validation and must always reflect the
+    # saved human text, even when the richer ASS representation is rejected.
     write_srt(
         adapters,
         srt_file,
         source_language=source_language,
         target_language=target_language,
     )
+
+    ass_error = ""
+    if generate_ass:
+        try:
+            write_ass(
+                adapters,
+                ass_file,
+                source_language=source_language,
+                target_language=target_language,
+                config=render_config,
+            )
+        except Exception as exc:
+            ass_file.unlink(missing_ok=True)
+            ass_error = f"{type(exc).__name__}: {exc}"
+            if strict_ass:
+                raise
+    else:
+        ass_file.unlink(missing_ok=True)
+        overflow_file.unlink(missing_ok=True)
+
     return {
-        "ass_file": str(ass_file) if generate_ass else "",
+        "ass_file": str(ass_file) if generate_ass and not ass_error else "",
+        "ass_error": ass_error,
         "srt_file": str(srt_file),
         "override_count": sum(bool(entry.get("modified")) for entry in entries),
     }
@@ -310,6 +323,8 @@ def refresh_subtitle_artifacts(
     config: ProjectConfig,
     output_dir: Path,
     manifest_data: dict[str, Any] | None = None,
+    *,
+    strict_ass: bool = True,
 ) -> dict[str, Any]:
     return refresh_subtitle_artifacts_from_settings(
         output_dir,
@@ -323,6 +338,7 @@ def refresh_subtitle_artifacts(
         ),
         render_config=subtitle_render_config(config),
         manifest_data=manifest_data,
+        strict_ass=strict_ass,
     )
 
 
@@ -614,7 +630,12 @@ def update_project_subtitles(
     # A subtitle edit changes manifest/subtitle artifacts, but it must not
     # invalidate or rebuild the already verified continuous FLAC stage.
     invalidate_subtitle_stages(config)
-    refreshed = refresh_subtitle_artifacts(config, output_dir, data)
+    refreshed = refresh_subtitle_artifacts(
+        config,
+        output_dir,
+        data,
+        strict_ass=False,
+    )
 
     if updated_count < 1:
         raise ValueError("No matching subtitle entries were updated")

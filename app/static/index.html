@@ -560,10 +560,13 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <button type="button" class="small danger" id="prevPresetCollision">检查溢出</button>
         </div>
         <div class="actions" style="margin:0">
+          <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
+          <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
           <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
           <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
         </div>
       </div>
+      <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
 
       <details style="margin-bottom:12px">
         <summary>辅助线与诊断显示（高级）</summary>
@@ -577,6 +580,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
       <div style="position:relative;width:100%;aspect-ratio:16 / 9;background:#080a0e;border-radius:10px;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 0 20px rgba(0,0,0,0.8)" id="previewCanvasContainer">
         <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
         <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
+        <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
         <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
           <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">浏览器几何预览</span>
           <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
@@ -2077,7 +2081,13 @@ async function saveSubtitleItemInBackground(targetSub){
         const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
         target.modified=modifiedIds.has(sentKey);
       }
-      setSubtitleSaveUi('saved','条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。');
+      const assError=String(j.result?.ass_error||'');
+      setSubtitleSaveUi(
+        'saved',
+        assError
+          ? '条目 #'+sentId+' 已保存 ✓；SRT 已更新。现有 ASS 因排版校验失败已移除，请到字幕排版查看溢出报告。'
+          : '条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。'
+      );
       return true;
     }catch(x){
       setSubtitleSaveUi('error','保存字幕失败：'+shortError(x)+'；当前输入仍保留在页面中。');
@@ -2225,6 +2235,62 @@ document.getElementById('subReferenceIntensity').onchange=saveReferenceAnnotatio
 let previewDebounceTimer = null;
 let previewPreset = 'custom';
 let savedSubtitleSettings = null;
+let libassPreviewObjectUrl = null;
+
+function invalidateLibassPreview(){
+  const img=document.getElementById('libassPreviewImage');
+  if(img)img.classList.add('hidden');
+  if(libassPreviewObjectUrl){
+    URL.revokeObjectURL(libassPreviewObjectUrl);
+    libassPreviewObjectUrl=null;
+  }
+  const status=document.getElementById('libassPreviewStatus');
+  if(status){status.textContent='参数或测试文本已变化；实际 ASS 预览需要重新生成。';status.className='small muted';}
+}
+
+function showGeometryPreview(){
+  document.getElementById('libassPreviewImage')?.classList.add('hidden');
+}
+
+async function renderLibassPreview(){
+  const button=document.getElementById('previewLibassBtn');
+  const status=document.getElementById('libassPreviewStatus');
+  try{
+    if(button)button.disabled=true;
+    if(status){status.textContent='正在调用 FFmpeg/libass 渲染当前试调值…';status.className='small muted';}
+    const payload={
+      ...subtitleSettingsPayload(),
+      english_text:document.getElementById('prevPriText')?.value||'',
+      chinese_text:document.getElementById('prevChsText')?.value||'',
+      source_language:currentProject?.config?.source_text_language||'en',
+      target_language:currentProject?.config?.target_language||'zh-CN'
+    };
+    const response=await fetch('/api/subtitle-layout/render-preview',{
+      method:'POST',
+      headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify(payload),
+      cache:'no-store'
+    });
+    if(!response.ok){
+      let detail='HTTP '+response.status;
+      try{const body=await response.json();detail=body.error||detail}catch(e){try{detail=await response.text()}catch(_){}}
+      throw new Error(detail);
+    }
+    const blob=await response.blob();
+    if(!blob.size)throw new Error('实际 ASS 预览返回空图像');
+    if(libassPreviewObjectUrl)URL.revokeObjectURL(libassPreviewObjectUrl);
+    libassPreviewObjectUrl=URL.createObjectURL(blob);
+    const img=document.getElementById('libassPreviewImage');
+    img.src=libassPreviewObjectUrl;
+    img.classList.remove('hidden');
+    if(status){status.textContent='当前画面由 FFmpeg/libass 使用当前试调值实际渲染；修改参数后会自动标记过期。';status.className='small status-ok';}
+  }catch(err){
+    if(status){status.textContent='实际 ASS 预览失败：'+shortError(err);status.className='small status-bad';}
+    setLog(String(err));
+  }finally{
+    if(button)button.disabled=false;
+  }
+}
 
 function subtitleSettingsPayload(){
   return {
@@ -2260,6 +2326,7 @@ function loadSubtitleLayoutSettings(config){
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
+  invalidateLibassPreview();
   const status=document.getElementById('previewSaveStatus');
   if(status){status.textContent='当前显示项目已保存的 ASS 设置。';status.className='small status-ok';}
   updateLayoutPreview();
@@ -2339,6 +2406,8 @@ async function updateLayoutPreview() {
         margin_left_percent: marginH / 100.0,
         margin_top_percent: marginV / 100.0,
         min_central_gap: centralGap,
+        chs_font: document.getElementById('prevChsFont')?.value?.trim() || '汉仪旗黑',
+        primary_font: document.getElementById('prevPriFont')?.value?.trim() || 'Noto Sans',
         source_language: currentProject?.config?.source_text_language || 'en',
         target_language: currentProject?.config?.target_language || 'zh-CN',
       })
@@ -2351,6 +2420,7 @@ async function updateLayoutPreview() {
 }
 
 function scheduleLayoutPreviewUpdate() {
+  invalidateLibassPreview();
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
 }
@@ -2527,6 +2597,7 @@ function renderCanvasSubtitleOverlay(data) {
   document.getElementById(id)?.addEventListener('change',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
+    invalidateLibassPreview();
     updateLayoutPreview();
   });
 });
@@ -2554,6 +2625,7 @@ function applySubtitlePreset(name){
   if(name==='plain')document.getElementById('prevEnableKinetic').checked=false;
   if(name==='karaoke')document.getElementById('prevEnableKaraoke').checked=true;
   markSubtitleSettingsDirty();
+  invalidateLibassPreview();
   updateLayoutPreview();
 }
 
@@ -2564,6 +2636,7 @@ document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>apply
 document.getElementById('prevPresetLongText')?.addEventListener('click',()=>{
   document.getElementById('prevChsText').value='在这个广袤无垠的宇宙中，我们终将踏上属于自己的旅程，无论前路多么坎坷与漫长，星光终会照亮每一个勇敢前行的灵魂。';
   document.getElementById('prevPriText').value='In this vast and boundless universe, we will eventually embark on our own journey, regardless of how treacherous and long the road ahead may be, starward light will illuminate every brave soul.';
+  invalidateLibassPreview();
   updateLayoutPreview();
 });
 
@@ -2577,9 +2650,12 @@ document.getElementById('prevPresetCollision')?.addEventListener('click',()=>{
   document.getElementById('prevMarginV').value=20;
   previewPreset='custom';
   markSubtitleSettingsDirty();
+  invalidateLibassPreview();
   updateLayoutPreview();
 });
 
+document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
+document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();

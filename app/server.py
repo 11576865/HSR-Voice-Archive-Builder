@@ -11,6 +11,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
+from .ass_preview import preview_config_from_payload, render_ass_preview_png
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -52,6 +53,7 @@ from .project import (
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
+from subtitle_layout.fonts import validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -356,8 +358,8 @@ async def api_subtitle_layout_settings(request: Request):
         update_project(
             config,
             subtitle_preset=preset,
-            subtitle_chs_font=str(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑").strip(),
-            subtitle_primary_font=str(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans").strip(),
+            subtitle_chs_font=validate_ass_font_name(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑"),
+            subtitle_primary_font=validate_ass_font_name(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans"),
             subtitle_chs_size=max(12, min(120, int(data.get("base_chs_size", config.subtitle_chs_size)))),
             subtitle_primary_size=max(12, min(120, int(data.get("base_primary_size", config.subtitle_primary_size)))),
             subtitle_margin_horizontal_percent=max(
@@ -405,10 +407,42 @@ async def api_subtitle_layout_preview(request: Request):
             margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.10),
             margin_top_percent=float(data.get("margin_top_percent") if data.get("margin_top_percent") is not None else 0.05),
             min_central_gap=float(data.get("min_central_gap") if data.get("min_central_gap") is not None else 20.0),
+            chs_font=str(data.get("chs_font") or "汉仪旗黑"),
+            primary_font=str(data.get("primary_font") or "Noto Sans"),
         )
         return JSONResponse(result)
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/render-preview")
+async def api_subtitle_layout_render_preview(request: Request):
+    try:
+        try:
+            data = await request.json()
+        except Exception:
+            form = await request.form()
+            data = dict(form)
+        if not isinstance(data, dict):
+            raise ValueError("Subtitle preview payload must be an object")
+        config = preview_config_from_payload(data)
+        png = render_ass_preview_png(
+            english_text=str(data.get("english_text") or ""),
+            chinese_text=str(data.get("chinese_text") or ""),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            config=config,
+        )
+        return Response(
+            content=png,
+            media_type="image/png",
+            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
 
 
 @app.get("/api/status")

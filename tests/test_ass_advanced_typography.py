@@ -13,6 +13,7 @@ from subtitle_layout.ass_writer import (
 )
 from subtitle_layout.layout_solver import SubtitleLinePos
 from subtitle_layout.safe_area import DEFAULT_SAFE_AREA
+from subtitle_layout.fonts import validate_ass_font_name
 
 
 @dataclass
@@ -61,6 +62,35 @@ class TestAdvancedTypography(unittest.TestCase):
             format_karaoke_text(chinese, duration_sec=2.0, is_cjk=True),
             chinese,
         )
+
+    def test_partial_karaoke_alignment_falls_back_without_dropping_text(self):
+        text = "Hello world"
+        formatted = format_karaoke_text(
+            text,
+            duration_sec=1.0,
+            word_alignments=[{"word": "Hello", "start": 0.0, "end": 0.4}],
+        )
+        self.assertEqual(formatted, text)
+        self.assertNotIn(r"{\k", formatted)
+
+    def test_non_monotonic_karaoke_alignment_falls_back(self):
+        text = "Hello world"
+        formatted = format_karaoke_text(
+            text,
+            duration_sec=1.0,
+            word_alignments=[
+                {"word": "Hello ", "start": 0.4, "end": 0.7},
+                {"word": "world", "start": 0.2, "end": 0.8},
+            ],
+        )
+        self.assertEqual(formatted, text)
+
+    def test_ass_font_name_rejects_delimiters(self):
+        with self.assertRaises(ValueError):
+            validate_ass_font_name("Arial, sans-serif")
+        with self.assertRaises(ValueError):
+            validate_ass_font_name("Arial\nStyle: Injected")
+        self.assertEqual(validate_ass_font_name("Noto Sans"), "Noto Sans")
 
     def test_format_karaoke_explicit_word_alignments(self):
         alignments = [

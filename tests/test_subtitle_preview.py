@@ -4,6 +4,7 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.security import api_token
@@ -131,6 +132,8 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertIn("central_gap", data)
         self.assertIn("parallax", data)
         self.assertIn("layout", data)
+        self.assertIn("fonts", data)
+        self.assertEqual(data["fonts"]["primary"]["family"], "Noto Sans")
 
 
 class SubtitleSettingsApiTests(unittest.TestCase):
@@ -188,6 +191,33 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertTrue(saved.subtitle_enable_translucent_card)
         self.assertTrue(saved.subtitle_enable_multi_layer_outline)
         self.assertFalse(saved.subtitle_enable_kinetic)
+
+    def test_settings_endpoint_rejects_ass_delimiter_in_font_name(self):
+        response = self.client.post(
+            "/api/subtitle-layout/settings",
+            headers=self.headers,
+            json={"chs_font": "Arial, sans-serif"},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("commas", response.json()["error"])
+
+    @patch("app.server.render_ass_preview_png", return_value=b"\x89PNG\r\n\x1a\npreview")
+    def test_real_ass_preview_endpoint_returns_png(self, render_mock):
+        response = self.client.post(
+            "/api/subtitle-layout/render-preview",
+            headers=self.headers,
+            json={
+                "english_text": "Hello",
+                "chinese_text": "你好",
+                "chs_font": "Noto Sans",
+                "primary_font": "Noto Sans",
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "image/png")
+        self.assertEqual(response.headers["x-hsr-preview-renderer"], "ffmpeg-libass")
+        self.assertTrue(response.content.startswith(b"\x89PNG"))
+        render_mock.assert_called_once()
 
 
 if __name__ == "__main__":

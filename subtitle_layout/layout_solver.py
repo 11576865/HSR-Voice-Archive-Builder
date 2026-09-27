@@ -43,6 +43,8 @@ def solve_subtitle_layout(
     base_primary_size: int = DEFAULT_BASE_FONT_SIZE_PRIMARY,
     safe_area: SafeArea = DEFAULT_SAFE_AREA,
     min_central_gap: float = 20.0,
+    chs_font_path: str | None = None,
+    primary_font_path: str | None = None,
 ) -> SolvedLayout:
     same_chinese = source_language == target_language == "zh-CN"
     center_x = safe_area.canvas_width // 2
@@ -61,13 +63,13 @@ def solve_subtitle_layout(
     chs_input = chinese_text or english_text
     if same_chinese or not english_text.strip():
         pre_pri = []
-        pre_chs = break_line(chs_input, safe_area.max_printable_width, base_chs_size)
+        pre_chs = break_line(chs_input, safe_area.max_printable_width, base_chs_size, chs_font_path)
     elif not chinese_text.strip():
-        pre_pri = break_line(english_text, safe_area.max_printable_width, base_primary_size)
+        pre_pri = break_line(english_text, safe_area.max_printable_width, base_primary_size, primary_font_path)
         pre_chs = []
     else:
-        pre_pri = break_line(english_text, safe_area.max_printable_width, base_primary_size)
-        pre_chs = break_line(chinese_text, safe_area.max_printable_width, base_chs_size)
+        pre_pri = break_line(english_text, safe_area.max_printable_width, base_primary_size, primary_font_path)
+        pre_chs = break_line(chinese_text, safe_area.max_printable_width, base_chs_size, chs_font_path)
 
     # 2. Base font sizes are strictly consistent to preserve stable visual hierarchy
     effective_base_chs = base_chs_size
@@ -83,13 +85,13 @@ def solve_subtitle_layout(
         if same_chinese or not english_text.strip():
             pri_broken = []
             chs_input = chinese_text or english_text
-            chs_broken = break_line(chs_input, safe_area.max_printable_width, chs_size)
+            chs_broken = break_line(chs_input, safe_area.max_printable_width, chs_size, chs_font_path)
         elif not chinese_text.strip():
-            pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size)
+            pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size, primary_font_path)
             chs_broken = []
         else:
-            pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size)
-            chs_broken = break_line(chinese_text, safe_area.max_printable_width, chs_size)
+            pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size, primary_font_path)
+            chs_broken = break_line(chinese_text, safe_area.max_printable_width, chs_size, chs_font_path)
 
         chs_lh = measure_line_height(chs_size)
         pri_lh = measure_line_height(primary_size)
