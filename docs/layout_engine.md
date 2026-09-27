@@ -131,6 +131,31 @@ The import path validates:
 
 The cache is attached only in memory after canonical manifest/corrected-CSV persistence. It therefore does not become official/API text provenance and does not rewrite the manifest source text.
 
+## Optional local forced alignment
+
+The workbench can generate missing word timing through the optional local WhisperX provider in `app/local_word_alignment.py`.
+
+This provider is intentionally outside `requirements.txt`. Installing WhisperX also installs or depends on a comparatively large PyTorch/ML stack, so normal archive building, subtitle editing, SRT generation, and ASS without Karaoke do not require it.
+
+Enable it manually on a compatible processing host:
+
+```bash
+python -m pip install whisperx
+```
+
+The provider:
+
+- uses the project's declared `source_text_language`; `auto` is rejected because language guessing would make alignment semantics ambiguous;
+- resolves the original project WAV for each manifest entry;
+- uses the existing canonical source text as the forced-alignment transcript;
+- preserves already-valid cached alignments unless a forced regeneration is explicitly requested;
+- validates every generated result through the same cache validator before accepting it;
+- writes accepted results only to `output/word_alignments.json`;
+- reports per-entry failures instead of inventing timing;
+- runs as a normal background job so long alignment passes appear in the existing task center.
+
+The dashboard endpoint reports whether the optional provider is installed. No large dependency is installed automatically. Inference is local, although WhisperX itself may need to download an alignment model on first use when the required model is not already present in its local cache.
+
 ## Word-timing diagnostics
 
 The dashboard reports, per project:
