@@ -6,6 +6,7 @@ from .font_scale import (
     DEFAULT_BASE_FONT_SIZE_CHS,
     DEFAULT_BASE_FONT_SIZE_PRIMARY,
 )
+from .fonts import resolve_font_path, validate_ass_font_name
 from .layout_solver import SolvedLayout, SubtitleLinePos, solve_subtitle_layout
 from .measure import measure_line_height, measure_text_width
 from .safe_area import SafeArea
@@ -15,6 +16,7 @@ def _line_info(
     lines: list[SubtitleLinePos],
     *,
     is_primary: bool,
+    font_path: str | None = None,
 ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
     if not lines:
         return [], {
@@ -34,7 +36,7 @@ def _line_info(
 
     info: list[dict[str, Any]] = []
     for index, line in enumerate(lines):
-        width = measure_text_width(line.text, line.font_size)
+        width = measure_text_width(line.text, line.font_size, font_path)
         line_top = block_start + index * line_height
         info.append(
             {
@@ -73,12 +75,18 @@ def preview_subtitle_layout(
     margin_left_percent: float = 0.10,
     margin_top_percent: float = 0.05,
     min_central_gap: float = 20.0,
+    chs_font: str = "汉仪旗黑",
+    primary_font: str = "Noto Sans",
 ) -> dict[str, Any]:
     """Return browser-preview geometry from the exact ASS layout solver."""
 
     margin_left_percent = max(0.0, min(0.40, float(margin_left_percent)))
     margin_top_percent = max(0.0, min(0.40, float(margin_top_percent)))
     min_central_gap = max(0.0, min(200.0, float(min_central_gap)))
+    chs_font = validate_ass_font_name(chs_font)
+    primary_font = validate_ass_font_name(primary_font)
+    chs_font_path = resolve_font_path(chs_font)
+    primary_font_path = resolve_font_path(primary_font)
 
     safe_area = SafeArea(
         canvas_width=1920,
@@ -98,15 +106,19 @@ def preview_subtitle_layout(
         base_primary_size=int(base_primary_size),
         safe_area=safe_area,
         min_central_gap=min_central_gap,
+        chs_font_path=chs_font_path,
+        primary_font_path=primary_font_path,
     )
 
     primary_lines, primary_block = _line_info(
         solved.primary_lines,
         is_primary=True,
+        font_path=primary_font_path,
     )
     chs_lines, chs_block = _line_info(
         solved.chs_lines,
         is_primary=False,
+        font_path=chs_font_path,
     )
 
     y_center = safe_area.canvas_height / 2.0
@@ -130,6 +142,10 @@ def preview_subtitle_layout(
 
     return {
         "ok": True,
+        "fonts": {
+            "chs": {"family": chs_font, "resolved_path": chs_font_path},
+            "primary": {"family": primary_font, "resolved_path": primary_font_path},
+        },
         "canvas": {
             "width": safe_area.canvas_width,
             "height": safe_area.canvas_height,
