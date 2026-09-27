@@ -150,10 +150,16 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('id="assOutputBtn"', html)
         self.assertIn("label:'生成 ASS',primary:true,action:startAssExport", html)
         self.assertIn("'/api/output/ass'", html)
+        # The duplicate build-result stat block is gone. The project overview
+        # may still use official/API translation metrics once, as the canonical summary.
         self.assertNotIn('id="archiveStats"', html)
+        self.assertNotIn('id="statTotal"', html)
+        self.assertNotIn('id="statOfficial"', html)
+        self.assertNotIn('id="statIncrementalOfficial"', html)
+        self.assertNotIn('id="statApiOnly"', html)
         self.assertNotIn("增量官方中文</span>", html)
-        self.assertNotIn("API 补译</span>", html)
         self.assertNotIn("缺失目标文本</span>", html)
+        self.assertIn('<span>API 补译</span><b id="overviewApi">—</b>', html)
 
 
 
