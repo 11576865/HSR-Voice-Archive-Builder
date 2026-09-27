@@ -76,6 +76,8 @@ def render_ass_preview_png(
     source_language: str,
     target_language: str,
     config: SubtitleRenderConfig,
+    word_alignments: list[object] | None = None,
+    duration_seconds: float = 3.0,
     timestamp: float = 1.0,
 ) -> bytes:
     """Render one representative subtitle frame through FFmpeg/libass."""
@@ -83,9 +85,13 @@ def render_ass_preview_png(
     if not ffmpeg:
         raise RuntimeError("实际 ASS 预览需要 FFmpeg")
 
+    duration = max(0.25, min(120.0, float(duration_seconds)))
+    render_timestamp = max(0.0, min(duration - 0.01, float(timestamp)))
     entry = PreviewEntry(
         english=str(english_text or ""),
         chinese=str(chinese_text or ""),
+        display_end_seconds=duration,
+        word_alignments=word_alignments,
     )
     with tempfile.TemporaryDirectory(prefix="hsr-ass-preview-") as td:
         root = Path(td)
@@ -109,9 +115,9 @@ def render_ass_preview_png(
             "-f",
             "lavfi",
             "-i",
-            "color=c=black:s=1920x1080:r=1:d=3",
+            f"color=c=black:s=1920x1080:r=1:d={max(3.0, duration):.3f}",
             "-ss",
-            f"{max(0.0, float(timestamp)):.3f}",
+            f"{render_timestamp:.3f}",
             "-vf",
             f"subtitles='{escaped_ass}'",
             "-frames:v",
