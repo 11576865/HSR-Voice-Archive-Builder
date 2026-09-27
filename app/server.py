@@ -106,7 +106,7 @@ async def control_surface_guard(request: Request, call_next):
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "connect-src 'self'; "
-            "img-src 'self' data:; "
+            "img-src 'self' data: blob:; "
             "media-src 'self' blob:; "
             "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         )
