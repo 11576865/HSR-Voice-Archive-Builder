@@ -822,6 +822,7 @@ class Handler(BaseHTTPRequestHandler):
                 group_gap=_float(data.get("group_gap"), 3.00),
                 make_flac=_bool(data.get("make_flac")),
                 chapter_order=_bool(data.get("chapter_order")),
+                generate_chapter_flac=_bool(data.get("generate_chapter_flac")),
                 translate_missing=_bool(data.get("translate_missing")),
                 review_official_target=_bool(data.get("review_official_target")),
                 translation_model=data.get("translation_model", "").strip() or translation_default_model(),
