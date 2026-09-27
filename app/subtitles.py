@@ -53,6 +53,30 @@ def _entry_id(entry: dict[str, Any]) -> int | str | None:
     return item_id
 
 
+def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
+    path = output_dir / "subtitle_review_state.json"
+    if not path.is_file():
+        return {}
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    if not isinstance(payload, dict):
+        return {}
+    return {str(key): bool(value) for key, value in payload.items()}
+
+
+def _write_subtitle_review_state(output_dir: Path, state: dict[str, bool]) -> None:
+    atomic_write_text(
+        output_dir / "subtitle_review_state.json",
+        json.dumps(
+            {key: True for key, value in state.items() if value},
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+
+
 def load_subtitle_overrides(output_dir: Path) -> dict[str, dict[str, Any]]:
     path = output_dir / "subtitles_overrides.json"
     if not path.is_file():
@@ -446,6 +470,7 @@ def get_project_subtitles(
     entries = data.get("entries", [])
     overrides_file = output_dir / "subtitles_overrides.json"
     overrides: dict[str, dict[str, Any]] = {}
+    review_state = load_subtitle_review_state(output_dir)
     if overrides_file.is_file():
         try:
             overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
@@ -515,8 +540,10 @@ def get_project_subtitles(
             "source_text": str(entry.get("source_text") or entry.get("english", "")),
             "official_chs": official_chs,
             "api_chs": api_chs,
+            "original_chs": target_text,
             "final_chs": final_chs,
             "modified": modified,
+            "confirmed": bool(review_state.get(str_id, False)),
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
         }
@@ -533,6 +560,10 @@ def get_project_subtitles(
             subtitles = [s for s in subtitles if bool(s["api_chs"])]
         elif sel in ("overflow", "layout_overflow"):
             subtitles = [s for s in subtitles if s.get("layout_overflow")]
+        elif sel in ("unreviewed", "needs_review"):
+            subtitles = [s for s in subtitles if not s.get("confirmed")]
+        elif sel in ("confirmed", "reviewed"):
+            subtitles = [s for s in subtitles if s.get("confirmed")]
 
     # Filtering by search query (q)
     if q and q.strip():
@@ -573,12 +604,18 @@ def update_project_subtitles(
         raise ValueError("Manifest entries must be a list")
 
     overrides = load_subtitle_overrides(output_dir)
+    review_state = load_subtitle_review_state(output_dir)
     if not updates:
         raise ValueError("No subtitle updates supplied")
     updates_by_id = {
         str(item.get("id")): str(item["final_chs"])
         for item in updates
         if item.get("id") is not None and "final_chs" in item
+    }
+    confirmations = {
+        str(item.get("id")): bool(item.get("confirmed"))
+        for item in updates
+        if item.get("id") is not None and "confirmed" in item
     }
 
     updated_count = 0
@@ -620,12 +657,30 @@ def update_project_subtitles(
                 "logical_id": logical_id,
                 "source_member_id": member_id,
             }
+        if key in confirmations:
+            if confirmations[key]:
+                review_state[key] = True
+            else:
+                review_state.pop(key, None)
+        updated_count += 1
+
+    # Confirmation-only updates are valid even when the final text is unchanged.
+    entry_ids = {str(_entry_id(entry)) for entry in entries if _entry_id(entry) is not None}
+    for key, confirmed in confirmations.items():
+        if key not in entry_ids or key in updates_by_id:
+            continue
+        if confirmed:
+            review_state[key] = True
+        else:
+            review_state.pop(key, None)
         updated_count += 1
 
     atomic_write_text(
         output_dir / "subtitles_overrides.json",
         json.dumps(overrides, ensure_ascii=False, indent=2),
     )
+
+    _write_subtitle_review_state(output_dir, review_state)
 
     # A subtitle edit changes manifest/subtitle artifacts, but it must not
     # invalidate or rebuild the already verified continuous FLAC stage.
@@ -645,6 +700,7 @@ def update_project_subtitles(
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
         "modified_ids": sorted(str(key) for key in overrides),
+        "confirmed_ids": sorted(str(key) for key, value in review_state.items() if value),
         "total_count": len(entries),
         **refreshed,
     }
