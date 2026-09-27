@@ -93,6 +93,30 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertEqual(res["safe_area"]["margin_top"], round(1080 * 0.08))
         self.assertEqual(res["central_gap"]["min_central_gap"], 30.0)
 
+    def test_browser_font_file_endpoint_returns_resolved_font_bytes(self):
+        with tempfile.TemporaryDirectory() as td:
+            font_path = Path(td) / "PreviewFont.ttf"
+            font_path.write_bytes(b"fake-font-bytes")
+            with patch(
+                "app.server.resolve_browser_font_file",
+                return_value=(font_path, "font/ttf"),
+            ) as resolver:
+                response = self.client.get(
+                    "/api/subtitle-layout/font-file?family=PreviewFont",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.headers["content-type"], "font/ttf")
+        self.assertEqual(response.content, b"fake-font-bytes")
+        resolver.assert_called_once_with("PreviewFont")
+
+    def test_browser_font_file_endpoint_requires_api_token(self):
+        response = self.client.get(
+            "/api/subtitle-layout/font-file?family=PreviewFont"
+        )
+        self.assertEqual(response.status_code, 401)
+
     def test_collision_detection_in_preview(self):
         # Oversized text and extreme central gap forcing collision
         res = preview_subtitle_layout(
