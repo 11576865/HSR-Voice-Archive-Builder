@@ -5039,7 +5039,18 @@ function subtitleSettingsPayload(){
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
     enable_multi_layer_outline: !!document.getElementById('prevEnableOutline')?.checked,
-    enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked
+    enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked,
+    fade_in_ms: parseInt(document.getElementById('prevFadeIn')?.value || '200',10),
+    fade_out_ms: parseInt(document.getElementById('prevFadeOut')?.value || '200',10),
+    use_audio_aware_fade: !!document.getElementById('prevAudioAwareFade')?.checked,
+    outline_width: parseFloat(document.getElementById('prevOutlineWidth')?.value || '3'),
+    shadow_depth: parseFloat(document.getElementById('prevShadowDepth')?.value || '2'),
+    blur_radius: parseFloat(document.getElementById('prevBlurRadius')?.value || '0'),
+    card_opacity: parseFloat(document.getElementById('prevCardOpacity')?.value || '62') / 100,
+    enable_soft_entry: !!document.getElementById('prevEnableSoftEntry')?.checked,
+    soft_entry_scale_percent: parseFloat(document.getElementById('prevSoftEntryScale')?.value || '98'),
+    soft_entry_blur: parseFloat(document.getElementById('prevSoftEntryBlur')?.value || '1.5'),
+    soft_entry_ms: parseInt(document.getElementById('prevSoftEntryMs')?.value || '160',10)
   };
 }
 
@@ -5063,6 +5074,17 @@ function loadSubtitleLayoutSettings(config){
   check('prevEnableCard',config.subtitle_enable_translucent_card);
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
+  set('prevFadeIn',config.subtitle_fade_in_ms??200);
+  set('prevFadeOut',config.subtitle_fade_out_ms??200);
+  check('prevAudioAwareFade',config.subtitle_use_audio_aware_fade!==false);
+  set('prevOutlineWidth',config.subtitle_outline_width??3);
+  set('prevShadowDepth',config.subtitle_shadow_depth??2);
+  set('prevBlurRadius',config.subtitle_blur_radius??0);
+  set('prevCardOpacity',Number(config.subtitle_card_opacity??0.62)*100);
+  check('prevEnableSoftEntry',config.subtitle_enable_soft_entry);
+  set('prevSoftEntryScale',config.subtitle_soft_entry_scale_percent??98);
+  set('prevSoftEntryBlur',config.subtitle_soft_entry_blur??1.5);
+  set('prevSoftEntryMs',config.subtitle_soft_entry_ms??160);
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
   invalidateLibassPreview();
   const status=document.getElementById('previewSaveStatus');
@@ -5191,6 +5213,19 @@ async function updateLayoutPreview() {
     const pxV = Math.round(1080 * (marginV / 100));
     document.getElementById('prevMarginVVal').textContent = marginV + ' % (' + pxV + 'px)';
   }
+  const syncRangeLabel=(inputId,labelId,format)=>{
+    const input=document.getElementById(inputId),label=document.getElementById(labelId);
+    if(input&&label)label.textContent=format(parseFloat(input.value||'0'));
+  };
+  syncRangeLabel('prevOutlineWidth','prevOutlineWidthVal',v=>v.toFixed(2).replace(/0+$/,'').replace(/\.$/,''));
+  syncRangeLabel('prevShadowDepth','prevShadowDepthVal',v=>v.toFixed(2).replace(/0+$/,'').replace(/\.$/,''));
+  syncRangeLabel('prevBlurRadius','prevBlurRadiusVal',v=>v.toFixed(1));
+  syncRangeLabel('prevCardOpacity','prevCardOpacityVal',v=>Math.round(v)+'%');
+  syncRangeLabel('prevFadeIn','prevFadeInVal',v=>Math.round(v)+' ms');
+  syncRangeLabel('prevFadeOut','prevFadeOutVal',v=>Math.round(v)+' ms');
+  syncRangeLabel('prevSoftEntryScale','prevSoftEntryScaleVal',v=>v.toFixed(1).replace(/\.0$/,'')+'%');
+  syncRangeLabel('prevSoftEntryBlur','prevSoftEntryBlurVal',v=>v.toFixed(1));
+  syncRangeLabel('prevSoftEntryMs','prevSoftEntryMsVal',v=>Math.round(v)+' ms');
 
   try {
     await Promise.allSettled([
@@ -5412,7 +5447,7 @@ applyPreviewBackground();
   document.getElementById(id)?.addEventListener('input',scheduleLayoutPreviewUpdate);
 });
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -5420,7 +5455,7 @@ applyPreviewBackground();
   });
 });
 
-['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline'].forEach(id=>{
+['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevAudioAwareFade','prevEnableSoftEntry'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -5447,9 +5482,23 @@ function applySubtitlePreset(name){
     document.getElementById('prevEnableKaraoke').checked=false;
     document.getElementById('prevEnableCard').checked=false;
     document.getElementById('prevEnableOutline').checked=false;
+    document.getElementById('prevFadeIn').value=200;
+    document.getElementById('prevFadeOut').value=200;
+    document.getElementById('prevAudioAwareFade').checked=true;
+    document.getElementById('prevOutlineWidth').value=3;
+    document.getElementById('prevShadowDepth').value=2;
+    document.getElementById('prevBlurRadius').value=0;
+    document.getElementById('prevCardOpacity').value=62;
+    document.getElementById('prevEnableSoftEntry').checked=false;
+    document.getElementById('prevSoftEntryScale').value=98;
+    document.getElementById('prevSoftEntryBlur').value=1.5;
+    document.getElementById('prevSoftEntryMs').value=160;
   };
   standard();
-  if(name==='plain')document.getElementById('prevEnableKinetic').checked=false;
+  if(name==='plain'){
+    document.getElementById('prevEnableKinetic').checked=false;
+    document.getElementById('prevAudioAwareFade').checked=false;
+  }
   if(name==='karaoke')document.getElementById('prevEnableKaraoke').checked=true;
   markSubtitleSettingsDirty();
   invalidateLibassPreview();
