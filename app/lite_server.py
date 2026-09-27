@@ -24,6 +24,7 @@ from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
+from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -361,12 +362,78 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Subtitle id is required")
             self._json({"ok": True, "alignment": get_word_alignment(output, item_id)})
             return
+        if path.startswith("/api/project/") and path.endswith("/word-alignments/generate"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            if not (output / "manifest.json").is_file():
+                raise FileNotFoundError("请先完成档案构建")
+
+            raw_ids = data.get("item_ids") or "[]"
+            try:
+                item_ids = json.loads(raw_ids) if isinstance(raw_ids, str) else raw_ids
+            except (TypeError, ValueError) as exc:
+                raise ValueError("item_ids must be valid JSON") from exc
+            if not isinstance(item_ids, list):
+                raise ValueError("item_ids must be an array")
+            item_ids = [str(value) for value in item_ids if str(value).strip()]
+            force = _bool(data.get("force"))
+
+            provider = local_alignment_provider_status()
+            if not provider.get("available"):
+                missing = ", ".join(provider.get("missing_packages") or [])
+                raise RuntimeError(
+                    "本地强制对齐不可用"
+                    + (f"：缺少 {missing}" if missing else "")
+                    + "。可选安装：python -m pip install whisperx"
+                )
+
+            def run(report_progress):
+                result = generate_local_word_alignments(
+                    config,
+                    output,
+                    item_ids=item_ids or None,
+                    force=force,
+                    report_progress=report_progress,
+                )
+                report_progress("refresh", "正在刷新字幕成品", 0, 1)
+                refreshed = refresh_subtitle_artifacts_from_settings(
+                    output,
+                    source_language=config.source_text_language or "en",
+                    target_language=config.target_language or "zh-CN",
+                    generate_ass=(
+                        (output / "HSR_Voice_Archive.ass").is_file()
+                        or bool(getattr(config, "generate_ass", False))
+                    ),
+                    render_config=subtitle_render_config(config),
+                    strict_ass=False,
+                )
+                report_progress("refresh", "词级时间与字幕成品已刷新", 1, 1)
+                result["refreshed"] = refreshed
+                return result
+
+            job = create_job(
+                "word-align",
+                run,
+                with_progress=True,
+                project_root=config.root,
+                project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id, "provider": provider})
+            return
+
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Project output directory is not configured")
-            self._json({"ok": True, "diagnostics": alignment_diagnostics(output)})
+            self._json({
+                "ok": True,
+                "diagnostics": alignment_diagnostics(output),
+                "local_provider": local_alignment_provider_status(),
+            })
             return
         if path.startswith("/api/project/") and "/subtitles/" in path and path.endswith("/audio"):
             config = _active_config()
