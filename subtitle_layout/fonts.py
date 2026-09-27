@@ -63,14 +63,21 @@ def resolve_font_path(font_name: str) -> str | None:
     if fc_match:
         try:
             completed = subprocess.run(
-                [fc_match, "-f", "%{file}\n", "--", name],
+                [fc_match, "-f", "%{family}\t%{file}\n", "--", name],
                 capture_output=True,
                 text=True,
                 timeout=3,
                 check=False,
             )
-            candidate = completed.stdout.splitlines()[0].strip() if completed.stdout else ""
-            if candidate and Path(candidate).is_file():
+            line = completed.stdout.splitlines()[0].strip() if completed.stdout else ""
+            family, _, candidate = line.partition("\t")
+            requested = _normalized_name(name)
+            family_names = [_normalized_name(part) for part in family.split(",") if part.strip()]
+            if (
+                candidate
+                and Path(candidate).is_file()
+                and any(requested == item or requested in item or item in requested for item in family_names)
+            ):
                 return str(Path(candidate).resolve())
         except (OSError, subprocess.SubprocessError):
             pass
