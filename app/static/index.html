@@ -2486,10 +2486,12 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
               <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
-            <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。导入结果写入 <code>word_alignments.json</code>，不会改写 manifest 的文本来源。</div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
+            <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。本地生成使用可选 WhisperX forced alignment；未安装时不会自动下载或伪造时间。导入/生成结果写入 <code>word_alignments.json</code>，不会改写 manifest 的文本来源。</div>
           </section>
 
           <section class="inspector-group">
@@ -4038,6 +4040,17 @@ async function watchJob(id){
             if(status)status.textContent='黑屏 MKV 已生成。';
             setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
             setLog(x.job.result||x.job);
+          }else if(x.job.kind==='word-align'){
+            const r=x.job.result||{};
+            const status=document.getElementById('wordAlignmentStatus');
+            if(status){
+              status.textContent='本地词级对齐完成：生成 '+Number(r.generated_count||0)+'，失败 '+Number(r.failed_count||0)+'，跳过 '+Number(r.skipped_count||0)+'。';
+              status.className='small '+(Number(r.failed_count||0)?'status-warn':'status-ok')+' layout-corpus-status';
+            }
+            setRunReport('词级时间对齐完成',completedReport(x.job),Number(r.failed_count||0)>0);
+            await loadWordAlignmentDiagnostics();
+            await loadLayoutStressSample();
+            invalidateLibassPreview();
           }else{
             setLog('任务已完成。若没有失败提示，诊断日志无需查看。');
             const d=document.getElementById('diagnosticLog');if(d)d.open=false;
@@ -4049,6 +4062,14 @@ async function watchJob(id){
           if(['ass-export','black-video-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
+          }
+          if(x.job.kind==='word-align'){
+            const status=document.getElementById('wordAlignmentStatus');
+            if(status){
+              status.textContent='本地词级对齐失败：'+shortError(x.job.error||x.job);
+              status.className='small status-bad layout-corpus-status';
+            }
+            await loadWordAlignmentDiagnostics();
           }
           if(x.job.kind==='remote-update-check'){
             const result=document.getElementById('updateResult');
@@ -5083,6 +5104,23 @@ async function loadWordAlignmentDiagnostics(){
     status.className='small muted layout-corpus-status';
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments');
     const d=data.diagnostics||{};
+    const provider=data.local_provider||{};
+    const providerStatus=document.getElementById('wordAlignmentProviderStatus');
+    const generateButton=document.getElementById('generateWordAlignmentBtn');
+    if(providerStatus){
+      if(provider.available){
+        providerStatus.textContent='本地对齐器：WhisperX 可用'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；推理在处理主机执行。';
+        providerStatus.className='small status-ok';
+      }else{
+        const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
+        providerStatus.textContent='本地对齐器不可用：缺少 '+missingPackages+'。可选安装：python -m pip install whisperx';
+        providerStatus.className='small muted';
+      }
+    }
+    if(generateButton){
+      generateButton.disabled=!provider.available;
+      generateButton.title=provider.available?'只为当前缺失/无效条目生成可靠词级时间':'需要处理主机安装 WhisperX；不会自动安装大型依赖';
+    }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
     if(total<=0){
@@ -5100,6 +5138,38 @@ async function loadWordAlignmentDiagnostics(){
     status.textContent='词级时间诊断失败：'+shortError(err);
     status.className='small status-bad layout-corpus-status';
     return null;
+  }
+}
+
+async function generateLocalWordAlignments(){
+  const status=document.getElementById('wordAlignmentStatus');
+  const button=document.getElementById('generateWordAlignmentBtn');
+  if(!currentProject)return;
+  try{
+    if(button)button.disabled=true;
+    if(status){
+      status.textContent='正在启动本地 forced alignment；只处理缺失或无效的词级时间…';
+      status.className='small muted layout-corpus-status';
+    }
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments/generate',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({force:false})
+    });
+    if(status){
+      status.textContent='本地词级对齐任务已启动；进度请查看任务中心。';
+      status.className='small status-ok layout-corpus-status';
+    }
+    watchJob(result.job);
+  }catch(err){
+    if(status){
+      status.textContent='本地词级对齐启动失败：'+shortError(err);
+      status.className='small status-bad layout-corpus-status';
+    }
+    setLog(String(err));
+    await loadWordAlignmentDiagnostics();
+  }finally{
+    if(button&&!button.title.includes('需要处理主机安装'))button.disabled=false;
   }
 }
 
@@ -5680,6 +5750,7 @@ function applySubtitlePreset(name){
 }
 
 document.getElementById('refreshWordAlignmentBtn')?.addEventListener('click',()=>loadWordAlignmentDiagnostics());
+document.getElementById('generateWordAlignmentBtn')?.addEventListener('click',generateLocalWordAlignments);
 document.getElementById('importWordAlignmentBtn')?.addEventListener('click',()=>document.getElementById('wordAlignmentFile')?.click());
 document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>importWordAlignmentFile(e.target.files?.[0]));
 
