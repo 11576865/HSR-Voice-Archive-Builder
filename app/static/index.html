@@ -2471,8 +2471,30 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
 
           <section class="inspector-group">
             <b>同步</b>
-            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 逐词高亮（<code>\k</code>）</label>
-            <div class="small muted inspector-help">只有条目带可信词级时间戳时才生成逐词高亮；否则保持普通整句字幕。</div>
+            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 逐词高亮</label>
+            <label for="prevKaraokeMode">高亮模式</label>
+            <select id="prevKaraokeMode">
+              <option value="k">逐词切换（\k）</option>
+              <option value="kf">平滑扫光（\kf）</option>
+              <option value="clip">动态裁剪扫光（\clip + \t）</option>
+            </select>
+            <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。</div>
+          </section>
+
+          <section class="inspector-group">
+            <b>档案增强</b>
+            <label class="check"><input type="checkbox" id="prevEnableArchiveHud"> Archive HUD</label>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevArchiveHudSize" style="margin:0">信息字号</label>
+              <span id="prevArchiveHudSizeVal" class="small muted">22 px</span>
+            </div>
+            <input type="range" id="prevArchiveHudSize" min="12" max="36" value="22" step="1">
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevArchiveHudOpacity" style="margin:0">信息不透明度</label>
+              <span id="prevArchiveHudOpacityVal" class="small muted">72%</span>
+            </div>
+            <input type="range" id="prevArchiveHudOpacity" min="10" max="100" value="72" step="1">
+            <div class="small muted inspector-help">HUD 使用项目角色名、条目 <code>group</code>（章节/大组）和条目编号，作为低视觉权重的独立 ASS Layer；不改动字幕正文。</div>
           </section>
         </div>
 
@@ -5037,6 +5059,7 @@ function subtitleSettingsPayload(){
     margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
     min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
+    karaoke_mode: document.getElementById('prevKaraokeMode')?.value || 'k',
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
     enable_multi_layer_outline: !!document.getElementById('prevEnableOutline')?.checked,
     enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked,
@@ -5050,7 +5073,11 @@ function subtitleSettingsPayload(){
     enable_soft_entry: !!document.getElementById('prevEnableSoftEntry')?.checked,
     soft_entry_scale_percent: parseFloat(document.getElementById('prevSoftEntryScale')?.value || '98'),
     soft_entry_blur: parseFloat(document.getElementById('prevSoftEntryBlur')?.value || '1.5'),
-    soft_entry_ms: parseInt(document.getElementById('prevSoftEntryMs')?.value || '160',10)
+    soft_entry_ms: parseInt(document.getElementById('prevSoftEntryMs')?.value || '160',10),
+    enable_archive_hud: !!document.getElementById('prevEnableArchiveHud')?.checked,
+    archive_character: currentProject?.config?.remote_character || '',
+    archive_hud_font_size: parseInt(document.getElementById('prevArchiveHudSize')?.value || '22',10),
+    archive_hud_opacity: parseFloat(document.getElementById('prevArchiveHudOpacity')?.value || '72') / 100
   };
 }
 
@@ -5071,6 +5098,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
   set('prevCentralGap',config.subtitle_min_central_gap??20);
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
+  set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
   check('prevEnableCard',config.subtitle_enable_translucent_card);
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
@@ -5085,6 +5113,9 @@ function loadSubtitleLayoutSettings(config){
   set('prevSoftEntryScale',config.subtitle_soft_entry_scale_percent??98);
   set('prevSoftEntryBlur',config.subtitle_soft_entry_blur??1.5);
   set('prevSoftEntryMs',config.subtitle_soft_entry_ms??160);
+  check('prevEnableArchiveHud',config.subtitle_enable_archive_hud);
+  set('prevArchiveHudSize',config.subtitle_archive_hud_font_size??22);
+  set('prevArchiveHudOpacity',Number(config.subtitle_archive_hud_opacity??0.72)*100);
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
   invalidateLibassPreview();
   const status=document.getElementById('previewSaveStatus');
@@ -5226,6 +5257,8 @@ async function updateLayoutPreview() {
   syncRangeLabel('prevSoftEntryScale','prevSoftEntryScaleVal',v=>v.toFixed(1).replace(/\.0$/,'')+'%');
   syncRangeLabel('prevSoftEntryBlur','prevSoftEntryBlurVal',v=>v.toFixed(1));
   syncRangeLabel('prevSoftEntryMs','prevSoftEntryMsVal',v=>Math.round(v)+' ms');
+  syncRangeLabel('prevArchiveHudSize','prevArchiveHudSizeVal',v=>Math.round(v)+' px');
+  syncRangeLabel('prevArchiveHudOpacity','prevArchiveHudOpacityVal',v=>Math.round(v)+'%');
 
   try {
     await Promise.allSettled([
@@ -5447,7 +5480,7 @@ applyPreviewBackground();
   document.getElementById(id)?.addEventListener('input',scheduleLayoutPreviewUpdate);
 });
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -5455,13 +5488,20 @@ applyPreviewBackground();
   });
 });
 
-['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevAudioAwareFade','prevEnableSoftEntry'].forEach(id=>{
+['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevAudioAwareFade','prevEnableSoftEntry','prevEnableArchiveHud'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
     invalidateLibassPreview();
     updateLayoutPreview();
   });
+});
+
+document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
+  previewPreset='custom';
+  markSubtitleSettingsDirty();
+  invalidateLibassPreview();
+  updateLayoutPreview();
 });
 
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
@@ -5480,6 +5520,7 @@ function applySubtitlePreset(name){
     document.getElementById('prevMarginV').value=5;
     document.getElementById('prevEnableKinetic').checked=true;
     document.getElementById('prevEnableKaraoke').checked=false;
+    document.getElementById('prevKaraokeMode').value='k';
     document.getElementById('prevEnableCard').checked=false;
     document.getElementById('prevEnableOutline').checked=false;
     document.getElementById('prevFadeIn').value=200;
@@ -5493,13 +5534,19 @@ function applySubtitlePreset(name){
     document.getElementById('prevSoftEntryScale').value=98;
     document.getElementById('prevSoftEntryBlur').value=1.5;
     document.getElementById('prevSoftEntryMs').value=160;
+    document.getElementById('prevEnableArchiveHud').checked=false;
+    document.getElementById('prevArchiveHudSize').value=22;
+    document.getElementById('prevArchiveHudOpacity').value=72;
   };
   standard();
   if(name==='plain'){
     document.getElementById('prevEnableKinetic').checked=false;
     document.getElementById('prevAudioAwareFade').checked=false;
   }
-  if(name==='karaoke')document.getElementById('prevEnableKaraoke').checked=true;
+  if(name==='karaoke'){
+    document.getElementById('prevEnableKaraoke').checked=true;
+    document.getElementById('prevKaraokeMode').value='kf';
+  }
   markSubtitleSettingsDirty();
   invalidateLibassPreview();
   updateLayoutPreview();
