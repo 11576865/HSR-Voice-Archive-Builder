@@ -25,12 +25,12 @@ class DocumentationSurfaceTests(unittest.TestCase):
 
         self.assertIn(f"v{APP_VERSION}", page)
         self.assertIn("Voice Archive Builder", page)
-        self.assertIn("本地语音归档与字幕处理工作台", page)
-        self.assertIn("GitHub Pages 只提供启动说明与导航", page)
+        self.assertIn("语音归档 / 字幕 / 增量更新", page)
+        self.assertIn("Pages 只负责启动说明与导航", page)
         self.assertIn("Windows", page)
         self.assertIn("Android / Termux", page)
         self.assertIn("Python 3.11+", page)
-        self.assertIn("FFmpeg in PATH", page)
+        self.assertIn("FFmpeg PATH", page)
         self.assertIn(".\\run_windows.bat", page)
         self.assertIn("run_windows_lan.bat", page)
         self.assertIn("requirements.txt", page)
@@ -40,9 +40,12 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("continuous.flac", page)
         self.assertIn("ASS / libass", page)
         self.assertIn("Incremental Update", page)
+        self.assertIn(".shell{width:100%;padding:0 clamp(18px,2.4vw,48px)", page)
+        self.assertIn("launch-grid", page)
+        self.assertNotIn("RUNTIME MODEL", page)
         self.assertIn('rel="icon" type="image/svg+xml" href="./favicon.svg?v=1"', page)
         self.assertTrue((root / "docs" / "favicon.svg").is_file())
-        self.assertLess(len(page), 24000)
+        self.assertLess(len(page), 18000)
 
         for stale in (
             "v0.9-H",

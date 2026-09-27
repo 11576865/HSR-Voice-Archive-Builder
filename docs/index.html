@@ -7,247 +7,173 @@
 <meta name="theme-color" content="#0d1420">
 <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=1">
 <title>HSR Voice Archive Builder</title>
-<meta name="description" content="HSR Voice Archive Builder — local voice archive, subtitle, update and export workbench.">
+<meta name="description" content="HSR Voice Archive Builder — local voice archive and subtitle workbench.">
 <script>
 (()=>{try{
   const pref=localStorage.getItem('hsr-pages-theme-v1')||'system';
-  const resolved=pref==='system'
-    ? (matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light')
-    : pref;
-  document.documentElement.dataset.theme=resolved;
+  const theme=pref==='system'?(matchMedia('(prefers-color-scheme: dark)').matches?'dark':'light'):pref;
+  document.documentElement.dataset.theme=theme;
   document.documentElement.dataset.themePreference=pref;
-  const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta)meta.setAttribute('content',resolved==='light'?'#eef3f8':'#0d1420');
-}catch(e){
-  document.documentElement.dataset.theme='dark';
-  document.documentElement.dataset.themePreference='system';
-}})();
+}catch(e){document.documentElement.dataset.theme='dark';document.documentElement.dataset.themePreference='system'}})();
 </script>
 <style>
 :root{
   color-scheme:dark;
-  --bg:#0d1420;
-  --surface:#111b29;
-  --surface-2:#172334;
-  --surface-3:#1e2d40;
-  --line:#30455e;
-  --line-strong:#506881;
-  --text:#eaf1f8;
-  --text-strong:#fff;
-  --muted:#8fa2b6;
-  --accent:#32c6b1;
-  --blue:#4ea1ff;
-  --purple:#a77cff;
-  --green:#55d88a;
-  --warn:#f0b84b;
-  --accent-soft:rgba(50,198,177,.11);
-  --blue-soft:rgba(78,161,255,.10);
-  --purple-soft:rgba(167,124,255,.10);
-  --green-soft:rgba(85,216,138,.10);
-  --warn-soft:rgba(240,184,75,.10);
-  --shadow:0 18px 46px rgba(0,0,0,.18);
+  --bg:#0c1320;--surface:#111b29;--soft:#162233;--line:#2d4159;--text:#eaf1f8;
+  --strong:#fff;--muted:#8da0b5;--accent:#31c6b0;--blue:#4ea1ff;--purple:#a67cff;
+  --green:#55d88a;--warn:#e9b54a
 }
 :root[data-theme="light"]{
   color-scheme:light;
-  --bg:#edf3f8;
-  --surface:#fff;
-  --surface-2:#f5f8fb;
-  --surface-3:#eaf0f6;
-  --line:#ccd8e4;
-  --line-strong:#9baec1;
-  --text:#1a2b3d;
-  --text-strong:#0e1b2a;
-  --muted:#66798c;
-  --accent:#0f8f83;
-  --blue:#176fd1;
-  --purple:#7449d8;
-  --green:#19864a;
-  --warn:#a76605;
-  --accent-soft:rgba(15,143,131,.09);
-  --blue-soft:rgba(23,111,209,.08);
-  --purple-soft:rgba(116,73,216,.08);
-  --green-soft:rgba(25,134,74,.08);
-  --warn-soft:rgba(167,102,5,.08);
-  --shadow:0 14px 34px rgba(48,70,94,.09);
+  --bg:#edf3f8;--surface:#fff;--soft:#f4f7fa;--line:#ccd8e4;--text:#1b2a3a;
+  --strong:#0f1b29;--muted:#687b8e;--accent:#0f8f83;--blue:#176fd1;--purple:#7449d8;
+  --green:#19864a;--warn:#a76605
 }
 *{box-sizing:border-box}
-html{background:var(--bg);scroll-behavior:smooth}
+html{background:var(--bg)}
 body{
-  margin:0;color:var(--text);
-  background:
-    radial-gradient(circle at 8% -12%,color-mix(in srgb,var(--blue) 7%,transparent),transparent 30rem),
-    radial-gradient(circle at 92% -6%,color-mix(in srgb,var(--purple) 5%,transparent),transparent 28rem),
-    var(--bg);
+  margin:0;background:var(--bg);color:var(--text);
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
-  line-height:1.5;-webkit-font-smoothing:antialiased;
+  -webkit-font-smoothing:antialiased
 }
-a{color:inherit}
-button{font:inherit}
-code{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.shell{width:min(1100px,calc(100% - 30px));margin:0 auto;padding-bottom:max(52px,env(safe-area-inset-bottom))}
+a{color:inherit}button{font:inherit}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.shell{width:100%;padding:0 clamp(18px,2.4vw,48px) max(42px,env(safe-area-inset-bottom))}
 .topbar{
   min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;
   border-bottom:1px solid var(--line)
 }
-.brand{display:flex;align-items:center;gap:11px;min-width:0}
+.brand{display:flex;align-items:center;gap:10px;min-width:0}
 .logo{
-  width:36px;height:36px;display:grid;place-items:center;flex:0 0 auto;
-  border:1px solid color-mix(in srgb,var(--accent) 45%,var(--line));
-  background:var(--accent-soft);color:var(--accent);
-  font:800 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em
+  width:32px;height:32px;display:grid;place-items:center;border:1px solid var(--line);
+  color:var(--accent);font:800 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em
 }
-.brand-name{color:var(--text-strong);font-size:14px;font-weight:740}
+.brand-name{font-size:14px;font-weight:720;color:var(--strong)}
 .brand-sub{margin-top:1px;color:var(--muted);font-size:10px}
-.topbar-actions{display:flex;align-items:center;gap:8px}
-.theme-control{display:flex;gap:2px;padding:3px;border:1px solid var(--line);background:var(--surface)}
+.topbar-actions{display:flex;align-items:center;gap:7px}
+.theme-control{display:flex;border:1px solid var(--line);background:var(--surface)}
 .theme-control button{
-  min-height:28px;padding:4px 7px;border:0;border-radius:2px;background:transparent;
-  color:var(--muted);font-size:10px;font-weight:650;cursor:pointer
+  min-height:28px;padding:4px 7px;border:0;background:transparent;color:var(--muted);
+  font-size:10px;font-weight:650;cursor:pointer
 }
-.theme-control button:hover{background:var(--surface-2);color:var(--text-strong)}
-.theme-control button[aria-pressed="true"]{background:var(--accent-soft);color:var(--accent)}
-.repo-link,.btn{
-  display:inline-flex;align-items:center;justify-content:center;text-decoration:none;
-  border:1px solid var(--line);background:var(--surface);color:var(--text);font-weight:680
+.theme-control button[aria-pressed="true"]{background:var(--soft);color:var(--accent)}
+.repo,.btn{
+  display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;
+  border:1px solid var(--line);background:var(--surface);color:var(--text);text-decoration:none;
+  font-size:11px;font-weight:680
 }
-.repo-link{padding:7px 10px;font-size:11px}
-.hero{
-  display:grid;grid-template-columns:minmax(0,1.1fr) minmax(300px,.9fr);
-  gap:34px;padding:56px 0 30px;align-items:end
-}
-.eyebrow{
-  color:var(--accent);font:700 10px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
-  letter-spacing:.11em
-}
-h1{
-  margin:11px 0 12px;color:var(--text-strong);
-  font-size:clamp(34px,5.4vw,56px);line-height:1.02;letter-spacing:-.045em
-}
-.lead{margin:0;max-width:720px;color:var(--muted);font-size:14px}
-.hero-actions{display:flex;flex-wrap:wrap;gap:8px;margin-top:20px}
-.btn{min-height:40px;padding:9px 14px;font-size:12px}
 .btn.primary{background:var(--accent);border-color:var(--accent);color:#071310}
 :root[data-theme="light"] .btn.primary{color:#fff}
-.runtime-card{
-  border:1px solid var(--line);background:var(--surface);padding:15px;box-shadow:var(--shadow)
+.hero{
+  display:flex;align-items:flex-end;justify-content:space-between;gap:28px;
+  padding:38px 0 22px;border-bottom:1px solid var(--line)
 }
-.runtime-kicker{
-  color:var(--muted);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;
-  letter-spacing:.09em
+.hero-copy{max-width:900px}
+.eyebrow{
+  color:var(--accent);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em
 }
-.runtime-card b{display:block;margin:7px 0 4px;color:var(--text-strong);font-size:14px}
-.runtime-card p{margin:0;color:var(--muted);font-size:11px}
-.runtime-flow{
-  display:grid;grid-template-columns:auto 1fr;gap:7px 10px;margin-top:13px;
-  padding-top:12px;border-top:1px solid var(--line);font-size:10px
+h1{
+  margin:9px 0 8px;color:var(--strong);
+  font-size:clamp(30px,4.2vw,46px);line-height:1.02;letter-spacing:-.04em
 }
-.runtime-flow span:nth-child(odd){color:var(--muted)}
-.runtime-flow span:nth-child(even){color:var(--text)}
-.section{margin-top:24px}
-.section-head{display:flex;align-items:end;justify-content:space-between;gap:16px;margin-bottom:9px}
-.section-head h2{margin:0;color:var(--text-strong);font-size:17px}
-.section-head p{margin:0;color:var(--muted);font-size:11px}
-.platforms{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.platform{
-  min-width:0;border:1px solid var(--line);background:var(--surface);box-shadow:var(--shadow)
+.lead{margin:0;color:var(--muted);font-size:13px;max-width:900px}
+.hero-actions{display:flex;flex:0 0 auto;gap:7px}
+.section{padding-top:20px}
+.section-head{
+  display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:8px
 }
-.platform.windows{border-top:3px solid var(--blue)}
-.platform.termux{border-top:3px solid var(--accent)}
-.platform-head{padding:15px 16px 12px;border-bottom:1px solid var(--line)}
-.platform-title{display:flex;align-items:baseline;justify-content:space-between;gap:12px}
-.platform-title h3{margin:0;color:var(--text-strong);font-size:16px}
-.platform-title span{
-  color:var(--muted);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em
+.section-head h2{margin:0;color:var(--strong);font-size:14px}
+.section-head p{margin:0;color:var(--muted);font-size:10px}
+.launch-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.launch-card{
+  min-width:0;border:1px solid var(--line);background:var(--surface)
 }
-.platform-head p{margin:5px 0 0;color:var(--muted);font-size:11px}
-.requirements{
-  display:flex;flex-wrap:wrap;gap:6px;padding:10px 16px;border-bottom:1px solid var(--line)
+.launch-card.windows{border-top:2px solid var(--blue)}
+.launch-card.termux{border-top:2px solid var(--accent)}
+.launch-head{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 12px;border-bottom:1px solid var(--line)
 }
-.requirements span{padding:4px 7px;border:1px solid var(--line);background:var(--surface-2);color:var(--muted);font-size:10px}
-.command-top{
+.launch-title{display:flex;align-items:center;gap:9px}
+.launch-title b{font-size:13px;color:var(--strong)}
+.tags{display:flex;flex-wrap:wrap;gap:5px}
+.tags span{
+  padding:3px 6px;border:1px solid var(--line);background:var(--soft);
+  color:var(--muted);font-size:9px
+}
+.copy-row{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:9px 11px;border-bottom:1px solid var(--line)
+  padding:7px 10px;border-bottom:1px solid var(--line)
 }
-.command-label{color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.06em}
-.copy-btn{
-  min-height:28px;padding:4px 8px;border:1px solid var(--line);
-  background:var(--surface-2);color:var(--text);font-size:10px;font-weight:650;cursor:pointer
+.copy-row span{color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.05em}
+.copy{
+  min-height:26px;padding:3px 7px;border:1px solid var(--line);background:var(--soft);
+  color:var(--text);font-size:9px;font-weight:650;cursor:pointer
 }
-.copy-btn.done{color:var(--green);border-color:color-mix(in srgb,var(--green) 45%,var(--line))}
 pre{
-  margin:0;padding:13px 15px;overflow:auto;background:#09111c;color:#d5e2ef;
-  font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;white-space:pre
+  margin:0;padding:12px 13px;background:color-mix(in srgb,var(--bg) 78%,#000);
+  color:var(--text);font-size:11.5px;line-height:1.55;overflow:auto
 }
-:root[data-theme="light"] pre{background:#f1f5f9;color:#25364a}
-.platform-body{padding:13px 16px 15px}
-.platform-body p{margin:0;color:var(--muted);font-size:11px}
-.platform-body p+p{margin-top:8px}
-.platform-body strong{color:var(--text)}
-.platform-body code{color:var(--text)}
-.behavior{
-  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:7px;margin-top:11px
+:root[data-theme="light"] pre{background:#f1f5f9}
+.launch-meta{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  border-top:1px solid var(--line)
 }
-.behavior div{padding:9px;border:1px solid var(--line);background:var(--surface-2)}
-.behavior b{display:block;color:var(--text-strong);font-size:10px;margin-bottom:2px}
-.behavior span{display:block;color:var(--muted);font-size:9.5px;line-height:1.45}
-.lan-note{
-  margin-top:10px;padding:9px 10px;border-left:2px solid var(--warn);
-  background:var(--warn-soft);color:var(--muted);font-size:10px
+.launch-meta div{padding:9px 10px;border-right:1px solid var(--line)}
+.launch-meta div:last-child{border-right:0}
+.launch-meta b{display:block;color:var(--strong);font-size:9.5px;margin-bottom:2px}
+.launch-meta span{display:block;color:var(--muted);font-size:9px;line-height:1.35}
+.module-strip{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line)
 }
-.capabilities{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px}
-.cap{
-  --cap:var(--accent);--cap-soft:var(--accent-soft);
-  padding:14px;border:1px solid color-mix(in srgb,var(--cap) 28%,var(--line));
-  border-top:2px solid var(--cap);background:linear-gradient(155deg,var(--cap-soft),var(--surface) 48%)
+.module{
+  padding:11px 12px;background:var(--surface);border-right:1px solid var(--line)
 }
-.cap:nth-child(1){--cap:var(--blue);--cap-soft:var(--blue-soft)}
-.cap:nth-child(2){--cap:var(--purple);--cap-soft:var(--purple-soft)}
-.cap:nth-child(3){--cap:var(--warn);--cap-soft:var(--warn-soft)}
-.cap:nth-child(4){--cap:var(--green);--cap-soft:var(--green-soft)}
-.cap b{display:block;color:var(--text-strong);font-size:12px;margin-bottom:4px}
-.cap span{display:block;color:var(--muted);font-size:10.5px;line-height:1.45}
-.extras{margin-top:24px;border-top:1px solid var(--line)}
+.module:last-child{border-right:0}
+.module b{display:block;color:var(--strong);font-size:11px;margin-bottom:3px}
+.module span{color:var(--muted);font-size:9.5px;line-height:1.4}
+.notes{margin-top:20px;border-top:1px solid var(--line)}
 details{border-bottom:1px solid var(--line)}
 summary{
-  list-style:none;display:grid;grid-template-columns:1fr auto;gap:12px;align-items:center;
-  padding:13px 0;cursor:pointer;color:var(--text);font-size:12px;font-weight:650
+  list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:11px 0;cursor:pointer;color:var(--text);font-size:11px;font-weight:650
 }
 summary::-webkit-details-marker{display:none}
-.summary-note{display:block;margin-top:2px;color:var(--muted);font-size:10px;font-weight:500}
-.chevron{color:var(--muted)}
-.detail-body{padding:0 0 14px;color:var(--muted);font-size:11px}
-.detail-body p{margin:0}
-.detail-body p+p{margin-top:7px}
+.summary-note{color:var(--muted);font-size:9px;font-weight:500;margin-left:7px}
+.detail{padding:0 0 12px;color:var(--muted);font-size:10.5px;line-height:1.5}
+.detail p{margin:0}.detail p+p{margin-top:6px}
 .footer{
-  display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;
-  margin-top:25px;padding-top:13px;border-top:1px solid var(--line);color:var(--muted);font-size:10px
+  display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
+  margin-top:20px;padding-top:12px;border-top:1px solid var(--line);
+  color:var(--muted);font-size:9.5px
 }
 .toast{
-  position:fixed;left:50%;bottom:max(20px,env(safe-area-inset-bottom));transform:translate(-50%,14px);
-  padding:7px 10px;background:var(--accent);color:#fff;font-size:10px;font-weight:700;
-  opacity:0;pointer-events:none;transition:.15s;z-index:10
+  position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translate(-50%,10px);
+  padding:6px 9px;background:var(--accent);color:#fff;font-size:9px;font-weight:700;
+  opacity:0;pointer-events:none;transition:.14s
 }
 .toast.show{opacity:1;transform:translate(-50%,0)}
-@media(max-width:820px){
-  .hero{grid-template-columns:1fr;padding-top:42px}
-  .platforms{grid-template-columns:1fr}
-  .capabilities{grid-template-columns:1fr 1fr}
+@media(max-width:900px){
+  .hero{align-items:flex-start;flex-direction:column}
+  .hero-actions{width:100%}.hero-actions .btn{flex:1}
+  .launch-grid{grid-template-columns:1fr}
 }
-@media(max-width:560px){
-  .shell{width:min(100% - 18px,1100px)}
-  .topbar{min-height:54px}.brand-sub{display:none}
-  h1{font-size:clamp(31px,11vw,45px)}
-  .hero{padding-top:36px;gap:22px}
-  .capabilities{grid-template-columns:1fr}
-  .behavior{grid-template-columns:1fr}
-  .hero-actions{display:grid;grid-template-columns:1fr}
+@media(max-width:680px){
+  .shell{padding-left:12px;padding-right:12px}
+  .brand-sub{display:none}
+  .launch-meta{grid-template-columns:1fr}
+  .launch-meta div{border-right:0;border-bottom:1px solid var(--line)}
+  .launch-meta div:last-child{border-bottom:0}
+  .module-strip{grid-template-columns:1fr 1fr}
+  .module:nth-child(2){border-right:0}.module:nth-child(-n+2){border-bottom:1px solid var(--line)}
 }
-@media(max-width:430px){
-  .topbar-actions{gap:5px}.repo-link{padding:7px 8px}
+@media(max-width:460px){
   .theme-control button{width:27px;padding:0;font-size:0}
   .theme-control button[data-theme-choice="light"]::after{content:"☀";font-size:11px}
   .theme-control button[data-theme-choice="dark"]::after{content:"◐";font-size:11px}
   .theme-control button[data-theme-choice="system"]::after{content:"A";font-size:9px}
+  .module-strip{grid-template-columns:1fr}
+  .module{border-right:0;border-bottom:1px solid var(--line)}
+  .module:last-child{border-bottom:0}
 }
 </style>
 </head>
@@ -258,7 +184,7 @@ summary::-webkit-details-marker{display:none}
       <div class="logo">HSR</div>
       <div>
         <div class="brand-name">Voice Archive Builder</div>
-        <div class="brand-sub">Local voice archive / subtitle / update workbench</div>
+        <div class="brand-sub">Local archive / subtitle workbench</div>
       </div>
     </div>
     <div class="topbar-actions">
@@ -267,216 +193,126 @@ summary::-webkit-details-marker{display:none}
         <button type="button" data-theme-choice="dark" aria-pressed="false">夜间</button>
         <button type="button" data-theme-choice="system" aria-pressed="false">系统</button>
       </div>
-      <a class="repo-link" href="https://github.com/11576865/HSR-Voice-Archive-Builder">GitHub</a>
+      <a class="repo" href="https://github.com/11576865/HSR-Voice-Archive-Builder">GitHub</a>
     </div>
   </header>
 
   <section class="hero">
-    <div>
+    <div class="hero-copy">
       <div class="eyebrow">LOCAL PROCESSING · WINDOWS + TERMUX · v0.9-M</div>
-      <h1>本地语音归档与字幕处理工作台</h1>
-      <p class="lead">从本地语音包生成 <code>continuous.flac</code>、时间轴 / SRT、manifest 与构建报告；提供字幕校对、ASS / libass 检查、增量更新和可选导出。GitHub Pages 只提供启动说明与导航，不读取本机语音包，也不处理成品。</p>
-      <div class="hero-actions">
-        <a class="btn primary" href="http://127.0.0.1:8765/">打开本机控制台</a>
-        <a class="btn" href="#launch">启动方式</a>
-      </div>
+      <h1>语音归档 / 字幕 / 增量更新</h1>
+      <p class="lead">本地处理。Pages 只负责启动说明与导航；语音包、FFmpeg、项目状态和输出均留在处理设备。</p>
     </div>
-    <aside class="runtime-card" aria-label="运行结构">
-      <div class="runtime-kicker">RUNTIME MODEL</div>
-      <b>静态入口与处理主机分离</b>
-      <p>浏览器页面负责说明与跳转；实际扫描、解包、FFmpeg、项目状态和导出都发生在 Windows 或 Android / Termux 设备本机。</p>
-      <div class="runtime-flow">
-        <span>Pages</span><span>静态说明 / 导航</span>
-        <span>Launcher</span><span>启动本地 HTTP 控制台</span>
-        <span>Dashboard</span><span>127.0.0.1:8765</span>
-        <span>Processing</span><span>本机文件系统 + FFmpeg</span>
-      </div>
-    </aside>
+    <div class="hero-actions">
+      <a class="btn primary" href="http://127.0.0.1:8765/">打开本机控制台</a>
+      <a class="btn" href="#launch">启动</a>
+    </div>
   </section>
 
   <section class="section" id="launch">
     <div class="section-head">
       <h2>启动</h2>
-      <p>Windows 与 Android / Termux 使用同一套项目逻辑，启动器不同。</p>
+      <p>两端同一项目逻辑；仅运行环境不同。</p>
     </div>
 
-    <div class="platforms">
-      <article class="platform windows">
-        <div class="platform-head">
-          <div class="platform-title"><h3>Windows</h3><span>DESKTOP HOST</span></div>
-          <p>适合长期构建、FFmpeg 处理和局域网控制。</p>
+    <div class="launch-grid">
+      <article class="launch-card windows">
+        <div class="launch-head">
+          <div class="launch-title"><b>Windows</b></div>
+          <div class="tags"><span>Python 3.11+</span><span>FFmpeg PATH</span><span>Git 可选</span></div>
         </div>
-        <div class="requirements">
-          <span>Python 3.11+</span>
-          <span>FFmpeg in PATH</span>
-          <span>Git 可选</span>
-        </div>
-        <div class="command-top">
-          <span class="command-label">NORMAL START · POWERSHELL / CMD</span>
-          <button class="copy-btn" data-copy="cmd-windows">复制</button>
-        </div>
+        <div class="copy-row"><span>POWERSHELL / CMD</span><button class="copy" data-copy="cmd-windows">复制</button></div>
         <pre id="cmd-windows">cd HSR-Voice-Archive-Builder
 .\run_windows.bat</pre>
-        <div class="platform-body">
-          <p><strong>首次获取：</strong>可以用 Git 克隆仓库，也可以从 GitHub 下载 ZIP 后解压。启动器接受 <code>python</code>，也会回退到 <code>py -3</code>；要求 Python 3.11 或更新版本。</p>
-          <p><strong>脚本实际会做：</strong>检查 Python 版本 → 检查 Python 依赖 → 缺失时执行 <code>pip install -r requirements.txt</code> → 检查 FFmpeg 是否在 PATH → 启动本地控制台。正常情况下浏览器会自动打开；否则访问 <code>http://127.0.0.1:8765/</code>。</p>
-          <div class="behavior">
-            <div><b>日常运行</b><span>保留控制台窗口；关闭窗口即停止本地服务。</span></div>
-            <div><b>Git 更新</b><span>Git 克隆方式可先执行 <code>git pull --ff-only</code>，再运行批处理。</span></div>
-            <div><b>端口占用</b><span>可用 <code>python -m app.launch --port 8766</code> 改端口。</span></div>
-          </div>
-          <div class="lan-note">局域网控制：运行 <code>run_windows_lan.bat</code>。它绑定局域网地址并输出带随机 token 的 URL；处理仍发生在 Windows 主机。LAN 启动器要求 <code>python</code> 命令可用。</div>
+        <div class="launch-meta">
+          <div><b>Local</b><span>127.0.0.1:8765</span></div>
+          <div><b>Dependencies</b><span>缺失 Python 包自动安装</span></div>
+          <div><b>LAN</b><span>run_windows_lan.bat</span></div>
         </div>
       </article>
 
-      <article class="platform termux">
-        <div class="platform-head">
-          <div class="platform-title"><h3>Android / Termux</h3><span>MOBILE HOST</span></div>
-          <p>使用轻量 stdlib 服务端与 Termux 原生工具链。</p>
+      <article class="launch-card termux">
+        <div class="launch-head">
+          <div class="launch-title"><b>Android / Termux</b></div>
+          <div class="tags"><span>Termux</span><span>Git</span><span>FFmpeg / 7-Zip</span></div>
         </div>
-        <div class="requirements">
-          <span>Termux</span>
-          <span>Git</span>
-          <span>Python / FFmpeg / 7-Zip 自动检查</span>
-        </div>
-        <div class="command-top">
-          <span class="command-label">NORMAL START · TERMUX</span>
-          <button class="copy-btn" data-copy="cmd-termux">复制</button>
-        </div>
+        <div class="copy-row"><span>TERMUX</span><button class="copy" data-copy="cmd-termux">复制</button></div>
         <pre id="cmd-termux">cd ~/HSR-Voice-Archive-Builder
 git pull --ff-only
 bash run_termux.sh</pre>
-        <div class="platform-body">
-          <p><strong>脚本实际会做：</strong>缺少时安装 Python、FFmpeg 和 7-Zip → 检查轻量依赖 → 缺失时执行 <code>pip install -r requirements-termux.txt</code> → 运行 <code>app.launch --lite --no-browser</code>。</p>
-          <p><strong>控制台地址：</strong>脚本不会自动拉起 Android 浏览器；保持 Termux 运行，再在浏览器打开 <code>http://127.0.0.1:8765/</code>。</p>
-          <div class="behavior">
-            <div><b>首次安装</b><span>安装 Git、克隆仓库，然后运行 <code>bash run_termux.sh</code>。</span></div>
-            <div><b>服务端</b><span>使用 dependency-light 的 stdlib HTTP server。</span></div>
-            <div><b>后台限制</b><span>Android 可能终止长时间 CPU 密集任务；项目有恢复状态，但 FLAC 编码会重新开始。</span></div>
-          </div>
+        <div class="launch-meta">
+          <div><b>Local</b><span>127.0.0.1:8765</span></div>
+          <div><b>Runtime</b><span>stdlib lite server</span></div>
+          <div><b>Setup</b><span>Python / FFmpeg / 7-Zip 自动检查</span></div>
         </div>
       </article>
     </div>
   </section>
 
   <section class="section">
-    <div class="section-head">
-      <h2>处理范围</h2>
-      <p>首页只列核心模块；具体状态与参数以本机控制台为准。</p>
-    </div>
-    <div class="capabilities" aria-label="核心能力">
-      <div class="cap"><b>Archive</b><span><code>continuous.flac</code>、manifest、resolved Timeline 与构建报告。</span></div>
-      <div class="cap"><b>Subtitle</b><span>SRT、人工校对、ASS 排版与 FFmpeg / libass 实际渲染检查。</span></div>
-      <div class="cap"><b>Incremental Update</b><span>识别新增、变化与冲突条目；对不安全匹配保留人工确认。</span></div>
-      <div class="cap"><b>Export</b><span>可选 ASS、黑屏 MKV、训练集与参考语音包等派生产物。</span></div>
+    <div class="section-head"><h2>范围</h2><p>核心输出与工作面。</p></div>
+    <div class="module-strip">
+      <div class="module"><b>Archive</b><span>continuous.flac · manifest · resolved Timeline</span></div>
+      <div class="module"><b>Subtitle</b><span>SRT · 校对 · ASS / libass</span></div>
+      <div class="module"><b>Incremental Update</b><span>新增 · 变化 · 冲突确认</span></div>
+      <div class="module"><b>Export</b><span>ASS · 黑屏 MKV · 训练集 / 参考包</span></div>
     </div>
   </section>
 
-  <section class="extras" aria-label="补充说明">
+  <section class="notes" aria-label="补充说明">
     <details>
-      <summary>
-        <span>Windows 首次准备<span class="summary-note">下载仓库、Python、FFmpeg 与依赖</span></span>
-        <span class="chevron">⌄</span>
-      </summary>
-      <div class="detail-body">
-        <p>安装 Python 3.11 或更新版本，并确认 <code>python --version</code> 或 <code>py -3 --version</code> 可用。安装 FFmpeg 后确认 <code>ffmpeg -version</code> 可用。Git 只在你希望用 <code>git clone</code> / <code>git pull</code> 更新时需要。</p>
-        <p>如果批处理窗口出现错误后停住，直接阅读窗口中的报错；<code>run_windows.bat</code> 失败时会保留窗口并等待按键。</p>
+      <summary><span>Windows 细节<span class="summary-note">首次准备 / 更新 / 端口</span></span><span>⌄</span></summary>
+      <div class="detail">
+        <p>安装 Python 3.11+ 与 FFmpeg，并确认 <code>python --version</code> 或 <code>py -3 --version</code>、<code>ffmpeg -version</code> 可用。<code>run_windows.bat</code> 会检查 Python、安装缺失的 <code>requirements.txt</code> 依赖、检查 FFmpeg，然后启动本地控制台。</p>
+        <p>Git 克隆方式可先执行 <code>git pull --ff-only</code>。8765 被占用时可运行 <code>python -m app.launch --port 8766</code>。局域网控制使用 <code>run_windows_lan.bat</code>，终端会输出带 token 的地址。</p>
       </div>
     </details>
 
     <details>
-      <summary>
-        <span>Termux 首次安装<span class="summary-note">只做一次</span></span>
-        <span class="chevron">⌄</span>
-      </summary>
-      <div class="detail-body">
-        <div class="command-top">
-          <span class="command-label">TERMUX · FIRST INSTALL</span>
-          <button class="copy-btn" data-copy="cmd-install">复制</button>
-        </div>
+      <summary><span>Termux 首次安装<span class="summary-note">只做一次</span></span><span>⌄</span></summary>
+      <div class="detail">
+        <div class="copy-row"><span>FIRST INSTALL</span><button class="copy" data-copy="cmd-install">复制</button></div>
         <pre id="cmd-install">pkg install -y git
 cd ~
 git clone https://github.com/11576865/HSR-Voice-Archive-Builder.git
 cd HSR-Voice-Archive-Builder
 bash run_termux.sh</pre>
-      </div>
-    </details>
-
-    <details>
-      <summary>
-        <span>输出语义<span class="summary-note">固定档案状态与按需成品</span></span>
-        <span class="chevron">⌄</span>
-      </summary>
-      <div class="detail-body">
-        <p>固定核心输出包括 <code>continuous.flac</code>、SRT、manifest、resolved Timeline 与构建报告；ASS 和黑屏 MKV 属于按需生成的成品。内部恢复与 QA 状态位于项目 <code>.state/</code>，不等同于最终输出目录。</p>
+        <p style="margin-top:8px"><code>run_termux.sh</code> 会检查 Python、FFmpeg、7-Zip 和 <code>requirements-termux.txt</code>，然后运行 <code>app.launch --lite --no-browser</code>。</p>
       </div>
     </details>
   </section>
 
   <footer class="footer">
     <span>HSR Voice Archive Builder · v0.9-M</span>
-    <span>Static entry · processing stays on the host device</span>
+    <span>Static entry · local processing</span>
   </footer>
 </main>
 
 <div class="toast" id="toast" role="status" aria-live="polite">已复制</div>
-
 <script>
-const THEME_KEY='hsr-pages-theme-v1';
-const systemThemeQuery=window.matchMedia('(prefers-color-scheme: dark)');
-let themePreference=localStorage.getItem(THEME_KEY)||document.documentElement.dataset.themePreference||'system';
-function resolvedTheme(pref=themePreference){
-  return pref==='system'?(systemThemeQuery.matches?'dark':'light'):pref;
+const KEY='hsr-pages-theme-v1',mq=matchMedia('(prefers-color-scheme: dark)');
+let pref=localStorage.getItem(KEY)||document.documentElement.dataset.themePreference||'system';
+function apply(next,{save=true}={}){
+  pref=['light','dark','system'].includes(next)?next:'system';
+  if(save)localStorage.setItem(KEY,pref);
+  document.documentElement.dataset.theme=pref==='system'?(mq.matches?'dark':'light'):pref;
+  document.documentElement.dataset.themePreference=pref;
+  document.querySelectorAll('[data-theme-choice]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.themeChoice===pref?'true':'false'));
 }
-function applyTheme(pref,{persist=true}={}){
-  themePreference=['light','dark','system'].includes(pref)?pref:'system';
-  if(persist)localStorage.setItem(THEME_KEY,themePreference);
-  const theme=resolvedTheme(themePreference);
-  document.documentElement.dataset.theme=theme;
-  document.documentElement.dataset.themePreference=themePreference;
-  const meta=document.querySelector('meta[name="theme-color"]');
-  if(meta)meta.setAttribute('content',theme==='light'?'#eef3f8':'#0d1420');
-  document.querySelectorAll('[data-theme-choice]').forEach(button=>{
-    button.setAttribute('aria-pressed',button.dataset.themeChoice===themePreference?'true':'false');
-  });
-}
-document.querySelectorAll('[data-theme-choice]').forEach(button=>{
-  button.addEventListener('click',()=>applyTheme(button.dataset.themeChoice));
-});
-const onSystemThemeChange=()=>{if(themePreference==='system')applyTheme('system',{persist:false})};
-if(systemThemeQuery.addEventListener)systemThemeQuery.addEventListener('change',onSystemThemeChange);
-else if(systemThemeQuery.addListener)systemThemeQuery.addListener(onSystemThemeChange);
-applyTheme(themePreference,{persist:false});
+document.querySelectorAll('[data-theme-choice]').forEach(b=>b.onclick=()=>apply(b.dataset.themeChoice));
+if(mq.addEventListener)mq.addEventListener('change',()=>{if(pref==='system')apply('system',{save:false})});
+apply(pref,{save:false});
 
-const toast=document.getElementById('toast');
-let toastTimer=null;
-function showToast(message){
-  toast.textContent=message;toast.classList.add('show');clearTimeout(toastTimer);
-  toastTimer=setTimeout(()=>toast.classList.remove('show'),1400);
-}
+const toast=document.getElementById('toast');let timer;
 async function copyText(text){
-  if(navigator.clipboard&&window.isSecureContext){await navigator.clipboard.writeText(text);return}
-  const ta=document.createElement('textarea');
-  ta.value=text;ta.setAttribute('readonly','');ta.style.position='fixed';ta.style.opacity='0';
-  document.body.appendChild(ta);ta.select();
-  const ok=document.execCommand('copy');ta.remove();
-  if(!ok)throw new Error('copy failed');
+  if(navigator.clipboard&&window.isSecureContext)return navigator.clipboard.writeText(text);
+  const t=document.createElement('textarea');t.value=text;t.style.position='fixed';t.style.opacity='0';
+  document.body.appendChild(t);t.select();const ok=document.execCommand('copy');t.remove();if(!ok)throw new Error()
 }
-document.querySelectorAll('[data-copy]').forEach(btn=>{
-  btn.addEventListener('click',async()=>{
-    const el=document.getElementById(btn.dataset.copy);if(!el)return;
-    const original=btn.textContent;
-    try{
-      await copyText(el.textContent.trim());btn.textContent='已复制';btn.classList.add('done');showToast('命令已复制');
-    }catch(e){btn.textContent='复制失败';showToast('复制失败，请手动复制')}
-    setTimeout(()=>{btn.textContent=original;btn.classList.remove('done')},1500);
-  });
-});
-document.querySelectorAll('details').forEach(item=>{
-  item.addEventListener('toggle',()=>{
-    if(!item.open)return;
-    document.querySelectorAll('details[open]').forEach(other=>{if(other!==item)other.open=false});
-  });
+document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{
+  const el=document.getElementById(b.dataset.copy);if(!el)return;
+  try{await copyText(el.textContent.trim());toast.textContent='已复制'}catch{toast.textContent='复制失败'}
+  toast.classList.add('show');clearTimeout(timer);timer=setTimeout(()=>toast.classList.remove('show'),1200)
 });
 </script>
 </body>
