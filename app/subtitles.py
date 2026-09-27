@@ -619,6 +619,7 @@ def update_project_subtitles(
     }
 
     updated_count = 0
+    text_updated_count = 0
     for entry in entries:
         item_id = _entry_id(entry)
         if item_id is None or str(item_id) not in updates_by_id:
@@ -663,6 +664,7 @@ def update_project_subtitles(
             else:
                 review_state.pop(key, None)
         updated_count += 1
+        text_updated_count += 1
 
     # Confirmation-only updates are valid even when the final text is unchanged.
     entry_ids = {str(_entry_id(entry)) for entry in entries if _entry_id(entry) is not None}
@@ -682,15 +684,27 @@ def update_project_subtitles(
 
     _write_subtitle_review_state(output_dir, review_state)
 
-    # A subtitle edit changes manifest/subtitle artifacts, but it must not
-    # invalidate or rebuild the already verified continuous FLAC stage.
-    invalidate_subtitle_stages(config)
-    refreshed = refresh_subtitle_artifacts(
-        config,
-        output_dir,
-        data,
-        strict_ass=False,
-    )
+    if text_updated_count:
+        # A text edit changes manifest/subtitle artifacts, but it must not
+        # invalidate or rebuild the already verified continuous FLAC stage.
+        invalidate_subtitle_stages(config)
+        refreshed = refresh_subtitle_artifacts(
+            config,
+            output_dir,
+            data,
+            strict_ass=False,
+        )
+    else:
+        refreshed = {
+            "ass_file": str(output_dir / "HSR_Voice_Archive.ass")
+            if (output_dir / "HSR_Voice_Archive.ass").is_file()
+            else "",
+            "ass_error": "",
+            "srt_file": str(output_dir / "HSR_Voice_Archive.srt")
+            if (output_dir / "HSR_Voice_Archive.srt").is_file()
+            else "",
+            "override_count": len(overrides),
+        }
 
     if updated_count < 1:
         raise ValueError("No matching subtitle entries were updated")
