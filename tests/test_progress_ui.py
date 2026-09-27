@@ -226,15 +226,15 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("media-src 'self' blob:", server_py)
         self.assertIn("media-src 'self' blob:", lite_server_py)
         self.assertIn("body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})", html)
-        self.assertIn('id="subUseOfficialBtn"', html)
-        self.assertIn('id="subUseApiBtn"', html)
+        self.assertNotIn('id="subUseOfficialBtn"', html)
+        self.assertNotIn('id="subUseApiBtn"', html)
         self.assertIn('id="subResetBtn"', html)
         self.assertIn('id="subConfirmBtn"', html)
-        self.assertIn('id="subOpenLayoutBtn"', html)
-        self.assertIn('id="subNextAttentionBtn"', html)
+        self.assertNotIn('id="subOpenLayoutBtn"', html)
+        self.assertNotIn('id="subNextAttentionBtn"', html)
         self.assertIn('<option value="unreviewed">未人工确认</option>', html)
         self.assertIn('<option value="overflow">ASS 排版失败</option>', html)
-        self.assertIn("openCurrentSubtitleInLayout", html)
+        self.assertNotIn("openCurrentSubtitleInLayout", html)
         self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
         self.assertIn('id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"', html)
         self.assertIn('id="quickGroupGap" type="number" min="0" step="0.01" value="3.00"', html)
@@ -262,9 +262,9 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("function confirmCurrentSubtitleFromShortcut()", html)
         self.assertIn("subtitleEditor.addEventListener('keydown'", html)
 
-        self.assertIn("e.altKey&&e.key.toLowerCase()==='a'", html)
-        self.assertIn("e.altKey&&e.key.toLowerCase()==='t'", html)
-        self.assertIn("e.altKey&&e.key.toLowerCase()==='n'", html)
+        self.assertNotIn("e.altKey&&e.key.toLowerCase()==='a'", html)
+        self.assertNotIn("e.altKey&&e.key.toLowerCase()==='t'", html)
+        self.assertNotIn("e.altKey&&e.key.toLowerCase()==='n'", html)
         self.assertIn("e.altKey&&e.code==='Space'", html)
         self.assertIn("(e.ctrlKey||e.metaKey)&&e.key==='Enter'", html)
         self.assertIn("await setSubtitleConfirmation(true)", html)
@@ -545,6 +545,8 @@ class QuickBuildUiTests(unittest.TestCase):
             ".sub-workspace,\n  .proofreading-workspace{\n    display:flex!important;\n    flex-direction:column!important;",
             html,
         )
+        self.assertIn("max-height:none!important;\n    height:auto!important;\n    overflow:visible!important;", html)
+        self.assertIn("-webkit-line-clamp:2;", html)
         self.assertIn(
             ".export-context,\n  .export-lanes,\n  .update-toolbar,\n  .update-review-tools,",
             html,
@@ -564,14 +566,13 @@ class QuickBuildUiTests(unittest.TestCase):
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
         ).read_text(encoding="utf-8")
 
-        # Proofreading order follows actual work: source -> audio/reference ->
-        # final subtitle -> official Chinese -> ASS layout.
+        # Proofreading stays focused on text/audio review. Layout QA belongs to
+        # the dedicated workbench and runs against a real project stress sample.
         positions = [
             html.index('id="subSourceText"'),
             html.index('id="subOriginalAudio"'),
             html.index('id="subFinalEditor"'),
             html.index('id="subOfficialText"'),
-            html.index('id="subLayoutDiagnostic"'),
         ]
         self.assertTrue(all(position >= 0 for position in positions))
         self.assertEqual(positions, sorted(positions))
@@ -580,6 +581,17 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn("reviewReferences.before(reviewEditor)", html)
         self.assertIn('id="subInitialSourceBadge"', html)
         self.assertIn("function subtitleInitialText(", html)
+        self.assertNotIn('id="subLayoutDiagnostic"', html)
+        self.assertNotIn('class="proof-step proof-step-layout"', html)
+        self.assertIn('class="sub-nav-bar proofreading-nav-actions"', html)
+        self.assertIn('id="layoutCorpusCheckStatus"', html)
+        self.assertIn("function loadLayoutStressSample()", html)
+        self.assertIn("function subtitleLayoutStressScore(", html)
+        self.assertNotIn('id="prevPresetLongText"', html)
+        self.assertNotIn('id="prevPresetCollision"', html)
+        self.assertIn('id="prevChsSize" min="38" max="64" value="48"', html)
+        self.assertIn('id="prevMarginH" min="0" max="30" value="3"', html)
+        self.assertIn('id="prevMarginV" min="0" max="20" value="5"', html)
 
         # Utility information is an on-demand drawer, not a permanent column.
         self.assertIn('class="stack utility-drawer" id="sideStack"', html)
@@ -884,6 +896,15 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("cache:'no-store'", html)
         self.assertIn("let attempts=0;while(attempts<5)", html)
         self.assertIn("await new Promise(r=>setTimeout(r,1000*(attempts+1)));", html)
+
+    def test_subtitle_layout_default_preset_contract(self) -> None:
+        root = Path(__file__).resolve().parents[1]
+        project_py = (root / "app" / "project.py").read_text(encoding="utf-8")
+        config_py = (root / "subtitle_layout" / "config.py").read_text(encoding="utf-8")
+        for source in (project_py, config_py):
+            self.assertIn("48", source)
+            self.assertIn("0.03", source)
+            self.assertIn("0.05", source)
 
     def test_index_html_contains_a11y_and_ux_improvements(self) -> None:
         index_path = Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
