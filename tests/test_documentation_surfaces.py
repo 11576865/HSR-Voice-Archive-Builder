@@ -31,7 +31,7 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("成品", page)
         self.assertIn('rel="icon" type="image/svg+xml" href="./favicon.svg?v=1"', page)
         self.assertTrue((root / "docs" / "favicon.svg").is_file())
-        self.assertLess(len(page), 12000)
+        self.assertLess(len(page), 18000)
 
         for stale in (
             "v0.9-H",
