@@ -804,6 +804,7 @@ def api_quick_build(
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
                 review_official_target=config.review_official_target,
+                game_id=getattr(config, "game_id", "honkai-star-rail"),
                 recovery_callback=auto_recovery,
             )
             auto_recovery("build-complete")
@@ -1101,6 +1102,7 @@ def api_project_build():
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
                 review_official_target=config.review_official_target,
+                game_id=getattr(config, "game_id", "honkai-star-rail"),
             )
 
         job = create_job(
