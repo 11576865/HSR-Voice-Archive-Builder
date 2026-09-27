@@ -432,8 +432,10 @@ def get_project_subtitles(
                 "source_text": "May this journey lead us starward.",
                 "official_chs": "愿此行，终抵群星。",
                 "api_chs": "愿这场旅程带我们走向群星。",
+                "original_chs": "愿此行，终抵群星。",
                 "final_chs": "愿此行，终抵群星。",
                 "modified": False,
+                "confirmed": False,
             },
             {
                 "id": 2,
@@ -443,8 +445,10 @@ def get_project_subtitles(
                 "source_text": "Rules are made to be broken!",
                 "official_chs": "规则，就是用来打破的！",
                 "api_chs": "规矩就是用来打破的！",
+                "original_chs": "规则，就是用来打破的！",
                 "final_chs": "规则，就是用来打破的！",
                 "modified": False,
+                "confirmed": False,
             },
         ]
         if q and q.strip():
