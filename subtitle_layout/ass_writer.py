@@ -394,7 +394,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
                     entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
-                    voice_gap_seconds=voice_gap_sec,
+                    voice_gap_seconds=voice_gap_sec if cfg.use_audio_aware_fade else None,
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{pri_motion_tags}"
@@ -446,7 +446,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
                     entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
-                    voice_gap_seconds=voice_gap_sec,
+                    voice_gap_seconds=voice_gap_sec if cfg.use_audio_aware_fade else None,
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{chs_motion_tags}"
