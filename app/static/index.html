@@ -188,6 +188,46 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .preview-advanced{grid-area:advanced;margin:0!important;padding:6px 16px 14px;background:#121619;border-top:1px solid var(--line)}
 .preview-advanced summary{font-size:12px;color:var(--muted)}
 #previewCanvasContainer>div:first-of-type{z-index:5}
+
+/* Project overview, global job center, and artifact browser */
+.job-center-bar{position:sticky;top:49px;z-index:28;max-width:1220px;margin:0 auto;background:#111619;border:1px solid var(--line);border-top:0}
+.job-center-toggle{width:100%;min-height:48px;border:0;border-radius:0;background:transparent;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;padding:8px 16px}
+.job-center-toggle:hover{background:#ffffff08}
+.job-center-copy{display:flex;flex-direction:column;min-width:0}
+.job-center-copy b{font-size:12px;font-weight:700;color:var(--text)}
+.job-center-copy span{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.job-center-dot{width:8px;height:8px;border-radius:50%;background:#667276;box-shadow:0 0 0 3px #66727622}
+.job-center-dot.running{background:var(--ok);box-shadow:0 0 0 3px #70c99620}
+.job-center-dot.failed{background:var(--bad);box-shadow:0 0 0 3px #ef6b7322}
+.job-center-dot.waiting{background:var(--warn);box-shadow:0 0 0 3px #f0a64022}
+.job-center-percent{font-size:12px;font-variant-numeric:tabular-nums;color:var(--muted)}
+.job-center-track{height:2px;background:#20272a;overflow:hidden}.job-center-fill{height:100%;width:0;background:#70c996;transition:width .2s ease}
+.project-overview{padding:4px 0 18px;border-top:1px solid var(--line)}
+.project-overview-head{display:flex;justify-content:space-between;gap:16px;align-items:flex-start;padding:18px 0 12px}
+.project-kicker{font-size:10px;letter-spacing:.12em;color:var(--muted);font-weight:750}
+.project-overview-head h3{font-size:24px;letter-spacing:-.03em;margin:2px 0 3px}
+.project-status{display:inline-flex;padding:5px 9px;border:1px solid var(--line);border-radius:999px;font-size:11px;color:var(--muted)}
+.project-status.ok{color:var(--ok);border-color:#356d4d;background:#13251b}.project-status.warn{color:var(--warn);border-color:#755a2c;background:#2b2214}.project-status.bad{color:var(--bad);border-color:#743f44;background:#2a181b}
+.project-overview-actions{display:flex;gap:7px;flex-wrap:wrap;padding-bottom:16px;border-bottom:1px solid var(--line)}
+.project-overview-actions button{min-height:34px;padding:6px 10px;font-size:12px}
+.overview-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:1px;background:var(--line);border:1px solid var(--line);margin:16px 0}
+.overview-metric{background:#14191b;padding:13px 14px}.overview-metric span{display:block;font-size:11px;color:var(--muted)}.overview-metric b{display:block;margin-top:3px;font-size:23px;font-variant-numeric:tabular-nums}
+.overview-panels{display:grid;grid-template-columns:1fr 1fr;gap:14px}
+.overview-panel{border:1px solid var(--line);background:#121719;padding:13px 14px}.overview-panel-title{font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted);font-weight:750;margin-bottom:8px}
+.overview-source-list,.overview-attention-list{display:grid;gap:6px}.overview-line{display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:5px 0;border-bottom:1px solid #253034}.overview-line:last-child{border-bottom:0}
+.overview-line .state-ok{color:var(--ok)}.overview-line .state-bad{color:var(--bad)}.overview-line .state-muted{color:var(--muted)}
+.project-settings{border-top:1px solid var(--line);padding-top:10px}.project-settings>summary{font-size:13px}.project-settings>form{margin-top:10px}
+.artifact-heading{display:flex;justify-content:space-between;gap:12px;align-items:flex-start}.artifact-heading h3{margin:0}.artifact-heading p{margin:4px 0 0}
+.artifact-browser{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px;margin:12px 0}
+.artifact-card{display:flex;flex-direction:column;min-width:0;gap:8px;border:1px solid var(--line);background:#121719;padding:12px 13px}
+.artifact-card-head{display:flex;justify-content:space-between;gap:10px;align-items:flex-start}.artifact-card-title{font-size:13px;font-weight:700;overflow-wrap:anywhere}.artifact-card-kind{font-size:10px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+.artifact-card-desc{font-size:11px;color:var(--muted);line-height:1.45}.artifact-card-meta{display:flex;gap:8px;flex-wrap:wrap;font-size:11px;color:var(--muted)}
+.artifact-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}.artifact-card-actions button{min-height:30px;padding:4px 8px;font-size:11px}
+.artifact-card.missing{border-style:dashed;opacity:.88}.artifact-card.audio{border-left:2px solid var(--ok)}.artifact-card.subtitle{border-left:2px solid var(--purple)}.artifact-card.video{border-left:2px solid var(--blue)}
+.artifact-file-list{margin-top:10px}.artifact-status{margin-top:8px}
+.quick-plan{margin-top:12px;background:#111318;color:var(--text);border:1px solid var(--line);max-height:none}
+#sideStack #progressCard{border-left:2px solid #536166}
+@media(max-width:820px){.job-center-bar{top:49px;margin:0 14px}.overview-metrics{grid-template-columns:1fr 1fr}.overview-panels{grid-template-columns:1fr}.artifact-browser{grid-template-columns:1fr}}
 body[data-workspace="project"] #subtitleLayoutPreviewCard,body[data-workspace="project"] #subtitleReviewCard,body[data-workspace="project"] #gptSovitsCard,body[data-workspace="project"] #updateCard{display:none!important}
 body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
 body[data-workspace="review"] #subtitleLayoutPreviewCard,body[data-workspace="review"] #gptSovitsCard,body[data-workspace="review"] #updateCard{display:none!important}
@@ -257,6 +297,17 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
   <button type="button" data-workspace-target="export">资产导出</button>
   <button type="button" data-workspace-target="update">增量更新</button>
 </nav>
+<section id="jobCenterBar" class="job-center-bar" aria-label="任务中心">
+  <button type="button" id="jobCenterToggle" class="job-center-toggle">
+    <span id="jobCenterDot" class="job-center-dot"></span>
+    <span class="job-center-copy">
+      <b id="jobCenterTitle">没有运行中的任务</b>
+      <span id="jobCenterMeta">任务中心会在所有工作区保持可见。</span>
+    </span>
+    <span id="jobCenterPercent" class="job-center-percent">—</span>
+  </button>
+  <div class="job-center-track" aria-hidden="true"><div id="jobCenterFill" class="job-center-fill"></div></div>
+</section>
 <main id="mainContent">
 <div class="grid">
   <div class="stack" id="primaryStack">
@@ -340,7 +391,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <button type="button" id="quickRefreshBtn">刷新本机文件</button>
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
         </div>
-        <pre id="quickPlan" style="margin-top:12px;background:#fafafa;color:var(--text);border:1px solid var(--line);max-height:none">尚未扫描。</pre>
+        <pre id="quickPlan" class="quick-plan">尚未扫描。</pre>
         <div class="row3">
           <div><label>开头留白（秒）</label><input id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"></div>
           <div><label>同组语音间隔（秒）</label><input id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"></div>
@@ -389,7 +440,6 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
               <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
               <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
-        <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
               <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
               <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
               <label class="check"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
@@ -399,6 +449,42 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
         </details>
       </div>
 
+      <section id="projectOverview" class="project-overview hidden" aria-label="项目总览">
+        <div class="project-overview-head">
+          <div>
+            <div class="project-kicker">PROJECT OVERVIEW</div>
+            <h3 id="overviewProjectName">—</h3>
+            <div id="overviewProjectRoute" class="small muted">—</div>
+          </div>
+          <span id="overviewStatus" class="project-status">尚未构建</span>
+        </div>
+        <div class="project-overview-actions">
+          <button type="button" class="primary" id="overviewBuildBtn">构建 / 更新档案</button>
+          <button type="button" id="overviewReviewBtn">字幕校对</button>
+          <button type="button" id="overviewUpdateBtn">增量更新</button>
+          <button type="button" id="overviewArtifactsBtn">查看成品</button>
+        </div>
+        <div class="overview-metrics">
+          <div class="overview-metric"><span>语音条目</span><b id="overviewTotal">—</b></div>
+          <div class="overview-metric"><span>官方中文</span><b id="overviewOfficial">—</b></div>
+          <div class="overview-metric"><span>API 补译</span><b id="overviewApi">—</b></div>
+          <div class="overview-metric"><span>章节 FLAC</span><b id="overviewChapters">—</b></div>
+        </div>
+        <div class="overview-panels">
+          <div class="overview-panel">
+            <div class="overview-panel-title">数据源</div>
+            <div id="overviewSources" class="overview-source-list"></div>
+          </div>
+          <div class="overview-panel">
+            <div class="overview-panel-title">需要处理</div>
+            <div id="overviewAttention" class="overview-attention-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <details id="projectSettingsPanel" class="project-settings hidden">
+        <summary>项目设置</summary>
+        <p class="small muted">日常使用只需关注上方项目总览。这里保留构建参数、数据源与高级设置。</p>
       <form id="projectForm" class="hidden">
         <div class="row">
           <div><label>项目名称</label><input name="name" required></div>
@@ -490,6 +576,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <div class="actions"><button type="submit">保存高级设置</button></div>
         </details>
       </form>
+      </details>
     </section>
 
     <div id="mobileProgressSlot"></div>
@@ -515,10 +602,19 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
       <div id="translationUsage" class="small muted" style="margin-top:10px"></div>
       <div id="finishedOutputs" class="hidden">
         <div class="divider"></div>
-        <h3>Final Products（最终成品）</h3>
-        <p class="small muted">普通使用时主要关注连续音频与字幕；ASS / 黑屏 MKV 可按需生成。</p>
-        <table><tbody id="outputTable"></tbody></table>
-        <div id="optionalOutputStatus" class="small muted" style="margin-top:8px" role="status" aria-live="polite"></div>
+        <div class="artifact-heading">
+          <div>
+            <h3>成品</h3>
+            <p class="small muted">播放、字幕与章节音频集中在这里；审计记录保留在下方高级区域。</p>
+          </div>
+          <span id="artifactCount" class="badge">0 项</span>
+        </div>
+        <div id="artifactBrowser" class="artifact-browser"></div>
+        <details class="artifact-file-list">
+          <summary>完整文件列表</summary>
+          <table><tbody id="outputTable"></tbody></table>
+        </details>
+        <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
         <summary>Archive / Build Records（档案与构建记录）</summary>
@@ -867,7 +963,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
 
   <div class="stack" id="sideStack">
     <section id="progressCard" class="card" role="region" aria-label="处理进度">
-      <div class="topline"><h2>当前进度</h2><button id="refreshBtn">刷新</button></div>
+      <div class="topline"><h2>任务中心</h2><button id="refreshBtn">刷新</button></div>
       <div id="activeJobState" class="notice" role="status" aria-live="polite">当前没有运行中的构建。</div>
       <div id="progressTrack" class="progress-track" role="progressbar" aria-label="任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar" class="progress-bar"></div></div>
       <div id="progressText" class="small muted">等待任务。</div>
@@ -1100,7 +1196,7 @@ function renderSourceHealth(p){
     const state=!configured?(required?'未配置':'未使用'):(exists?'可用':'找不到');
     const cls=configured&&!exists?'status-bad':'muted';
     const path=item.path?'<br><span class="muted">'+item.path+'</span>':'';
-    return '<div style="padding:7px 0;border-bottom:1px solid #eee"><b>'+label+'</b> · <span class="'+cls+'">'+state+'</span>'+path+'</div>';
+    return '<div style="padding:7px 0;border-bottom:1px solid var(--line)"><b>'+label+'</b> · <span class="'+cls+'">'+state+'</span>'+path+'</div>';
   }).join('');
 }
 let relinkCandidates=[];
@@ -1509,7 +1605,7 @@ function renderJobs(jobs){
     const when=j.finished_at||j.started_at||j.created_at||'';
     const detail=j.state==='failed'?shortError(j.error):(j.message||'');
     const project=j.project_name?'<span class="muted"> · '+j.project_name+'</span>':'';
-    return '<div style="padding:8px 0;border-bottom:1px solid #eee"><b>'+(labels[j.kind]||j.kind)+'</b> · '+(states[j.state]||j.state)+project+(when?' · '+new Date(when).toLocaleString():'')+'<br><span class="'+(j.state==='failed'?'status-bad':'muted')+'">'+detail+'</span></div>';
+    return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+(labels[j.kind]||j.kind)+'</b> · '+(states[j.state]||j.state)+project+(when?' · '+new Date(when).toLocaleString():'')+'<br><span class="'+(j.state==='failed'?'status-bad':'muted')+'">'+detail+'</span></div>';
   };
   const recentCurrent=projectJobs.slice(0,5),olderCurrent=projectJobs.slice(5);
   let html=recentCurrent.length?recentCurrent.map(row).join(''):'<div class="muted">当前项目暂无任务历史。</div>';
