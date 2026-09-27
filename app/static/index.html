@@ -1813,10 +1813,9 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           <button type="button" class="success" id="openSelectedProjectBtn">打开所选</button>
           <button type="button" class="success" id="newProjectBtn">新建 / 导入项目</button>
           <button type="button" id="cloneProjectBtn">复制项目</button>
-          <button type="button" id="forgetProjectBtn">移出列表</button>
           <button type="button" class="danger" id="deleteProjectBtn">删除项目</button>
         </div>
-        <p class="small muted">“复制项目”会复制设置和程序生成的索引，但不复制 output 成品、.state 恢复状态或原始语音包，适合从同一素材派生另一套语言/参数。“移出列表”只隐藏项目，不删除文件；“删除项目”会清理程序管理的数据。</p>
+        <p class="small muted">“复制项目”会复制设置和程序生成的索引，但不复制 output 成品、.state 恢复状态或原始语音包，适合从同一素材派生另一套语言/参数。“删除项目”会清理程序管理的数据。</p>
       </div>
       <div id="noProject">
         <h3>快速创建</h3>
@@ -2086,12 +2085,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
         </div>
         <div id="reviewStatus" class="small" style="margin-top:8px">等待修订文件。</div>
       </div>
-      <div id="archiveStats" class="stats hidden" style="margin-top:12px">
-        <div class="stat"><b id="statTotal">—</b><span>已归档语音</span></div>
-        <div class="stat"><b id="statOfficial">—</b><span>官方中文字幕</span></div>
-        <div class="stat"><b id="statIncrementalOfficial">—</b><span>增量官方中文</span></div>
-        <div class="stat"><b id="statApiOnly">—</b><span>API 补译</span></div>
-      </div>
       <div id="translationUsage" class="small muted" style="margin-top:10px"></div>
       <div id="finishedOutputs" class="hidden">
         <div class="divider"></div>
@@ -2103,10 +2096,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           <span id="artifactCount" class="badge">0 项</span>
         </div>
         <div id="artifactBrowser" class="artifact-browser"></div>
-        <details class="artifact-file-list">
-          <summary>完整文件列表</summary>
-          <table><tbody id="outputTable"></tbody></table>
-        </details>
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
@@ -2297,7 +2286,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
       <div class="topline">
         <div>
           <h2>字幕校对</h2>
-          <p class="small muted" style="margin:4px 0 0">按“原文 → 语音与参考标注 → 最终中文字幕 → 官方中文”的顺序逐条处理。停止输入约 1 秒后自动保存。</p>
+          <p class="small muted" style="margin:4px 0 0">按“原文 → 语音与参考标注 → 最终中文字幕”的顺序逐条处理。停止输入约 1 秒后自动保存。</p>
         </div>
       </div>
 
@@ -2314,8 +2303,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           <label>字幕来源 / 状态</label>
           <select id="subSelector">
             <option value="all">全部字幕</option>
-            <option value="unreviewed">未人工确认</option>
-            <option value="confirmed">已人工确认</option>
             <option value="modified">已修改字幕</option>
             <option value="official">官方中文字幕</option>
             <option value="api">API 翻译中文字幕</option>
@@ -2413,23 +2400,12 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
               </div>
               <div class="actions proofreading-actions">
                 <button type="button" class="secondary" id="subResetBtn">恢复初始字幕</button>
-                <button type="button" class="success" id="subConfirmBtn" title="Ctrl/Cmd+Enter">确认当前字幕</button>
               </div>
               <div id="subShortcutHelp" class="sub-shortcuts">
-                <kbd>Alt+↑ / Alt+↓</kbd> 上一条 / 下一条　<kbd>Ctrl/⌘+Enter</kbd> 确认　<kbd>Alt+Space</kbd> 播放
+                <kbd>Alt+↑ / Alt+↓</kbd> 上一条 / 下一条　<kbd>Alt+Space</kbd> 播放
               </div>
             </div>
           </section>
-
-          <section class="proof-step proof-step-official" aria-labelledby="proofOfficialLabel">
-            <div class="proof-step-kicker">04 · OFFICIAL REFERENCE</div>
-            <div class="sub-ref-card">
-              <div class="sub-ref-label" id="proofOfficialLabel">官方中文</div>
-              <div id="subOfficialText" class="sub-ref-content">愿此行，终抵群星。</div>
-            </div>
-            <div id="subApiText" class="hidden" aria-hidden="true">—</div>
-          </section>
-
 
         </div>
       </div>
@@ -2439,7 +2415,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
       <div class="topline">
         <div>
           <h2>导出工作台</h2>
-          <p class="small muted" style="margin:4px 0 0">训练数据、参考语音与档案成品集中在一个工作区。这里不重新构建主档案。</p>
+          <p class="small muted" style="margin:4px 0 0">训练数据与参考语音集中在一个工作区。这里不重新构建主档案。</p>
         </div>
         <span id="exportProjectBadge" class="badge">未打开项目</span>
       </div>
@@ -2467,17 +2443,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
         </section>
       </div>
 
-      <div class="export-artifacts-head">
-        <div><h3>当前档案成品</h3><p class="small muted">快速确认连续 FLAC、字幕与播放容器是否已经可用。</p></div>
-        <div class="actions">
-          <button type="button" id="exportGoArchiveBtn">返回档案</button>
-          <button type="button" id="exportGoReviewBtn">字幕校对</button>
-          <button type="button" id="exportGoLayoutBtn">排版工作台</button>
-        </div>
-      </div>
-      <div id="exportArtifactSummary" class="export-artifact-summary">
-        <div class="update-empty">打开项目后显示当前成品状态。</div>
-      </div>
     </section>
 
     <section class="card hidden" id="updateCard">
@@ -2951,9 +2916,6 @@ document.getElementById('gptSovitsSpeaker').addEventListener('input',()=>{
     (currentProject.root||'')+' / '+(currentProject.config.output_dir||'output')+
     ' / '+document.getElementById('gptSovitsSpeaker').value+'_GPTSoVITS';
 });
-document.getElementById('exportGoArchiveBtn')?.addEventListener('click',()=>showWorkspace('project'));
-document.getElementById('exportGoReviewBtn')?.addEventListener('click',()=>showWorkspace('review'));
-document.getElementById('exportGoLayoutBtn')?.addEventListener('click',()=>showWorkspace('layout'));
 function fd(form){return new FormData(form)}
 function setLog(x){log.textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
 function showDiagnosticLog(){
@@ -2985,7 +2947,7 @@ function renderProjectSwitcher(items){
 function updateProjectActionButtons(){
   const select=document.getElementById('projectSwitcher');
   const chosen=!!select?.value;
-  for(const id of ['openSelectedProjectBtn','cloneProjectBtn','forgetProjectBtn','deleteProjectBtn']){
+  for(const id of ['openSelectedProjectBtn','cloneProjectBtn','deleteProjectBtn']){
     const button=document.getElementById(id);if(button)button.disabled=!chosen;
   }
 }
@@ -3017,15 +2979,6 @@ async function cloneSelectedProject(){
   await refresh();
 }
 
-async function forgetSelectedProject(){
-  const select=document.getElementById('projectSwitcher'),root=select.value;
-  if(!root)throw new Error('请先选择一个项目');
-  const d=new FormData();d.set('project_path',root);
-  const j=await api('/api/project/forget',{method:'POST',body:d});
-  fillProject(j.project||null);
-  setLog('已将项目移出列表；项目文件仍保留在磁盘。');
-  await refresh();
-}
 async function deleteSelectedProject(){
   const select=document.getElementById('projectSwitcher'),root=select.value;
   if(!root)throw new Error('请先选择一个项目');
@@ -3045,7 +2998,7 @@ async function deleteSelectedProject(){
           ? '自动恢复保护：latest 不可用，但上一代恢复包已校验可用；删除项目不会删除它。'
           : (a.error?'自动恢复保护：最近一次保存/校验失败（'+a.error+'），后端可能拒绝删除。':'自动恢复保护：当前没有经过校验的外置恢复包。'));
   }catch(e){protection='自动恢复保护状态检查失败：'+shortError(e);}
-  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n'+protection+'\n\n警告：删除会丢失 .generated、.state、增量索引、已下载增量语音和项目内恢复状态。构建失败时应优先继续使用当前项目；如果只是不想在列表里看到它，请使用“移出列表”。\n\n'+root))return;
+  if(!confirm('确定删除所选项目？\n\n'+mode+'\n\n'+protection+'\n\n警告：删除会丢失 .generated、.state、增量索引、已下载增量语音和项目内恢复状态。构建失败时应优先继续使用当前项目；如果不确定是否应删除，请取消并保留当前项目。\n\n'+root))return;
   const d=new FormData();d.set('project_path',root);
   const j=await api('/api/project/delete',{method:'POST',body:d});
   fillProject(j.project||null);
@@ -3208,30 +3161,7 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
 
 function renderExportWorkspace(p){
   const badge=document.getElementById('exportProjectBadge');
-  const box=document.getElementById('exportArtifactSummary');
   if(badge)badge.textContent=p?.name||'未打开项目';
-  if(!box)return;
-  if(!p){
-    box.innerHTML='<div class="update-empty">打开项目后显示当前成品状态。</div>';
-    return;
-  }
-  const outputs=p.outputs||{},groups=p.output_groups||{},finalProducts=groups.final_products||{};
-  const specs=[
-    ['continuous.flac','audio','连续 FLAC'],
-    ['HSR_Voice_Archive.srt','subtitle','SRT 字幕'],
-    ['HSR_Voice_Archive.ass','subtitle','ASS 字幕'],
-    ['HSR_Voice_Archive_Black.mkv','video','黑屏 MKV'],
-  ];
-  box.innerHTML=specs.map(([name,kind,label])=>{
-    const item=finalProducts[name]||outputs[name]||{};
-    const exists=!!item.exists;
-    return '<div class="export-artifact '+kind+(exists?' ready':' missing')+'>'+
-      '<span class="export-artifact-kind">'+kind.toUpperCase()+'</span>'+
-      '<b>'+escapeHtml(label)+'</b>'+
-      '<span class="'+(exists?'status-ok':'muted')+'">'+(exists?'可用':'未生成')+'</span>'+
-      (exists&&item.size_bytes?'<small>'+bytes(item.size_bytes)+'</small>':'')+
-      '</div>';
-  }).join('');
 }
 
 function renderProjectOverview(p){
@@ -3317,14 +3247,9 @@ function fillProject(p){
   const hasGaps=has&&(missingWavs>0||missingText>0);
   document.getElementById('manifestState').textContent=has?(hasGaps?'构建完成，存在缺项':'完整构建已完成'):'尚未完成';
   const hint=document.getElementById('archiveHint');
-  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方统计和成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
+  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
-  document.getElementById('archiveStats').classList.toggle('hidden',!has);
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
-  document.getElementById('statTotal').textContent=n(r.count_total);
-  document.getElementById('statOfficial').textContent=n(r.count_official_chs_lab);
-  document.getElementById('statIncrementalOfficial').textContent=n(r.count_incremental_official_reference);
-  document.getElementById('statApiOnly').textContent=n(r.count_unreferenced_api_target_text);
   const usage=[];
   if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
   if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
@@ -3334,28 +3259,13 @@ function fillProject(p){
   document.getElementById('translationUsage').textContent=usage.join(' · ');
   const actionStatus=document.getElementById('projectActionStatus');
   if(has&&p.output_path){actionStatus.textContent='成品文件已放至：'+p.output_path;actionStatus.className='small status-ok action-status';}
-  const main=document.getElementById('outputTable'),archive=document.getElementById('archiveOutputTable'),resources=document.getElementById('projectResourceTable'),diag=document.getElementById('diagnosticOutputTable');
-  main.innerHTML='';archive.innerHTML='';resources.innerHTML='';diag.innerHTML='';
+  const archive=document.getElementById('archiveOutputTable'),resources=document.getElementById('projectResourceTable'),diag=document.getElementById('diagnosticOutputTable');
+  archive.innerHTML='';resources.innerHTML='';diag.innerHTML='';
   const outputMap=p.outputs||{};
   const groups=p.output_groups||{};
   const finalProducts=groups.final_products||{};
   const archiveRecords=groups.archive_records||{};
   renderArtifactBrowser(p,finalProducts,outputMap);
-  for(const name of ['continuous.flac','HSR_Voice_Archive.srt']){
-    const o=finalProducts[name]||outputMap[name];
-    if(!o?.exists)continue;
-    const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':'file-subtitle';
-    tr.innerHTML='<td><span class="'+fileClass+'">'+name+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
-    main.appendChild(tr);
-  }
-  for(const [name,o] of Object.entries(finalProducts)){
-    if(!name.startsWith('chapter_flac/')||!o?.exists)continue;
-    const tr=document.createElement('tr');
-    const label=name==='chapter_flac/'?'章节 / 大组连续 FLAC':name.replace('chapter_flac/','');
-    const fileClass=name.endsWith('.flac')?'file-audio':'';
-    tr.innerHTML='<td><span class="'+fileClass+'">'+label+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+(o.kind==='directory'?'目录':bytes(o.size_bytes))+'</td>';
-    main.appendChild(tr);
-  }
   for(const [name,o] of Object.entries(archiveRecords)){
     if(!o?.exists)continue;
     const tr=document.createElement('tr');
@@ -3390,25 +3300,6 @@ function fillProject(p){
       autoBox.textContent='自动恢复保护：尚无 API 翻译检查点；产生翻译后会自动创建外置恢复包。';
       autoBox.className='notice';
     }
-  }
-  if(has){
-    const ass=outputMap['HSR_Voice_Archive.ass'],assRow=document.createElement('tr');
-    if(ass?.exists){
-      assRow.innerHTML='<td><span class="file-subtitle">HSR_Voice_Archive.ass</span><div class="small muted" style="margin-top:3px">'+outputDescription('HSR_Voice_Archive.ass')+'</div></td><td>'+bytes(ass.size_bytes)+'</td>';
-    }else{
-      assRow.innerHTML='<td><button type="button" class="success" id="assOutputBtn">生成 ASS 字幕</button><div class="small muted" style="margin-top:6px">按现有时间轴生成可选 ASS 字幕。</div></td><td>可选</td>';
-      assRow.querySelector('#assOutputBtn').onclick=startAssExport;
-    }
-    main.appendChild(assRow);
-
-    const mkv=outputMap['HSR_Voice_Archive_Black.mkv'],tr=document.createElement('tr');
-    if(mkv?.exists){
-      tr.innerHTML='<td><span class="file-audio">HSR_Voice_Archive_Black.mkv</span><div class="small muted" style="margin-top:3px">'+outputDescription('HSR_Voice_Archive_Black.mkv')+'</div></td><td>'+bytes(mkv.size_bytes)+'</td>';
-    }else{
-      tr.innerHTML='<td><button type="button" class="success" id="blackVideoBtn">生成黑屏 MKV</button><div class="small muted" style="margin-top:6px">生成黑色视频轨与连续 FLAC 的播放容器。</div></td><td>可选</td>';
-      tr.querySelector('#blackVideoBtn').onclick=startBlackVideo;
-    }
-    main.appendChild(tr);
   }
   for(const [name,o] of Object.entries(p.state_outputs||{})){
     if(!o.exists)continue;
@@ -4040,7 +3931,6 @@ document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
 document.getElementById('openSelectedProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await switchProject(document.getElementById('projectSwitcher').value);s.textContent='项目已打开。';s.className='small status-ok action-status'}catch(x){s.textContent='打开失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
 document.getElementById('newProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await startNewProject();s.textContent='已进入新建 / 导入模式。';s.className='small status-ok action-status'}catch(x){s.textContent='操作失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
 document.getElementById('cloneProjectBtn').onclick=async()=>{try{await cloneSelectedProject()}catch(x){setLog(String(x))}};
-document.getElementById('forgetProjectBtn').onclick=async()=>{try{await forgetSelectedProject()}catch(x){setLog(String(x))}};
 document.getElementById('deleteProjectBtn').onclick=async()=>{try{await deleteSelectedProject()}catch(x){setLog(String(x))}};
 function escapeHtml(str){
   if(!str)return '';
@@ -4133,7 +4023,6 @@ function dirtyDrafts(){
     if(sub?._dirty)drafts.set(subtitleKey(sub),{
       final_chs:sub.final_chs,
       modified:sub.modified,
-      confirmed:false,
       _savedFinal:sub._savedFinal
     });
   }
@@ -4302,7 +4191,6 @@ async function fetchSubtitles(){
       if(!draft)continue;
       sub.final_chs=draft.final_chs;
       sub.modified=true;
-      sub.confirmed=!!draft.confirmed;
       sub._savedFinal=draft._savedFinal;
       sub._dirty=true;
     }
@@ -4338,8 +4226,7 @@ function renderSubtitleList(){
   const listView=document.getElementById('subListView');
   const countTag=document.getElementById('subListCount');
   if(!listView||!countTag)return;
-  const confirmedCount=loadedSubtitles.filter(sub=>sub.confirmed).length;
-  countTag.textContent=loadedSubtitles.length+' 条 · '+confirmedCount+' 已确认';
+  countTag.textContent=loadedSubtitles.length+' 条';
 
   if(!loadedSubtitles.length){
     listView.innerHTML='<div class="muted small" style="padding:16px;text-align:center">无匹配字幕记录。</div>';
@@ -4358,7 +4245,6 @@ function renderSubtitleList(){
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
     const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
     const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
-    const reviewTag=sub.confirmed?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已确认</span>':'<span class="badge" style="color:var(--muted);padding:2px 5px;font-size:10px">未确认</span>';
     const rawPreview=sub.final_chs||sub.source_text||'—';
     const highlightedPreview=highlightText(rawPreview,q);
     const highlightedId=highlightText(sub.id,q);
@@ -4368,7 +4254,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+reviewTag+refTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+srcTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -4392,7 +4278,6 @@ function syncEditorToMemory(){
   if(!currentSub||!editor)return;
   if(editor.value!==currentSub.final_chs){
     currentSub.final_chs=editor.value;
-    currentSub.confirmed=false;
   }
   currentSub._dirty=String(currentSub.final_chs??'')!==String(currentSub._savedFinal??'');
   if(currentSub._dirty)currentSub.modified=true;
@@ -4408,9 +4293,6 @@ function renderSubtitleEditState(){
   else if(sub._dirty)parts.push('<span class="badge" style="color:var(--warn)">未保存</span>');
   else if(sub.modified)parts.push('<span class="badge" style="color:var(--ok)">已人工修改</span>');
   else parts.push('<span class="badge" style="color:var(--muted)">未修改</span>');
-  parts.push(sub.confirmed
-    ? '<span class="badge" style="color:var(--ok)">已人工确认</span>'
-    : '<span class="badge" style="color:var(--muted)">未确认</span>');
   badge.innerHTML=parts.join(' ');
 }
 
@@ -4432,19 +4314,13 @@ function renderActiveSubtitle(){
     document.getElementById('subSourceText').textContent='—';
     document.getElementById('subSourceText').className='sub-ref-content empty';
     document.getElementById('subSourceFileMeta').textContent='源文件：—';
-    document.getElementById('subOfficialText').textContent='—';
-    document.getElementById('subOfficialText').className='sub-ref-content empty';
-    document.getElementById('subApiText').textContent='—';
-    document.getElementById('subApiText').className='sub-ref-content empty';
     document.getElementById('subFinalEditor').value='';
     document.getElementById('subFinalEditor').disabled=true;
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
     const initialBadge=document.getElementById('subInitialSourceBadge');if(initialBadge)initialBadge.textContent='初始来源 —';
-    for(const id of ['subResetBtn','subConfirmBtn']){
-      const button=document.getElementById(id);if(button)button.disabled=true;
-    }
+    const resetButton=document.getElementById('subResetBtn');if(resetButton)resetButton.disabled=true;
     renderReferenceControls(null);
     clearReferenceAudio();
     const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
@@ -4461,14 +4337,6 @@ function renderActiveSubtitle(){
   srcEl.className=sub.source_text?'sub-ref-content':'sub-ref-content empty';
   document.getElementById('subSourceLangBadge').textContent=(sub.source_language||'EN').toUpperCase();
   document.getElementById('subSourceFileMeta').textContent='源文件：'+(sub.source_member_id||sub.filename||'未记录');
-
-  const offEl=document.getElementById('subOfficialText');
-  offEl.textContent=sub.official_chs||'无官方中文参考';
-  offEl.className=sub.official_chs?'sub-ref-content':'sub-ref-content empty';
-
-  const apiEl=document.getElementById('subApiText');
-  apiEl.textContent=sub.api_chs||'无 API 翻译参考';
-  apiEl.className=sub.api_chs?'sub-ref-content':'sub-ref-content empty';
 
   const editor=document.getElementById('subFinalEditor');
   const initialText=subtitleInitialText(sub);
@@ -4488,9 +4356,7 @@ function renderActiveSubtitle(){
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
   const reset=document.getElementById('subResetBtn');
-  const confirm=document.getElementById('subConfirmBtn');
   if(reset)reset.disabled=String(sub.final_chs||subtitleInitialText(sub))===subtitleInitialText(sub);
-  if(confirm){confirm.disabled=false;confirm.textContent=sub.confirmed?'取消确认':'确认当前字幕';confirm.classList.toggle('success',!sub.confirmed);}
   loadReferenceAudio(sub);
 }
 
@@ -4525,7 +4391,7 @@ async function saveSubtitleItemInBackground(targetSub){
       const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})
+        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
       });
       if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
       const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
@@ -4535,9 +4401,7 @@ async function saveSubtitleItemInBackground(targetSub){
           target._dirty=false;
         }
         const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
-        const confirmedIds=new Set((j.result?.confirmed_ids||[]).map(String));
         target.modified=modifiedIds.has(sentKey);
-        target.confirmed=confirmedIds.has(sentKey);
       }
       const assError=String(j.result?.ass_error||'');
       setSubtitleSaveUi(
@@ -4594,33 +4458,6 @@ function applySubtitleCandidate(value){
   scheduleSubtitleAutosave();
 }
 
-async function setSubtitleConfirmation(confirmed){
-  const sub=currentSubtitle();
-  if(!currentProject||!sub)return;
-  if(sub._dirty)await saveCurrentSubtitle({quiet:true});
-  const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
-    method:'POST',
-    headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({subtitles:[{id:sub.id,confirmed:!!confirmed}]})
-  });
-  const confirmedIds=new Set((j.result?.confirmed_ids||[]).map(String));
-  sub.confirmed=confirmedIds.has(String(sub.id));
-  renderSubtitleEditState();
-  renderSubtitleList();
-  renderActiveSubtitle();
-  setSubtitleSaveUi('saved',sub.confirmed?'当前字幕已人工确认。':'已取消当前字幕的人工确认。');
-}
-
-function goToNextAttentionSubtitle(){
-  if(!loadedSubtitles.length)return;
-  for(let step=1;step<=loadedSubtitles.length;step++){
-    const idx=(activeSubIndex+step)%loadedSubtitles.length;
-    const sub=loadedSubtitles[idx];
-    if(!sub.confirmed){selectSubtitleIndex(idx);return;}
-  }
-  setSubtitleSaveUi('saved','当前列表中没有未确认字幕。');
-}
-
 function goToPrevSubtitle(){
   if(activeSubIndex<=0)return;
   selectSubtitleIndex(activeSubIndex-1);
@@ -4648,7 +4485,6 @@ function scheduleSubtitleFetch(){
 document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
 document.getElementById('subResetBtn').onclick=()=>applySubtitleCandidate(subtitleInitialText(currentSubtitle()));
-document.getElementById('subConfirmBtn').onclick=()=>setSubtitleConfirmation(!currentSubtitle()?.confirmed).catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认状态保存失败：'+shortError(x));});
 function toggleCurrentSubtitleAudio(){
   const audio=document.getElementById('subOriginalAudio');
   if(!audio?.src)return;
@@ -4659,22 +4495,12 @@ function toggleCurrentSubtitleAudio(){
   }
 }
 
-async function confirmCurrentSubtitleFromShortcut(){
-  const sub=currentSubtitle();
-  if(!sub)return;
-  await setSubtitleConfirmation(true);
-  goToNextAttentionSubtitle();
-  document.getElementById('subFinalEditor')?.focus();
-}
-
 const subtitleEditor=document.getElementById('subFinalEditor');
 subtitleEditor.addEventListener('keydown',(e)=>{
   if(e.altKey&&e.key==='ArrowUp'){
     e.preventDefault();goToPrevSubtitle();subtitleEditor.focus();
   }else if(e.altKey&&e.key==='ArrowDown'){
     e.preventDefault();goToNextSubtitle();subtitleEditor.focus();
-  }else if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){
-    e.preventDefault();confirmCurrentSubtitleFromShortcut().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认失败：'+shortError(x))});
   }else if(e.altKey&&e.code==='Space'){
     e.preventDefault();toggleCurrentSubtitleAudio();
   }
