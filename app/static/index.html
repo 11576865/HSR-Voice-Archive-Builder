@@ -3792,8 +3792,9 @@ async function loadQuickCandidates(){
 }
 function renderQuickPlan(plan){
   quickPlanState=plan;
-  const e=plan.english||{},z=plan.chinese||{},ref=plan.reference||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{};
+  const e=plan.english||{},z=plan.chinese||{},ref=plan.reference||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{},game=plan.game_profile||{};
   const lines=[
+    '游戏识别：'+(game.label||'Generic voice package')+' ('+(game.confidence||'none')+')',
     '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
@@ -3809,6 +3810,7 @@ function renderQuickPlan(plan){
     'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置'),
     '待翻译：'+n(tr.pending_translation_count)+' · 预计 Token：'+n(tr.translation_estimated_total_tokens)+(tr.translation_estimate_excludes_repair_pass?'（不含可能的修复 pass）':'')
   ];
+  if(game.game_id==='genshin-impact'&&!game.remote_updates_supported)lines.push('兼容模式：原神本地 WAV + LAB 已支持；原神远程 JSON 索引与增量下载尚未启用。');
   if(plan.blockers?.length)lines.push('阻塞：'+plan.blockers.join('；'));
   if(plan.warnings?.length)lines.push('提示：'+plan.warnings.join('；'));
   lines.push(plan.ready?'预检通过：可以开始构建。':'预检未通过：不会开始构建。');
