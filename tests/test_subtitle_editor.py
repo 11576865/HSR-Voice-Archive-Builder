@@ -79,7 +79,8 @@ class TestSubtitleEditor(unittest.TestCase):
             item = subs[0]
             required_keys = {
                 "id", "start", "end", "source_language",
-                "source_text", "official_chs", "api_chs", "final_chs", "modified"
+                "source_text", "official_chs", "api_chs", "original_chs",
+                "final_chs", "modified", "confirmed"
             }
             self.assertTrue(required_keys.issubset(set(item.keys())))
             self.assertEqual(item["id"], 1)
@@ -90,6 +91,8 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertEqual(item["api_chs"], "")
             self.assertEqual(item["final_chs"], "愿此行，终抵群星。")
             self.assertFalse(item["modified"])
+            self.assertFalse(item["confirmed"])
+            self.assertEqual(item["original_chs"], "愿此行，终抵群星。")
 
     def test_query_filters_q_time_and_selector(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -382,6 +385,56 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertIn(long_text, srt)
             manifest = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(manifest["entries"][0]["final_chs"], long_text)
+
+    def test_confirmation_state_is_independent_from_text_modification(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "output"
+            out.mkdir(parents=True, exist_ok=True)
+            (out / "manifest.json").write_text(
+                json.dumps(
+                    {"entries": [{
+                        "index": 1,
+                        "filename": "line.wav",
+                        "start_seconds": 1.0,
+                        "display_end_seconds": 2.0,
+                        "source_text": "Hello",
+                        "target_text": "你好",
+                        "target_text_source": "official_target_lab",
+                    }]},
+                    ensure_ascii=False,
+                ),
+                encoding="utf-8",
+            )
+            cfg = create_project(
+                root,
+                name="proofreading-confirmation",
+                index_csv="index.csv",
+                wav_source="wavs",
+                output_dir="output",
+            )
+            _set_active(cfg)
+
+            response = self.client.post(
+                "/api/project/active/subtitles",
+                json={"subtitles": [{"id": 1, "confirmed": True}]},
+                headers=self.headers,
+            )
+            self.assertEqual(response.status_code, 200)
+            result = response.json()["result"]
+            self.assertEqual(result["updated_count"], 1)
+            self.assertEqual(result["confirmed_ids"], ["1"])
+            self.assertFalse((out / "subtitles_overrides.json").read_text(encoding="utf-8").strip() == "")
+            state = json.loads((out / "subtitle_review_state.json").read_text(encoding="utf-8"))
+            self.assertTrue(state["1"])
+
+            fetched = self.client.get(
+                "/api/project/active/subtitles?selector=confirmed",
+                headers=self.headers,
+            ).json()["subtitles"]
+            self.assertEqual(len(fetched), 1)
+            self.assertTrue(fetched[0]["confirmed"])
+            self.assertFalse(fetched[0]["modified"])
 
 
 if __name__ == "__main__":

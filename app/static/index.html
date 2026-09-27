@@ -615,7 +615,10 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <label>字幕来源 / 状态</label>
           <select id="subSelector">
             <option value="all">全部字幕</option>
+            <option value="unreviewed">未人工确认</option>
+            <option value="confirmed">已人工确认</option>
             <option value="modified">已修改字幕</option>
+            <option value="overflow">ASS 排版失败</option>
             <option value="official">官方中文字幕</option>
             <option value="api">API 翻译中文字幕</option>
           </select>
@@ -646,6 +649,12 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
             <div id="subStatusBadge"></div>
           </div>
 
+          <div class="sub-ref-card" id="subAudioCard" style="margin-top:10px">
+            <div class="sub-ref-label">原始语音</div>
+            <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
+            <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后自动加载对应的原始 WAV。</div>
+          </div>
+
           <!-- Read-only references -->
           <div class="sub-references" style="display:grid;gap:10px">
             <div class="sub-ref-card">
@@ -663,8 +672,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
                 <span id="subReferenceSelectedBadge" class="badge" style="margin-left:8px">未选为参考</span>
               </summary>
               <div class="sub-reference-body" style="padding-top:8px">
-                <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
-                <div id="subAudioStatus" class="small muted" style="margin-top:5px">展开此工具后加载当前字幕对应的原始 WAV。</div>
+                <div class="small muted">这里仅保存 GPT-SoVITS 参考语音标注；原始 WAV 播放已移到校对主区域。</div>
                 <div class="row3" style="margin-top:8px">
                   <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
                   <div>
@@ -723,6 +731,17 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
               <span id="subCharCounter" class="small muted">0 字</span>
             </div>
             <textarea id="subFinalEditor" class="sub-textarea" placeholder="在此输入修饰后的最终中文字幕…"></textarea>
+            <div class="actions" style="margin-top:8px">
+              <button type="button" class="secondary" id="subUseOfficialBtn">采用官方中文</button>
+              <button type="button" class="secondary" id="subUseApiBtn">采用 API 翻译</button>
+              <button type="button" class="secondary" id="subResetBtn">恢复原始目标文本</button>
+              <button type="button" class="success" id="subConfirmBtn">确认当前字幕</button>
+            </div>
+            <div id="subLayoutDiagnostic" class="small muted" style="margin-top:8px">ASS 排版：尚未检查。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="secondary" id="subOpenLayoutBtn">在排版工作台检查当前条目</button>
+              <button type="button" class="secondary" id="subNextAttentionBtn">下一条未确认 / 异常字幕</button>
+            </div>
           </div>
 
           <!-- Navigation controls -->
@@ -1714,7 +1733,12 @@ function markServerSubtitle(sub){
 function dirtyDrafts(){
   const drafts=new Map();
   for(const sub of loadedSubtitles){
-    if(sub?._dirty)drafts.set(subtitleKey(sub),{final_chs:sub.final_chs,modified:sub.modified,_savedFinal:sub._savedFinal});
+    if(sub?._dirty)drafts.set(subtitleKey(sub),{
+      final_chs:sub.final_chs,
+      modified:sub.modified,
+      confirmed:false,
+      _savedFinal:sub._savedFinal
+    });
   }
   return drafts;
 }
@@ -1881,6 +1905,7 @@ async function fetchSubtitles(){
       if(!draft)continue;
       sub.final_chs=draft.final_chs;
       sub.modified=true;
+      sub.confirmed=!!draft.confirmed;
       sub._savedFinal=draft._savedFinal;
       sub._dirty=true;
     }
@@ -1935,6 +1960,8 @@ function renderSubtitleList(){
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
     const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
     const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
+    const reviewTag=sub.confirmed?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已确认</span>':'<span class="badge" style="color:var(--muted);padding:2px 5px;font-size:10px">未确认</span>';
+    const overflowTag=sub.layout_overflow?'<span class="badge" style="color:var(--bad);padding:2px 5px;font-size:10px">排版失败</span>':'';
     const rawPreview=sub.final_chs||sub.source_text||'—';
     const highlightedPreview=highlightText(rawPreview,q);
     const highlightedId=highlightText(sub.id,q);
@@ -1944,7 +1971,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+refTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+srcTag+reviewTag+overflowTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -1968,6 +1995,7 @@ function syncEditorToMemory(){
   if(!currentSub||!editor)return;
   if(editor.value!==currentSub.final_chs){
     currentSub.final_chs=editor.value;
+    currentSub.confirmed=false;
   }
   currentSub._dirty=String(currentSub.final_chs??'')!==String(currentSub._savedFinal??'');
   if(currentSub._dirty)currentSub.modified=true;
@@ -1978,15 +2006,16 @@ function renderSubtitleEditState(){
   const badge=document.getElementById('subStatusBadge');
   if(!badge)return;
   if(!sub){badge.innerHTML='';return;}
-  if(sub._saving){
-    badge.innerHTML='<span class="badge" style="color:var(--blue)">保存中…</span>';
-  }else if(sub._dirty){
-    badge.innerHTML='<span class="badge" style="color:var(--warn)">未保存</span>';
-  }else if(sub.modified){
-    badge.innerHTML='<span class="badge" style="color:var(--ok)">已人工修改</span>';
-  }else{
-    badge.innerHTML='<span class="badge" style="color:var(--muted)">未修改</span>';
-  }
+  const parts=[];
+  if(sub._saving)parts.push('<span class="badge" style="color:var(--blue)">保存中…</span>');
+  else if(sub._dirty)parts.push('<span class="badge" style="color:var(--warn)">未保存</span>');
+  else if(sub.modified)parts.push('<span class="badge" style="color:var(--ok)">已人工修改</span>');
+  else parts.push('<span class="badge" style="color:var(--muted)">未修改</span>');
+  parts.push(sub.confirmed
+    ? '<span class="badge" style="color:var(--ok)">已人工确认</span>'
+    : '<span class="badge" style="color:var(--muted)">未确认</span>');
+  if(sub.layout_overflow)parts.push('<span class="badge" style="color:var(--bad)">ASS 排版失败</span>');
+  badge.innerHTML=parts.join(' ');
 }
 
 function renderActiveSubtitle(){
@@ -2006,6 +2035,11 @@ function renderActiveSubtitle(){
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
+    for(const id of ['subUseOfficialBtn','subUseApiBtn','subResetBtn','subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
+      const button=document.getElementById(id);if(button)button.disabled=true;
+    }
+    const diag=document.getElementById('subLayoutDiagnostic');
+    if(diag){diag.textContent='ASS 排版：尚未检查。';diag.className='small muted';}
     renderReferenceControls(null);
     clearReferenceAudio();
     const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
@@ -2044,14 +2078,25 @@ function renderActiveSubtitle(){
   updateCharCounter();
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
-  const refDetails=document.getElementById('subReferenceCard');
-  if(refDetails?.open){
-    loadReferenceAudio(sub);
-  }else{
-    clearReferenceAudio();
-    const audioStatus=document.getElementById('subAudioStatus');
-    if(audioStatus)audioStatus.textContent='展开此工具后加载当前字幕对应的原始 WAV。';
+  for(const id of ['subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=false;
   }
+  const useOfficial=document.getElementById('subUseOfficialBtn');
+  const useApi=document.getElementById('subUseApiBtn');
+  const reset=document.getElementById('subResetBtn');
+  const confirm=document.getElementById('subConfirmBtn');
+  if(useOfficial)useOfficial.disabled=!sub.official_chs;
+  if(useApi)useApi.disabled=!sub.api_chs;
+  if(reset)reset.disabled=String(sub.final_chs||'')===String(sub.original_chs||'');
+  if(confirm){confirm.textContent=sub.confirmed?'取消确认':'确认当前字幕';confirm.classList.toggle('success',!sub.confirmed);}
+  const diag=document.getElementById('subLayoutDiagnostic');
+  if(diag){
+    diag.textContent=sub.layout_overflow
+      ? 'ASS 排版：失败 · '+(sub.overflow_condition||'未知条件')+'。可直接送到排版工作台检查。'
+      : 'ASS 排版：当前没有已记录的溢出错误。';
+    diag.className='small '+(sub.layout_overflow?'status-bad':'muted');
+  }
+  loadReferenceAudio(sub);
 }
 
 function updateCharCounter(){
@@ -2085,7 +2130,7 @@ async function saveSubtitleItemInBackground(targetSub){
       const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
+        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})
       });
       if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
       const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
@@ -2095,7 +2140,9 @@ async function saveSubtitleItemInBackground(targetSub){
           target._dirty=false;
         }
         const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
+        const confirmedIds=new Set((j.result?.confirmed_ids||[]).map(String));
         target.modified=modifiedIds.has(sentKey);
+        target.confirmed=confirmedIds.has(sentKey);
       }
       const assError=String(j.result?.ass_error||'');
       setSubtitleSaveUi(
@@ -2141,6 +2188,56 @@ async function saveCurrentSubtitle({quiet=false}={}){
   return await saveSubtitleItemInBackground(sub);
 }
 
+function applySubtitleCandidate(value){
+  const sub=currentSubtitle(),editor=document.getElementById('subFinalEditor');
+  if(!sub||!editor||value===undefined||value===null)return;
+  editor.value=String(value);
+  syncEditorToMemory();
+  updateCharCounter();
+  renderSubtitleEditState();
+  renderSubtitleList();
+  scheduleSubtitleAutosave();
+}
+
+async function setSubtitleConfirmation(confirmed){
+  const sub=currentSubtitle();
+  if(!currentProject||!sub)return;
+  if(sub._dirty)await saveCurrentSubtitle({quiet:true});
+  const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({subtitles:[{id:sub.id,confirmed:!!confirmed}]})
+  });
+  const confirmedIds=new Set((j.result?.confirmed_ids||[]).map(String));
+  sub.confirmed=confirmedIds.has(String(sub.id));
+  renderSubtitleEditState();
+  renderSubtitleList();
+  renderActiveSubtitle();
+  setSubtitleSaveUi('saved',sub.confirmed?'当前字幕已人工确认。':'已取消当前字幕的人工确认。');
+}
+
+function goToNextAttentionSubtitle(){
+  if(!loadedSubtitles.length)return;
+  for(let step=1;step<=loadedSubtitles.length;step++){
+    const idx=(activeSubIndex+step)%loadedSubtitles.length;
+    const sub=loadedSubtitles[idx];
+    if(!sub.confirmed||sub.layout_overflow){selectSubtitleIndex(idx);return;}
+  }
+  setSubtitleSaveUi('saved','当前列表中没有未确认或排版异常字幕。');
+}
+
+async function openCurrentSubtitleInLayout(){
+  const sub=currentSubtitle();
+  if(!sub)return;
+  if(sub._dirty)await saveCurrentSubtitle({quiet:true});
+  document.getElementById('prevPriText').value=sub.source_text||'';
+  document.getElementById('prevChsText').value=sub.final_chs||'';
+  showWorkspace('layout');
+  invalidateLibassPreview();
+  await updateLayoutPreview();
+  await renderLibassPreview();
+}
+
 function goToPrevSubtitle(){
   if(activeSubIndex<=0)return;
   selectSubtitleIndex(activeSubIndex-1);
@@ -2167,6 +2264,12 @@ function scheduleSubtitleFetch(){
 
 document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
+document.getElementById('subUseOfficialBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.official_chs||'');
+document.getElementById('subUseApiBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.api_chs||'');
+document.getElementById('subResetBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.original_chs||'');
+document.getElementById('subConfirmBtn').onclick=()=>setSubtitleConfirmation(!currentSubtitle()?.confirmed).catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认状态保存失败：'+shortError(x));});
+document.getElementById('subNextAttentionBtn').onclick=goToNextAttentionSubtitle;
+document.getElementById('subOpenLayoutBtn').onclick=()=>openCurrentSubtitleInLayout().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','打开排版工作台失败：'+shortError(x));});
 const subtitleEditor=document.getElementById('subFinalEditor');
 subtitleEditor.addEventListener('keydown',(e)=>{
   if((e.altKey&&e.key==='ArrowUp')||(e.ctrlKey&&e.key==='ArrowUp')){
@@ -2227,15 +2330,9 @@ originalAudio.addEventListener('error',()=>{
   const status=document.getElementById('subAudioStatus');
   status.textContent='原始语音无法播放（媒体错误 '+(originalAudio.error?.code||'未知')+'）：浏览器无法解码该 WAV，请检查文件编码。';
 });
-document.getElementById('subReferenceCard').addEventListener('toggle',(event)=>{
-  const details=event.currentTarget;
-  if(details.open){
-    loadReferenceAudio(currentSubtitle());
-  }else{
-    clearReferenceAudio();
-    const status=document.getElementById('subAudioStatus');
-    if(status)status.textContent='展开此工具后加载当前字幕对应的原始 WAV。';
-  }
+document.getElementById('subReferenceCard').addEventListener('toggle',()=>{
+  // Reference metadata is optional; audio playback belongs to proofreading
+  // and therefore remains loaded regardless of this details panel.
 });
 document.getElementById('subReferenceSelected').onchange=saveReferenceAnnotation;
 document.getElementById('subReferenceEmotion').onchange=saveReferenceAnnotation;
