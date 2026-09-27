@@ -55,7 +55,7 @@ from .project import (
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
-from subtitle_layout.fonts import list_font_families, validate_ass_font_name
+from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -263,6 +263,7 @@ class Handler(BaseHTTPRequestHandler):
                     "default-src 'self'; script-src 'self' 'unsafe-inline'; "
                     "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
                     "img-src 'self' data: blob:; media-src 'self' blob:; "
+                    "font-src 'self' data: blob:; "
                     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
                 )
             }
@@ -303,6 +304,17 @@ class Handler(BaseHTTPRequestHandler):
             limit_raw = (query.get("limit") or ["400"])[-1]
             families = list_font_families(q, _int(limit_raw, 400))
             self._json({"ok": True, "families": families, "count": len(families)})
+            return
+        if path == "/api/subtitle-layout/font-file":
+            query = parse_qs(urlsplit(self.path).query)
+            family = (query.get("family") or [""])[-1]
+            font_path, media_type = resolve_browser_font_file(family)
+            self._send_bytes(
+                200,
+                font_path.read_bytes(),
+                media_type,
+                extra_headers={"Content-Disposition": "inline"},
+            )
             return
         if path == "/api/status":
             project = None
