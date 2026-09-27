@@ -17,6 +17,55 @@ _HSR_HINT_RE = re.compile(
     re.IGNORECASE,
 )
 
+_GAME_ALIASES = {
+    "hsr": "honkai-star-rail",
+    "star-rail": "honkai-star-rail",
+    "honkai-star-rail": "honkai-star-rail",
+    "genshin": "genshin-impact",
+    "genshin-impact": "genshin-impact",
+}
+
+_GAME_PROVIDERS: dict[str, dict[str, Any]] = {
+    "honkai-star-rail": {
+        "game_id": "honkai-star-rail",
+        "label": "Honkai: Star Rail",
+        "remote_updates_supported": True,
+        "index_kind": "xlsx",
+        "index_urls": {
+            "en": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/EN.xlsx",
+            "zh-CN": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/CHS.xlsx",
+            "ja": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/JP.xlsx",
+            "ko": "https://raw.githubusercontent.com/AI-Hobbyist/StarRail_Voice_Sorting_Scripts/main/Indexs/KR.xlsx",
+        },
+        "audio_dataset": "simon3000/starrail-voice",
+    },
+    "genshin-impact": {
+        "game_id": "genshin-impact",
+        "label": "Genshin Impact",
+        "remote_updates_supported": True,
+        "index_kind": "json",
+        "index_urls": {
+            "en": "https://raw.githubusercontent.com/AI-Hobbyist/Genshin_Voice_Sorting_Scripts/main/Indexs/all/EN.json",
+            "zh-CN": "https://raw.githubusercontent.com/AI-Hobbyist/Genshin_Voice_Sorting_Scripts/main/Indexs/all/CHS.json",
+            "ja": "https://raw.githubusercontent.com/AI-Hobbyist/Genshin_Voice_Sorting_Scripts/main/Indexs/all/JP.json",
+            "ko": "https://raw.githubusercontent.com/AI-Hobbyist/Genshin_Voice_Sorting_Scripts/main/Indexs/all/KR.json",
+        },
+        "audio_dataset": "simon3000/genshin-voice",
+    },
+}
+
+_LANGUAGE_ALIASES = {
+    "zh": "zh-CN",
+    "zh-cn": "zh-CN",
+    "chs": "zh-CN",
+    "cn": "zh-CN",
+    "jp": "ja",
+    "ja-jp": "ja",
+    "kr": "ko",
+    "ko-kr": "ko",
+    "en-us": "en",
+}
+
 
 def genshin_voice_parts(filename_or_stem: str) -> dict[str, str] | None:
     stem = Path(str(filename_or_stem or "")).stem
@@ -53,9 +102,7 @@ def detect_game_profile(filenames: Iterable[str]) -> dict[str, Any]:
             "matched": len(genshin_matches),
             "total": total,
             "evidence": "vo_anecdote_<section>_<character>_<sequence>",
-            # Local WAV+LAB archives are supported. The Genshin JSON remote
-            # index/downloader is intentionally a separate provider task.
-            "remote_updates_supported": False,
+            "remote_updates_supported": True,
         }
 
     hsr_matches = [
@@ -85,9 +132,53 @@ def detect_game_profile(filenames: Iterable[str]) -> dict[str, Any]:
     }
 
 
-def remote_updates_supported(game_id: str) -> bool:
-    return str(game_id or "").strip().casefold() in {
-        "honkai-star-rail",
-        "hsr",
-        "star-rail",
+def normalize_game_id(game_id: str) -> str:
+    key = str(game_id or "").strip().casefold()
+    return _GAME_ALIASES.get(key, key or "generic")
+
+
+def game_provider(game_id: str) -> dict[str, Any]:
+    normalized = normalize_game_id(game_id)
+    provider = _GAME_PROVIDERS.get(normalized)
+    if provider is None:
+        return {
+            "game_id": normalized,
+            "label": "Generic voice package",
+            "remote_updates_supported": False,
+            "index_kind": "",
+            "index_urls": {},
+            "audio_dataset": "",
+        }
+    return {
+        **provider,
+        "index_urls": dict(provider.get("index_urls", {})),
     }
+
+
+def normalize_language(language: str) -> str:
+    raw = str(language or "en").strip()
+    return _LANGUAGE_ALIASES.get(raw.casefold(), raw)
+
+
+def game_index_url(game_id: str, language: str) -> str:
+    provider = game_provider(game_id)
+    key = normalize_language(language)
+    urls = provider.get("index_urls", {})
+    if key not in urls:
+        raise ValueError(
+            f"No built-in {provider.get('label', game_id)} remote index is configured "
+            f"for language {language!r}; supported source languages are en, zh-CN, ja, ko"
+        )
+    return str(urls[key])
+
+
+def game_index_kind(game_id: str) -> str:
+    return str(game_provider(game_id).get("index_kind", ""))
+
+
+def game_audio_dataset(game_id: str) -> str:
+    return str(game_provider(game_id).get("audio_dataset", ""))
+
+
+def remote_updates_supported(game_id: str) -> bool:
+    return bool(game_provider(game_id).get("remote_updates_supported"))
