@@ -23,6 +23,9 @@ class DummyEntry:
     start_seconds: float
     display_end_seconds: float
     word_alignments: list | None = None
+    id: int | str = 1
+    group: str = ""
+    character: str = ""
 
 
 class TestAdvancedTypography(unittest.TestCase):
@@ -116,6 +119,64 @@ class TestAdvancedTypography(unittest.TestCase):
         ]
         formatted = format_karaoke_text("May this journey.", duration_sec=1.2, word_alignments=alignments)
         self.assertEqual(formatted, r"{\k30}May {\k30}this {\k60}journey.")
+
+    def test_format_kf_karaoke_explicit_word_alignments(self):
+        alignments = [
+            {"word": "May ", "start": 0.0, "end": 0.3},
+            {"word": "this ", "start": 0.3, "end": 0.6},
+            {"word": "journey.", "start": 0.6, "end": 1.2},
+        ]
+        formatted = format_karaoke_text(
+            "May this journey.",
+            duration_sec=1.2,
+            word_alignments=alignments,
+            mode="kf",
+        )
+        self.assertEqual(formatted, r"{\kf30}May {\kf30}this {\kf60}journey.")
+
+    def test_render_ass_clip_karaoke_uses_progressive_clip_layer(self):
+        entry = DummyEntry(
+            english="May this journey.",
+            chinese="愿此行。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+            word_alignments=[
+                {"word": "May ", "start": 0.0, "end": 0.4},
+                {"word": "this ", "start": 0.4, "end": 0.8},
+                {"word": "journey.", "start": 0.8, "end": 1.6},
+            ],
+        )
+        cfg = SubtitleRenderConfig(
+            enable_karaoke=True,
+            karaoke_mode="clip",
+            enable_kinetic=False,
+        )
+        ass_content = render_ass([entry], config=cfg)
+        self.assertIn("Dialogue: 3,", ass_content)
+        self.assertIn(r"\clip(", ass_content)
+        self.assertIn(r"\t(", ass_content)
+        self.assertIn(r"\1c&H00E8FF&", ass_content)
+
+    def test_render_ass_archive_hud_uses_character_group_and_entry_id(self):
+        entry = DummyEntry(
+            english="Archive metadata.",
+            chinese="档案元数据。",
+            start_seconds=1.0,
+            display_end_seconds=3.0,
+            id=7,
+            group="chapter-a",
+        )
+        cfg = SubtitleRenderConfig(
+            enable_kinetic=False,
+            enable_archive_hud=True,
+            archive_character="Evanescia",
+            archive_hud_font_size=20,
+            archive_hud_opacity=0.7,
+        )
+        ass_content = render_ass([entry], config=cfg)
+        self.assertIn("Style: Archive", ass_content)
+        self.assertIn("Dialogue: 5,", ass_content)
+        self.assertIn("EVANESCIA · chapter-a · #7", ass_content)
 
     def test_generate_frosted_glass_card(self):
         lines = [
