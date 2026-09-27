@@ -2478,7 +2478,13 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
               <option value="kf">平滑扫光（\kf）</option>
               <option value="clip">动态裁剪扫光（\clip + \t）</option>
             </select>
-            <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。</div>
+            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
+              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
+            </div>
+            <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。导入结果写入 <code>word_alignments.json</code>，不会改写 manifest 的文本来源。</div>
           </section>
 
           <section class="inspector-group">
@@ -5048,6 +5054,71 @@ async function renderLibassPreview(){
   }
 }
 
+async function loadWordAlignmentDiagnostics(){
+  const status=document.getElementById('wordAlignmentStatus');
+  if(!status)return;
+  if(!currentProject){
+    status.textContent='打开项目后检查词级时间数据。';
+    status.className='small muted layout-corpus-status';
+    return null;
+  }
+  try{
+    status.textContent='正在检查词级时间数据…';
+    status.className='small muted layout-corpus-status';
+    const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments');
+    const d=data.diagnostics||{};
+    const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
+    const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
+    if(total<=0){
+      status.textContent='当前项目没有可诊断的字幕条目。';
+      status.className='small muted layout-corpus-status';
+    }else if(usable<=0){
+      status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
+      status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
+    }else{
+      status.textContent='词级时间可用 '+usable+' / '+total+'（'+Number(d.usable_percent||0).toFixed(1)+'%）；缺失 '+missing+'，无效 '+invalid+'。';
+      status.className='small '+(invalid?'status-warn':'status-ok')+' layout-corpus-status';
+    }
+    return d;
+  }catch(err){
+    status.textContent='词级时间诊断失败：'+shortError(err);
+    status.className='small status-bad layout-corpus-status';
+    return null;
+  }
+}
+
+async function importWordAlignmentFile(file){
+  const status=document.getElementById('wordAlignmentStatus');
+  if(!file||!currentProject)return;
+  try{
+    if(status){status.textContent='正在校验并导入词级时间…';status.className='small muted layout-corpus-status';}
+    const text=await file.text();
+    let payload;
+    try{payload=JSON.parse(text)}catch(_){throw new Error('JSON 文件无法解析')}
+    if(Array.isArray(payload))payload={alignments:payload};
+    if(!payload||typeof payload!=='object')throw new Error('JSON 顶层必须是对象或数组');
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(payload)
+    });
+    const imported=Number(result.result?.imported_count||0);
+    const rejected=Number(result.result?.rejected_count||0);
+    if(status){
+      status.textContent='已导入 '+imported+' 条词级时间'+(rejected?'；拒绝 '+rejected+' 条。':'。');
+      status.className='small '+(rejected?'status-warn':'status-ok')+' layout-corpus-status';
+    }
+    await loadWordAlignmentDiagnostics();
+    invalidateLibassPreview();
+  }catch(err){
+    if(status){status.textContent='词级时间导入失败：'+shortError(err);status.className='small status-bad layout-corpus-status';}
+    setLog(String(err));
+  }finally{
+    const input=document.getElementById('wordAlignmentFile');
+    if(input)input.value='';
+  }
+}
+
 function subtitleSettingsPayload(){
   return {
     preset: previewPreset,
@@ -5121,6 +5192,7 @@ function loadSubtitleLayoutSettings(config){
   const status=document.getElementById('previewSaveStatus');
   if(status){status.textContent='当前显示项目已保存的 ASS 设置。';status.className='small status-ok';}
   updateLayoutPreview();
+  loadWordAlignmentDiagnostics();
 }
 
 function markSubtitleSettingsDirty(){
@@ -5494,6 +5566,7 @@ applyPreviewBackground();
     markSubtitleSettingsDirty();
     invalidateLibassPreview();
     updateLayoutPreview();
+    if(id==='prevEnableKaraoke')loadWordAlignmentDiagnostics();
   });
 });
 
@@ -5502,6 +5575,7 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
   markSubtitleSettingsDirty();
   invalidateLibassPreview();
   updateLayoutPreview();
+  loadWordAlignmentDiagnostics();
 });
 
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
@@ -5551,6 +5625,10 @@ function applySubtitlePreset(name){
   invalidateLibassPreview();
   updateLayoutPreview();
 }
+
+document.getElementById('refreshWordAlignmentBtn')?.addEventListener('click',()=>loadWordAlignmentDiagnostics());
+document.getElementById('importWordAlignmentBtn')?.addEventListener('click',()=>document.getElementById('wordAlignmentFile')?.click());
+document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>importWordAlignmentFile(e.target.files?.[0]));
 
 document.getElementById('prevPresetDefault')?.addEventListener('click',()=>applySubtitlePreset('standard'));
 document.getElementById('prevPresetPlain')?.addEventListener('click',()=>applySubtitlePreset('plain'));
