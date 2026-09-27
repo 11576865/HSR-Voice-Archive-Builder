@@ -134,6 +134,15 @@ class TestWordAlignment(unittest.TestCase):
             self.assertEqual(diagnostics["missing"], 0)
             self.assertEqual(diagnostics["invalid"], 0)
 
+            alignment = self.client.get(
+                "/api/project/active/word-alignments/1",
+                headers=self.headers,
+            ).json()["alignment"]
+            self.assertTrue(alignment["valid"])
+            self.assertEqual(alignment["provider"], "unit-test")
+            self.assertEqual(len(alignment["words"]), 2)
+            self.assertEqual(alignment["words"][0]["word"], "Hello ")
+
             subtitles = self.client.get(
                 "/api/project/active/subtitles",
                 headers=self.headers,
