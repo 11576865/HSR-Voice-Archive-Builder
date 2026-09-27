@@ -47,6 +47,7 @@ class ProjectConfig:
     group_gap: float = 3.00
     make_flac: bool = True
     chapter_order: bool = False
+    generate_chapter_flac: bool = False
     generate_ass: bool = False
     subtitle_preset: str = "standard"
     subtitle_chs_font: str = "汉仪旗黑"
@@ -150,6 +151,7 @@ def create_project(
     reference_language: str = "auto",
     remote_character: str = "",
     chapter_order: bool = False,
+    generate_chapter_flac: bool = False,
     translate_missing: bool = True,
     review_official_target: bool = False,
 ) -> ProjectConfig:
@@ -183,6 +185,7 @@ def create_project(
         reference_language=str(reference_language or "auto").strip() or "auto",
         remote_character=remote_character.strip(),
         chapter_order=bool(chapter_order),
+        generate_chapter_flac=bool(generate_chapter_flac),
         translate_missing=bool(translate_missing),
         review_official_target=bool(review_official_target),
     )
