@@ -3,6 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<meta name="theme-color" content="#0d1725">
 <title>HSR Voice Archive Builder</title>
 <script>
 (()=>{try{
@@ -12,6 +13,8 @@
     : (pref==='light'?'light':'dark');
   document.documentElement.dataset.theme=resolved;
   document.documentElement.dataset.themePreference=pref;
+  const themeMeta=document.querySelector('meta[name="theme-color"]');
+  if(themeMeta)themeMeta.setAttribute('content',resolved==='light'?'#eef4f8':'#0d1725');
 }catch(e){
   document.documentElement.dataset.theme='dark';
   document.documentElement.dataset.themePreference='system';
@@ -1332,6 +1335,176 @@ body:not([data-workspace="project"]) #sideStack{display:flex!important}
   }
 }
 
+
+/* Theme coherence + utility simplification v7 ----------------------------- */
+:root{
+  --task:#60a5fa;
+  --diagnostic:#a78bfa;
+  --network:#2dd4bf;
+  --archive:#38bdf8;
+  --terminal-text:#d7e3ef;
+}
+:root[data-theme="light"]{
+  --task:#2563eb;
+  --diagnostic:#7c3aed;
+  --network:#0f8f83;
+  --archive:#087aa6;
+  --terminal-text:#25364a;
+  --surface-terminal:#f1f5f9;
+}
+
+/* Replace old hard-coded dark leftovers so Light really is a light theme. */
+button:disabled{
+  background:var(--surface-subtle)!important;
+  border-color:var(--line)!important;
+  color:var(--muted)!important;
+  opacity:.62!important;
+}
+pre,
+.log{
+  background:var(--surface-terminal)!important;
+  color:var(--terminal-text)!important;
+  border-color:var(--line)!important;
+}
+#quickPlan{
+  background:var(--surface-subtle)!important;
+  color:var(--text)!important;
+  border-color:var(--line)!important;
+}
+.sub-textarea{
+  background:var(--surface-input)!important;
+  color:var(--text)!important;
+  border-color:color-mix(in srgb,var(--blue) 62%,var(--line))!important;
+}
+.sub-item{
+  background:var(--surface-secondary)!important;
+  color:var(--text)!important;
+}
+.sub-item:hover{background:var(--surface-subtle)!important}
+.sub-item.active{
+  background:var(--blue-soft)!important;
+  border-color:color-mix(in srgb,var(--blue) 58%,var(--line))!important;
+}
+mark.search-hl{
+  background:var(--amber-soft)!important;
+  color:var(--text-strong)!important;
+}
+.font-browser-dialog,
+.font-browser-item,
+.preview-copy-fields,
+.preview-controls,
+.preview-actions,
+#libassPreviewStatus,
+.preview-advanced{
+  background:var(--surface-secondary);
+  color:var(--text);
+}
+.notice{
+  background:var(--surface-subtle);
+  color:var(--text);
+  border-color:var(--line);
+}
+.notice.ok{background:var(--green-soft);border-color:color-mix(in srgb,var(--ok) 42%,var(--line));color:var(--ok)}
+.notice.warn{background:var(--amber-soft);border-color:color-mix(in srgb,var(--warn) 42%,var(--line));color:var(--warn)}
+.notice.bad{background:var(--rose-soft);border-color:color-mix(in srgb,var(--bad) 42%,var(--line));color:var(--bad)}
+
+/* Stronger semantic identity without turning the app into a saturated dashboard. */
+#archiveCard{border-top:3px solid var(--archive)}
+#subtitleReviewCard{border-top:3px solid var(--blue)}
+#subtitleLayoutPreviewCard{border-top:3px solid var(--purple)}
+#gptSovitsCard{border-top:3px solid var(--ok)}
+#updateCard{border-top:3px solid var(--warn)}
+
+#sideStack.utility-drawer{
+  background:
+    linear-gradient(180deg,color-mix(in srgb,var(--task) 5%,var(--surface-header)),var(--surface-header) 26%),
+    var(--surface-header);
+}
+.utility-drawer-head{
+  position:sticky!important;
+  top:0!important;
+  z-index:12!important;
+  margin:-10px -10px 2px!important;
+  padding:12px 12px 10px!important;
+  min-height:52px;
+  background:var(--surface-header)!important;
+  border-bottom:1px solid var(--line)!important;
+  box-shadow:0 7px 18px color-mix(in srgb,#000 18%,transparent);
+  backdrop-filter:blur(16px) saturate(1.08);
+}
+.utility-drawer-head b{color:var(--text-strong)}
+.utility-drawer-head #utilityCloseBtn{
+  flex:0 0 auto;
+  min-width:58px;
+  min-height:36px;
+  border-color:color-mix(in srgb,var(--bad) 28%,var(--line));
+  background:color-mix(in srgb,var(--bad) 7%,var(--surface-elevated));
+}
+.utility-drawer-head #utilityCloseBtn:hover{
+  color:var(--bad);
+  border-color:color-mix(in srgb,var(--bad) 55%,var(--line));
+}
+#sideStack .utility-card{
+  position:relative;
+  overflow:hidden;
+  border:1px solid var(--line);
+  background:var(--surface-utility)!important;
+}
+#sideStack .utility-card::before{
+  content:"";
+  position:absolute;
+  left:-1px;
+  top:10px;
+  bottom:10px;
+  width:3px;
+  background:var(--task);
+}
+#progressCard::before{background:var(--task)!important}
+#diagnosticCard::before{background:var(--diagnostic)!important}
+#localControlCard::before{background:var(--network)!important}
+#progressCard .ui-collapse-head h2{color:var(--task)!important}
+#diagnosticCard .ui-collapse-head h2{color:var(--diagnostic)!important}
+#localControlCard .ui-collapse-head h2{color:var(--network)!important}
+#diagnosticCard .utility-panel-body,
+#localControlCard .utility-panel-body{
+  padding-top:8px;
+  border-top:1px solid var(--line);
+}
+#diagnosticCard .utility-panel-body p,
+#localControlCard .utility-panel-body p{margin:0 0 9px}
+#diagnosticCard pre{max-height:300px!important}
+#localControlCard code{
+  padding:2px 5px;
+  border:1px solid var(--line);
+  border-radius:3px;
+  background:var(--surface-input);
+  color:var(--network);
+}
+
+/* The utility cards have exactly one collapse layer: their outer panel. */
+#diagnosticCard > details,
+#localControlCard > details{display:none!important}
+
+@media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px){
+  .utility-drawer-head{
+    margin:-8px -8px 2px!important;
+    padding:10px 10px 9px!important;
+  }
+  #sideStack.utility-drawer{
+    overscroll-behavior:contain;
+    scroll-padding-top:62px;
+  }
+}
+@media (max-width:520px){
+  .utility-drawer-head{
+    margin:-6px -6px 2px!important;
+    padding:9px 9px 8px!important;
+  }
+  .utility-kicker{display:none}
+  .utility-drawer-head b{font-size:15px}
+  #sideStack .utility-card{padding:10px!important}
+}
+
 </style>
 </head>
 <body>
@@ -2170,19 +2343,19 @@ body:not([data-workspace="project"]) #sideStack{display:flex!important}
         <div id="jobs" class="muted small" style="margin-top:8px">暂无任务。</div>
       </details>
     </section>
-    <section class="card utility-card" id="diagnosticCard">
-      <details id="diagnosticLog">
-        <summary>诊断日志</summary>
-        <p class="small muted">仅在任务失败或排查异常时需要。</p>
+    <section class="card utility-card utility-diagnostic" id="diagnosticCard">
+      <div class="topline utility-panel-head"><h2>诊断</h2></div>
+      <div class="utility-panel-body" id="diagnosticLog">
+        <p class="small muted">仅在任务失败或排查异常时需要。日志直接显示在这一层，不再套第二层折叠。</p>
         <pre id="log">等待后端状态。</pre>
-      </details>
+      </div>
     </section>
-    <section class="card utility-card" id="localControlCard">
-      <details>
-        <summary>本地优先 / 局域网控制</summary>
-        <p class="small muted">默认仅绑定 127.0.0.1。使用 <code>python -m app.launch --lan</code> 后可由局域网设备控制；原始音频仍留在处理设备。</p>
+    <section class="card utility-card utility-network" id="localControlCard">
+      <div class="topline utility-panel-head"><h2>本地优先 / 局域网控制</h2></div>
+      <div class="utility-panel-body">
+        <p class="small muted">默认仅绑定 <code>127.0.0.1</code>。使用 <code>python -m app.launch --lan</code> 后可由局域网设备控制；原始音频仍留在处理设备。</p>
         <p class="small muted">AI 翻译凭据只保存在处理设备本地。</p>
-      </details>
+      </div>
     </section>
   </div></div>
 </div>
@@ -2206,7 +2379,10 @@ function updateThemeButtons(){
 function applyTheme(pref,{persist=true}={}){
   themePreference=['light','dark','system'].includes(pref)?pref:'system';
   if(persist)localStorage.setItem(THEME_KEY,themePreference);
-  document.documentElement.dataset.theme=resolvedTheme(themePreference);
+  const theme=resolvedTheme(themePreference);
+  document.documentElement.dataset.theme=theme;
+  const themeMeta=document.querySelector('meta[name="theme-color"]');
+  if(themeMeta)themeMeta.setAttribute('content',theme==='light'?'#eef4f8':'#0d1725');
   updateThemeButtons();
 }
 for(const button of document.querySelectorAll('[data-theme-choice]')){
@@ -2436,8 +2612,17 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
 }
 for(const button of workspaceButtons)button.addEventListener('click',()=>showWorkspace(button.dataset.workspaceTarget));
 function setUtilityDrawer(open){
+  const drawer=document.getElementById('sideStack');
   document.body.classList.toggle('utility-drawer-open',!!open);
   document.getElementById('jobCenterToggle')?.setAttribute('aria-expanded',open?'true':'false');
+  if(open&&drawer){
+    drawer.scrollTop=0;
+    requestAnimationFrame(()=>{
+      drawer.scrollTop=0;
+      const close=document.getElementById('utilityCloseBtn');
+      try{close?.focus({preventScroll:true})}catch(e){close?.focus()}
+    });
+  }
 }
 const jobCenterToggle=document.getElementById('jobCenterToggle');
 if(jobCenterToggle){
@@ -2527,8 +2712,10 @@ document.getElementById('exportGoLayoutBtn')?.addEventListener('click',()=>showW
 function fd(form){return new FormData(form)}
 function setLog(x){log.textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
 function showDiagnosticLog(){
-  const d=document.getElementById('diagnosticLog');
-  if(d){d.open=true;d.scrollIntoView({behavior:'smooth'});}
+  const panel=document.getElementById('diagnosticCard');
+  if(panel?.classList.contains('ui-collapsed'))setPanelCollapsed(panel,false);
+  setUtilityDrawer(true);
+  requestAnimationFrame(()=>document.getElementById('diagnosticLog')?.scrollIntoView({behavior:'smooth',block:'start'}));
 }
 function n(v){return v===undefined||v===null?'—':String(v)}
 function bytes(v){if(!v)return '—';const u=['B','KB','MB','GB'];let i=0,x=v;while(x>=1024&&i<u.length-1){x/=1024;i++}return x.toFixed(i?1:0)+' '+u[i]}
