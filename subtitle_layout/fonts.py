@@ -54,6 +54,59 @@ def _normalized_name(value: str) -> str:
     return "".join(ch.casefold() for ch in value if ch.isalnum())
 
 
+@functools.lru_cache(maxsize=1)
+def _installed_font_families() -> tuple[str, ...]:
+    """Return host font family names without exposing filesystem paths."""
+    names: set[str] = set()
+    fc_list = shutil.which("fc-list")
+    if fc_list:
+        try:
+            completed = subprocess.run(
+                [fc_list, "-f", "%{family}\n"],
+                capture_output=True,
+                text=True,
+                timeout=5,
+                check=False,
+            )
+            if completed.returncode == 0:
+                for line in completed.stdout.splitlines():
+                    for family in line.split(","):
+                        name = family.strip()
+                        if name and len(name) <= 128 and "\n" not in name and "\r" not in name:
+                            names.add(name)
+        except (OSError, subprocess.SubprocessError):
+            pass
+
+    if not names:
+        extensions = {".ttf", ".otf", ".ttc"}
+        for root in _font_roots():
+            try:
+                for path in root.rglob("*"):
+                    if path.is_file() and path.suffix.casefold() in extensions:
+                        stem = path.stem.strip()
+                        if stem and len(stem) <= 128:
+                            names.add(stem)
+            except OSError:
+                continue
+
+    return tuple(sorted(names, key=lambda value: (value.casefold(), value)))
+
+
+def list_font_families(query: str = "", limit: int = 400) -> list[str]:
+    """List installed host font families for the subtitle workbench.
+
+    The returned value intentionally contains family names only. Absolute font
+    paths remain private to the processing host, including when the UI is used
+    over the optional LAN control surface.
+    """
+    needle = str(query or "").strip().casefold()
+    safe_limit = max(1, min(1000, int(limit)))
+    families = _installed_font_families()
+    if needle:
+        families = tuple(name for name in families if needle in name.casefold())
+    return list(families[:safe_limit])
+
+
 @functools.lru_cache(maxsize=64)
 def resolve_font_path(font_name: str) -> str | None:
     """Resolve a font family to a concrete file when the host can do so."""
