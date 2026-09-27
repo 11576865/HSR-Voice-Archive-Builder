@@ -21,6 +21,7 @@ from .builder import (
     sha256_file,
 )
 from .credentials import credentials_status
+from .game_profiles import detect_game_profile
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
 from .remote_index import (
@@ -750,6 +751,7 @@ def quick_scan(
     english = source_inventory(english_source)
     blockers: list[str] = []
     warnings: list[str] = []
+    game_profile = detect_game_profile(english.get("wav_names", []))
 
     # Member-level LAB coverage: every WAV member has its own sibling LAB or
     # a tree-wide unique same-stem LAB. When complete, the package itself can
@@ -762,7 +764,15 @@ def quick_scan(
     )
 
     remote_index_url = remote_index_url.strip()
-    if not remote_index_url:
+    if game_profile.get("game_id") == "genshin-impact":
+        if not complete_primary_lab:
+            blockers.append(
+                "Detected a Genshin Impact voice package, but not every WAV has a matching LAB file. "
+                "Local Genshin WAV+LAB archives are supported; the Genshin JSON remote-index provider "
+                "is not enabled yet."
+            )
+        remote_index_url = ""
+    elif not remote_index_url:
         try:
             remote_index_url = ai_hobbyist_index_url(source_text_language)
         except ValueError:
@@ -815,7 +825,7 @@ def quick_scan(
     )
     remote_attempt: dict[str, Any] | None = None
     remote_records: list[dict[str, str]] = []
-    if not local_full and not blockers:
+    if not local_full and not blockers and game_profile.get("game_id") != "genshin-impact":
         try:
             remote_records, cache = fetch_ai_hobbyist_index_for_filenames_cached(
                 wav_names, remote_index_url
@@ -1113,6 +1123,7 @@ def quick_scan(
     return {
         "schema_version": 2,
         "kind": "quick_scan",
+        "game_profile": game_profile,
         "source_text_language": source_text_language,
         "english": {
             key: value
@@ -1436,6 +1447,7 @@ def create_quick_project(
             selected_index.get("primary_character")
             or plan.get("character", {}).get("value", "")
         ),
+        game_id=str(plan.get("game_profile", {}).get("game_id", "generic") or "generic"),
     )
     update_project(
         config,
@@ -1447,7 +1459,7 @@ def create_quick_project(
         remote_index_url=str(
             selected_index.get("url")
             or plan.get("translation", {}).get("remote_index_url")
-            or DEFAULT_EN_INDEX_URL
+            or (DEFAULT_EN_INDEX_URL if config.game_id == "honkai-star-rail" else "")
         ),
     )
 
