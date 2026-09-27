@@ -17,6 +17,18 @@ class SubtitleRenderConfig:
     fade_out_ms: int = 200
     use_audio_aware_fade: bool = True
 
+    # Readability / appearance settings shared by preview and ASS export.
+    outline_width: float = 3.0
+    shadow_depth: float = 2.0
+    blur_radius: float = 0.0
+    card_opacity: float = 0.62
+
+    # Deliberately restrained transform-based entrance animation.
+    enable_soft_entry: bool = False
+    soft_entry_scale_percent: float = 98.0
+    soft_entry_blur: float = 1.5
+    soft_entry_ms: int = 160
+
     # Layout settings are shared by preview and ASS export.
     chs_font: str = "汉仪旗黑"
     primary_font: str = "Noto Sans"
