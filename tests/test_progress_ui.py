@@ -381,6 +381,34 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_high_contrast_shell_and_panel_collapse_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        for element_id in (
+            "panelModeControl",
+            "panelAutoModeBtn",
+            "panelManualModeBtn",
+            "panelExpandAllBtn",
+            "panelCollapseSecondaryBtn",
+        ):
+            self.assertIn(f'id="{element_id}"', html)
+
+        self.assertIn("PANEL_MODE_KEY='hsr-ui-panel-mode-v1'", html)
+        self.assertIn("PANEL_STATE_KEY='hsr-ui-panel-state-v1'", html)
+        self.assertIn("function enhanceCollapsiblePanels()", html)
+        self.assertIn("function applyAutoPanelState(", html)
+        self.assertIn("function applyManualPanelState()", html)
+        self.assertIn("function taskNeedsAttention()", html)
+        self.assertIn("panel.dataset.uiTier=tier", html)
+        self.assertIn("panel.classList.add('ui-collapsible')", html)
+        self.assertIn(".card[data-ui-tier=\"primary\"]", html)
+        self.assertIn(".card[data-ui-tier=\"utility\"]", html)
+        self.assertIn(".card.ui-collapsible.ui-collapsed", html)
+        self.assertIn('class="app-brand-mark"', html)
+        self.assertIn("LOCAL ARCHIVE WORKBENCH", html)
+
     def test_incremental_update_review_workbench_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
