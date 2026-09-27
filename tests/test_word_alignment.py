@@ -4,12 +4,15 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
 from app.project import create_project
 from app.security import api_token
 from app.server import app, _clear_active, _set_active
+from app.local_word_alignment import local_alignment_provider_status
 from app.word_alignment import (
     alignment_diagnostics,
     import_word_alignments,
@@ -90,6 +93,91 @@ class TestWordAlignment(unittest.TestCase):
             output_dir="output",
         )
         return config, output
+
+    def test_local_provider_status_reports_missing_optional_dependencies(self) -> None:
+        def fake_find_spec(name: str):
+            return None if name == "whisperx" else object()
+
+        with patch("app.local_word_alignment.importlib.util.find_spec", side_effect=fake_find_spec):
+            status = local_alignment_provider_status()
+
+        self.assertFalse(status["available"])
+        self.assertIn("whisperx", status["missing_packages"])
+        self.assertFalse(status["network_inference"])
+        self.assertIn("pip install whisperx", status["install_hint"])
+
+    def test_alignment_diagnostics_expose_local_provider_status(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config, _output = self._make_project(root)
+            _set_active(config)
+            with patch(
+                "app.server.local_alignment_provider_status",
+                return_value={
+                    "provider": "whisperx-local",
+                    "available": False,
+                    "missing_packages": ["whisperx"],
+                },
+            ):
+                response = self.client.get(
+                    "/api/project/active/word-alignments",
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertFalse(body["local_provider"]["available"])
+        self.assertEqual(body["local_provider"]["provider"], "whisperx-local")
+
+    def test_local_generation_route_starts_background_job_when_provider_available(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config, _output = self._make_project(root)
+            _set_active(config)
+            with patch(
+                "app.server.local_alignment_provider_status",
+                return_value={
+                    "provider": "whisperx-local",
+                    "available": True,
+                    "missing_packages": [],
+                },
+            ), patch(
+                "app.server.create_job",
+                return_value=SimpleNamespace(id="align-job"),
+            ) as create_job_mock:
+                response = self.client.post(
+                    "/api/project/active/word-alignments/generate",
+                    json={"force": False},
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["job"], "align-job")
+        create_job_mock.assert_called_once()
+        self.assertEqual(create_job_mock.call_args.args[0], "word-align")
+        self.assertTrue(create_job_mock.call_args.kwargs["with_progress"])
+
+    def test_local_generation_route_refuses_missing_provider(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            config, _output = self._make_project(root)
+            _set_active(config)
+            with patch(
+                "app.server.local_alignment_provider_status",
+                return_value={
+                    "provider": "whisperx-local",
+                    "available": False,
+                    "missing_packages": ["whisperx"],
+                },
+            ):
+                response = self.client.post(
+                    "/api/project/active/word-alignments/generate",
+                    json={},
+                    headers=self.headers,
+                )
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("whisperx", response.json()["error"].lower())
 
     def test_import_cache_is_non_destructive_and_decorates_subtitle_api(self) -> None:
         with tempfile.TemporaryDirectory() as td:
