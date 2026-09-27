@@ -132,6 +132,62 @@ input,select,textarea{border-radius:6px}
 #gptSovitsCard .grid.two{display:grid;grid-template-columns:1fr 1fr;gap:14px}
 #gptSovitsOutput{background:transparent;color:var(--muted)}
 #updateStats{grid-template-columns:repeat(3,minmax(0,1fr))}
+
+/* Dense tool-workbench visual system: content hierarchy before decoration. */
+body[data-workspace="review"] main,body[data-workspace="layout"] main{max-width:1380px;padding-top:18px}
+body[data-workspace="review"] .card,body[data-workspace="layout"] .card{background:#15191c;border-color:#30383b}
+#subtitleReviewCard,#subtitleLayoutPreviewCard{padding:0;overflow:hidden;border-radius:6px}
+#subtitleReviewCard>.topline,#subtitleLayoutPreviewCard>.topline{padding:18px 20px 12px;margin:0;border-bottom:1px solid var(--line);background:#171c1f}
+#subtitleReviewCard>p.small.muted,#subtitleLayoutPreviewCard>p.small.muted{padding:0 20px;margin:10px 0 14px;max-width:none}
+.proofreading-filters{padding:0 20px 16px;margin:0!important;border-bottom:1px solid var(--line)}
+.proofreading-filters label{font-size:11px;text-transform:uppercase;letter-spacing:.055em;color:var(--muted);font-weight:700}
+#subtitleSaveStatus{padding:8px 20px!important;margin:0!important;border-bottom:1px solid var(--line);background:#121619}
+.proofreading-workspace{margin:0;gap:0;grid-template-columns:280px minmax(0,1fr);min-height:620px}
+.proofreading-workspace .sub-sidebar{border:0;border-right:1px solid var(--line);border-radius:0;background:#121619;max-height:calc(100vh - 180px)}
+.proofreading-workspace .sub-sidebar-header{background:#171c1f;border-radius:0;padding:11px 13px}
+.proofreading-workspace .sub-list{padding:5px;gap:1px}
+.proofreading-workspace .sub-item{border:0;border-left:2px solid transparent;border-radius:2px;padding:10px 11px}
+.proofreading-workspace .sub-item:hover{background:#1b2225;border-left-color:#536166}
+.proofreading-workspace .sub-item.active{background:#1d302f;border-left-color:#82bbb4}
+.proofreading-workspace .sub-main{border:0;border-radius:0;padding:18px 22px 20px;background:#15191c;gap:16px}
+.proofreading-workspace .sub-current-header{padding-bottom:12px}
+.sub-audio-card{margin:0!important;padding:10px 0 14px!important;border-width:0 0 1px!important}
+.sub-audio-card audio{height:36px}
+.proofreading-workspace .sub-edit-area{padding:16px 0 4px;border-bottom:1px solid var(--line)}
+.proofreading-workspace .sub-textarea{min-height:132px;border:0;border-left:2px solid #6eaaa2;border-radius:0;background:#101517;padding:13px 15px;font-size:17px;line-height:1.65}
+.proofreading-workspace .sub-textarea:focus{border-left-color:#a5d9ce;box-shadow:inset 3px 0 0 #315e59}
+.proofreading-actions,.proofreading-secondary-actions{margin-top:10px!important}
+.proofreading-actions button,.proofreading-secondary-actions button{min-height:34px;padding:6px 10px;font-size:12px}
+.proofreading-references{border-top:0!important}
+.proofreading-references .sub-ref-card{padding:12px 0}
+#subLayoutDiagnostic{padding:8px 10px;background:#111619;border-left:2px solid var(--line)}
+
+#subtitleLayoutPreviewCard{display:grid;grid-template-columns:minmax(0,1fr) 350px;grid-template-areas:
+  "head head"
+  "intro intro"
+  "stage copy"
+  "stage controls"
+  "stage actions"
+  "stage status"
+  "stage advanced";column-gap:0;align-items:start}
+#subtitleLayoutPreviewCard>.topline{grid-area:head}
+#subtitleLayoutPreviewCard>p.small.muted{grid-area:intro;border-bottom:1px solid var(--line);padding-bottom:13px;margin-bottom:0}
+.preview-stage{grid-area:stage;position:relative;width:100%;aspect-ratio:16/9;background:#07090b;border:0;border-right:1px solid var(--line);border-radius:0;overflow:hidden;box-shadow:none;align-self:start}
+.preview-copy-fields{grid-area:copy;grid-template-columns:1fr!important;padding:14px 16px 4px;margin:0!important;background:#121619}
+.preview-copy-fields label{margin-top:6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.preview-controls{grid-area:controls;display:block!important;margin:0!important;padding:0 16px;background:#121619}
+.inspector-group{padding:14px 0;border-top:1px solid var(--line)}
+.inspector-group>b{display:block;margin-bottom:9px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:#cbd5d2}
+.inspector-group label{font-size:12px;font-weight:600;margin-top:9px}
+.inspector-group input[type="range"]{min-height:24px}
+.inspector-help{margin-top:8px!important;line-height:1.45}
+.preview-actions{grid-area:actions;display:block!important;margin:0!important;padding:8px 16px 14px;background:#121619}
+.preview-actions>.actions{margin:6px 0!important}
+.preview-actions button{min-height:34px;padding:6px 9px;font-size:12px}
+#libassPreviewStatus{grid-area:status;margin:0!important;padding:10px 16px;border-top:1px solid var(--line);background:#121619}
+.preview-advanced{grid-area:advanced;margin:0!important;padding:6px 16px 14px;background:#121619;border-top:1px solid var(--line)}
+.preview-advanced summary{font-size:12px;color:var(--muted)}
+#previewCanvasContainer>div:first-of-type{z-index:5}
 body[data-workspace="project"] #subtitleLayoutPreviewCard,body[data-workspace="project"] #subtitleReviewCard,body[data-workspace="project"] #gptSovitsCard,body[data-workspace="project"] #updateCard{display:none!important}
 body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
 body[data-workspace="review"] #subtitleLayoutPreviewCard,body[data-workspace="review"] #gptSovitsCard,body[data-workspace="review"] #updateCard{display:none!important}
@@ -140,6 +196,15 @@ body[data-workspace="export"] #subtitleReviewCard,body[data-workspace="export"] 
 body[data-workspace="update"] #subtitleReviewCard,body[data-workspace="update"] #subtitleLayoutPreviewCard,body[data-workspace="update"] #gptSovitsCard{display:none!important}
 body:not([data-workspace="project"]) .grid{display:block;max-width:1020px;margin:auto}
 body:not([data-workspace="project"]) #primaryStack{display:block}
+@media(max-width:1000px){
+  #subtitleLayoutPreviewCard{display:flex;flex-direction:column}
+  #subtitleLayoutPreviewCard .preview-stage{order:1;border-right:0;border-bottom:1px solid var(--line)}
+  #subtitleLayoutPreviewCard .preview-copy-fields{order:2;width:100%}
+  #subtitleLayoutPreviewCard .preview-controls{order:3;width:100%;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:14px}
+  #subtitleLayoutPreviewCard .preview-actions{order:4;width:100%}
+  #subtitleLayoutPreviewCard #libassPreviewStatus{order:5;width:100%}
+  #subtitleLayoutPreviewCard .preview-advanced{order:6;width:100%}
+}
 @media(max-width:820px){
   header{padding:14px 17px 12px;gap:7px}header h1{font-size:18px}header .sub{display:none}
   .workspace-nav{padding:0 10px}.workspace-nav button{min-height:46px;padding:0 12px}
@@ -147,6 +212,10 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
   .grid{display:block}.stack{gap:12px}.card{padding:17px;border-radius:6px}
   #sideStack{margin-top:12px}
   #subtitleReviewCard>.row3{grid-template-columns:1fr 1fr;gap:8px}
+  .proofreading-workspace{min-height:0}
+  .proofreading-workspace .sub-sidebar{border-right:0;border-bottom:1px solid var(--line);max-height:150px}
+  .proofreading-workspace .sub-main{padding:14px}
+  #subtitleLayoutPreviewCard .preview-controls{grid-template-columns:1fr!important;gap:0}
   #subtitleReviewCard>.row3>div:first-child{grid-column:1/-1}
   #subtitleReviewCard>.row3 label{margin:4px 0}
   .sub-workspace{display:flex;flex-direction:column;gap:10px}
@@ -494,19 +563,19 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
       </div>
       <p class="small muted">浏览器预览与 ASS 导出共用同一个排版求解器。浏览器只模拟文字几何；libass / FFmpeg 的实际字体栅格化仍可能有细微差异。</p>
 
-      <div class="row" style="margin-bottom:12px">
+      <div class="row preview-copy-fields">
         <div>
-          <label for="prevChsText">中文字幕测试文本</label>
+          <label for="prevChsText">中文字幕</label>
           <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
         </div>
         <div>
-          <label for="prevPriText">原文字幕测试文本</label>
+          <label for="prevPriText">原文字幕</label>
           <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
         </div>
       </div>
 
-      <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px;margin-bottom:12px">
-        <div style="background:var(--soft);padding:12px;border:1px solid var(--line);border-radius:10px">
+      <div class="preview-controls">
+        <section class="inspector-group">
           <b>样式</b>
           <label for="prevChsFont">中文字体</label>
           <input id="prevChsFont" value="汉仪旗黑">
@@ -522,9 +591,9 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
             <span id="prevPriSizeVal" class="small muted">42 px</span>
           </div>
           <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
-        </div>
+        </section>
 
-        <div style="background:var(--soft);padding:12px;border:1px solid var(--line);border-radius:10px">
+        <section class="inspector-group">
           <b>位置</b>
           <div style="display:flex;justify-content:space-between;margin-top:8px">
             <label for="prevCentralGap" style="margin:0">中央间隔</label>
@@ -541,9 +610,9 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
             <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
           </div>
           <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
-        </div>
+        </section>
 
-        <div style="background:var(--soft);padding:12px;border:1px solid var(--line);border-radius:10px">
+        <section class="inspector-group">
           <b>特效</b>
           <div class="actions" style="margin:8px 0">
             <button type="button" class="small" id="prevPresetDefault">标准</button>
@@ -554,11 +623,11 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <label class="check"><input type="checkbox" id="prevEnableKaraoke"> K 歌高亮</label>
           <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
           <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层描边</label>
-          <div class="small muted" style="margin-top:7px">K 歌只有在条目带可信词级时间戳时才生成逐词 <code>\k</code>；否则降级为整句。半透明底板不包含背景模糊。</div>
-        </div>
+          <div class="small muted inspector-help">K 歌只有在条目带可信词级时间戳时才生成逐词 <code>\k</code>；否则降级为整句。半透明底板不包含背景模糊。</div>
+        </section>
       </div>
 
-      <div style="display:flex;justify-content:space-between;gap:10px;flex-wrap:wrap;margin-bottom:12px">
+      <div class="preview-actions">
         <div class="actions" style="margin:0">
           <button type="button" class="small" id="prevPresetLongText">检查长句</button>
           <button type="button" class="small danger" id="prevPresetCollision">检查溢出</button>
@@ -572,7 +641,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
       </div>
       <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
 
-      <details style="margin-bottom:12px">
+      <details class="preview-advanced">
         <summary>辅助线与诊断显示（高级）</summary>
         <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
           <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
@@ -581,7 +650,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
         </div>
       </details>
 
-      <div style="position:relative;width:100%;aspect-ratio:16 / 9;background:#080a0e;border-radius:10px;border:1px solid var(--line);overflow:hidden;box-shadow:inset 0 0 20px rgba(0,0,0,0.8)" id="previewCanvasContainer">
+      <div class="preview-stage" id="previewCanvasContainer">
         <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
         <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
         <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
@@ -602,7 +671,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
       </div>
       <p class="small muted">逐条修正中文。停止输入约 1 秒后会自动保存。</p>
 
-      <div class="row3" style="margin-bottom:12px">
+      <div class="row3 proofreading-filters">
         <div>
           <label>关键词 / 角色搜索</label>
           <input id="subSearchQuery" type="search" autocomplete="off" placeholder="搜索台词、角色、中英文…">
@@ -627,7 +696,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
 
       <div id="subtitleSaveStatus" class="small muted" style="margin-bottom:8px" role="status" aria-live="polite"></div>
 
-      <div class="sub-workspace">
+      <div class="sub-workspace proofreading-workspace">
         <!-- Left: Subtitle List & Navigation -->
         <div class="sub-sidebar">
           <div class="sub-sidebar-header">
@@ -649,14 +718,14 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
             <div id="subStatusBadge"></div>
           </div>
 
-          <div class="sub-ref-card" id="subAudioCard" style="margin-top:10px">
+          <div class="sub-ref-card sub-audio-card" id="subAudioCard">
             <div class="sub-ref-label">原始语音</div>
             <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
             <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后自动加载对应的原始 WAV。</div>
           </div>
 
           <!-- Read-only references -->
-          <div class="sub-references" style="display:grid;gap:10px">
+          <div class="sub-references proofreading-references">
             <div class="sub-ref-card">
               <div class="sub-ref-label">
                 <span>原文</span>
@@ -731,14 +800,14 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
               <span id="subCharCounter" class="small muted">0 字</span>
             </div>
             <textarea id="subFinalEditor" class="sub-textarea" placeholder="在此输入修饰后的最终中文字幕…"></textarea>
-            <div class="actions" style="margin-top:8px">
+            <div class="actions proofreading-actions">
               <button type="button" class="secondary" id="subUseOfficialBtn">采用官方中文</button>
               <button type="button" class="secondary" id="subUseApiBtn">采用 API 翻译</button>
               <button type="button" class="secondary" id="subResetBtn">恢复原始目标文本</button>
               <button type="button" class="success" id="subConfirmBtn">确认当前字幕</button>
             </div>
             <div id="subLayoutDiagnostic" class="small muted" style="margin-top:8px">ASS 排版：尚未检查。</div>
-            <div class="actions" style="margin-top:6px">
+            <div class="actions proofreading-secondary-actions">
               <button type="button" class="secondary" id="subOpenLayoutBtn">在排版工作台检查当前条目</button>
               <button type="button" class="secondary" id="subNextAttentionBtn">下一条未确认 / 异常字幕</button>
             </div>
