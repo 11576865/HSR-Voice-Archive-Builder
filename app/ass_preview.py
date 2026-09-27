@@ -8,6 +8,7 @@ from pathlib import Path
 
 from subtitle_layout.ass_writer import write_ass
 from subtitle_layout.config import SubtitleRenderConfig
+from subtitle_layout.fonts import validate_ass_font_name
 
 
 @dataclass
@@ -22,6 +23,32 @@ class PreviewEntry:
 def _escape_subtitles_filter_path(path: Path) -> str:
     value = str(path.resolve()).replace("\\", "/")
     return value.replace(":", "\\:").replace("'", "\\'")
+
+
+def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig:
+    def as_bool(name: str, default: bool) -> bool:
+        value = data.get(name, default)
+        if isinstance(value, bool):
+            return value
+        return str(value).strip().lower() in {"1", "true", "yes", "on"}
+
+    return SubtitleRenderConfig(
+        enable_karaoke=as_bool("enable_karaoke", False),
+        enable_frosted_glass=as_bool("enable_translucent_card", False),
+        enable_multi_layer_outline=as_bool("enable_multi_layer_outline", False),
+        enable_kinetic=as_bool("enable_kinetic", True),
+        chs_font=validate_ass_font_name(data.get("chs_font", "汉仪旗黑")),
+        primary_font=validate_ass_font_name(data.get("primary_font", "Noto Sans")),
+        base_chs_size=max(12, min(120, int(data.get("base_chs_size", 52)))),
+        base_primary_size=max(12, min(120, int(data.get("base_primary_size", 42)))),
+        margin_horizontal_percent=max(
+            0.0, min(0.40, float(data.get("margin_horizontal_percent", 0.10)))
+        ),
+        margin_vertical_percent=max(
+            0.0, min(0.40, float(data.get("margin_vertical_percent", 0.05)))
+        ),
+        min_central_gap=max(0.0, min(200.0, float(data.get("min_central_gap", 20.0)))),
+    )
 
 
 def render_ass_preview_png(
