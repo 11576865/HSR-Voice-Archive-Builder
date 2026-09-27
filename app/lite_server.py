@@ -565,12 +565,24 @@ class Handler(BaseHTTPRequestHandler):
 
         if path == "/api/subtitle-layout/render-preview":
             config = preview_config_from_payload(data)
+            word_alignments = None
+            raw_word_alignments = data.get("word_alignments", "")
+            if raw_word_alignments:
+                try:
+                    parsed_word_alignments = json.loads(raw_word_alignments)
+                    if isinstance(parsed_word_alignments, list):
+                        word_alignments = parsed_word_alignments
+                except (TypeError, ValueError):
+                    word_alignments = None
             png = render_ass_preview_png(
                 english_text=data.get("english_text", ""),
                 chinese_text=data.get("chinese_text", ""),
                 source_language=data.get("source_language", "en") or "en",
                 target_language=data.get("target_language", "zh-CN") or "zh-CN",
                 config=config,
+                word_alignments=word_alignments,
+                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                timestamp=_float(data.get("preview_timestamp"), 1.0),
             )
             self._send_bytes(
                 200,
