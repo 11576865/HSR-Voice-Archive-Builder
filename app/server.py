@@ -410,6 +410,44 @@ async def api_subtitle_layout_settings(request: Request):
                 "enable_multi_layer_outline", config.subtitle_enable_multi_layer_outline
             ),
             subtitle_enable_kinetic=as_bool("enable_kinetic", config.subtitle_enable_kinetic),
+            subtitle_fade_in_ms=max(0, min(2000, int(data.get("fade_in_ms", config.subtitle_fade_in_ms)))),
+            subtitle_fade_out_ms=max(0, min(2000, int(data.get("fade_out_ms", config.subtitle_fade_out_ms)))),
+            subtitle_use_audio_aware_fade=as_bool(
+                "use_audio_aware_fade", config.subtitle_use_audio_aware_fade
+            ),
+            subtitle_outline_width=max(
+                0.0, min(12.0, float(data.get("outline_width", config.subtitle_outline_width)))
+            ),
+            subtitle_shadow_depth=max(
+                0.0, min(12.0, float(data.get("shadow_depth", config.subtitle_shadow_depth)))
+            ),
+            subtitle_blur_radius=max(
+                0.0, min(5.0, float(data.get("blur_radius", config.subtitle_blur_radius)))
+            ),
+            subtitle_card_opacity=max(
+                0.0, min(1.0, float(data.get("card_opacity", config.subtitle_card_opacity)))
+            ),
+            subtitle_enable_soft_entry=as_bool(
+                "enable_soft_entry", config.subtitle_enable_soft_entry
+            ),
+            subtitle_soft_entry_scale_percent=max(
+                90.0,
+                min(
+                    100.0,
+                    float(
+                        data.get(
+                            "soft_entry_scale_percent",
+                            config.subtitle_soft_entry_scale_percent,
+                        )
+                    ),
+                ),
+            ),
+            subtitle_soft_entry_blur=max(
+                0.0, min(5.0, float(data.get("soft_entry_blur", config.subtitle_soft_entry_blur)))
+            ),
+            subtitle_soft_entry_ms=max(
+                0, min(1000, int(data.get("soft_entry_ms", config.subtitle_soft_entry_ms)))
+            ),
         )
         return {"ok": True, "project": project_summary(config)}
     except Exception as exc:
