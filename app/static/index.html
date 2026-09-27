@@ -2317,7 +2317,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <option value="unreviewed">未人工确认</option>
             <option value="confirmed">已人工确认</option>
             <option value="modified">已修改字幕</option>
-            <option value="overflow">ASS 排版失败</option>
             <option value="official">官方中文字幕</option>
             <option value="api">API 翻译中文字幕</option>
           </select>
@@ -4360,7 +4359,6 @@ function renderSubtitleList(){
     const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
     const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
     const reviewTag=sub.confirmed?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已确认</span>':'<span class="badge" style="color:var(--muted);padding:2px 5px;font-size:10px">未确认</span>';
-    const overflowTag=sub.layout_overflow?'<span class="badge" style="color:var(--bad);padding:2px 5px;font-size:10px">排版失败</span>':'';
     const rawPreview=sub.final_chs||sub.source_text||'—';
     const highlightedPreview=highlightText(rawPreview,q);
     const highlightedId=highlightText(sub.id,q);
@@ -4370,7 +4368,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+reviewTag+overflowTag+refTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+srcTag+reviewTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -4413,7 +4411,6 @@ function renderSubtitleEditState(){
   parts.push(sub.confirmed
     ? '<span class="badge" style="color:var(--ok)">已人工确认</span>'
     : '<span class="badge" style="color:var(--muted)">未确认</span>');
-  if(sub.layout_overflow)parts.push('<span class="badge" style="color:var(--bad)">ASS 排版失败</span>');
   badge.innerHTML=parts.join(' ');
 }
 
@@ -4619,9 +4616,9 @@ function goToNextAttentionSubtitle(){
   for(let step=1;step<=loadedSubtitles.length;step++){
     const idx=(activeSubIndex+step)%loadedSubtitles.length;
     const sub=loadedSubtitles[idx];
-    if(!sub.confirmed||sub.layout_overflow){selectSubtitleIndex(idx);return;}
+    if(!sub.confirmed){selectSubtitleIndex(idx);return;}
   }
-  setSubtitleSaveUi('saved','当前列表中没有未确认或排版异常字幕。');
+  setSubtitleSaveUi('saved','当前列表中没有未确认字幕。');
 }
 
 function goToPrevSubtitle(){
