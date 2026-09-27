@@ -902,6 +902,436 @@ body:not([data-workspace="project"]) #sideStack{display:flex!important}
   .proof-step{padding:10px}.proof-editor-meta{align-items:flex-end;flex-direction:column;gap:3px}
 }
 
+
+/* Mobile layout authority v6 ------------------------------------------------
+   Mobile keeps the desktop information hierarchy, but every working surface
+   becomes a single vertical flow. This block intentionally lives last so
+   older responsive rules cannot reintroduce desktop columns. */
+#sideStack.utility-drawer{
+  flex-direction:column!important;
+  align-items:stretch!important;
+}
+#sideStack.utility-drawer > *{
+  width:100%!important;
+  min-width:0!important;
+}
+
+@media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px){
+  :root{
+    --rail-width:0px;
+    --topbar-height:56px;
+  }
+
+  html,body{
+    width:100%;
+    max-width:100%;
+    min-width:0;
+    overflow-x:hidden;
+  }
+
+  header{
+    position:sticky;
+    top:0;
+    z-index:90;
+    width:100%;
+    max-width:none;
+    min-height:56px;
+    height:auto;
+    padding:8px 10px;
+    display:flex;
+    flex-direction:row;
+    align-items:center;
+    justify-content:space-between;
+    gap:8px;
+    background:var(--surface-header);
+  }
+  .app-brand{
+    flex:1 1 auto;
+    min-width:0;
+  }
+  .app-brand>div:last-child{
+    min-width:0;
+  }
+  .app-brand h1{
+    max-width:100%;
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .header-tools{
+    flex:0 0 auto;
+    min-width:0;
+  }
+
+  .workspace-nav{
+    position:sticky!important;
+    left:auto!important;
+    right:auto!important;
+    top:56px!important;
+    bottom:auto!important;
+    z-index:84!important;
+    width:100%!important;
+    max-width:100%!important;
+    height:44px!important;
+    margin:0!important;
+    padding:0 6px!important;
+    display:flex!important;
+    flex-direction:row!important;
+    align-items:stretch!important;
+    gap:2px!important;
+    overflow-x:auto!important;
+    overflow-y:hidden!important;
+    background:var(--surface-nav)!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--line)!important;
+    scrollbar-width:none;
+  }
+  .workspace-nav::-webkit-scrollbar{display:none}
+  .workspace-nav::before{display:none!important}
+  .workspace-nav button{
+    position:relative;
+    flex:1 0 auto!important;
+    width:auto!important;
+    min-width:64px!important;
+    min-height:43px!important;
+    padding:0 10px!important;
+    display:flex!important;
+    align-items:center!important;
+    justify-content:center!important;
+    gap:5px!important;
+    border:0!important;
+    border-radius:0!important;
+    background:transparent!important;
+    white-space:nowrap!important;
+    text-align:center!important;
+  }
+  .workspace-nav button::after{
+    left:9px!important;
+    right:9px!important;
+    top:auto!important;
+    bottom:0!important;
+    width:auto!important;
+    height:2px!important;
+  }
+  .workspace-nav .workspace-index{display:none!important}
+  .workspace-nav button[aria-current="page"]{
+    background:color-mix(in srgb,var(--nav-accent) 9%,transparent)!important;
+  }
+
+  .job-center-bar{
+    position:relative!important;
+    top:auto!important;
+    left:auto!important;
+    right:auto!important;
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    border-left:0!important;
+    border-right:0!important;
+  }
+  .job-center-toggle{
+    min-height:42px!important;
+    padding:6px 10px!important;
+  }
+  .job-center-copy{
+    min-width:0!important;
+  }
+  .job-center-copy b{
+    overflow:hidden;
+    text-overflow:ellipsis;
+    white-space:nowrap;
+  }
+  .job-center-copy span{display:none!important}
+
+  main,
+  body[data-workspace="review"] main,
+  body[data-workspace="layout"] main{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    padding:12px 10px calc(64px + env(safe-area-inset-bottom))!important;
+  }
+  .grid{
+    display:block!important;
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+  }
+  #primaryStack{
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    min-width:0!important;
+    gap:10px!important;
+  }
+  #primaryStack>section,
+  #primaryStack>.card,
+  .card{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+  }
+
+  .row,
+  .row2,
+  .row3,
+  .proofreading-filters,
+  .preview-copy-fields,
+  .preview-controls,
+  .preview-actions,
+  .preview-background-controls,
+  .export-context,
+  .export-lanes,
+  .update-toolbar,
+  .update-review-tools,
+  .update-change-diff{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  .row>*,
+  .row2>*,
+  .row3>*,
+  .proofreading-filters>*,
+  .preview-copy-fields>*,
+  .preview-controls>*,
+  .preview-actions>*,
+  .export-context>*,
+  .export-lanes>*,
+  .update-toolbar>*,
+  .update-review-tools>*{
+    min-width:0!important;
+    grid-column:auto!important;
+  }
+
+  .stats,
+  .overview-metrics,
+  .update-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+  }
+  .overview-panels,
+  .artifact-browser,
+  .export-artifact-summary{
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+
+  .sub-workspace,
+  .proofreading-workspace{
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    min-height:0!important;
+    gap:8px!important;
+  }
+  .proofreading-workspace .sub-sidebar,
+  .sub-sidebar{
+    width:100%!important;
+    max-width:none!important;
+    min-width:0!important;
+    max-height:240px!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--line)!important;
+  }
+  .sub-list,
+  .proofreading-workspace .sub-list{
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    max-width:100%!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    padding:4px!important;
+  }
+  .sub-item{
+    flex:0 0 auto!important;
+    width:100%!important;
+    min-width:0!important;
+  }
+  .proofreading-workspace .sub-main,
+  .sub-main{
+    width:100%!important;
+    min-width:0!important;
+    padding:10px!important;
+  }
+  .proof-step{
+    width:100%!important;
+    min-width:0!important;
+  }
+  .proofreading-actions,
+  .proofreading-secondary-actions{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    gap:6px!important;
+  }
+  .proofreading-actions>button,
+  .proofreading-secondary-actions>button{
+    width:100%!important;
+    margin:0!important;
+  }
+  .sub-nav-bar{
+    position:sticky;
+    bottom:0;
+    z-index:6;
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    gap:6px!important;
+    padding:8px 0 0!important;
+    background:var(--surface-secondary);
+  }
+  .sub-nav-bar button{
+    width:100%!important;
+    min-width:0!important;
+  }
+
+  #subtitleLayoutPreviewCard{
+    display:flex!important;
+    flex-direction:column!important;
+  }
+  #subtitleLayoutPreviewCard .preview-controls,
+  #subtitleLayoutPreviewCard .preview-actions,
+  #subtitleLayoutPreviewCard .preview-copy-fields,
+  #subtitleLayoutPreviewCard .preview-background-controls{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr)!important;
+    width:100%!important;
+  }
+  #previewCanvasContainer,
+  .preview-stage{
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+  }
+
+  .update-group-actions{
+    display:grid!important;
+    grid-template-columns:1fr 1fr!important;
+    width:100%!important;
+    gap:6px!important;
+  }
+  .update-group-actions button{
+    width:100%!important;
+  }
+  .update-change>summary.update-change-summary{
+    align-items:flex-start!important;
+    flex-direction:column!important;
+  }
+  .update-change-badges{
+    justify-content:flex-start!important;
+  }
+
+  .export-artifacts-head{
+    align-items:flex-start!important;
+    flex-direction:column!important;
+  }
+  .export-artifacts-head .actions{
+    width:100%!important;
+  }
+  .export-artifacts-head .actions>button{
+    flex:1 1 100%!important;
+  }
+
+  /* Utility Drawer is a vertical mobile sheet. Never let flex defaults turn
+     diagnostic/system cards into narrow side-by-side columns. */
+  #sideStack.utility-drawer{
+    display:flex!important;
+    flex-direction:column!important;
+    align-items:stretch!important;
+    justify-content:flex-start!important;
+    top:56px!important;
+    right:0!important;
+    bottom:0!important;
+    width:min(430px,100dvw)!important;
+    max-width:100dvw!important;
+    height:auto!important;
+    max-height:calc(100dvh - 56px)!important;
+    margin:0!important;
+    padding:8px!important;
+    gap:8px!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    border-right:0!important;
+    border-bottom:0!important;
+  }
+  #sideStack.utility-drawer > .utility-drawer-head,
+  #sideStack.utility-drawer > .card{
+    flex:0 0 auto!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-width:0!important;
+    min-height:0!important;
+    height:auto!important;
+  }
+  #sideStack .ui-collapse-head{
+    width:100%!important;
+  }
+  #sideStack details,
+  #sideStack details>summary{
+    width:100%!important;
+    max-width:100%!important;
+  }
+  body.utility-drawer-open{
+    overflow:hidden!important;
+  }
+
+  .actions{
+    max-width:100%;
+  }
+  .actions>button,
+  .actions>input,
+  .actions>select{
+    max-width:100%;
+  }
+}
+
+@media (max-width:520px){
+  header{
+    min-height:54px!important;
+    padding:7px 8px!important;
+  }
+  .app-brand-mark{display:none!important}
+  .app-brand h1{font-size:12px!important}
+  .theme-control{flex:0 0 auto}
+  .workspace-nav{top:54px!important}
+  .workspace-nav button{
+    min-width:58px!important;
+    padding:0 8px!important;
+    font-size:11px!important;
+  }
+  main,
+  body[data-workspace="review"] main,
+  body[data-workspace="layout"] main{
+    padding-left:7px!important;
+    padding-right:7px!important;
+  }
+  .card{
+    padding:11px!important;
+    border-radius:4px!important;
+  }
+  .topline{
+    align-items:flex-start!important;
+  }
+  .topline>.actions{
+    width:100%!important;
+  }
+  .topline>.actions>button{
+    flex:1 1 auto!important;
+  }
+  .stats,
+  .overview-metrics,
+  .update-stats{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:6px!important;
+  }
+  .stat,
+  .overview-metric{
+    padding:9px!important;
+  }
+  #sideStack.utility-drawer{
+    top:54px!important;
+    width:100dvw!important;
+    max-height:calc(100dvh - 54px)!important;
+    padding:6px!important;
+  }
+}
+
 </style>
 </head>
 <body>
