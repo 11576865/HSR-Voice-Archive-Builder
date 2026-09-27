@@ -356,7 +356,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         fade_in_ms = cfg.fade_in_ms
         fade_out_ms = cfg.fade_out_ms
 
-        if cfg.use_audio_aware_fade and prev_end_sec is not None:
+        if use_kinetic and cfg.use_audio_aware_fade and prev_end_sec is not None:
             delta_t_sec = start_sec - prev_end_sec
             if delta_t_sec > 0:
                 pre_roll_sec = min(delta_t_sec / 2.0, fade_in_ms / 1000.0)
