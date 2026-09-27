@@ -2478,6 +2478,11 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
               <option value="kf">平滑扫光（\kf）</option>
               <option value="clip">动态裁剪扫光（\clip + \t）</option>
             </select>
+            <div style="display:flex;justify-content:space-between">
+              <label for="prevKaraokePreviewTime" style="margin:0">实际预览时间点</label>
+              <span id="prevKaraokePreviewTimeVal" class="small muted">50%</span>
+            </div>
+            <input type="range" id="prevKaraokePreviewTime" min="5" max="95" value="50" step="5">
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
@@ -5020,12 +5025,17 @@ async function renderLibassPreview(){
   try{
     if(button)button.disabled=true;
     if(status){status.textContent='正在调用 FFmpeg/libass 渲染当前试调值…';status.className='small muted';}
+    const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
+    const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
     const payload={
       ...subtitleSettingsPayload(),
       english_text:document.getElementById('prevPriText')?.value||'',
       chinese_text:document.getElementById('prevChsText')?.value||'',
       source_language:currentProject?.config?.source_text_language||'en',
-      target_language:currentProject?.config?.target_language||'zh-CN'
+      target_language:currentProject?.config?.target_language||'zh-CN',
+      word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
+      preview_duration_seconds:previewDuration,
+      preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
     };
     const response=await fetch('/api/subtitle-layout/render-preview',{
       method:'POST',
@@ -5045,7 +5055,13 @@ async function renderLibassPreview(){
     const img=document.getElementById('libassPreviewImage');
     img.src=libassPreviewObjectUrl;
     img.classList.remove('hidden');
-    if(status){status.textContent='当前画面由 FFmpeg/libass 使用当前试调值实际渲染；修改参数后会自动标记过期。';status.className='small status-ok';}
+    if(status){
+      const timingNote=Array.isArray(layoutStressSample?.word_alignments)&&layoutStressSample.word_alignments.length
+        ? '，使用项目词级时间'
+        : '';
+      status.textContent='当前画面由 FFmpeg/libass 使用当前试调值实际渲染'+timingNote+'；修改参数或时间点后会自动标记过期。';
+      status.className='small status-ok';
+    }
   }catch(err){
     if(status){status.textContent='实际 ASS 预览失败：'+shortError(err);status.className='small status-bad';}
     setLog(String(err));
@@ -5109,6 +5125,7 @@ async function importWordAlignmentFile(file){
       status.className='small '+(rejected?'status-warn':'status-ok')+' layout-corpus-status';
     }
     await loadWordAlignmentDiagnostics();
+    await loadLayoutStressSample();
     invalidateLibassPreview();
   }catch(err){
     if(status){status.textContent='词级时间导入失败：'+shortError(err);status.className='small status-bad layout-corpus-status';}
@@ -5269,18 +5286,44 @@ async function loadLayoutStressSample(){
       if(status){status.textContent='当前项目没有可用于排版检测的字幕。';status.className='small muted layout-corpus-status';}
       return updateLayoutPreview();
     }
-    let selected=subtitles[0],bestScore=-1;
-    for(const sub of subtitles){
+    const karaokeEnabled=!!document.getElementById('prevEnableKaraoke')?.checked;
+    const alignedCandidates=karaokeEnabled
+      ? subtitles.filter(sub=>sub.word_alignment_ready)
+      : [];
+    const samplePool=alignedCandidates.length?alignedCandidates:subtitles;
+    let selected=samplePool[0],bestScore=-1;
+    for(const sub of samplePool){
       const score=subtitleLayoutStressScore(sub);
       if(score>bestScore){bestScore=score;selected=sub;}
     }
     const chs=String(selected.final_chs||selected.official_chs||selected.api_chs||selected.original_chs||'');
     const primary=String(selected.source_text||'');
-    layoutStressSample={id:selected.id,score:bestScore};
+    let alignment=null;
+    if(selected.word_alignment_ready){
+      try{
+        const timing=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments/'+encodeURIComponent(selected.id));
+        alignment=timing.alignment||null;
+      }catch(_){alignment=null}
+    }
+    layoutStressSample={
+      id:selected.id,
+      score:bestScore,
+      duration_seconds:Number(alignment?.duration_seconds||Math.max(0.25,Number(selected.end||0)-Number(selected.start||0))||3),
+      word_alignments:alignment?.valid&&Array.isArray(alignment.words)?alignment.words:null
+    };
     const chsInput=document.getElementById('prevChsText'),priInput=document.getElementById('prevPriText');
     if(chsInput)chsInput.value=chs;
     if(priInput)priInput.value=primary;
-    if(status){status.textContent='已载入项目版面压力较高的字幕 #'+selected.id+'，调整字号或安全边距时会自动复检。';status.className='small muted layout-corpus-status';}
+    if(status){
+      if(karaokeEnabled&&alignment?.valid){
+        status.textContent='已载入带词级时间的项目字幕 #'+selected.id+'；实际 ASS 预览可检查 Karaoke 时间效果。';
+      }else if(karaokeEnabled&&!alignedCandidates.length){
+        status.textContent='项目没有可用词级时间；当前载入版面压力样本 #'+selected.id+'，Karaoke 将降级为普通整句。';
+      }else{
+        status.textContent='已载入项目版面压力较高的字幕 #'+selected.id+'，调整字号或安全边距时会自动复检。';
+      }
+      status.className='small '+(karaokeEnabled&&!alignment?.valid?'status-warn':'muted')+' layout-corpus-status';
+    }
     invalidateLibassPreview();
     return updateLayoutPreview();
   }catch(err){
@@ -5331,6 +5374,7 @@ async function updateLayoutPreview() {
   syncRangeLabel('prevSoftEntryMs','prevSoftEntryMsVal',v=>Math.round(v)+' ms');
   syncRangeLabel('prevArchiveHudSize','prevArchiveHudSizeVal',v=>Math.round(v)+' px');
   syncRangeLabel('prevArchiveHudOpacity','prevArchiveHudOpacityVal',v=>Math.round(v)+'%');
+  syncRangeLabel('prevKaraokePreviewTime','prevKaraokePreviewTimeVal',v=>Math.round(v)+'%');
 
   try {
     await Promise.allSettled([
@@ -5566,7 +5610,10 @@ applyPreviewBackground();
     markSubtitleSettingsDirty();
     invalidateLibassPreview();
     updateLayoutPreview();
-    if(id==='prevEnableKaraoke')loadWordAlignmentDiagnostics();
+    if(id==='prevEnableKaraoke'){
+      loadWordAlignmentDiagnostics();
+      loadLayoutStressSample();
+    }
   });
 });
 
@@ -5580,6 +5627,12 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
 
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',updateLayoutPreview);
+});
+document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>{
+  const label=document.getElementById('prevKaraokePreviewTimeVal');
+  const input=document.getElementById('prevKaraokePreviewTime');
+  if(label&&input)label.textContent=Math.round(parseFloat(input.value||'50'))+'%';
+  invalidateLibassPreview();
 });
 
 function applySubtitlePreset(name){
