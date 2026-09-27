@@ -237,6 +237,25 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertGreater(mobile_pos, desktop_pos)
         self.assertNotIn('.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}', html)
 
+    def test_workbench_visual_structure_uses_canvas_and_inspector_hierarchy(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('class="row preview-copy-fields"', html)
+        self.assertIn('class="preview-controls"', html)
+        self.assertEqual(html.count('class="inspector-group"'), 3)
+        self.assertIn('class="preview-stage" id="previewCanvasContainer"', html)
+        self.assertIn(
+            '#subtitleLayoutPreviewCard{display:grid;grid-template-columns:minmax(0,1fr) 350px;',
+            html,
+        )
+        self.assertIn('class="sub-workspace proofreading-workspace"', html)
+        self.assertIn('class="sub-ref-card sub-audio-card" id="subAudioCard"', html)
+        self.assertIn('class="actions proofreading-actions"', html)
+        self.assertIn('class="actions proofreading-secondary-actions"', html)
+        self.assertIn('@media(max-width:1000px)', html)
+
     def test_job_polling_retries_and_bypasses_get_cache(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
