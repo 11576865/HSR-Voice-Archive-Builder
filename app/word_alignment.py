@@ -309,6 +309,31 @@ def _manifest_entries(output_dir: Path) -> list[dict[str, Any]]:
     return [entry for entry in entries if isinstance(entry, dict)]
 
 
+def get_word_alignment(output_dir: Path, item_id: str | int) -> dict[str, Any]:
+    wanted = str(item_id)
+    entries = apply_cached_word_alignments(_manifest_entries(output_dir), output_dir)
+    for entry in entries:
+        if _entry_id(entry) != wanted:
+            continue
+        diag = dict(entry.get("_word_alignment") or {})
+        return {
+            "id": wanted,
+            "source_member_id": str(entry.get("source_member_id") or ""),
+            "filename": str(entry.get("filename") or ""),
+            "source_text": _source_text(entry),
+            "duration_seconds": _entry_duration(entry),
+            "valid": bool(diag.get("valid")),
+            "reason": str(diag.get("reason") or "missing"),
+            "source": str(diag.get("source") or "none"),
+            "provider": str(diag.get("provider") or ""),
+            "word_count": int(diag.get("word_count") or 0),
+            "coverage_percent": float(diag.get("coverage_percent") or 0.0),
+            "mean_confidence": diag.get("mean_confidence"),
+            "words": list(entry.get("word_alignments") or []) if diag.get("valid") else [],
+        }
+    raise KeyError(f"Subtitle entry not found: {item_id}")
+
+
 def alignment_diagnostics(output_dir: Path) -> dict[str, Any]:
     entries = apply_cached_word_alignments(_manifest_entries(output_dir), output_dir)
     rows = []
