@@ -109,6 +109,19 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertIsNotNone(res["layout"]["failed_condition"])
         self.assertTrue(res["layout"]["primary_lines"] or res["layout"]["chs_lines"])
 
+    @patch("app.server.list_font_families", return_value=["Inter", "Noto Sans"])
+    def test_font_browser_endpoint_returns_family_names_only(self, list_mock):
+        response = self.client.get(
+            "/api/subtitle-layout/fonts?q=noto&limit=25",
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        data = response.json()
+        self.assertEqual(data["families"], ["Inter", "Noto Sans"])
+        self.assertEqual(data["count"], 2)
+        list_mock.assert_called_once_with("noto", 25)
+        self.assertNotIn("/", json.dumps(data))
+
     def test_fastapi_endpoint(self):
         response = self.client.post(
             "/api/subtitle-layout/preview",
