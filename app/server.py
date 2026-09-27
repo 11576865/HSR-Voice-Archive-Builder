@@ -1331,6 +1331,7 @@ def legacy_build(
     group_gap: float = Form(3.00),
     make_flac: bool = Form(False),
     chapter_order: bool = Form(False),
+    generate_chapter_flac: bool = Form(False),
     translate_missing: bool = Form(False),
     translation_model: str = Form(""),
     translation_batch_size: int = Form(80),
