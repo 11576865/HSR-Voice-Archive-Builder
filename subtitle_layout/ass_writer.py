@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any, Iterable
 
 from .config import SubtitleRenderConfig
+from .fonts import resolve_font_path, validate_ass_font_name
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
 from .measure import measure_line_height, measure_text_width
@@ -48,39 +49,73 @@ def _atomic_write(path: Path, text: str, encoding: str = "utf-8-sig") -> None:
         temporary.unlink(missing_ok=True)
 
 
+def _normalized_alignment_text(value: str) -> str:
+    return "".join(str(value or "").split())
+
+
+def _validated_word_alignments(
+    text: str,
+    duration_sec: float,
+    word_alignments: list[object] | None,
+) -> list[tuple[str, float]] | None:
+    if not text or duration_sec <= 0 or not word_alignments:
+        return None
+
+    tokens: list[tuple[str, float]] = []
+    previous_end = 0.0
+    covered = ""
+    for item in word_alignments:
+        try:
+            if isinstance(item, dict):
+                word = str(item.get("word", ""))
+                start = float(item.get("start", 0.0))
+                end = float(item.get("end", 0.0))
+                duration = float(item.get("duration", max(0.0, end - start)))
+            elif hasattr(item, "word"):
+                word = str(getattr(item, "word", ""))
+                start = float(getattr(item, "start", 0.0))
+                end = float(getattr(item, "end", 0.0))
+                duration = float(getattr(item, "duration", max(0.0, end - start)))
+            else:
+                return None
+        except (TypeError, ValueError):
+            return None
+
+        if not word or start < -0.001 or end <= start or duration <= 0:
+            return None
+        if start + 0.02 < previous_end:
+            return None
+        if end > duration_sec + 0.25:
+            return None
+        previous_end = end
+        covered += word
+        tokens.append((word, duration))
+
+    if _normalized_alignment_text(covered) != _normalized_alignment_text(text):
+        return None
+    return tokens
+
+
 def format_karaoke_text(
     text: str,
     duration_sec: float,
     word_alignments: list[object] | None = None,
     is_cjk: bool = False,
 ) -> str:
-    """Apply ASS karaoke tags only when explicit word-level timing is available."""
-    if not text or duration_sec <= 0 or not word_alignments:
+    """Apply ASS karaoke tags only for complete, monotonic word-level timing."""
+    validated = _validated_word_alignments(text, duration_sec, word_alignments)
+    if not validated:
         return text
-
-    formatted_tokens: list[str] = []
-    for item in word_alignments:
-        word = ""
-        duration = 0.0
-        if isinstance(item, dict):
-            word = str(item.get("word", ""))
-            start = float(item.get("start", 0.0))
-            end = float(item.get("end", 0.0))
-            duration = float(item.get("duration", max(0.0, end - start)))
-        elif hasattr(item, "word"):
-            word = str(getattr(item, "word", ""))
-            start = float(getattr(item, "start", 0.0))
-            end = float(getattr(item, "end", 0.0))
-            duration = float(getattr(item, "duration", max(0.0, end - start)))
-        if word and duration > 0:
-            formatted_tokens.append(f"{{\\k{max(1, round(duration * 100))}}}{word}")
-
-    return "".join(formatted_tokens) if formatted_tokens else text
+    return "".join(
+        f"{{\\k{max(1, round(duration * 100))}}}{word}"
+        for word, duration in validated
+    )
 
 
 def generate_frosted_glass_card(
     lines: list[object],
     safe_area: SafeArea = DEFAULT_SAFE_AREA,
+    font_path: str | None = None,
     pad_x: int = 24,
     pad_y: int = 12,
     radius: int = 16,
@@ -95,7 +130,7 @@ def generate_frosted_glass_card(
     total_height = len(lines) * lh
 
     max_text_w = max(
-        measure_text_width(getattr(p, "text", str(p)), font_size)
+        measure_text_width(getattr(p, "text", str(p)), font_size, font_path)
         for p in lines
     )
 
@@ -185,6 +220,10 @@ def render_ass(
     kinetic_options: dict[str, Any] | None = None,
 ) -> str:
     cfg = config or SubtitleRenderConfig()
+    chs_font = validate_ass_font_name(cfg.chs_font)
+    primary_font = validate_ass_font_name(cfg.primary_font)
+    chs_font_path = resolve_font_path(chs_font)
+    primary_font_path = resolve_font_path(primary_font)
     margin_h = round(1920 * max(0.0, min(0.40, float(cfg.margin_horizontal_percent))))
     margin_v = round(1080 * max(0.0, min(0.40, float(cfg.margin_vertical_percent))))
     header = f"""[Script Info]
@@ -197,9 +236,9 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,{cfg.chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
-Style: Primary,{cfg.primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
-Style: Card,{cfg.primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
+Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
+Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,2,8,{margin_h},{margin_h},{margin_v},1
+Style: Card,{primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
@@ -256,6 +295,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             base_primary_size=int(cfg.base_primary_size),
             safe_area=safe_area,
             min_central_gap=float(cfg.min_central_gap),
+            chs_font_path=chs_font_path,
+            primary_font_path=primary_font_path,
         )
 
         if layout.failed:
@@ -290,7 +331,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         if use_frosted_glass:
             if layout.primary_lines:
-                res_pri = generate_frosted_glass_card(layout.primary_lines, safe_area=safe_area)
+                res_pri = generate_frosted_glass_card(layout.primary_lines, safe_area=safe_area, font_path=primary_font_path)
                 if res_pri:
                     card_tag = res_pri[0]
                     if use_kinetic:
@@ -299,7 +340,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         f"Dialogue: 0,{start_time},{end_time},Card,,0,0,0,,{card_tag}"
                     )
             if layout.chs_lines:
-                res_chs = generate_frosted_glass_card(layout.chs_lines, safe_area=safe_area)
+                res_chs = generate_frosted_glass_card(layout.chs_lines, safe_area=safe_area, font_path=chs_font_path)
                 if res_chs:
                     card_tag = res_chs[0]
                     if use_kinetic:
