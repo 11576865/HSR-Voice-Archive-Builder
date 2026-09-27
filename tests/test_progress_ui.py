@@ -381,6 +381,38 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_mobile_single_column_workbench_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("Mobile layout authority v6", html)
+        self.assertIn(
+            "@media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px)",
+            html,
+        )
+        self.assertIn(
+            "#sideStack.utility-drawer{\n  flex-direction:column!important;",
+            html,
+        )
+        self.assertIn(
+            "#sideStack.utility-drawer > .utility-drawer-head,\n  #sideStack.utility-drawer > .card",
+            html,
+        )
+        self.assertIn(
+            ".sub-workspace,\n  .proofreading-workspace{\n    display:flex!important;\n    flex-direction:column!important;",
+            html,
+        )
+        self.assertIn(
+            ".export-context,\n  .export-lanes,\n  .update-toolbar,\n  .update-review-tools,",
+            html,
+        )
+        self.assertIn(
+            "#subtitleLayoutPreviewCard .preview-controls,",
+            html,
+        )
+        self.assertIn("body.utility-drawer-open{\n    overflow:hidden!important;", html)
+
     def test_workflow_density_review_update_export_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
