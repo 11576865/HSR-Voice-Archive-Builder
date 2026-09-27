@@ -52,9 +52,9 @@ class ProjectConfig:
     subtitle_preset: str = "standard"
     subtitle_chs_font: str = "汉仪旗黑"
     subtitle_primary_font: str = "Noto Sans"
-    subtitle_chs_size: int = 52
+    subtitle_chs_size: int = 48
     subtitle_primary_size: int = 42
-    subtitle_margin_horizontal_percent: float = 0.10
+    subtitle_margin_horizontal_percent: float = 0.03
     subtitle_margin_vertical_percent: float = 0.05
     subtitle_min_central_gap: float = 20.0
     subtitle_enable_karaoke: bool = False

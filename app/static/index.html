@@ -175,6 +175,19 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .proofreading-workspace .sub-textarea:focus{border-left-color:#a5d9ce;box-shadow:inset 3px 0 0 #315e59}
 .proofreading-actions,.proofreading-secondary-actions{margin-top:10px!important}
 .proofreading-actions button,.proofreading-secondary-actions button{min-height:34px;padding:6px 10px;font-size:12px}
+.proofreading-nav-actions{
+  position:static!important;
+  bottom:auto!important;
+  z-index:auto!important;
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  gap:7px!important;
+  margin-top:8px!important;
+  padding:0!important;
+  border-top:0!important;
+  background:transparent!important;
+}
+.proofreading-nav-actions button{width:100%;min-width:0}
 .proofreading-references{border-top:0!important}
 .proofreading-references .sub-ref-card{padding:12px 0}
 #subLayoutDiagnostic{padding:8px 10px;background:var(--surface-utility);border-left:2px solid var(--line)}
@@ -192,6 +205,7 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .preview-stage{grid-area:stage;position:relative;width:100%;aspect-ratio:16/9;background:#07090b;border:0;border-right:1px solid var(--line);border-radius:0;overflow:hidden;box-shadow:none;align-self:start}
 .preview-copy-fields{grid-area:copy;grid-template-columns:1fr!important;padding:14px 16px 4px;margin:0!important;background:var(--surface-utility)}
 .preview-copy-fields label{margin-top:6px;font-size:11px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted)}
+.layout-corpus-status{margin:8px 0 4px;padding:8px 9px;border-left:2px solid var(--line);background:var(--surface-subtle);line-height:1.45}
 .preview-controls{grid-area:controls;display:block!important;margin:0!important;padding:0 16px;background:var(--surface-utility)}
 .inspector-group{padding:14px 0;border-top:1px solid var(--line)}
 .inspector-group>b{display:block;margin-bottom:9px;font-size:11px;text-transform:uppercase;letter-spacing:.07em;color:var(--text-soft)}
@@ -1148,6 +1162,19 @@ body:not([data-workspace="project"]) #sideStack{display:flex!important}
     flex:0 0 auto!important;
     width:100%!important;
     min-width:0!important;
+    max-height:none!important;
+    height:auto!important;
+    overflow:visible!important;
+  }
+  .sub-item-preview{
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical;
+    -webkit-line-clamp:2;
+    white-space:normal!important;
+    overflow:hidden!important;
+    text-overflow:ellipsis;
+    overflow-wrap:anywhere!important;
+    word-break:break-word!important;
   }
   .proofreading-workspace .sub-main,
   .sub-main{
@@ -1713,6 +1740,21 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
   }
 }
 
+
+/* Final mobile proofreading navigation authority -------------------------- */
+@media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px){
+  .proofreading-workspace .sub-edit-area .proofreading-nav-actions{
+    position:static!important;
+    inset:auto!important;
+    bottom:auto!important;
+    z-index:auto!important;
+    width:100%!important;
+    margin-top:8px!important;
+    padding:0!important;
+    background:transparent!important;
+    border-top:0!important;
+  }
+}
 </style>
 </head>
 <body>
@@ -2137,6 +2179,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <label for="prevPriText">原文字幕</label>
             <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
           </div>
+          <div id="layoutCorpusCheckStatus" class="small muted layout-corpus-status">打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。</div>
         </div>
 
         <div class="preview-controls">
@@ -2155,9 +2198,9 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <div id="fontResolveStatus" class="small muted inspector-help">字体名仍可直接输入；“浏览”只列出处理主机可发现的字体 family。</div>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevChsSize" style="margin:0">中文基础字号</label>
-              <span id="prevChsSizeVal" class="small muted">52 px</span>
+              <span id="prevChsSizeVal" class="small muted">48 px</span>
             </div>
-            <input type="range" id="prevChsSize" min="38" max="64" value="52" step="1">
+            <input type="range" id="prevChsSize" min="38" max="64" value="48" step="1">
             <div style="display:flex;justify-content:space-between">
               <label for="prevPriSize" style="margin:0">原文基础字号</label>
               <span id="prevPriSizeVal" class="small muted">42 px</span>
@@ -2174,9 +2217,9 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
             <div style="display:flex;justify-content:space-between">
               <label for="prevMarginH" style="margin:0">水平安全边距</label>
-              <span id="prevMarginHVal" class="small muted">10 % (192px)</span>
+              <span id="prevMarginHVal" class="small muted">3 % (58px)</span>
             </div>
-            <input type="range" id="prevMarginH" min="0" max="30" value="10" step="1">
+            <input type="range" id="prevMarginH" min="0" max="30" value="3" step="1">
             <div style="display:flex;justify-content:space-between">
               <label for="prevMarginV" style="margin:0">垂直安全边距</label>
               <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
@@ -2200,10 +2243,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
         </div>
 
         <div class="preview-actions">
-          <div class="actions" style="margin:0">
-            <button type="button" class="small" id="prevPresetLongText">检查长句</button>
-            <button type="button" class="small danger" id="prevPresetCollision">检查溢出</button>
-          </div>
           <div class="actions" style="margin:0">
             <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
             <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
@@ -2258,7 +2297,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
       <div class="topline">
         <div>
           <h2>字幕校对</h2>
-          <p class="small muted" style="margin:4px 0 0">按“原文 → 语音与参考标注 → 最终中文字幕 → 官方中文 → ASS 检查”的顺序逐条处理。停止输入约 1 秒后自动保存。</p>
+          <p class="small muted" style="margin:4px 0 0">按“原文 → 语音与参考标注 → 最终中文字幕 → 官方中文”的顺序逐条处理。停止输入约 1 秒后自动保存。</p>
         </div>
       </div>
 
@@ -2278,7 +2317,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <option value="unreviewed">未人工确认</option>
             <option value="confirmed">已人工确认</option>
             <option value="modified">已修改字幕</option>
-            <option value="overflow">ASS 排版失败</option>
             <option value="official">官方中文字幕</option>
             <option value="api">API 翻译中文字幕</option>
           </select>
@@ -2369,14 +2407,16 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
                 <span class="proof-editor-meta"><span id="subInitialSourceBadge" class="badge">初始来源 —</span><span id="subCharCounter" class="small muted">0 字</span></span>
               </div>
               <textarea id="subFinalEditor" class="sub-textarea" placeholder="官方中文存在时以官方中文为初始字幕；否则使用补译结果。"></textarea>
+              <div class="sub-nav-bar proofreading-nav-actions">
+                <button type="button" id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)" title="上一条字幕 (Alt+Up)">上一条</button>
+                <button type="button" id="subNextBtn" aria-label="下一条字幕 (Alt+Down)" title="下一条字幕 (Alt+Down)">下一条</button>
+              </div>
               <div class="actions proofreading-actions">
-                <button type="button" class="secondary" id="subUseOfficialBtn" title="Alt+A">采用官方中文</button>
-                <button type="button" class="secondary" id="subUseApiBtn" title="Alt+T">采用补译</button>
                 <button type="button" class="secondary" id="subResetBtn">恢复初始字幕</button>
                 <button type="button" class="success" id="subConfirmBtn" title="Ctrl/Cmd+Enter">确认当前字幕</button>
               </div>
               <div id="subShortcutHelp" class="sub-shortcuts">
-                <kbd>Alt+A</kbd> 官方　<kbd>Alt+T</kbd> 补译　<kbd>Ctrl/⌘+Enter</kbd> 确认　<kbd>Alt+N</kbd> 下一待办　<kbd>Alt+Space</kbd> 播放
+                <kbd>Alt+↑ / Alt+↓</kbd> 上一条 / 下一条　<kbd>Ctrl/⌘+Enter</kbd> 确认　<kbd>Alt+Space</kbd> 播放
               </div>
             </div>
           </section>
@@ -2390,20 +2430,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <div id="subApiText" class="hidden" aria-hidden="true">—</div>
           </section>
 
-          <section class="proof-step proof-step-layout" aria-labelledby="proofLayoutLabel">
-            <div class="proof-step-kicker">05 · ASS LAYOUT</div>
-            <div id="proofLayoutLabel" class="sub-ref-label">ASS 排版检测</div>
-            <div id="subLayoutDiagnostic" class="small muted">ASS 排版：尚未检查。</div>
-            <div class="actions proofreading-secondary-actions">
-              <button type="button" class="secondary" id="subOpenLayoutBtn">在排版工作台检查当前条目</button>
-              <button type="button" class="secondary" id="subNextAttentionBtn">下一条未确认 / 异常字幕</button>
-            </div>
-          </section>
 
-          <div class="sub-nav-bar">
-            <button type="button" id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)" title="上一条字幕 (Alt+Up)">上一条</button>
-            <button type="button" id="subNextBtn" aria-label="下一条字幕 (Alt+Down)" title="下一条字幕 (Alt+Down)">下一条</button>
-          </div>
         </div>
       </div>
     </section>
@@ -2820,7 +2847,12 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   }
   updatePanelTiers(name);
   if(panelCollapseMode==='auto')requestAnimationFrame(()=>applyAutoPanelState(name));
-  if(name==='layout'&&typeof updateLayoutPreview==='function')requestAnimationFrame(updateLayoutPreview);
+  if(name==='layout'&&typeof updateLayoutPreview==='function'){
+    requestAnimationFrame(()=>{
+      if(typeof loadLayoutStressSample==='function')loadLayoutStressSample().catch(error=>setLog(String(error)));
+      else updateLayoutPreview();
+    });
+  }
   if(scroll)window.scrollTo({top:0,behavior:'instant'});
 }
 for(const button of workspaceButtons)button.addEventListener('click',()=>showWorkspace(button.dataset.workspaceTarget));
@@ -4327,7 +4359,6 @@ function renderSubtitleList(){
     const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
     const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
     const reviewTag=sub.confirmed?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已确认</span>':'<span class="badge" style="color:var(--muted);padding:2px 5px;font-size:10px">未确认</span>';
-    const overflowTag=sub.layout_overflow?'<span class="badge" style="color:var(--bad);padding:2px 5px;font-size:10px">排版失败</span>':'';
     const rawPreview=sub.final_chs||sub.source_text||'—';
     const highlightedPreview=highlightText(rawPreview,q);
     const highlightedId=highlightText(sub.id,q);
@@ -4337,7 +4368,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+reviewTag+overflowTag+refTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+srcTag+reviewTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -4380,7 +4411,6 @@ function renderSubtitleEditState(){
   parts.push(sub.confirmed
     ? '<span class="badge" style="color:var(--ok)">已人工确认</span>'
     : '<span class="badge" style="color:var(--muted)">未确认</span>');
-  if(sub.layout_overflow)parts.push('<span class="badge" style="color:var(--bad)">ASS 排版失败</span>');
   badge.innerHTML=parts.join(' ');
 }
 
@@ -4412,11 +4442,9 @@ function renderActiveSubtitle(){
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
     const initialBadge=document.getElementById('subInitialSourceBadge');if(initialBadge)initialBadge.textContent='初始来源 —';
-    for(const id of ['subUseOfficialBtn','subUseApiBtn','subResetBtn','subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
+    for(const id of ['subResetBtn','subConfirmBtn']){
       const button=document.getElementById(id);if(button)button.disabled=true;
     }
-        const diag=document.getElementById('subLayoutDiagnostic');
-    if(diag){diag.textContent='ASS 排版：尚未检查。';diag.className='small muted';}
     renderReferenceControls(null);
     clearReferenceAudio();
     const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
@@ -4459,24 +4487,10 @@ function renderActiveSubtitle(){
   updateCharCounter();
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
-  for(const id of ['subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
-    const button=document.getElementById(id);if(button)button.disabled=false;
-  }
-  const useOfficial=document.getElementById('subUseOfficialBtn');
-  const useApi=document.getElementById('subUseApiBtn');
   const reset=document.getElementById('subResetBtn');
   const confirm=document.getElementById('subConfirmBtn');
-  if(useOfficial)useOfficial.disabled=!sub.official_chs;
-  if(useApi)useApi.disabled=!sub.api_chs;
   if(reset)reset.disabled=String(sub.final_chs||subtitleInitialText(sub))===subtitleInitialText(sub);
-  if(confirm){confirm.textContent=sub.confirmed?'取消确认':'确认当前字幕';confirm.classList.toggle('success',!sub.confirmed);}
-  const diag=document.getElementById('subLayoutDiagnostic');
-  if(diag){
-    diag.textContent=sub.layout_overflow
-      ? 'ASS 排版：失败 · '+(sub.overflow_condition||'未知条件')+'。可直接送到排版工作台检查。'
-      : 'ASS 排版：当前没有已记录的溢出错误。';
-    diag.className='small '+(sub.layout_overflow?'status-bad':'muted');
-  }
+  if(confirm){confirm.disabled=false;confirm.textContent=sub.confirmed?'取消确认':'确认当前字幕';confirm.classList.toggle('success',!sub.confirmed);}
   loadReferenceAudio(sub);
 }
 
@@ -4602,21 +4616,9 @@ function goToNextAttentionSubtitle(){
   for(let step=1;step<=loadedSubtitles.length;step++){
     const idx=(activeSubIndex+step)%loadedSubtitles.length;
     const sub=loadedSubtitles[idx];
-    if(!sub.confirmed||sub.layout_overflow){selectSubtitleIndex(idx);return;}
+    if(!sub.confirmed){selectSubtitleIndex(idx);return;}
   }
-  setSubtitleSaveUi('saved','当前列表中没有未确认或排版异常字幕。');
-}
-
-async function openCurrentSubtitleInLayout(){
-  const sub=currentSubtitle();
-  if(!sub)return;
-  if(sub._dirty)await saveCurrentSubtitle({quiet:true});
-  document.getElementById('prevPriText').value=sub.source_text||'';
-  document.getElementById('prevChsText').value=sub.final_chs||'';
-  showWorkspace('layout');
-  invalidateLibassPreview();
-  await updateLayoutPreview();
-  await renderLibassPreview();
+  setSubtitleSaveUi('saved','当前列表中没有未确认字幕。');
 }
 
 function goToPrevSubtitle(){
@@ -4645,12 +4647,8 @@ function scheduleSubtitleFetch(){
 
 document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
-document.getElementById('subUseOfficialBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.official_chs||'');
-document.getElementById('subUseApiBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.api_chs||'');
 document.getElementById('subResetBtn').onclick=()=>applySubtitleCandidate(subtitleInitialText(currentSubtitle()));
 document.getElementById('subConfirmBtn').onclick=()=>setSubtitleConfirmation(!currentSubtitle()?.confirmed).catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认状态保存失败：'+shortError(x));});
-document.getElementById('subNextAttentionBtn').onclick=goToNextAttentionSubtitle;
-document.getElementById('subOpenLayoutBtn').onclick=()=>openCurrentSubtitleInLayout().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','打开排版工作台失败：'+shortError(x));});
 function toggleCurrentSubtitleAudio(){
   const audio=document.getElementById('subOriginalAudio');
   if(!audio?.src)return;
@@ -4677,12 +4675,6 @@ subtitleEditor.addEventListener('keydown',(e)=>{
     e.preventDefault();goToNextSubtitle();subtitleEditor.focus();
   }else if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){
     e.preventDefault();confirmCurrentSubtitleFromShortcut().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认失败：'+shortError(x))});
-  }else if(e.altKey&&e.key.toLowerCase()==='a'){
-    e.preventDefault();const value=currentSubtitle()?.official_chs;if(value)applySubtitleCandidate(value);
-  }else if(e.altKey&&e.key.toLowerCase()==='t'){
-    e.preventDefault();const value=currentSubtitle()?.api_chs;if(value)applySubtitleCandidate(value);
-  }else if(e.altKey&&e.key.toLowerCase()==='n'){
-    e.preventDefault();goToNextAttentionSubtitle();subtitleEditor.focus();
   }else if(e.altKey&&e.code==='Space'){
     e.preventDefault();toggleCurrentSubtitleAudio();
   }
@@ -4715,7 +4707,6 @@ document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subtitleReviewCard').addEventListener('keydown',(e)=>{
   if(document.body.dataset.workspace!=='review'||document.activeElement===subtitleEditor)return;
   if(e.altKey&&e.code==='Space'){e.preventDefault();toggleCurrentSubtitleAudio()}
-  else if(e.altKey&&e.key.toLowerCase()==='n'){e.preventDefault();goToNextAttentionSubtitle()}
   else if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();goToPrevSubtitle()}
   else if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();goToNextSubtitle()}
 });
@@ -4893,9 +4884,9 @@ function subtitleSettingsPayload(){
     preset: previewPreset,
     chs_font: document.getElementById('prevChsFont')?.value?.trim() || '汉仪旗黑',
     primary_font: document.getElementById('prevPriFont')?.value?.trim() || 'Noto Sans',
-    base_chs_size: parseInt(document.getElementById('prevChsSize')?.value || '52',10),
+    base_chs_size: parseInt(document.getElementById('prevChsSize')?.value || '48',10),
     base_primary_size: parseInt(document.getElementById('prevPriSize')?.value || '42',10),
-    margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '10') / 100,
+    margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '3') / 100,
     margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
     min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
@@ -4912,9 +4903,9 @@ function loadSubtitleLayoutSettings(config){
   previewPreset=config.subtitle_preset||'standard';
   set('prevChsFont',config.subtitle_chs_font||'汉仪旗黑');
   set('prevPriFont',config.subtitle_primary_font||'Noto Sans');
-  set('prevChsSize',config.subtitle_chs_size??52);
+  set('prevChsSize',config.subtitle_chs_size??48);
   set('prevPriSize',config.subtitle_primary_size??42);
-  set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.10)*100);
+  set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.03)*100);
   set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
   set('prevCentralGap',config.subtitle_min_central_gap??20);
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
@@ -4965,13 +4956,71 @@ async function saveSubtitleLayoutSettings(){
   }
 }
 
+let layoutStressSample=null;
+
+function subtitleVisualLength(text){
+  let width=0;
+  for(const ch of String(text||'')){
+    if(ch==='\n')continue;
+    if(/\s/.test(ch))width+=0.32;
+    else if(/[\u2e80-\u9fff\uf900-\ufaff]/.test(ch))width+=1;
+    else width+=0.58;
+  }
+  return width;
+}
+
+function subtitleLayoutStressScore(sub){
+  const chs=String(sub?.final_chs||sub?.official_chs||sub?.api_chs||sub?.original_chs||'');
+  const primary=String(sub?.source_text||'');
+  const chsWidth=subtitleVisualLength(chs);
+  const primaryWidth=subtitleVisualLength(primary);
+  return Math.max(chsWidth,primaryWidth)+(chsWidth+primaryWidth)*0.28;
+}
+
+async function loadLayoutStressSample(){
+  const status=document.getElementById('layoutCorpusCheckStatus');
+  if(!currentProject){
+    layoutStressSample=null;
+    if(status){status.textContent='打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。';status.className='small muted layout-corpus-status';}
+    return updateLayoutPreview();
+  }
+  if(status){status.textContent='正在从项目字幕中选择版面压力较高的条目…';status.className='small muted layout-corpus-status';}
+  try{
+    const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?selector=all');
+    const subtitles=data.subtitles||[];
+    if(!subtitles.length){
+      layoutStressSample=null;
+      if(status){status.textContent='当前项目没有可用于排版检测的字幕。';status.className='small muted layout-corpus-status';}
+      return updateLayoutPreview();
+    }
+    let selected=subtitles[0],bestScore=-1;
+    for(const sub of subtitles){
+      const score=subtitleLayoutStressScore(sub);
+      if(score>bestScore){bestScore=score;selected=sub;}
+    }
+    const chs=String(selected.final_chs||selected.official_chs||selected.api_chs||selected.original_chs||'');
+    const primary=String(selected.source_text||'');
+    layoutStressSample={id:selected.id,score:bestScore};
+    const chsInput=document.getElementById('prevChsText'),priInput=document.getElementById('prevPriText');
+    if(chsInput)chsInput.value=chs;
+    if(priInput)priInput.value=primary;
+    if(status){status.textContent='已载入项目版面压力较高的字幕 #'+selected.id+'，调整字号或安全边距时会自动复检。';status.className='small muted layout-corpus-status';}
+    invalidateLibassPreview();
+    return updateLayoutPreview();
+  }catch(err){
+    layoutStressSample=null;
+    if(status){status.textContent='自动载入项目字幕失败：'+shortError(err);status.className='small status-bad layout-corpus-status';}
+    return updateLayoutPreview();
+  }
+}
+
 async function updateLayoutPreview() {
   const chsText = document.getElementById('prevChsText')?.value || '';
   const priText = document.getElementById('prevPriText')?.value || '';
-  const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '52', 10);
+  const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '48', 10);
   const priSize = parseInt(document.getElementById('prevPriSize')?.value || '42', 10);
   const centralGap = parseFloat(document.getElementById('prevCentralGap')?.value || '20');
-  const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '10');
+  const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
   const showSafeArea = document.getElementById('prevShowSafeArea')?.checked ?? true;
@@ -5010,6 +5059,20 @@ async function updateLayoutPreview() {
     });
 
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
+    const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
+    if(corpusStatus&&layoutStressSample){
+      const layout=res?.layout||{};
+      if(layout.failed){
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 在当前设置下仍无法安全显示：'+(layout.failed_condition||'OVERFLOW')+'。请调整字号、边距或中央间隔。';
+        corpusStatus.className='small status-bad layout-corpus-status';
+      }else if(Number(layout.scale_percent||100)<100){
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 需要由排版求解器缩放到 '+layout.scale_percent+'% 才能安全显示。';
+        corpusStatus.className='small status-warn layout-corpus-status';
+      }else{
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 在当前设置下可安全显示（100%）。';
+        corpusStatus.className='small status-ok layout-corpus-status';
+      }
+    }
   } catch (err) {
     console.error('Preview request error:', err);
   }
@@ -5218,10 +5281,10 @@ function applySubtitlePreset(name){
   const standard=()=>{
     document.getElementById('prevChsFont').value='汉仪旗黑';
     document.getElementById('prevPriFont').value='Noto Sans';
-    document.getElementById('prevChsSize').value=52;
+    document.getElementById('prevChsSize').value=48;
     document.getElementById('prevPriSize').value=42;
     document.getElementById('prevCentralGap').value=20;
-    document.getElementById('prevMarginH').value=10;
+    document.getElementById('prevMarginH').value=3;
     document.getElementById('prevMarginV').value=5;
     document.getElementById('prevEnableKinetic').checked=true;
     document.getElementById('prevEnableKaraoke').checked=false;
@@ -5239,27 +5302,6 @@ function applySubtitlePreset(name){
 document.getElementById('prevPresetDefault')?.addEventListener('click',()=>applySubtitlePreset('standard'));
 document.getElementById('prevPresetPlain')?.addEventListener('click',()=>applySubtitlePreset('plain'));
 document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>applySubtitlePreset('karaoke'));
-
-document.getElementById('prevPresetLongText')?.addEventListener('click',()=>{
-  document.getElementById('prevChsText').value='在这个广袤无垠的宇宙中，我们终将踏上属于自己的旅程，无论前路多么坎坷与漫长，星光终会照亮每一个勇敢前行的灵魂。';
-  document.getElementById('prevPriText').value='In this vast and boundless universe, we will eventually embark on our own journey, regardless of how treacherous and long the road ahead may be, starward light will illuminate every brave soul.';
-  invalidateLibassPreview();
-  updateLayoutPreview();
-});
-
-document.getElementById('prevPresetCollision')?.addEventListener('click',()=>{
-  document.getElementById('prevChsText').value='这是一句极长且字号巨大的中文字幕，第一行、第二行、第三行、第四行不断向下堆叠增长，直到侵入中央安全间隔区并突破底部安全边界。';
-  document.getElementById('prevPriText').value='This is an extremely long primary sentence with oversized base font size that breaks into multiple lines and grows upward rapidly until top boundary overflow occurs.';
-  document.getElementById('prevChsSize').value=64;
-  document.getElementById('prevPriSize').value=54;
-  document.getElementById('prevCentralGap').value=100;
-  document.getElementById('prevMarginH').value=30;
-  document.getElementById('prevMarginV').value=20;
-  previewPreset='custom';
-  markSubtitleSettingsDirty();
-  invalidateLibassPreview();
-  updateLayoutPreview();
-});
 
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
