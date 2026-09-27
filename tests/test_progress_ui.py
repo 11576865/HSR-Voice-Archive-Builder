@@ -339,7 +339,10 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('data-font-target="prevChsFont"', html)
         self.assertIn('data-font-target="prevPriFont"', html)
         self.assertIn("'/api/subtitle-layout/fonts?q='", html)
-        self.assertIn("sample.style.fontFamily=family", html)
+        self.assertIn("'/api/subtitle-layout/font-file?family='", html)
+        self.assertIn("new FontFace(alias,bytes)", html)
+        self.assertIn("document.fonts.add(face)", html)
+        self.assertIn("browserPreviewFontName(", html)
         self.assertIn('id="previewBackgroundMode"', html)
         self.assertIn('<option value="image">本地图片</option>', html)
         self.assertIn('id="previewBackgroundFile" type="file"', html)
@@ -349,6 +352,10 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn("bgGradient", html)
         self.assertIn("img-src 'self' data: blob:", server_py)
         self.assertIn("img-src 'self' data: blob:", lite_server_py)
+        self.assertIn("font-src 'self' data: blob:", server_py)
+        self.assertIn("font-src 'self' data: blob:", lite_server_py)
+        self.assertIn('@app.get("/api/subtitle-layout/font-file")', server_py)
+        self.assertIn('path == "/api/subtitle-layout/font-file"', lite_server_py)
         self.assertIn('path == "/api/subtitle-layout/fonts"', lite_server_py)
 
     def test_workbench_visual_structure_uses_canvas_and_inspector_hierarchy(self) -> None:
