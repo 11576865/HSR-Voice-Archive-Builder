@@ -435,7 +435,7 @@ async def api_subtitle_layout_preview(request: Request):
             target_language=str(data.get("target_language") or "zh-CN"),
             base_chs_size=int(data.get("base_chs_size") if data.get("base_chs_size") is not None else 52),
             base_primary_size=int(data.get("base_primary_size") if data.get("base_primary_size") is not None else 42),
-            margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.10),
+            margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.03),
             margin_top_percent=float(data.get("margin_top_percent") if data.get("margin_top_percent") is not None else 0.05),
             min_central_gap=float(data.get("min_central_gap") if data.get("min_central_gap") is not None else 20.0),
             chs_font=str(data.get("chs_font") or "汉仪旗黑"),
