@@ -383,7 +383,7 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("停止输入约 1 秒后会自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn(
-            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})",
+            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})",
             html,
         )
         self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
