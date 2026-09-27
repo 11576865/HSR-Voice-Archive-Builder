@@ -1,94 +1,191 @@
 # ASS Subtitle Layout Engine
 
-## Overview & Architecture
+## Current model
 
-The ASS Subtitle Layout Engine formats bilingual (Chinese primary and English/other primary) continuous voice subtitles for 1920x1080 video output. It produces ASS dialogue events mapped accurately to audio timestamps with safe area margins and rule-based line breaking.
+The ASS subtitle system is a derived presentation layer over the resolved archive Timeline. SRT remains the always-generated subtitle artifact; ASS is generated on demand from the same final text, timestamps, project settings, and optional word-level timing sidecar.
 
-### Module Responsibilities
+The engine targets a 1920 × 1080 canvas. The current default safe area is:
 
-- **`safe_area.py`**: Defines the $1920 \times 1080$ canvas dimensions and safe area margins ($10\%$ horizontal margin = $192\text{px}$, $5\%$ vertical margin = $54\text{px}$).
-  - Horizontal bounds: $192\text{px} \le x \le 1728\text{px}$ (Maximum printable width: $1536\text{px}$)
-  - Vertical bounds: $54\text{px} \le y \le 1026\text{px}$ (Maximum printable height: $972\text{px}$)
-- **`measure.py`**: Character-width and line-height measurement functions based on CJK/Latin character width ratios.
-- **`breaker.py`**: Rule-based scoring line breaker with backtracking. Breaks text at optimal punctuation or whitespace boundaries while preserving protected phrases.
-- **`font_scale.py`**: Discrete font scale factor evaluation ($100\% \to 95\% \to 90\% \to 85\%$).
-- **`collision.py`**: Symmetric 4-bound collision detection for both Chinese and Primary text blocks (top overflow, bottom overflow, horizontal overflow, and central gap safety check).
-- **`layout_solver.py`**: Iteratively calculates text block positions and font scales, returning a `SolvedLayout` or marking extreme overflow when $85\%$ scale fails safe-area constraints.
-- **`ass_writer.py`**: Generates full ASS script headers, styles (`CHS`, `Primary`), and dialogue lines with absolute alignment/position tags (`\an8\pos(x,y)\fs...`). Writes `ass_layout_overflow_report.json` if invalid layouts occur.
+- horizontal margin: **3%** on each side (about 58 px);
+- vertical margin: **5%** on each side (54 px);
+- minimum central gap: **20 px**;
+- after reserving the central gap, the remaining safe-area height is divided **60% to the source/primary subtitle region above** and **40% to the Chinese target subtitle region below**.
 
----
+The browser geometry preview and the Python layout solver use the same 60/40 boundary calculation.
 
-## Output Architecture & Pipeline Switch
+## Modules
 
-ASS generation is opt-in to decouple subtitle processing dependencies:
-- Default output format remains **SRT** (`HSR_Voice_Archive.srt`).
-- Toggle `generate_ass` option in `ProjectConfig`, CLI (`--generate-ass`), Quick Mode, and Advanced Project Settings.
-- When `generate_ass=False` (default), ASS generation and `subtitle_layout` execution are skipped.
-- When `generate_ass=True`, `HSR_Voice_Archive.ass` is built alongside SRT.
+- **`safe_area.py`** defines the frame and safe-area bounds.
+- **`measure.py`** measures text with a resolved host font when available and falls back to deterministic width estimates.
+- **`breaker.py`** performs rule-based line breaking with punctuation and protected-phrase penalties.
+- **`font_scale.py`** evaluates the discrete scale sequence 100% → 95% → 90% → 85%.
+- **`collision.py`** checks horizontal overflow, top/bottom overflow, and the protected central gap.
+- **`layout_solver.py`** places primary/source lines above the central gap and Chinese target lines below it.
+- **`ass_writer.py`** writes ASS styles/events, optional readability layers, animation, Karaoke, and Archive HUD.
+- **`preview.py`** produces geometry-preview data using the same layout constraints.
+- **`app/ass_preview.py`** renders a representative frame through FFmpeg/libass for final visual confirmation.
+- **`app/word_alignment.py`** validates and attaches optional word-level timing without mutating canonical manifest text/provenance.
 
----
+## Fonts and browser preview
 
-## Summary of Modified & Added Files
+The processing host remains authoritative for font discovery and ASS rendering.
 
-| File | Changes Made |
-| :--- | :--- |
-| `app/project.py` | Added `generate_ass: bool = False` to `ProjectConfig` and `ass_layout_overflow_report.json` to summary outputs. |
-| `app/builder.py` | Added `generate_ass` parameter to `write_manifest()`. |
-| `app/pipeline.py` | Propagated `generate_ass` CLI flag and pipeline configuration option. |
-| `app/subtitles.py` | Updated `update_project_subtitles()` to honor `config.generate_ass` and exposed overflow flags in `get_project_subtitles()`. |
-| `app/quick.py` | Set default `generate_ass=False` during quick project creation. |
-| `app/static/index.html` | Added ASS generation checkbox toggle to Advanced Project Settings. |
-| `subtitle_layout/breaker.py` | Implemented scoring-based line breaker with punctuation priorities and protected phrase penalties. |
-| `subtitle_layout/collision.py` | Implemented symmetric 4-bound safety area check (`check_bilingual_collision_with_reason`). |
-| `subtitle_layout/layout_solver.py` | Added failure tracking and scale attempt history when $85\%$ font scale fails bounds. |
-| `subtitle_layout/ass_writer.py` | Added `ass_layout_overflow_report.json` generation upon layout failures. |
-| `scripts/verify_ass_render.py` | Added automated headless FFmpeg render verification script with PNG pixel bounds analysis. |
-| `tests/test_subtitle_layout.py` | Added comprehensive unit tests for scoring line breaking, 4-bound collision checks, render verification helpers, and pipeline options. |
+The browser UI lists host font families through the local backend. When a font is selected, the dashboard can fetch the resolved installed font file through the authenticated same-origin font endpoint and register it with the browser `FontFace` API. SVG/Canvas geometry preview therefore uses the real host font when the browser supports that font format.
 
----
+This reduces browser/libass mismatch, but FFmpeg/libass remains the final rendering authority because browser text metrics and libass/FreeType can still differ.
 
-## Sample ASS Output
+Font files are not committed to the repository.
+
+## Readability controls
+
+The workbench exposes:
+
+- Chinese and primary/source font family;
+- Chinese and primary/source base size;
+- horizontal and vertical safe margins;
+- central gap;
+- outline width (`\bord`);
+- shadow depth (`\shad`);
+- blur radius (`\blur`);
+- optional multi-layer soft outline;
+- optional translucent vector backdrop;
+- backdrop opacity.
+
+ASS `\blur` applies to subtitle glyph/outline/shadow rendering. It does **not** blur the underlying video image.
+
+## Entry and exit motion
+
+Fade and transform motion are separate controls.
+
+The normal fade path uses `\fad(in,out)`, optionally shortened according to the available inter-voice gap.
+
+The optional soft-entry path uses a restrained `\t(...)` transform. Its default shape is approximately:
 
 ```ass
-[Script Info]
-Title: HSR Voice Archive
-ScriptType: v4.00+
-PlayResX: 1920
-PlayResY: 1080
-WrapStyle: 0
-ScaledBorderAndShadow: yes
-
-[V4+ Styles]
-Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,汉仪旗黑,52,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,0,8,192,192,54,1
-Style: Primary,Noto Sans,42,&H00FFFFFF,&H00FFFFFF,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,3,0,8,192,192,54,1
-
-[Events]
-Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
-Dialogue: 1,0:00:05.00,0:00:07.50,CHS,,0,0,0,,{\an8\pos(960,54)\fs52}愿此行，终抵群星。
-Dialogue: 0,0:00:05.00,0:00:07.50,Primary,,0,0,0,,{\an8\pos(960,1026)\fs42}May this journey lead us starward.
+\fscx98\fscy98\blur1.5
+\t(0,160,\fscx100\fscy100\blur0)
 ```
 
----
+If a non-zero base blur is configured, the transform returns to that base blur rather than forcing zero.
 
-## Player Compatibility Strategy (libass)
+No bounce or large positional motion is added by default.
 
-- **Encoding**: UTF-8 with BOM (`utf-8-sig`) is enforced for maximum compatibility across Windows media players (mpv, VLC, MPC-HC) and libass builds.
-- **Font Fallback Hierarchy**: Recommended system font stack includes `汉仪旗黑` / `Noto Sans CJK SC` / `Source Han Sans CN` for Chinese subtitles and `Noto Sans` / `Arial` for Primary text.
-- **Positioning**: Uses standard ASS v4.00+ `\an8` (top-center alignment) paired with explicit `\pos(x,y)` coordinates relative to the $1920 \times 1080$ frame.
+## Karaoke modes
 
----
+Karaoke is only emitted when complete, monotonic word timing covers the source text exactly enough for the renderer's validation rules. Missing, stale, partial, non-monotonic, or out-of-duration timing automatically falls back to ordinary sentence subtitles.
 
-## Verification & Test Results
+Available modes:
 
-Run unit test suite:
+- **`\k`** — discrete word switching;
+- **`\kf`** — smooth fill/sweep behavior provided by libass;
+- **dynamic clip** — a separate highlight layer using `\clip(...)` plus timed `\t(...)` changes.
+
+Dynamic clip is currently restricted to a single rendered line. Multi-line text falls back rather than inventing an ambiguous sweep path.
+
+For non-Chinese source projects, word timing normally applies to the primary/source-language subtitle. Chinese target text is not assigned source-language word timing.
+
+## Word-level timing sidecar
+
+Word timing is intentionally separate from canonical manifest text provenance.
+
+Imported timing is stored in:
+
+```text
+output/word_alignments.json
+```
+
+A record is bound to a manifest entry using stable identity in this order where available:
+
+- `source_member_id`;
+- `logical_id`;
+- entry id/index;
+- a unique filename fallback.
+
+Each cached record also stores a fingerprint of the normalized source text and the source-audio duration. If the source text or duration changes materially, the cache entry is treated as stale and is not reused.
+
+Accepted word records use the form:
+
+```json
+{
+  "alignments": [
+    {
+      "id": 17,
+      "provider": "external-aligner",
+      "words": [
+        {"word": "May ", "start": 0.00, "end": 0.31, "confidence": 0.98},
+        {"word": "this ", "start": 0.34, "end": 0.57, "confidence": 0.97}
+      ]
+    }
+  ]
+}
+```
+
+The import path validates:
+
+- non-empty words;
+- finite start/end values;
+- positive duration;
+- monotonic order;
+- timing within source-audio duration (with a small tolerance);
+- complete normalized source-text coverage.
+
+The cache is attached only in memory after canonical manifest/corrected-CSV persistence. It therefore does not become official/API text provenance and does not rewrite the manifest source text.
+
+## Word-timing diagnostics
+
+The dashboard reports, per project:
+
+- total subtitle entries;
+- usable alignments;
+- missing alignments;
+- invalid alignments;
+- usable percentage;
+- provider counts.
+
+A per-entry endpoint returns the validated words only for the requested subtitle.
+
+When Karaoke is enabled, the layout workbench prefers an aligned project subtitle as its sample. The actual ASS preview can pass those real word timings to FFmpeg/libass and render at a user-selected percentage of the subtitle duration, so `\kf` and dynamic clip can be inspected at intermediate time points.
+
+## Archive HUD
+
+Archive HUD is an optional independent ASS layer with lower visual weight than subtitle text. It can display available archive metadata such as:
+
+```text
+CHARACTER · GROUP / CHAPTER · #ENTRY
+```
+
+The current implementation uses the project character identifier, manifest `group`, and entry id when present. HUD font size and opacity are configurable. It does not alter the subtitle text itself.
+
+## Layer model
+
+The current writer may use multiple ASS layers:
+
+- Layer 0: backdrop cards / primary base and outer-outline events;
+- Layer 1: Chinese base and outer-outline events;
+- Layer 3: primary dynamic-clip highlight;
+- Layer 4: Chinese dynamic-clip highlight;
+- Layer 5: Archive HUD.
+
+Exact visual ordering also depends on style/event ordering and whether optional features are enabled.
+
+## Failure behavior
+
+The layout solver tries 100%, 95%, 90%, then 85% scale. If an entry still violates safe-area or central-gap constraints, ASS generation is rejected rather than silently producing a partial archive. The failure is written to `ass_layout_overflow_report.json`.
+
+SRT generation is independent from ASS layout validation and continues to reflect the saved final subtitle text.
+
+## Verification
+
+Run the complete test suite:
+
 ```bash
-python3 -m unittest discover -s tests
+python -m unittest discover -s tests -v
 ```
-Result: **182 tests passed**.
 
-Run automated ASS render verification (requires FFmpeg):
+For pixel-level ASS verification, use the FFmpeg/libass verification script:
+
 ```bash
-python3 scripts/verify_ass_render.py --ass output/HSR_Voice_Archive.ass --out docs/artifacts
+python scripts/verify_ass_render.py --ass output/HSR_Voice_Archive.ass --out docs/artifacts
 ```
-Result: **PASS: Zero visual bleed into safe area margins**.
+
+The browser geometry preview is intended for fast iteration. FFmpeg/libass rendering remains the final check for font selection, outline/blur behavior, motion, Karaoke, clipping, and Archive HUD.
