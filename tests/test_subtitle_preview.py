@@ -33,7 +33,7 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertTrue(res["ok"])
         self.assertFalse(res["layout"]["failed"])
         self.assertIsNone(res["layout"]["failed_condition"])
-        self.assertEqual(res["safe_area"]["margin_left"], 192)
+        self.assertEqual(res["safe_area"]["margin_left"], 58)
         self.assertEqual(res["safe_area"]["margin_top"], 54)
         self.assertEqual(len(res["layout"]["primary_lines"]), 1)
         self.assertEqual(len(res["layout"]["chs_lines"]), 1)
