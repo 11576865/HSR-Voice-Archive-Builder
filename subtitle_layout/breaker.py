@@ -143,7 +143,11 @@ def _get_candidate_split_points(text: str) -> list[int]:
 
 
 def _score_split_point(
-    text: str, k: int, font_size: int, protected_spans: list[tuple[int, int]]
+    text: str,
+    k: int,
+    font_size: int,
+    protected_spans: list[tuple[int, int]],
+    font_path: str | None = None,
 ) -> tuple[float, float, float]:
     """Calculate (boundary_score, protected_penalty, imbalance_penalty) for split index k."""
     l1 = text[:k].strip()
@@ -168,8 +172,8 @@ def _score_split_point(
             protected_penalty -= 100.0
 
     # 3. Pixel-width based line imbalance penalty
-    w1 = measure_text_width(l1, font_size)
-    w2 = measure_text_width(l2, font_size)
+    w1 = measure_text_width(l1, font_size, font_path)
+    w2 = measure_text_width(l2, font_size, font_path)
     imbalance_penalty = -abs(w1 - w2) * 0.05
 
     return boundary_score, protected_penalty, imbalance_penalty
@@ -179,13 +183,14 @@ def break_line(
     text: str,
     max_width: float,
     font_size: int,
+    font_path: str | None = None,
 ) -> list[str]:
     """Rule-based line breaking with scoring, semantic-protected binding, and pixel imbalance penalty."""
     cleaned = text.strip()
     if not cleaned:
         return []
 
-    if measure_text_width(cleaned, font_size) <= max_width:
+    if measure_text_width(cleaned, font_size, font_path) <= max_width:
         return [cleaned]
 
     if any(is_cjk_char(c) for c in cleaned):
@@ -195,10 +200,10 @@ def break_line(
             if len(parts) > 1:
                 final_lines: list[str] = []
                 for part in parts:
-                    if measure_text_width(part, font_size) <= max_width:
+                    if measure_text_width(part, font_size, font_path) <= max_width:
                         final_lines.append(part)
                     else:
-                        final_lines.extend(break_line(part, max_width, font_size))
+                        final_lines.extend(break_line(part, max_width, font_size, font_path))
                 return final_lines
 
     protected_spans = _protected_phrase_spans(cleaned)
@@ -213,18 +218,18 @@ def break_line(
         if not l1 or not l2:
             continue
 
-        w1 = measure_text_width(l1, font_size)
-        w2 = measure_text_width(l2, font_size)
+        w1 = measure_text_width(l1, font_size, font_path)
+        w2 = measure_text_width(l2, font_size, font_path)
 
         if w1 <= max_width and w2 <= max_width:
-            b_score, p_pen, imb_pen = _score_split_point(cleaned, k, font_size, protected_spans)
+            b_score, p_pen, imb_pen = _score_split_point(cleaned, k, font_size, protected_spans, font_path)
             total_score = b_score + p_pen + imb_pen
             valid_two_line_candidates.append((total_score, k, l1, l2))
 
     if valid_two_line_candidates:
         # Pick the candidate with the highest total score
         valid_two_line_candidates.sort(
-            key=lambda x: (x[0], -abs(measure_text_width(x[2], font_size) - measure_text_width(x[3], font_size))),
+            key=lambda x: (x[0], -abs(measure_text_width(x[2], font_size, font_path) - measure_text_width(x[3], font_size, font_path))),
             reverse=True,
         )
         best = valid_two_line_candidates[0]
@@ -239,9 +244,9 @@ def break_line(
         if not l1 or not l2:
             continue
 
-        w1 = measure_text_width(l1, font_size)
+        w1 = measure_text_width(l1, font_size, font_path)
         if w1 <= max_width:
-            b_score, p_pen, _ = _score_split_point(cleaned, k, font_size, protected_spans)
+            b_score, p_pen, _ = _score_split_point(cleaned, k, font_size, protected_spans, font_path)
             fill_score = (w1 / max_width) * 10.0
             total_score = b_score + p_pen + fill_score
             fit_candidates.append((total_score, k, l1, l2))
@@ -249,18 +254,18 @@ def break_line(
     if fit_candidates:
         fit_candidates.sort(key=lambda x: x[0], reverse=True)
         best = fit_candidates[0]
-        rest_lines = break_line(best[3], max_width, font_size)
+        rest_lines = break_line(best[3], max_width, font_size, font_path)
         return [best[2]] + rest_lines
 
     # Single-character / single-word overflow handler fallback
     sub_line = ""
     for char in cleaned:
-        if not sub_line or measure_text_width(sub_line + char, font_size) <= max_width:
+        if not sub_line or measure_text_width(sub_line + char, font_size, font_path) <= max_width:
             sub_line += char
         else:
             break
     if sub_line and len(sub_line) < len(cleaned):
         rest = cleaned[len(sub_line):].strip()
-        return [sub_line] + (break_line(rest, max_width, font_size) if rest else [])
+        return [sub_line] + (break_line(rest, max_width, font_size, font_path) if rest else [])
 
     return [cleaned]
