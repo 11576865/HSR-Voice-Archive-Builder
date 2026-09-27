@@ -211,6 +211,17 @@ class SubtitleSettingsApiTests(unittest.TestCase):
                 "enable_translucent_card": True,
                 "enable_multi_layer_outline": True,
                 "enable_kinetic": False,
+                "fade_in_ms": 240,
+                "fade_out_ms": 180,
+                "use_audio_aware_fade": False,
+                "outline_width": 4.5,
+                "shadow_depth": 1.25,
+                "blur_radius": 0.8,
+                "card_opacity": 0.55,
+                "enable_soft_entry": True,
+                "soft_entry_scale_percent": 97.5,
+                "soft_entry_blur": 1.7,
+                "soft_entry_ms": 170,
             },
         )
         self.assertEqual(response.status_code, 200)
@@ -227,6 +238,17 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertTrue(saved.subtitle_enable_translucent_card)
         self.assertTrue(saved.subtitle_enable_multi_layer_outline)
         self.assertFalse(saved.subtitle_enable_kinetic)
+        self.assertEqual(saved.subtitle_fade_in_ms, 240)
+        self.assertEqual(saved.subtitle_fade_out_ms, 180)
+        self.assertFalse(saved.subtitle_use_audio_aware_fade)
+        self.assertEqual(saved.subtitle_outline_width, 4.5)
+        self.assertEqual(saved.subtitle_shadow_depth, 1.25)
+        self.assertEqual(saved.subtitle_blur_radius, 0.8)
+        self.assertEqual(saved.subtitle_card_opacity, 0.55)
+        self.assertTrue(saved.subtitle_enable_soft_entry)
+        self.assertEqual(saved.subtitle_soft_entry_scale_percent, 97.5)
+        self.assertEqual(saved.subtitle_soft_entry_blur, 1.7)
+        self.assertEqual(saved.subtitle_soft_entry_ms, 170)
 
     def test_settings_endpoint_rejects_ass_delimiter_in_font_name(self):
         response = self.client.post(
