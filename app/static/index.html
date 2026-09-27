@@ -2305,15 +2305,9 @@ originalAudio.addEventListener('error',()=>{
   const status=document.getElementById('subAudioStatus');
   status.textContent='原始语音无法播放（媒体错误 '+(originalAudio.error?.code||'未知')+'）：浏览器无法解码该 WAV，请检查文件编码。';
 });
-document.getElementById('subReferenceCard').addEventListener('toggle',(event)=>{
-  const details=event.currentTarget;
-  if(details.open){
-    loadReferenceAudio(currentSubtitle());
-  }else{
-    clearReferenceAudio();
-    const status=document.getElementById('subAudioStatus');
-    if(status)status.textContent='展开此工具后加载当前字幕对应的原始 WAV。';
-  }
+document.getElementById('subReferenceCard').addEventListener('toggle',()=>{
+  // Reference metadata is optional; audio playback belongs to proofreading
+  // and therefore remains loaded regardless of this details panel.
 });
 document.getElementById('subReferenceSelected').onchange=saveReferenceAnnotation;
 document.getElementById('subReferenceEmotion').onchange=saveReferenceAnnotation;
