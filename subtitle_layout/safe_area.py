@@ -7,8 +7,8 @@ from dataclasses import dataclass
 class SafeArea:
     canvas_width: int = 1920
     canvas_height: int = 1080
-    margin_left_percent: float = 0.10
-    margin_right_percent: float = 0.10
+    margin_left_percent: float = 0.03
+    margin_right_percent: float = 0.03
     margin_top_percent: float = 0.05
     margin_bottom_percent: float = 0.05
 
