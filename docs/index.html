@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
 <meta name="color-scheme" content="dark light">
-<meta name="theme-color" content="#0d1420">
+<meta name="theme-color" content="#0b1220">
 <link rel="icon" type="image/svg+xml" href="./favicon.svg?v=1">
 <title>HSR Voice Archive Builder</title>
 <meta name="description" content="HSR Voice Archive Builder — local voice archive and subtitle workbench.">
@@ -19,27 +19,28 @@
 <style>
 :root{
   color-scheme:dark;
-  --bg:#0c1320;--surface:#111b29;--soft:#162233;--line:#2d4159;--text:#eaf1f8;
-  --strong:#fff;--muted:#8da0b5;--accent:#31c6b0;--blue:#4ea1ff;--purple:#a67cff;
-  --green:#55d88a;--warn:#e9b54a
+  --bg:#0b1220;--panel:#101a29;--soft:#152234;--line:#2a3d55;--line-strong:#45617e;
+  --text:#e7eef6;--strong:#fff;--muted:#8fa2b8;--accent:#35c6b1;--blue:#58a6ff;
+  --purple:#aa7dff;--green:#55d88a;--amber:#e8b354
 }
 :root[data-theme="light"]{
   color-scheme:light;
-  --bg:#edf3f8;--surface:#fff;--soft:#f4f7fa;--line:#ccd8e4;--text:#1b2a3a;
-  --strong:#0f1b29;--muted:#687b8e;--accent:#0f8f83;--blue:#176fd1;--purple:#7449d8;
-  --green:#19864a;--warn:#a76605
+  --bg:#f2f5f8;--panel:#fff;--soft:#f6f8fb;--line:#d3dce6;--line-strong:#a7b7c8;
+  --text:#1c2a38;--strong:#0b1724;--muted:#687b8e;--accent:#0d8f82;--blue:#176fd1;
+  --purple:#7449d8;--green:#19864a;--amber:#a66808
 }
 *{box-sizing:border-box}
-html{background:var(--bg)}
+html{background:var(--bg);scroll-behavior:smooth}
 body{
   margin:0;background:var(--bg);color:var(--text);
   font-family:Inter,ui-sans-serif,system-ui,-apple-system,"Segoe UI","Microsoft YaHei",sans-serif;
   -webkit-font-smoothing:antialiased
 }
-a{color:inherit}button{font:inherit}code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
-.shell{width:100%;padding:0 clamp(18px,2.4vw,48px) max(42px,env(safe-area-inset-bottom))}
+a{color:inherit}button{font:inherit}
+code,pre{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace}
+.shell{width:100%;padding:0 clamp(14px,1.8vw,32px) max(42px,env(safe-area-inset-bottom))}
 .topbar{
-  min-height:60px;display:flex;align-items:center;justify-content:space-between;gap:16px;
+  min-height:58px;display:flex;align-items:center;justify-content:space-between;gap:16px;
   border-bottom:1px solid var(--line)
 }
 .brand{display:flex;align-items:center;gap:10px;min-width:0}
@@ -50,130 +51,187 @@ a{color:inherit}button{font:inherit}code,pre{font-family:ui-monospace,SFMono-Reg
 .brand-name{font-size:14px;font-weight:720;color:var(--strong)}
 .brand-sub{margin-top:1px;color:var(--muted);font-size:10px}
 .topbar-actions{display:flex;align-items:center;gap:7px}
-.theme-control{display:flex;border:1px solid var(--line);background:var(--surface)}
+.theme-control{display:flex;border:1px solid var(--line);background:var(--panel)}
 .theme-control button{
   min-height:28px;padding:4px 7px;border:0;background:transparent;color:var(--muted);
   font-size:10px;font-weight:650;cursor:pointer
 }
 .theme-control button[aria-pressed="true"]{background:var(--soft);color:var(--accent)}
-.repo,.btn{
-  display:inline-flex;align-items:center;justify-content:center;min-height:34px;padding:7px 10px;
-  border:1px solid var(--line);background:var(--surface);color:var(--text);text-decoration:none;
-  font-size:11px;font-weight:680
+.link-button{
+  display:inline-flex;align-items:center;justify-content:center;min-height:30px;padding:6px 9px;
+  border:1px solid var(--line);background:var(--panel);color:var(--text);text-decoration:none;
+  font-size:10px;font-weight:680
 }
-.btn.primary{background:var(--accent);border-color:var(--accent);color:#071310}
-:root[data-theme="light"] .btn.primary{color:#fff}
+.link-button.primary{background:var(--accent);border-color:var(--accent);color:#071310}
+:root[data-theme="light"] .link-button.primary{color:#fff}
+
 .hero{
-  display:flex;align-items:flex-end;justify-content:space-between;gap:28px;
-  padding:38px 0 22px;border-bottom:1px solid var(--line)
+  display:grid;grid-template-columns:minmax(0,1fr) auto;gap:24px;align-items:end;
+  padding:34px 0 24px
 }
-.hero-copy{max-width:900px}
 .eyebrow{
   color:var(--accent);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.1em
 }
 h1{
-  margin:9px 0 8px;color:var(--strong);
-  font-size:clamp(30px,4.2vw,46px);line-height:1.02;letter-spacing:-.04em
+  margin:9px 0 7px;color:var(--strong);
+  font-size:clamp(30px,4.1vw,50px);line-height:1.02;letter-spacing:-.045em
 }
-.lead{margin:0;color:var(--muted);font-size:13px;max-width:900px}
-.hero-actions{display:flex;flex:0 0 auto;gap:7px}
-.section{padding-top:20px}
-.section-head{
-  display:flex;align-items:baseline;justify-content:space-between;gap:16px;margin-bottom:8px
+.lead{margin:0;max-width:900px;color:var(--muted);font-size:12px}
+.version{
+  align-self:start;margin-top:4px;padding:5px 8px;border:1px solid var(--line);
+  color:var(--muted);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace
 }
-.section-head h2{margin:0;color:var(--strong);font-size:14px}
-.section-head p{margin:0;color:var(--muted);font-size:10px}
-.launch-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.launch-card{
-  min-width:0;border:1px solid var(--line);background:var(--surface)
+
+.workspace{
+  display:grid;grid-template-columns:190px minmax(0,1fr);
+  min-height:430px;border:1px solid var(--line);background:var(--panel)
 }
-.launch-card.windows{border-top:2px solid var(--blue)}
-.launch-card.termux{border-top:2px solid var(--accent)}
-.launch-head{
-  display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:11px 12px;border-bottom:1px solid var(--line)
+.platform-nav{
+  border-right:1px solid var(--line);padding:10px;background:color-mix(in srgb,var(--panel) 88%,var(--bg))
 }
-.launch-title{display:flex;align-items:center;gap:9px}
-.launch-title b{font-size:13px;color:var(--strong)}
-.tags{display:flex;flex-wrap:wrap;gap:5px}
-.tags span{
-  padding:3px 6px;border:1px solid var(--line);background:var(--soft);
-  color:var(--muted);font-size:9px
+.platform-label{
+  padding:7px 8px 9px;color:var(--muted);
+  font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em
 }
-.copy-row{
+.platform-tab{
+  width:100%;display:grid;grid-template-columns:1fr auto;gap:8px;align-items:center;
+  padding:11px 10px;border:0;border-left:2px solid transparent;background:transparent;
+  color:var(--muted);text-align:left;cursor:pointer
+}
+.platform-tab span:first-child{font-size:12px;font-weight:700}
+.platform-tab span:last-child{font-size:9px}
+.platform-tab:hover{background:var(--soft);color:var(--text)}
+.platform-tab[aria-selected="true"]{
+  border-left-color:var(--accent);background:var(--soft);color:var(--strong)
+}
+.platform-main{min-width:0}
+.platform-panel{min-height:100%;padding:22px}
+.platform-panel[hidden]{display:none}
+.panel-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:18px;
+  padding-bottom:18px;border-bottom:1px solid var(--line)
+}
+.panel-title h2{margin:0;color:var(--strong);font-size:22px;letter-spacing:-.02em}
+.panel-title p{margin:5px 0 0;color:var(--muted);font-size:11px}
+.panel-actions{display:flex;flex-wrap:wrap;gap:7px;justify-content:flex-end}
+.steps{
+  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
+  margin-top:18px;border-top:1px solid var(--line);border-left:1px solid var(--line)
+}
+.step{
+  min-width:0;padding:17px;border-right:1px solid var(--line);border-bottom:1px solid var(--line)
+}
+.step-no{
+  color:var(--muted);font:700 9px/1 ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.08em
+}
+.step h3{margin:8px 0 5px;color:var(--strong);font-size:13px}
+.step p{margin:0;color:var(--muted);font-size:10.5px;line-height:1.5}
+.step strong{color:var(--text)}
+.file{
+  display:inline-flex;margin-top:8px;padding:5px 7px;border:1px solid var(--line);
+  background:var(--soft);color:var(--text);font:700 10px/1.3 ui-monospace,SFMono-Regular,Menlo,monospace
+}
+.repo-strip{
+  margin-top:14px;display:grid;grid-template-columns:auto minmax(0,1fr) auto;
+  gap:10px;align-items:center;padding:10px 11px;border:1px solid var(--line);background:var(--soft)
+}
+.repo-strip b{font-size:10px;color:var(--strong)}
+.repo-strip code{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--muted);font-size:10px}
+.status-line{
+  margin-top:14px;display:flex;align-items:center;gap:8px;color:var(--muted);font-size:10px
+}
+.dot{width:7px;height:7px;border-radius:50%;background:var(--green);box-shadow:0 0 0 3px color-mix(in srgb,var(--green) 14%,transparent)}
+
+.termux-layout{
+  display:grid;grid-template-columns:minmax(0,1fr) minmax(320px,.9fr);gap:16px;margin-top:18px
+}
+.termux-notes{display:grid;grid-template-columns:1fr 1fr;border:1px solid var(--line)}
+.termux-note{padding:14px;border-right:1px solid var(--line)}
+.termux-note:last-child{border-right:0}
+.termux-note b{display:block;color:var(--strong);font-size:11px;margin-bottom:3px}
+.termux-note span{display:block;color:var(--muted);font-size:9.5px;line-height:1.4}
+.command{
+  border:1px solid var(--line);background:color-mix(in srgb,var(--bg) 80%,#000)
+}
+:root[data-theme="light"] .command{background:#f1f5f9}
+.command-head{
   display:flex;align-items:center;justify-content:space-between;gap:10px;
-  padding:7px 10px;border-bottom:1px solid var(--line)
+  padding:7px 9px;border-bottom:1px solid var(--line);color:var(--muted);
+  font-size:9px;font-weight:700;letter-spacing:.06em
 }
-.copy-row span{color:var(--muted);font-size:9px;font-weight:700;letter-spacing:.05em}
 .copy{
-  min-height:26px;padding:3px 7px;border:1px solid var(--line);background:var(--soft);
+  min-height:25px;padding:3px 7px;border:1px solid var(--line);background:var(--soft);
   color:var(--text);font-size:9px;font-weight:650;cursor:pointer
 }
-pre{
-  margin:0;padding:12px 13px;background:color-mix(in srgb,var(--bg) 78%,#000);
-  color:var(--text);font-size:11.5px;line-height:1.55;overflow:auto
+pre{margin:0;padding:12px 13px;color:var(--text);font-size:11px;line-height:1.55;overflow:auto}
+
+.scope{
+  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));
+  margin-top:18px;border:1px solid var(--line)
 }
-:root[data-theme="light"] pre{background:#f1f5f9}
-.launch-meta{
-  display:grid;grid-template-columns:repeat(3,minmax(0,1fr));
-  border-top:1px solid var(--line)
-}
-.launch-meta div{padding:9px 10px;border-right:1px solid var(--line)}
-.launch-meta div:last-child{border-right:0}
-.launch-meta b{display:block;color:var(--strong);font-size:9.5px;margin-bottom:2px}
-.launch-meta span{display:block;color:var(--muted);font-size:9px;line-height:1.35}
-.module-strip{
-  display:grid;grid-template-columns:repeat(4,minmax(0,1fr));border:1px solid var(--line)
-}
-.module{
-  padding:11px 12px;background:var(--surface);border-right:1px solid var(--line)
-}
-.module:last-child{border-right:0}
-.module b{display:block;color:var(--strong);font-size:11px;margin-bottom:3px}
-.module span{color:var(--muted);font-size:9.5px;line-height:1.4}
-.notes{margin-top:20px;border-top:1px solid var(--line)}
+.scope-item{padding:12px 13px;border-right:1px solid var(--line)}
+.scope-item:last-child{border-right:0}
+.scope-item b{display:block;color:var(--strong);font-size:10.5px;margin-bottom:3px}
+.scope-item span{display:block;color:var(--muted);font-size:9.5px;line-height:1.35}
+
+.notes{margin-top:18px;border-top:1px solid var(--line)}
 details{border-bottom:1px solid var(--line)}
 summary{
   list-style:none;display:flex;align-items:center;justify-content:space-between;gap:12px;
-  padding:11px 0;cursor:pointer;color:var(--text);font-size:11px;font-weight:650
+  padding:11px 0;cursor:pointer;color:var(--text);font-size:10.5px;font-weight:650
 }
 summary::-webkit-details-marker{display:none}
-.summary-note{color:var(--muted);font-size:9px;font-weight:500;margin-left:7px}
-.detail{padding:0 0 12px;color:var(--muted);font-size:10.5px;line-height:1.5}
+.summary-note{margin-left:7px;color:var(--muted);font-size:9px;font-weight:500}
+.detail{padding:0 0 12px;color:var(--muted);font-size:10px;line-height:1.5}
 .detail p{margin:0}.detail p+p{margin-top:6px}
+
 .footer{
   display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
-  margin-top:20px;padding-top:12px;border-top:1px solid var(--line);
-  color:var(--muted);font-size:9.5px
+  margin-top:20px;padding-top:12px;border-top:1px solid var(--line);color:var(--muted);font-size:9px
 }
 .toast{
   position:fixed;left:50%;bottom:max(18px,env(safe-area-inset-bottom));transform:translate(-50%,10px);
   padding:6px 9px;background:var(--accent);color:#fff;font-size:9px;font-weight:700;
-  opacity:0;pointer-events:none;transition:.14s
+  opacity:0;pointer-events:none;transition:.14s;z-index:20
 }
 .toast.show{opacity:1;transform:translate(-50%,0)}
-@media(max-width:900px){
-  .hero{align-items:flex-start;flex-direction:column}
-  .hero-actions{width:100%}.hero-actions .btn{flex:1}
-  .launch-grid{grid-template-columns:1fr}
+
+@media(max-width:980px){
+  .workspace{grid-template-columns:1fr}
+  .platform-nav{
+    display:flex;gap:4px;border-right:0;border-bottom:1px solid var(--line);padding:7px
+  }
+  .platform-label{display:none}
+  .platform-tab{width:auto;min-width:150px;border-left:0;border-bottom:2px solid transparent}
+  .platform-tab[aria-selected="true"]{border-left-color:transparent;border-bottom-color:var(--accent)}
+  .steps{grid-template-columns:1fr}
+  .termux-layout{grid-template-columns:1fr}
 }
-@media(max-width:680px){
-  .shell{padding-left:12px;padding-right:12px}
-  .brand-sub{display:none}
-  .launch-meta{grid-template-columns:1fr}
-  .launch-meta div{border-right:0;border-bottom:1px solid var(--line)}
-  .launch-meta div:last-child{border-bottom:0}
-  .module-strip{grid-template-columns:1fr 1fr}
-  .module:nth-child(2){border-right:0}.module:nth-child(-n+2){border-bottom:1px solid var(--line)}
+@media(max-width:700px){
+  .shell{padding-left:10px;padding-right:10px}
+  .hero{grid-template-columns:1fr;padding-top:26px}
+  .version{display:none}
+  .panel-head{flex-direction:column}
+  .panel-actions{justify-content:flex-start}
+  .platform-panel{padding:15px}
+  .scope{grid-template-columns:1fr 1fr}
+  .scope-item:nth-child(2){border-right:0}
+  .scope-item:nth-child(-n+2){border-bottom:1px solid var(--line)}
 }
 @media(max-width:460px){
+  .brand-sub{display:none}
   .theme-control button{width:27px;padding:0;font-size:0}
   .theme-control button[data-theme-choice="light"]::after{content:"☀";font-size:11px}
   .theme-control button[data-theme-choice="dark"]::after{content:"◐";font-size:11px}
   .theme-control button[data-theme-choice="system"]::after{content:"A";font-size:9px}
-  .module-strip{grid-template-columns:1fr}
-  .module{border-right:0;border-bottom:1px solid var(--line)}
-  .module:last-child{border-bottom:0}
+  .platform-nav{overflow:auto}
+  .platform-tab{min-width:130px}
+  .scope{grid-template-columns:1fr}
+  .scope-item{border-right:0;border-bottom:1px solid var(--line)}
+  .scope-item:last-child{border-bottom:0}
+  .termux-notes{grid-template-columns:1fr}
+  .termux-note{border-right:0;border-bottom:1px solid var(--line)}
+  .termux-note:last-child{border-bottom:0}
 }
 </style>
 </head>
@@ -193,91 +251,123 @@ summary::-webkit-details-marker{display:none}
         <button type="button" data-theme-choice="dark" aria-pressed="false">夜间</button>
         <button type="button" data-theme-choice="system" aria-pressed="false">系统</button>
       </div>
-      <a class="repo" href="https://github.com/11576865/HSR-Voice-Archive-Builder">GitHub</a>
+      <a class="link-button" href="https://github.com/11576865/HSR-Voice-Archive-Builder">GitHub</a>
     </div>
   </header>
 
   <section class="hero">
-    <div class="hero-copy">
-      <div class="eyebrow">LOCAL PROCESSING · WINDOWS + TERMUX · v0.9-M</div>
+    <div>
+      <div class="eyebrow">LOCAL PROCESSING · WINDOWS + TERMUX</div>
       <h1>语音归档 / 字幕 / 增量更新</h1>
-      <p class="lead">本地处理。Pages 只负责启动说明与导航；语音包、FFmpeg、项目状态和输出均留在处理设备。</p>
+      <p class="lead">Pages 只提供项目入口与启动说明。语音包、FFmpeg、项目状态和输出均留在本机处理。</p>
     </div>
-    <div class="hero-actions">
-      <a class="btn primary" href="http://127.0.0.1:8765/">打开本机控制台</a>
-      <a class="btn" href="#launch">启动</a>
-    </div>
+    <div class="version">v0.9-M</div>
   </section>
 
-  <section class="section" id="launch">
-    <div class="section-head">
-      <h2>启动</h2>
-      <p>两端同一项目逻辑；仅运行环境不同。</p>
-    </div>
+  <section class="workspace" aria-label="启动平台">
+    <nav class="platform-nav" aria-label="平台选择">
+      <div class="platform-label">PLATFORM</div>
+      <button class="platform-tab" type="button" role="tab" id="tab-windows" aria-controls="panel-windows" aria-selected="true" data-platform="windows">
+        <span>Windows</span><span>Desktop</span>
+      </button>
+      <button class="platform-tab" type="button" role="tab" id="tab-termux" aria-controls="panel-termux" aria-selected="false" data-platform="termux">
+        <span>Android / Termux</span><span>Mobile</span>
+      </button>
+    </nav>
 
-    <div class="launch-grid">
-      <article class="launch-card windows">
-        <div class="launch-head">
-          <div class="launch-title"><b>Windows</b></div>
-          <div class="tags"><span>Python 3.11+</span><span>FFmpeg PATH</span><span>Git 可选</span></div>
+    <div class="platform-main">
+      <section class="platform-panel" id="panel-windows" role="tabpanel" aria-labelledby="tab-windows">
+        <div class="panel-head">
+          <div class="panel-title">
+            <h2>Windows</h2>
+            <p>下载项目后运行批处理文件；不需要手动输入启动命令。</p>
+          </div>
+          <div class="panel-actions">
+            <a class="link-button primary" href="https://github.com/11576865/HSR-Voice-Archive-Builder">打开仓库</a>
+            <a class="link-button" href="https://github.com/11576865/HSR-Voice-Archive-Builder/archive/refs/heads/main.zip">下载 ZIP</a>
+          </div>
         </div>
-        <div class="copy-row"><span>POWERSHELL / CMD</span><button class="copy" data-copy="cmd-windows">复制</button></div>
-        <pre id="cmd-windows">cd HSR-Voice-Archive-Builder
-.\run_windows.bat</pre>
-        <div class="launch-meta">
-          <div><b>Local</b><span>127.0.0.1:8765</span></div>
-          <div><b>Dependencies</b><span>缺失 Python 包自动安装</span></div>
-          <div><b>LAN</b><span>run_windows_lan.bat</span></div>
+
+        <div class="repo-strip">
+          <b>Repository</b>
+          <code>github.com/11576865/HSR-Voice-Archive-Builder</code>
+          <a class="link-button" href="https://github.com/11576865/HSR-Voice-Archive-Builder">查看</a>
         </div>
-      </article>
 
-      <article class="launch-card termux">
-        <div class="launch-head">
-          <div class="launch-title"><b>Android / Termux</b></div>
-          <div class="tags"><span>Termux</span><span>Git</span><span>FFmpeg / 7-Zip</span></div>
+        <div class="steps">
+          <div class="step">
+            <div class="step-no">01 · GET</div>
+            <h3>获取项目</h3>
+            <p>从 GitHub 下载 ZIP 并解压，或使用 Git 克隆仓库。Git 只在需要 <strong>clone / pull</strong> 时使用。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">02 · REQUIRE</div>
+            <h3>准备环境</h3>
+            <p>需要 <strong>Python 3.11+</strong>。FFmpeg 需加入 PATH 才能执行音频构建；控制台本身仍可启动。</p>
+          </div>
+          <div class="step">
+            <div class="step-no">03 · RUN</div>
+            <h3>启动控制台</h3>
+            <p>双击或运行项目根目录中的：</p>
+            <span class="file">run_windows.bat</span>
+          </div>
         </div>
-        <div class="copy-row"><span>TERMUX</span><button class="copy" data-copy="cmd-termux">复制</button></div>
-        <pre id="cmd-termux">cd ~/HSR-Voice-Archive-Builder
-git pull --ff-only
-bash run_termux.sh</pre>
-        <div class="launch-meta">
-          <div><b>Local</b><span>127.0.0.1:8765</span></div>
-          <div><b>Runtime</b><span>stdlib lite server</span></div>
-          <div><b>Setup</b><span>Python / FFmpeg / 7-Zip 自动检查</span></div>
+
+        <div class="status-line">
+          <span class="dot" aria-hidden="true"></span>
+          <span><code>run_windows.bat</code> 会检查 Python、安装缺失依赖并启动 <code>127.0.0.1:8765</code>；默认会自动打开浏览器。</span>
         </div>
-      </article>
-    </div>
-  </section>
+      </section>
 
-  <section class="section">
-    <div class="section-head"><h2>范围</h2><p>核心输出与工作面。</p></div>
-    <div class="module-strip">
-      <div class="module"><b>Archive</b><span>continuous.flac · manifest · resolved Timeline</span></div>
-      <div class="module"><b>Subtitle</b><span>SRT · 校对 · ASS / libass</span></div>
-      <div class="module"><b>Incremental Update</b><span>新增 · 变化 · 冲突确认</span></div>
-      <div class="module"><b>Export</b><span>ASS · 黑屏 MKV · 训练集 / 参考包</span></div>
-    </div>
-  </section>
+      <section class="platform-panel" id="panel-termux" role="tabpanel" aria-labelledby="tab-termux" hidden>
+        <div class="panel-head">
+          <div class="panel-title">
+            <h2>Android / Termux</h2>
+            <p>使用 Termux 原生工具链；首次安装与日常启动分开。</p>
+          </div>
+          <div class="panel-actions">
+            <a class="link-button" href="https://github.com/11576865/HSR-Voice-Archive-Builder">打开仓库</a>
+          </div>
+        </div>
 
-  <section class="notes" aria-label="补充说明">
-    <details>
-      <summary><span>Windows 细节<span class="summary-note">首次准备 / 更新 / 端口</span></span><span>⌄</span></summary>
-      <div class="detail">
-        <p>安装 Python 3.11+ 与 FFmpeg，并确认 <code>python --version</code> 或 <code>py -3 --version</code>、<code>ffmpeg -version</code> 可用。<code>run_windows.bat</code> 会检查 Python、安装缺失的 <code>requirements.txt</code> 依赖、检查 FFmpeg，然后启动本地控制台。</p>
-        <p>Git 克隆方式可先执行 <code>git pull --ff-only</code>。8765 被占用时可运行 <code>python -m app.launch --port 8766</code>。局域网控制使用 <code>run_windows_lan.bat</code>，终端会输出带 token 的地址。</p>
-      </div>
-    </details>
-
-    <details>
-      <summary><span>Termux 首次安装<span class="summary-note">只做一次</span></span><span>⌄</span></summary>
-      <div class="detail">
-        <div class="copy-row"><span>FIRST INSTALL</span><button class="copy" data-copy="cmd-install">复制</button></div>
-        <pre id="cmd-install">pkg install -y git
+        <div class="termux-layout">
+          <div class="command">
+            <div class="command-head"><span>FIRST INSTALL</span><button class="copy" data-copy="cmd-install">复制</button></div>
+            <pre id="cmd-install">pkg install -y git
 cd ~
 git clone https://github.com/11576865/HSR-Voice-Archive-Builder.git
 cd HSR-Voice-Archive-Builder
 bash run_termux.sh</pre>
-        <p style="margin-top:8px"><code>run_termux.sh</code> 会检查 Python、FFmpeg、7-Zip 和 <code>requirements-termux.txt</code>，然后运行 <code>app.launch --lite --no-browser</code>。</p>
+          </div>
+          <div class="command">
+            <div class="command-head"><span>DAILY START</span><button class="copy" data-copy="cmd-termux">复制</button></div>
+            <pre id="cmd-termux">cd ~/HSR-Voice-Archive-Builder
+git pull --ff-only
+bash run_termux.sh</pre>
+          </div>
+        </div>
+
+        <div class="termux-notes">
+          <div class="termux-note"><b>Setup</b><span>脚本检查 Python、FFmpeg、7-Zip 与轻量依赖，缺少时自动安装。</span></div>
+          <div class="termux-note"><b>Runtime</b><span>启动 dependency-light 的 stdlib server；浏览器访问 127.0.0.1:8765。</span></div>
+        </div>
+      </section>
+    </div>
+  </section>
+
+  <section class="scope" aria-label="处理范围">
+    <div class="scope-item"><b>Archive</b><span>continuous.flac · manifest · resolved Timeline</span></div>
+    <div class="scope-item"><b>Subtitle</b><span>SRT · 校对 · ASS / libass</span></div>
+    <div class="scope-item"><b>Incremental Update</b><span>新增 · 变化 · 冲突确认</span></div>
+    <div class="scope-item"><b>Export</b><span>ASS · 黑屏 MKV · 训练集 / 参考包</span></div>
+  </section>
+
+  <section class="notes" aria-label="补充说明">
+    <details>
+      <summary><span>Windows 其他启动方式<span class="summary-note">局域网 / 端口 / 更新</span></span><span>⌄</span></summary>
+      <div class="detail">
+        <p>局域网控制运行 <code>run_windows_lan.bat</code>；它会绑定局域网地址并输出带随机 token 的访问 URL。默认端口 8765 被占用时，可运行 <code>python -m app.launch --port 8766</code>。</p>
+        <p>使用 Git 获取项目时，可在启动前执行 <code>git pull --ff-only</code> 更新仓库。</p>
       </div>
     </details>
   </section>
@@ -290,18 +380,35 @@ bash run_termux.sh</pre>
 
 <div class="toast" id="toast" role="status" aria-live="polite">已复制</div>
 <script>
-const KEY='hsr-pages-theme-v1',mq=matchMedia('(prefers-color-scheme: dark)');
-let pref=localStorage.getItem(KEY)||document.documentElement.dataset.themePreference||'system';
-function apply(next,{save=true}={}){
+const THEME_KEY='hsr-pages-theme-v1',PLATFORM_KEY='hsr-pages-platform-v1';
+const mq=matchMedia('(prefers-color-scheme: dark)');
+let pref=localStorage.getItem(THEME_KEY)||document.documentElement.dataset.themePreference||'system';
+function applyTheme(next,{save=true}={}){
   pref=['light','dark','system'].includes(next)?next:'system';
-  if(save)localStorage.setItem(KEY,pref);
+  if(save)localStorage.setItem(THEME_KEY,pref);
   document.documentElement.dataset.theme=pref==='system'?(mq.matches?'dark':'light'):pref;
   document.documentElement.dataset.themePreference=pref;
   document.querySelectorAll('[data-theme-choice]').forEach(b=>b.setAttribute('aria-pressed',b.dataset.themeChoice===pref?'true':'false'));
 }
-document.querySelectorAll('[data-theme-choice]').forEach(b=>b.onclick=()=>apply(b.dataset.themeChoice));
-if(mq.addEventListener)mq.addEventListener('change',()=>{if(pref==='system')apply('system',{save:false})});
-apply(pref,{save:false});
+document.querySelectorAll('[data-theme-choice]').forEach(b=>b.onclick=()=>applyTheme(b.dataset.themeChoice));
+if(mq.addEventListener)mq.addEventListener('change',()=>{if(pref==='system')applyTheme('system',{save:false})});
+applyTheme(pref,{save:false});
+
+function setPlatform(name,{focus=false}={}){
+  const next=name==='termux'?'termux':'windows';
+  localStorage.setItem(PLATFORM_KEY,next);
+  document.querySelectorAll('[data-platform]').forEach(tab=>{
+    const active=tab.dataset.platform===next;
+    tab.setAttribute('aria-selected',active?'true':'false');
+    if(active&&focus)tab.focus();
+  });
+  document.getElementById('panel-windows').hidden=next!=='windows';
+  document.getElementById('panel-termux').hidden=next!=='termux';
+}
+document.querySelectorAll('[data-platform]').forEach(tab=>{
+  tab.addEventListener('click',()=>setPlatform(tab.dataset.platform));
+});
+setPlatform(localStorage.getItem(PLATFORM_KEY)||'windows');
 
 const toast=document.getElementById('toast');let timer;
 async function copyText(text){
