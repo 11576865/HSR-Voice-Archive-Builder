@@ -2081,7 +2081,13 @@ async function saveSubtitleItemInBackground(targetSub){
         const modifiedIds=new Set((j.result?.modified_ids||[]).map(String));
         target.modified=modifiedIds.has(sentKey);
       }
-      setSubtitleSaveUi('saved','条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。');
+      const assError=String(j.result?.ass_error||'');
+      setSubtitleSaveUi(
+        'saved',
+        assError
+          ? '条目 #'+sentId+' 已保存 ✓；SRT 已更新。现有 ASS 因排版校验失败已移除，请到字幕排版查看溢出报告。'
+          : '条目 #'+sentId+' 已保存 ✓；SRT 已更新，现有 ASS（如有）也已同步。'
+      );
       return true;
     }catch(x){
       setSubtitleSaveUi('error','保存字幕失败：'+shortError(x)+'；当前输入仍保留在页面中。');
@@ -2320,6 +2326,7 @@ function loadSubtitleLayoutSettings(config){
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
+  invalidateLibassPreview();
   const status=document.getElementById('previewSaveStatus');
   if(status){status.textContent='当前显示项目已保存的 ASS 设置。';status.className='small status-ok';}
   updateLayoutPreview();
