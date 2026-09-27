@@ -377,8 +377,23 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="preview-controls"', html)
         self.assertEqual(html.count('class="inspector-group"'), 3)
         self.assertIn('class="preview-stage" id="previewCanvasContainer"', html)
+        self.assertIn('class="preview-workbench"', html)
+        self.assertIn('class="preview-inspector" aria-label="字幕排版参数与操作"', html)
         self.assertIn(
-            '#subtitleLayoutPreviewCard{display:grid;grid-template-columns:minmax(0,1fr) 350px;',
+            '.preview-workbench{\n  position:relative;\n  min-width:0;\n  padding-right:350px;',
+            html,
+        )
+        self.assertIn(
+            '.preview-inspector{\n  position:absolute;\n  top:0;\n  right:0;\n  bottom:0;\n  width:350px;',
+            html,
+        )
+        self.assertIn('overflow-y:auto;', html)
+        self.assertIn(
+            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  display:block!important;\n  background:var(--surface-primary)!important;',
+            html,
+        )
+        self.assertIn(
+            '.preview-workbench .preview-stage{\n  width:100%!important;\n  margin:0!important;\n  aspect-ratio:16/9;\n  background:#05070b!important;',
             html,
         )
         self.assertIn('class="sub-workspace proofreading-workspace"', html)
@@ -465,6 +480,10 @@ class QuickBuildUiTests(unittest.TestCase):
         )
         self.assertIn(
             "#subtitleLayoutPreviewCard .preview-controls,",
+            html,
+        )
+        self.assertIn(
+            ".preview-inspector{\n    position:static;\n    order:2;\n    width:100%;",
             html,
         )
         self.assertIn("body.utility-drawer-open{\n    overflow:hidden!important;", html)
