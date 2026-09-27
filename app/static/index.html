@@ -1650,6 +1650,69 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
   }
 }
 
+
+
+/* Workspace width authority v10 -------------------------------------------
+   Desktop workspaces use the available application canvas according to their
+   task. This block intentionally lives last so legacy generic max-width rules
+   cannot shrink the workbench back into a centered narrow column. */
+@media (min-width:1201px){
+  body[data-workspace="project"] main{
+    width:auto!important;
+    max-width:none!important;
+  }
+  body[data-workspace="project"] .grid{
+    width:min(100%,1640px)!important;
+    max-width:1640px!important;
+    margin:0 auto!important;
+  }
+
+  body[data-workspace="review"] main,
+  body[data-workspace="layout"] main,
+  body[data-workspace="export"] main,
+  body[data-workspace="update"] main{
+    width:auto!important;
+    max-width:none!important;
+  }
+
+  body[data-workspace="review"] .grid{
+    width:min(100%,1760px)!important;
+    max-width:1760px!important;
+    margin:0 auto!important;
+  }
+
+  body[data-workspace="layout"] .grid{
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+  }
+  body[data-workspace="layout"] #primaryStack,
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+    width:100%!important;
+    max-width:none!important;
+  }
+  body[data-workspace="layout"] .preview-workbench{
+    --layout-inspector-width:clamp(340px,20vw,430px);
+    width:100%!important;
+    padding-right:var(--layout-inspector-width)!important;
+  }
+  body[data-workspace="layout"] .preview-inspector{
+    width:var(--layout-inspector-width)!important;
+  }
+
+  body[data-workspace="export"] .grid{
+    width:min(100%,1760px)!important;
+    max-width:1760px!important;
+    margin:0 auto!important;
+  }
+
+  body[data-workspace="update"] .grid{
+    width:min(100%,1900px)!important;
+    max-width:1900px!important;
+    margin:0 auto!important;
+  }
+}
+
 </style>
 </head>
 <body>
