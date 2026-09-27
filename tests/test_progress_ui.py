@@ -399,7 +399,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="sub-workspace proofreading-workspace"', html)
         self.assertIn('class="sub-ref-card sub-audio-card" id="subAudioCard"', html)
         self.assertIn('class="actions proofreading-actions"', html)
-        self.assertIn('class="actions proofreading-secondary-actions"', html)
+        self.assertNotIn('class="actions proofreading-secondary-actions"', html)
+        self.assertIn('class="sub-nav-bar proofreading-nav-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
     def test_layout_light_theme_has_authoritative_tokens(self) -> None:
