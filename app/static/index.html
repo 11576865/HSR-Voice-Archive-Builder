@@ -263,6 +263,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
         <p class="small muted">Quick Mode 固定生成简体中文字幕；源文本可使用 EN / CHS / JP / KR。第二语言包只作为额外逐条语义参考，不会混入连续 FLAC。</p>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
         <label class="check"><input id="quickChapterOrder" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
+        <label class="check"><input id="quickChapterFlac" type="checkbox"> 额外生成按章节 / 大组拆分的连续 FLAC</label>
         <label class="check"><input id="quickTranslateMissing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check"><input id="quickReviewOfficial" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <p class="small muted">这两项会随快速构建一起保存。关闭“官方中文对照复核”仍会采用官方中文文本；只是跳过英文与官方中文的快速语义比对，以及只针对高风险条目的 API 复核/重译。</p>
@@ -319,6 +320,8 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
               <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
               <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
+        <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
+              <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
               <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
               <label class="check"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
               <div class="actions"><button class="success">创建</button></div>
@@ -342,6 +345,7 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
         </div>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
         <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
+        <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
         <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check" id="advancedReviewRow"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <div class="actions">
@@ -1520,6 +1524,7 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
   d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
   d.set('chapter_order',document.getElementById('quickChapterOrder').checked?'true':'false');
+  d.set('generate_chapter_flac',document.getElementById('quickChapterFlac').checked?'true':'false');
   d.set('translate_missing',document.getElementById('quickTranslateMissing').checked?'true':'false');
   d.set('review_official_target',document.getElementById('quickReviewOfficial').checked?'true':'false');
   d.set('intro_gap',document.getElementById('quickIntroGap').value||'9.00');
