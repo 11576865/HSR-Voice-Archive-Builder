@@ -35,6 +35,7 @@ class ProjectConfig:
     reference_source_fingerprint: str = ""
     reference_text_embedded: bool = False
     managed_project_root: bool = False
+    game_id: str = "honkai-star-rail"
     audio_language: str = "auto"
     source_text_language: str = "en"
     target_language: str = "zh-CN"
@@ -160,6 +161,7 @@ def create_project(
     reference_source_fingerprint: str = "",
     reference_text_embedded: bool = False,
     managed_project_root: bool = False,
+    game_id: str = "honkai-star-rail",
     audio_language: str = "auto",
     source_text_language: str = "en",
     target_language: str = "zh-CN",
@@ -194,6 +196,7 @@ def create_project(
         reference_source_fingerprint=str(reference_source_fingerprint or "").strip(),
         reference_text_embedded=bool(reference_text_embedded),
         managed_project_root=bool(managed_project_root),
+        game_id=str(game_id or "generic").strip() or "generic",
         audio_language=str(audio_language or "auto").strip() or "auto",
         source_text_language=str(source_text_language or "en").strip() or "en",
         target_language=str(target_language or "zh-CN").strip() or "zh-CN",
