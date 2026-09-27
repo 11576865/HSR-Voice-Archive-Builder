@@ -381,6 +381,56 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_workflow_density_review_update_export_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        # Proofreading order follows actual work: source -> audio/reference ->
+        # final subtitle -> official Chinese -> ASS layout.
+        positions = [
+            html.index('id="subSourceText"'),
+            html.index('id="subOriginalAudio"'),
+            html.index('id="subFinalEditor"'),
+            html.index('id="subOfficialText"'),
+            html.index('id="subLayoutDiagnostic"'),
+        ]
+        self.assertTrue(all(position >= 0 for position in positions))
+        self.assertEqual(positions, sorted(positions))
+        self.assertNotIn('id="subDiffPanel"', html)
+        self.assertNotIn("function renderSubtitleDiff()", html)
+        self.assertNotIn("reviewReferences.before(reviewEditor)", html)
+        self.assertIn('id="subInitialSourceBadge"', html)
+        self.assertIn("function subtitleInitialText(", html)
+
+        # Utility information is an on-demand drawer, not a permanent column.
+        self.assertIn('class="stack utility-drawer" id="sideStack"', html)
+        self.assertIn("function setUtilityDrawer(", html)
+        self.assertIn('id="utilityCloseBtn"', html)
+        self.assertIn("utility-drawer-open", html)
+
+        # Incremental review can be searched, classified, grouped and folded.
+        for element_id in (
+            "updateSearchQuery",
+            "updateCategorySelect",
+            "updateGroupBy",
+            "updateExpandGroupsBtn",
+            "updateCollapseGroupsBtn",
+        ):
+            self.assertIn(f'id="{element_id}"', html)
+        self.assertIn("function updateRowSearchText(", html)
+        self.assertIn("function updateGroupInfo(", html)
+        self.assertIn("className='update-group'", html)
+        self.assertIn("className='update-change'", html)
+
+        # Export workspace contains useful targets and current archive summary.
+        self.assertIn('class="card hidden export-workbench" id="gptSovitsCard"', html)
+        self.assertIn('id="exportArtifactSummary"', html)
+        self.assertIn('id="exportGoArchiveBtn"', html)
+        self.assertIn('id="exportGoReviewBtn"', html)
+        self.assertIn('id="exportGoLayoutBtn"', html)
+        self.assertIn("function renderExportWorkspace(", html)
+
     def test_theme_switcher_and_collapse_regression_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
