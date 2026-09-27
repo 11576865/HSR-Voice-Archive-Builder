@@ -42,7 +42,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         base_chs_size=max(12, min(120, int(data.get("base_chs_size", 52)))),
         base_primary_size=max(12, min(120, int(data.get("base_primary_size", 42)))),
         margin_horizontal_percent=max(
-            0.0, min(0.40, float(data.get("margin_horizontal_percent", 0.10)))
+            0.0, min(0.40, float(data.get("margin_horizontal_percent", 0.03)))
         ),
         margin_vertical_percent=max(
             0.0, min(0.40, float(data.get("margin_vertical_percent", 0.05)))
