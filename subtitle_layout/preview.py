@@ -121,9 +121,11 @@ def preview_subtitle_layout(
         font_path=chs_font_path,
     )
 
-    y_center = safe_area.canvas_height / 2.0
-    y_center_top = round(y_center - min_central_gap / 2.0)
-    y_center_bottom = round(y_center + min_central_gap / 2.0)
+    available_height = max(0.0, safe_area.max_printable_height - min_central_gap)
+    primary_region_height = available_height * 0.60
+    y_center_top = round(safe_area.y_min + primary_region_height)
+    y_center_bottom = round(y_center_top + min_central_gap)
+    y_center = (y_center_top + y_center_bottom) / 2.0
 
     primary_height = float(primary_block["height"])
     chs_height = float(chs_block["height"])
