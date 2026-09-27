@@ -1066,6 +1066,8 @@ async function relinkSelectedSource(){
 
 const outputDescriptions={
   'continuous.flac':'连续播放的无损语音音频',
+  'chapter_flac/':'按章节 / 大组拆分的连续 FLAC 集合',
+  'chapter_flac/chapter_flac_manifest.json':'章节 FLAC 的机器可读清单、校验与无法归属记录',
   'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
   'HSR_Voice_Archive.srt':'与 ASS 同一时间轴的通用 SRT 字幕',
   'HSR_Voice_Archive_Black.mkv':'黑色视频轨与连续 FLAC 的播放容器（不含字幕）',
@@ -1112,6 +1114,7 @@ function fillProject(p){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
   if(f.elements.chapter_order)f.elements.chapter_order.checked=!!c.chapter_order;
+  if(f.elements.generate_chapter_flac)f.elements.generate_chapter_flac.checked=!!c.generate_chapter_flac;
   f.elements.translate_missing.checked=!!c.translate_missing;
   if(f.elements.review_official_target)f.elements.review_official_target.checked=!!c.review_official_target;
   syncAdvancedTranslationVisibility();
@@ -1152,6 +1155,14 @@ function fillProject(p){
     if(!o?.exists)continue;
     const tr=document.createElement('tr'),fileClass=name.endsWith('.flac')?'file-audio':'file-subtitle';
     tr.innerHTML='<td><span class="'+fileClass+'">'+name+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+bytes(o.size_bytes)+'</td>';
+    main.appendChild(tr);
+  }
+  for(const [name,o] of Object.entries(finalProducts)){
+    if(!name.startsWith('chapter_flac/')||!o?.exists)continue;
+    const tr=document.createElement('tr');
+    const label=name==='chapter_flac/'?'章节 / 大组连续 FLAC':name.replace('chapter_flac/','');
+    const fileClass=name.endsWith('.flac')?'file-audio':'';
+    tr.innerHTML='<td><span class="'+fileClass+'">'+label+'</span><div class="small muted" style="margin-top:3px">'+outputDescription(name)+'</div></td><td>'+(o.kind==='directory'?'目录':bytes(o.size_bytes))+'</td>';
     main.appendChild(tr);
   }
   for(const [name,o] of Object.entries(archiveRecords)){
