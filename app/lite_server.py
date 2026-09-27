@@ -472,6 +472,17 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
                 subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline", str(config.subtitle_enable_multi_layer_outline))),
                 subtitle_enable_kinetic=_bool(data.get("enable_kinetic", str(config.subtitle_enable_kinetic))),
+                subtitle_fade_in_ms=max(0, min(2000, _int(data.get("fade_in_ms"), config.subtitle_fade_in_ms))),
+                subtitle_fade_out_ms=max(0, min(2000, _int(data.get("fade_out_ms"), config.subtitle_fade_out_ms))),
+                subtitle_use_audio_aware_fade=_bool(data.get("use_audio_aware_fade", str(config.subtitle_use_audio_aware_fade))),
+                subtitle_outline_width=max(0.0, min(12.0, _float(data.get("outline_width"), config.subtitle_outline_width))),
+                subtitle_shadow_depth=max(0.0, min(12.0, _float(data.get("shadow_depth"), config.subtitle_shadow_depth))),
+                subtitle_blur_radius=max(0.0, min(5.0, _float(data.get("blur_radius"), config.subtitle_blur_radius))),
+                subtitle_card_opacity=max(0.0, min(1.0, _float(data.get("card_opacity"), config.subtitle_card_opacity))),
+                subtitle_enable_soft_entry=_bool(data.get("enable_soft_entry", str(config.subtitle_enable_soft_entry))),
+                subtitle_soft_entry_scale_percent=max(90.0, min(100.0, _float(data.get("soft_entry_scale_percent"), config.subtitle_soft_entry_scale_percent))),
+                subtitle_soft_entry_blur=max(0.0, min(5.0, _float(data.get("soft_entry_blur"), config.subtitle_soft_entry_blur))),
+                subtitle_soft_entry_ms=max(0, min(1000, _int(data.get("soft_entry_ms"), config.subtitle_soft_entry_ms))),
             )
             self._json({"ok": True, "project": project_summary(config)})
             return
