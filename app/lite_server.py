@@ -483,7 +483,7 @@ class Handler(BaseHTTPRequestHandler):
             target_language = data.get("target_language") or "zh-CN"
             base_chs_size = _int(data.get("base_chs_size"), 52)
             base_primary_size = _int(data.get("base_primary_size"), 42)
-            margin_left_percent = _float(data.get("margin_left_percent"), 0.10)
+            margin_left_percent = _float(data.get("margin_left_percent"), 0.03)
             margin_top_percent = _float(data.get("margin_top_percent"), 0.05)
             min_central_gap = _float(data.get("min_central_gap"), 20.0)
 
