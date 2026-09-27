@@ -180,7 +180,15 @@ Advanced Karaoke never invents word timing. `\k`, `\kf`, and dynamic `\clip + \t
 
 The Sync panel reports usable, missing, and invalid alignments. When Karaoke is enabled, the workbench prefers an aligned project subtitle for FFmpeg/libass preview and can render an intermediate percentage of its real duration to inspect the sweep.
 
-See [ASS layout engine](docs/layout_engine.md) for the cache schema, validation rules, layer model, and preview behavior.
+Word timing can be imported from external tooling or generated locally with the optional WhisperX forced-alignment provider. WhisperX is deliberately **not** part of the normal requirements because it pulls in a large ML runtime. When it is not installed, the UI reports the provider as unavailable and keeps the existing import/fallback workflow; it never fabricates timestamps or installs the dependency automatically. To enable it on a compatible processing host:
+
+```bash
+python -m pip install whisperx
+```
+
+Inference runs against the project's existing source audio and canonical source text on the processing host. The first use may still require WhisperX to obtain an alignment model if that model is not already cached locally.
+
+See [ASS layout engine](docs/layout_engine.md) for the cache schema, validation rules, layer model, local provider, and preview behavior.
 
 ## Translation configuration
 
