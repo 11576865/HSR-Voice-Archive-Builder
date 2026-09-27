@@ -47,6 +47,7 @@ class ProjectConfig:
     group_gap: float = 3.00
     make_flac: bool = True
     chapter_order: bool = False
+    generate_chapter_flac: bool = False
     generate_ass: bool = False
     subtitle_preset: str = "standard"
     subtitle_chs_font: str = "汉仪旗黑"
@@ -150,6 +151,7 @@ def create_project(
     reference_language: str = "auto",
     remote_character: str = "",
     chapter_order: bool = False,
+    generate_chapter_flac: bool = False,
     translate_missing: bool = True,
     review_official_target: bool = False,
 ) -> ProjectConfig:
@@ -183,6 +185,7 @@ def create_project(
         reference_language=str(reference_language or "auto").strip() or "auto",
         remote_character=remote_character.strip(),
         chapter_order=bool(chapter_order),
+        generate_chapter_flac=bool(generate_chapter_flac),
         translate_missing=bool(translate_missing),
         review_official_target=bool(review_official_target),
     )
@@ -633,11 +636,35 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "path": str(p),
         }
 
+    chapter_dir = output / "chapter_flac"
+    outputs["chapter_flac/"] = {
+        "exists": chapter_dir.is_dir(),
+        "size_bytes": 0,
+        "path": str(chapter_dir),
+        "kind": "directory" if chapter_dir.is_dir() else "",
+    }
+    if chapter_dir.is_dir():
+        for child in sorted(chapter_dir.iterdir()):
+            if not child.is_file():
+                continue
+            key = f"chapter_flac/{child.name}"
+            outputs[key] = {
+                "exists": True,
+                "size_bytes": child.stat().st_size,
+                "path": str(child),
+                "kind": "file",
+            }
+
     final_product_names = (
         "continuous.flac",
         "HSR_Voice_Archive.srt",
         "HSR_Voice_Archive.ass",
         "HSR_Voice_Archive_Black.mkv",
+        *tuple(
+            name
+            for name in outputs
+            if name == "chapter_flac/" or name.startswith("chapter_flac/")
+        ),
     )
     archive_record_names = tuple(
         name for name in outputs if name not in final_product_names

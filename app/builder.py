@@ -11,7 +11,7 @@ import subprocess
 import tempfile
 import zipfile
 from collections import defaultdict
-from dataclasses import asdict, dataclass
+from dataclasses import asdict, dataclass, replace
 from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Iterable, Mapping
@@ -1156,6 +1156,188 @@ def major_group_sort_key(mg: str) -> tuple[int, int | str, str]:
         num = int(m_side.group(1)) if m_side.group(1).isdigit() else 999
         return (4, num, mg_lower)
     return (5, 0, mg_lower)
+
+
+def _chapter_output_slug(group_id: str) -> str:
+    slug = re.sub(r"[^A-Za-z0-9._-]+", "_", str(group_id or "").strip())
+    slug = slug.strip("._-")
+    return slug or "group"
+
+
+def _retime_entries_for_collection(
+    entries: list[Entry],
+    *,
+    intro_gap: float,
+    same_group_gap: float,
+    group_gap: float,
+) -> list[Entry]:
+    if not entries:
+        return []
+    sample_rate = entries[0].sample_rate
+    rows = [
+        {
+            "index": entry.index,
+            "filename": entry.filename,
+            "group": entry.group,
+            "source_frames": entry.source_frames,
+        }
+        for entry in entries
+    ]
+    timeline = resolve_timeline(
+        rows,
+        sample_rate,
+        intro_gap=intro_gap,
+        same_group_gap=same_group_gap,
+        group_gap=group_gap,
+    )
+    retimed: list[Entry] = []
+    for entry, timing in zip(entries, timeline["entry_timings"], strict=True):
+        retimed.append(
+            replace(
+                entry,
+                start_sample=int(timing["start_sample"]),
+                audio_end_sample=int(timing["audio_end_sample"]),
+                next_start_sample=int(timing["next_start_sample"]),
+                start_seconds=int(timing["start_sample"]) / sample_rate,
+                audio_end_seconds=int(timing["audio_end_sample"]) / sample_rate,
+                display_end_seconds=int(timing["display_end_sample"]) / sample_rate,
+                voice_gap_seconds=float(timing.get("voice_gap_seconds", 0.0)),
+            )
+        )
+    return retimed
+
+
+def build_chapter_flac_collection(
+    entries: list[Entry],
+    wav_root: Path,
+    output_dir: Path,
+    *,
+    intro_gap: float = 9.0,
+    same_group_gap: float = 1.50,
+    group_gap: float = 3.00,
+    compression_level: int = 8,
+) -> dict[str, object]:
+    """Build and atomically publish one verified continuous FLAC per major group."""
+    if not entries:
+        raise ValueError("No entries")
+
+    grouped: dict[str, list[Entry]] = defaultdict(list)
+    unassigned: list[dict[str, object]] = []
+    for entry in entries:
+        group_id = extract_major_group(entry)
+        if group_id is None:
+            unassigned.append(
+                {
+                    "index": entry.index,
+                    "filename": entry.filename,
+                    "source_member_id": entry.source_member_id,
+                    "group": entry.group,
+                }
+            )
+            continue
+        grouped[group_id].append(entry)
+
+    output_dir.parent.mkdir(parents=True, exist_ok=True)
+    staging = Path(
+        tempfile.mkdtemp(prefix=f".{output_dir.name}.staging-", dir=output_dir.parent)
+    )
+    backup = output_dir.with_name(f".{output_dir.name}.previous")
+    # A process may have stopped after moving the previous collection aside
+    # but before promoting staging. Recover that last good publication first.
+    if backup.exists() and not output_dir.exists():
+        backup.replace(output_dir)
+    outputs: list[dict[str, object]] = []
+    total_duration = 0.0
+    try:
+        for ordinal, group_id in enumerate(
+            sorted(grouped, key=major_group_sort_key), start=1
+        ):
+            group_entries = grouped[group_id]
+            local_entries = _retime_entries_for_collection(
+                group_entries,
+                intro_gap=intro_gap,
+                same_group_gap=same_group_gap,
+                group_gap=group_gap,
+            )
+            filename = f"{ordinal:02d}_{_chapter_output_slug(group_id)}.flac"
+            staging_flac = staging / filename
+            final_flac = output_dir / filename
+            audio_report = build_continuous_flac(
+                local_entries,
+                wav_root,
+                staging_flac,
+                compression_level=compression_level,
+            )
+            duration = local_entries[-1].next_start_sample / local_entries[0].sample_rate
+            total_duration += duration
+            outputs.append(
+                {
+                    "ordinal": ordinal,
+                    "group_id": group_id,
+                    "entry_count": len(local_entries),
+                    "duration_seconds": duration,
+                    "first_entry_index": local_entries[0].index,
+                    "last_entry_index": local_entries[-1].index,
+                    "first_filename": local_entries[0].filename,
+                    "last_filename": local_entries[-1].filename,
+                    "sample_rate": local_entries[0].sample_rate,
+                    "channels": local_entries[0].channels,
+                    "sample_width_bits": local_entries[0].sample_width_bits,
+                    "path": str(final_flac),
+                    "file_sha256": sha256_file(staging_flac),
+                    **{
+                        **audio_report,
+                        "flac_path": str(final_flac),
+                    },
+                }
+            )
+
+        manifest = {
+            "schema_version": 1,
+            "classification": "extract_major_group",
+            "intro_gap_seconds": float(intro_gap),
+            "same_group_gap_seconds": float(same_group_gap),
+            "group_gap_seconds": float(group_gap),
+            "chapter_count": len(outputs),
+            "chapter_entry_count": sum(int(row["entry_count"]) for row in outputs),
+            "chapter_duration_seconds": total_duration,
+            "unassigned_count": len(unassigned),
+            "unassigned": unassigned,
+            "outputs": outputs,
+        }
+        atomic_write_text(
+            staging / "chapter_flac_manifest.json",
+            json.dumps(manifest, ensure_ascii=False, indent=2),
+        )
+
+        had_previous = output_dir.exists()
+        if had_previous:
+            # Staging is fully verified now. If an older stranded backup still
+            # exists while the current publication is healthy, it can finally
+            # be superseded by the current publication.
+            shutil.rmtree(backup, ignore_errors=True)
+            output_dir.replace(backup)
+        try:
+            staging.replace(output_dir)
+        except BaseException:
+            if had_previous and backup.exists() and not output_dir.exists():
+                backup.replace(output_dir)
+            raise
+        shutil.rmtree(backup, ignore_errors=True)
+    finally:
+        shutil.rmtree(staging, ignore_errors=True)
+
+    return {
+        "chapter_flac_enabled": True,
+        "chapter_flac_directory": str(output_dir),
+        "chapter_flac_manifest": str(output_dir / "chapter_flac_manifest.json"),
+        "chapter_flac_count": len(outputs),
+        "chapter_flac_entry_count": sum(int(row["entry_count"]) for row in outputs),
+        "chapter_flac_duration_seconds": total_duration,
+        "chapter_flac_unassigned_count": len(unassigned),
+        "chapter_flac_unassigned": unassigned,
+        "chapter_flac_outputs": outputs,
+    }
 
 
 def _chapter_order_key(row: dict[str, object]) -> tuple[tuple[int, int | str, str], int]:
