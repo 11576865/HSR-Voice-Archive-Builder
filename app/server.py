@@ -53,7 +53,7 @@ from .project import (
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
-from subtitle_layout.fonts import list_font_families, validate_ass_font_name
+from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -108,6 +108,7 @@ async def control_surface_guard(request: Request, call_next):
             "connect-src 'self'; "
             "img-src 'self' data: blob:; "
             "media-src 'self' blob:; "
+            "font-src 'self' data: blob:; "
             "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         )
     return response
@@ -138,6 +139,27 @@ def api_subtitle_layout_fonts(q: str = Query(""), limit: int = Query(400)):
         return {"ok": True, "families": families, "count": len(families)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/subtitle-layout/font-file")
+def api_subtitle_layout_font_file(family: str = Query(...)):
+    try:
+        font_path, media_type = resolve_browser_font_file(family)
+        return Response(
+            content=font_path.read_bytes(),
+            media_type=media_type,
+            headers={"Content-Disposition": "inline"},
+        )
+    except FileNotFoundError as exc:
+        return JSONResponse(
+            {"ok": False, "error": str(exc)},
+            status_code=404,
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
 
 
 @app.get("/", response_class=HTMLResponse)
