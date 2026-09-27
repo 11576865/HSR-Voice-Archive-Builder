@@ -1011,6 +1011,10 @@ function showWorkspace(name,{scroll=true}={}){
   if(scroll)window.scrollTo({top:0,behavior:'instant'});
 }
 for(const button of workspaceButtons)button.addEventListener('click',()=>showWorkspace(button.dataset.workspaceTarget));
+document.getElementById('jobCenterToggle').onclick=()=>{
+  showWorkspace('project');
+  requestAnimationFrame(()=>document.getElementById('progressCard')?.scrollIntoView({behavior:'smooth',block:'start'}));
+};
 showWorkspace('project',{scroll:false});
 const token=typeof injectedToken==="string"?injectedToken:"";
 if(location.search){history.replaceState(null,'',location.pathname)}
@@ -1252,6 +1256,129 @@ function outputDescription(name){
   return outputDescriptions[name]||'构建生成的项目成品文件';
 }
 
+function copyTextValue(value){
+  const text=String(value||'');
+  if(!text)return Promise.reject(new Error('没有可复制的路径'));
+  if(navigator.clipboard?.writeText)return navigator.clipboard.writeText(text);
+  const box=document.createElement('textarea');box.value=text;box.style.position='fixed';box.style.opacity='0';document.body.appendChild(box);box.select();
+  try{document.execCommand('copy');return Promise.resolve()}finally{box.remove()}
+}
+
+function artifactCard({title,kind,desc,path,size,exists=true,actions=[]}){
+  const card=document.createElement('article');
+  card.className='artifact-card '+(kind||'')+(exists?'':' missing');
+  const meta=[];
+  if(exists&&size!==undefined)meta.push(bytes(size));
+  if(path)meta.push(path);
+  card.innerHTML=
+    '<div class="artifact-card-head"><div><div class="artifact-card-kind">'+escapeHtml(kind||'artifact')+'</div><div class="artifact-card-title">'+escapeHtml(title)+'</div></div>'+
+    '<span class="badge">'+(exists?'可用':'未生成')+'</span></div>'+
+    '<div class="artifact-card-desc">'+escapeHtml(desc||'')+'</div>'+
+    (meta.length?'<div class="artifact-card-meta">'+meta.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+
+    '<div class="artifact-card-actions"></div>';
+  const actionsBox=card.querySelector('.artifact-card-actions');
+  if(path&&exists){
+    const copy=document.createElement('button');copy.type='button';copy.textContent='复制路径';
+    copy.onclick=()=>copyTextValue(path).then(()=>{
+      const status=document.getElementById('optionalOutputStatus');if(status)status.textContent='已复制路径：'+path;
+    }).catch(e=>setLog(String(e)));
+    actionsBox.appendChild(copy);
+  }
+  for(const spec of actions){
+    const button=document.createElement('button');button.type='button';button.textContent=spec.label;
+    if(spec.primary)button.className='success';
+    button.onclick=spec.action;
+    actionsBox.appendChild(button);
+  }
+  return card;
+}
+
+function renderArtifactBrowser(p,finalProducts,outputMap){
+  const browser=document.getElementById('artifactBrowser'),count=document.getElementById('artifactCount');
+  if(!browser)return;
+  browser.innerHTML='';
+  const cards=[];
+  const master=finalProducts['continuous.flac']||outputMap['continuous.flac']||{};
+  cards.push(artifactCard({
+    title:'continuous.flac',kind:'audio',desc:outputDescription('continuous.flac'),
+    path:master.path,size:master.size_bytes,exists:!!master.exists
+  }));
+  const srt=finalProducts['HSR_Voice_Archive.srt']||outputMap['HSR_Voice_Archive.srt']||{};
+  cards.push(artifactCard({
+    title:'HSR_Voice_Archive.srt',kind:'subtitle',desc:outputDescription('HSR_Voice_Archive.srt'),
+    path:srt.path,size:srt.size_bytes,exists:!!srt.exists,
+    actions:[{label:'字幕校对',action:()=>showWorkspace('review')}]
+  }));
+  const ass=outputMap['HSR_Voice_Archive.ass']||{};
+  cards.push(artifactCard({
+    title:'HSR_Voice_Archive.ass',kind:'subtitle',desc:outputDescription('HSR_Voice_Archive.ass'),
+    path:ass.path,size:ass.size_bytes,exists:!!ass.exists,
+    actions:ass.exists
+      ? [{label:'排版工作台',action:()=>showWorkspace('layout')}]
+      : [{label:'生成 ASS',primary:true,action:startAssExport},{label:'排版设置',action:()=>showWorkspace('layout')}]
+  }));
+  const mkv=outputMap['HSR_Voice_Archive_Black.mkv']||{};
+  cards.push(artifactCard({
+    title:'HSR_Voice_Archive_Black.mkv',kind:'video',desc:outputDescription('HSR_Voice_Archive_Black.mkv'),
+    path:mkv.path,size:mkv.size_bytes,exists:!!mkv.exists,
+    actions:mkv.exists?[]:[{label:'生成黑屏 MKV',primary:true,action:startBlackVideo}]
+  }));
+  const chapterFiles=Object.entries(finalProducts).filter(([name,o])=>name.startsWith('chapter_flac/')&&name.endsWith('.flac')&&o?.exists);
+  const chapterDir=finalProducts['chapter_flac/']||outputMap['chapter_flac/']||{};
+  const chapterExpected=!!p?.config?.generate_chapter_flac;
+  if(chapterExpected||chapterDir.exists||chapterFiles.length){
+    cards.push(artifactCard({
+      title:'章节 / 大组连续 FLAC',kind:'audio',
+      desc:chapterFiles.length?('已生成 '+chapterFiles.length+' 个章节 / 大组音频。'):'已启用章节 FLAC，但当前没有可用章节成品。',
+      path:chapterDir.path,size:undefined,exists:!!chapterDir.exists,
+      actions:[]
+    }));
+  }
+  for(const card of cards){browser.appendChild(card)}
+  if(count)count.textContent=cards.filter(x=>!x.classList.contains('missing')).length+' 项可用';
+}
+
+function renderProjectOverview(p){
+  const overview=document.getElementById('projectOverview'),settings=document.getElementById('projectSettingsPanel');
+  if(!overview||!settings)return;
+  overview.classList.toggle('hidden',!p);settings.classList.toggle('hidden',!p);
+  if(!p)return;
+  const r=p.report||{},source=p.source_status||{},outputs=p.outputs||{},groups=p.output_groups||{},finalProducts=groups.final_products||{};
+  const reviewPending=!!outputs['semantic_review_required.txt']?.exists;
+  const missingWavs=Number(r.count_unavailable_wavs||0),missingText=Number(r.count_missing_target_text||0);
+  const has=!!p.build_complete,hasGaps=has&&(missingWavs>0||missingText>0);
+  document.getElementById('overviewProjectName').textContent=p.name||'未命名项目';
+  document.getElementById('overviewProjectRoute').textContent=(p.config?.source_text_language||'—')+' → '+(p.config?.target_language||'—')+' · '+(p.output_path||'尚无输出路径');
+  const status=document.getElementById('overviewStatus');
+  let statusText='尚未构建',statusClass='';
+  if(p.interrupted_build){statusText='构建中断';statusClass='bad'}
+  else if(reviewPending){statusText='等待人工复核';statusClass='warn'}
+  else if(hasGaps){statusText='完成，存在缺项';statusClass='warn'}
+  else if(has){statusText='档案完成';statusClass='ok'}
+  status.textContent=statusText;status.className='project-status '+statusClass;
+  document.getElementById('overviewTotal').textContent=n(r.count_total);
+  document.getElementById('overviewOfficial').textContent=n(Number(r.count_official_chs_lab||0)+Number(r.count_incremental_official_reference||0));
+  document.getElementById('overviewApi').textContent=n(r.count_unreferenced_api_target_text);
+  const chapterCount=Number(r.chapter_flac_count||Object.entries(finalProducts).filter(([name,o])=>name.startsWith('chapter_flac/')&&name.endsWith('.flac')&&o?.exists).length||0);
+  document.getElementById('overviewChapters').textContent=chapterCount||'—';
+  const sourceBox=document.getElementById('overviewSources');
+  const rows=[['主音频',source.primary,true],['官方中文',source.target,false],['参考包',source.reference,false],['项目索引',source.index,true]];
+  sourceBox.innerHTML=rows.map(([label,item,required])=>{
+    item=item||{};const configured=!!item.configured,exists=!!item.exists;
+    const text=!configured?(required?'未配置':'未使用'):(exists?'可用':'找不到');
+    const cls=configured&&!exists?'state-bad':exists?'state-ok':'state-muted';
+    return '<div class="overview-line"><span>'+label+'</span><span class="'+cls+'">'+text+'</span></div>';
+  }).join('');
+  const attention=[];
+  if(p.interrupted_build)attention.push(['构建中断','重新构建并核对报告','state-bad']);
+  if(reviewPending)attention.push(['语义复核','有条目等待人工修订','state-bad']);
+  if(missingWavs)attention.push(['缺失 WAV',missingWavs+' 条','state-bad']);
+  if(missingText)attention.push(['缺少目标文本',missingText+' 条','state-bad']);
+  if(!has&&!p.interrupted_build&&!reviewPending)attention.push(['构建','尚未生成完整档案','state-muted']);
+  if(!attention.length)attention.push(['状态','当前没有必须处理的项目级问题','state-ok']);
+  document.getElementById('overviewAttention').innerHTML=attention.map(([label,value,cls])=>'<div class="overview-line"><span>'+label+'</span><span class="'+cls+'">'+value+'</span></div>').join('');
+}
+
 function fillProject(p){
   currentProject=p;
   for(const button of workspaceButtons){
@@ -1260,6 +1387,7 @@ function fillProject(p){
   if(!p&&['review','export','update'].includes(document.body.dataset.workspace))showWorkspace('project');
   document.getElementById('noProject').classList.toggle('hidden',!!p);
   document.getElementById('projectForm').classList.toggle('hidden',!p);
+  renderProjectOverview(p);
   document.getElementById('archiveCard').classList.toggle('hidden',!p);
   document.getElementById('gptSovitsCard').classList.toggle('hidden',!p);
   document.getElementById('updateCard').classList.toggle('hidden',!p);
@@ -1315,6 +1443,7 @@ function fillProject(p){
   const groups=p.output_groups||{};
   const finalProducts=groups.final_products||{};
   const archiveRecords=groups.archive_records||{};
+  renderArtifactBrowser(p,finalProducts,outputMap);
   for(const name of ['continuous.flac','HSR_Voice_Archive.srt']){
     const o=finalProducts[name]||outputMap[name];
     if(!o?.exists)continue;
@@ -1553,11 +1682,33 @@ function completedReport(job){
   if(['build','quick-build'].includes(job?.kind))return '构建完成。\n成品文件已放至：'+(currentProject?.output_path||'项目 output 目录');
   return job?.message||'任务已完成。';
 }
+function renderJobCenterBar(active,projectJobs){
+  const title=document.getElementById('jobCenterTitle'),meta=document.getElementById('jobCenterMeta'),pctBox=document.getElementById('jobCenterPercent'),fill=document.getElementById('jobCenterFill'),dot=document.getElementById('jobCenterDot');
+  if(!title||!meta||!pctBox||!fill||!dot)return;
+  dot.className='job-center-dot';
+  if(active){
+    const pct=jobProgressPercent(active);
+    const labels={build:'构建档案','quick-build':'快速构建','remote-update-check':'检查增量','remote-update-apply':'应用增量','ass-export':'生成 ASS','black-video-export':'生成黑屏 MKV'};
+    title.textContent=(labels[active.kind]||'任务')+(active.project_name?' · '+active.project_name:'');
+    meta.textContent=active.message||'正在处理';
+    pctBox.textContent=pct+'%';fill.style.width=pct+'%';dot.classList.add('running');
+    return;
+  }
+  const latest=projectJobs?.[0];
+  fill.style.width=latest?.state==='succeeded'?'100%':'0';
+  pctBox.textContent='—';
+  if(!latest){title.textContent=currentProject?'没有运行中的任务':'没有打开项目';meta.textContent=currentProject?'当前项目处于空闲状态。':'选择项目后可查看任务状态。';return}
+  if(latest.state==='failed'){title.textContent='最近一次任务失败';meta.textContent=shortError(latest.error);dot.classList.add('failed');return}
+  if(latest.state==='awaiting_input'){title.textContent='等待人工修订';meta.textContent=latest.message||'需要人工输入后才能继续。';dot.classList.add('waiting');return}
+  title.textContent='任务空闲';meta.textContent=latest.state==='succeeded'?'最近一次任务已完成。':'当前没有运行中的任务。';
+}
+
 function renderJobs(jobs){
   const all=jobs||[],root=currentProject?.root||'';
   const active=all.find(j=>['queued','running'].includes(j.state));
   const projectJobs=root?all.filter(j=>j.project_root===root):[];
   const otherJobs=all.filter(j=>!root||j.project_root!==root);
+  renderJobCenterBar(active,projectJobs);
   const state=document.getElementById('activeJobState'),bar=document.getElementById('progressBar'),textBox=document.getElementById('progressText'),failure=document.getElementById('failureSummary');
   const activeForCurrent=active&&(!root||!active.project_root||active.project_root===root);
   if(active){
@@ -1605,7 +1756,7 @@ function renderJobs(jobs){
     const when=j.finished_at||j.started_at||j.created_at||'';
     const detail=j.state==='failed'?shortError(j.error):(j.message||'');
     const project=j.project_name?'<span class="muted"> · '+j.project_name+'</span>':'';
-    return '<div style="padding:8px 0;border-bottom:1px solid var(--line)"><b>'+(labels[j.kind]||j.kind)+'</b> · '+(states[j.state]||j.state)+project+(when?' · '+new Date(when).toLocaleString():'')+'<br><span class="'+(j.state==='failed'?'status-bad':'muted')+'">'+detail+'</span></div>';
+    return '<div class="job-history-row"><b>'+(labels[j.kind]||j.kind)+'</b> · '+(states[j.state]||j.state)+project+(when?' · '+new Date(when).toLocaleString():'')+'<br><span class="'+(j.state==='failed'?'status-bad':'muted')+'">'+detail+'</span></div>';
   };
   const recentCurrent=projectJobs.slice(0,5),olderCurrent=projectJobs.slice(5);
   let html=recentCurrent.length?recentCurrent.map(row).join(''):'<div class="muted">当前项目暂无任务历史。</div>';
@@ -1734,6 +1885,7 @@ document.getElementById('openForm').onsubmit=async e=>{e.preventDefault();try{co
 document.getElementById('createForm').onsubmit=async e=>{e.preventDefault();try{
   const data=fd(e.target);
   data.set('chapter_order',e.target.elements.chapter_order?.checked?'true':'false');
+  data.set('generate_chapter_flac',e.target.elements.generate_chapter_flac?.checked?'true':'false');
   data.set('translate_missing',e.target.elements.translate_missing?.checked?'true':'false');
   data.set('review_official_target',e.target.elements.review_official_target?.checked?'true':'false');
   const j=await api('/api/project/create',{method:'POST',body:data});
@@ -1756,6 +1908,7 @@ for(const name of ['source_text_language','target_language']){
 async function saveProject(){
   const form=document.getElementById('projectForm'),data=fd(form);
   if(form.elements.chapter_order)data.set('chapter_order',form.elements.chapter_order.checked?'true':'false');
+  if(form.elements.generate_chapter_flac)data.set('generate_chapter_flac',form.elements.generate_chapter_flac.checked?'true':'false');
   if(form.elements.translate_missing&&!form.elements.translate_missing.checked)data.delete('translate_missing');
   const j=await api('/api/project/save',{method:'POST',body:data});
   fillProject(j.project);
@@ -1804,6 +1957,10 @@ document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.
 document.getElementById('submitReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus'),input=document.getElementById('reviewFileInput'),button=document.getElementById('submitReviewBtn');try{const file=input.files?.[0];if(!file)throw new Error('请先选择修改后的 TXT 文件');button.disabled=true;s.textContent='正在校验并导入人工修订…';const d=new FormData();d.set('review_text',await file.text());const j=await api('/api/review/import',{method:'POST',body:d});fillProject(j.project);const r=j.result||{};if(r.remaining>0){s.textContent='已导入 '+n(r.imported)+' 条，仍有 '+n(r.remaining)+' 条未填写；请下载更新后的 TXT 继续修订。';button.disabled=false;return;}s.textContent='人工修订已导入，正在从检查点继续构建…';beginBuildLaunch();const build=await api('/api/project/build',{method:'POST'});watchJob(build.job);}catch(x){button.disabled=false;s.textContent='导入失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('refreshRelinkCandidatesBtn').onclick=async()=>{try{await loadRelinkCandidates();document.getElementById('relinkStatus').textContent='本机候选包已刷新。'}catch(x){document.getElementById('relinkStatus').textContent=shortError(x);document.getElementById('relinkStatus').className='small status-bad'}};
 document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSelectedSource()}catch(x){const s=document.getElementById('relinkStatus');s.textContent=shortError(x);s.className='small status-bad';setLog(String(x))}};
+document.getElementById('overviewBuildBtn').onclick=()=>document.getElementById('buildBtn')?.click();
+document.getElementById('overviewReviewBtn').onclick=()=>showWorkspace('review');
+document.getElementById('overviewUpdateBtn').onclick=()=>showWorkspace('update');
+document.getElementById('overviewArtifactsBtn').onclick=()=>document.getElementById('archiveCard')?.scrollIntoView({behavior:'smooth',block:'start'});
 document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
 document.getElementById('openSelectedProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await switchProject(document.getElementById('projectSwitcher').value);s.textContent='项目已打开。';s.className='small status-ok action-status'}catch(x){s.textContent='打开失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
 document.getElementById('newProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await startNewProject();s.textContent='已进入新建 / 导入模式。';s.className='small status-ok action-status'}catch(x){s.textContent='操作失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
