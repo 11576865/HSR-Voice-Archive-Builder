@@ -1590,12 +1590,6 @@ function updateCategoryLabel(key){
     ambiguous:'待确认身份',
   }[key]||key;
 }
-function updateCategorySeverity(key){
-  if(key==='new_logical')return 'new';
-  if(key==='changed_existing'||key==='ambiguous')return 'warn';
-  if(key==='variant_of_existing')return 'variant';
-  return 'existing';
-}
 function updatePlanEntries(plan){
   const keys=['new_logical','changed_existing','ambiguous','variant_of_existing','exact_existing'];
   const rows=[];
