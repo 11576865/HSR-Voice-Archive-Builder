@@ -148,8 +148,9 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("后端可能拒绝删除", html)
         self.assertIn('id="assOutputBtn"', html)
         self.assertIn("'/api/output/ass'", html)
-        self.assertIn("增量官方中文</span>", html)
-        self.assertIn("API 补译</span>", html)
+        self.assertNotIn('id="archiveStats"', html)
+        self.assertNotIn("增量官方中文</span>", html)
+        self.assertNotIn("API 补译</span>", html)
         self.assertNotIn("缺失目标文本</span>", html)
 
 
@@ -225,14 +226,15 @@ class QuickBuildUiTests(unittest.TestCase):
         lite_server_py = (Path(__file__).resolve().parents[1] / "app" / "lite_server.py").read_text(encoding="utf-8")
         self.assertIn("media-src 'self' blob:", server_py)
         self.assertIn("media-src 'self' blob:", lite_server_py)
-        self.assertIn("body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText,confirmed:!!targetSub.confirmed}]})", html)
+        self.assertIn("body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})", html)
         self.assertNotIn('id="subUseOfficialBtn"', html)
         self.assertNotIn('id="subUseApiBtn"', html)
         self.assertIn('id="subResetBtn"', html)
-        self.assertIn('id="subConfirmBtn"', html)
+        self.assertNotIn('id="subConfirmBtn"', html)
         self.assertNotIn('id="subOpenLayoutBtn"', html)
         self.assertNotIn('id="subNextAttentionBtn"', html)
-        self.assertIn('<option value="unreviewed">未人工确认</option>', html)
+        self.assertNotIn('<option value="unreviewed">未人工确认</option>', html)
+        self.assertNotIn('<option value="confirmed">已人工确认</option>', html)
         self.assertNotIn('<option value="overflow">ASS 排版失败</option>', html)
         self.assertNotIn("openCurrentSubtitleInLayout", html)
         self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
@@ -254,42 +256,23 @@ class QuickBuildUiTests(unittest.TestCase):
         ).read_text(encoding="utf-8")
 
         # The later dense proofreading redesign removed the character diff panel
-        # but kept the productivity shortcuts and confirmation flow.
+        # and the separate confirmation workflow; text edits autosave directly.
         self.assertNotIn('id="subDiffPanel"', html)
         self.assertNotIn("function renderSubtitleDiff()", html)
         self.assertIn('id="subShortcutHelp" class="sub-shortcuts"', html)
         self.assertIn("function toggleCurrentSubtitleAudio()", html)
-        self.assertIn("function confirmCurrentSubtitleFromShortcut()", html)
+        self.assertNotIn("function confirmCurrentSubtitleFromShortcut()", html)
         self.assertIn("subtitleEditor.addEventListener('keydown'", html)
 
         self.assertNotIn("e.altKey&&e.key.toLowerCase()==='a'", html)
         self.assertNotIn("e.altKey&&e.key.toLowerCase()==='t'", html)
         self.assertNotIn("e.altKey&&e.key.toLowerCase()==='n'", html)
         self.assertIn("e.altKey&&e.code==='Space'", html)
-        self.assertIn("(e.ctrlKey||e.metaKey)&&e.key==='Enter'", html)
-        self.assertIn("await setSubtitleConfirmation(true)", html)
-        self.assertIn("goToNextAttentionSubtitle()", html)
-
-        # Ctrl/Cmd+Enter must no longer mean ordinary next-row navigation.
-        shortcut_start = html.index(
-            "subtitleEditor.addEventListener('keydown',(e)=>{"
-        )
-        shortcut_end = html.index("subtitleEditor.oninput=()=>{", shortcut_start)
-        shortcut_block = html[shortcut_start:shortcut_end]
-        ctrl_enter_pos = shortcut_block.index(
-            "(e.ctrlKey||e.metaKey)&&e.key==='Enter'"
-        )
-        next_attention_pos = shortcut_block.index(
-            "confirmCurrentSubtitleFromShortcut()"
-        )
-        self.assertGreater(next_attention_pos, ctrl_enter_pos)
-        self.assertNotIn(
-            "||((e.ctrlKey||e.metaKey)&&e.key==='Enter')",
-            shortcut_block,
-        )
-
-        self.assertIn("confirmedCount=loadedSubtitles.filter(sub=>sub.confirmed).length", html)
-        self.assertIn("confirmedCount+' 已确认'", html)
+        self.assertNotIn("(e.ctrlKey||e.metaKey)&&e.key==='Enter'", html)
+        self.assertNotIn("setSubtitleConfirmation", html)
+        self.assertNotIn("goToNextAttentionSubtitle", html)
+        self.assertNotIn("confirmedCount=loadedSubtitles.filter(sub=>sub.confirmed).length", html)
+        self.assertNotIn("已确认</span>", html)
 
     def test_application_shell_v3_contract(self) -> None:
         html = (
@@ -573,7 +556,6 @@ class QuickBuildUiTests(unittest.TestCase):
             html.index('id="subSourceText"'),
             html.index('id="subOriginalAudio"'),
             html.index('id="subFinalEditor"'),
-            html.index('id="subOfficialText"'),
         ]
         self.assertTrue(all(position >= 0 for position in positions))
         self.assertEqual(positions, sorted(positions))
@@ -614,12 +596,12 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("className='update-group'", html)
         self.assertIn("className='update-change'", html)
 
-        # Export workspace contains useful targets and current archive summary.
+        # Export workspace contains only export-specific controls; archive products stay in Archive.
         self.assertIn('class="card hidden export-workbench" id="gptSovitsCard"', html)
-        self.assertIn('id="exportArtifactSummary"', html)
-        self.assertIn('id="exportGoArchiveBtn"', html)
-        self.assertIn('id="exportGoReviewBtn"', html)
-        self.assertIn('id="exportGoLayoutBtn"', html)
+        self.assertNotIn('id="exportArtifactSummary"', html)
+        self.assertNotIn('id="exportGoArchiveBtn"', html)
+        self.assertNotIn('id="exportGoReviewBtn"', html)
+        self.assertNotIn('id="exportGoLayoutBtn"', html)
         self.assertIn("function renderExportWorkspace(", html)
 
     def test_theme_switcher_and_collapse_regression_contract(self) -> None:
