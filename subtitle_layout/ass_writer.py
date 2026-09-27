@@ -142,17 +142,26 @@ def generate_clip_karaoke_overlay(
     if not details:
         return None
 
-    bbox = getattr(line, "bbox", None)
-    if bbox is None:
-        return None
-    x1 = round(float(getattr(bbox, "x_min", 0)))
-    x2 = round(float(getattr(bbox, "x_max", 0)))
-    y1 = round(float(getattr(bbox, "y_min", 0)) - 4)
-    y2 = round(float(getattr(bbox, "y_max", 0)) + 4)
+    font_size = int(getattr(line, "font_size", 42))
+    center_x = float(getattr(line, "x", 0))
+    anchor_y = float(getattr(line, "y", 0))
+    alignment = int(getattr(line, "alignment", 2))
+    text_width = max(1.0, measure_text_width(text, font_size, font_path))
+    line_height = max(1.0, measure_line_height(font_size))
+    x1 = round(center_x - text_width / 2.0)
+    x2 = round(center_x + text_width / 2.0)
+    if alignment == 2:
+        y1 = round(anchor_y - line_height - 4)
+        y2 = round(anchor_y + 4)
+    elif alignment == 8:
+        y1 = round(anchor_y - 4)
+        y2 = round(anchor_y + line_height + 4)
+    else:
+        y1 = round(anchor_y - line_height / 2.0 - 4)
+        y2 = round(anchor_y + line_height / 2.0 + 4)
     if x2 <= x1 or y2 <= y1:
         return None
 
-    font_size = int(getattr(line, "font_size", 42))
     widths = [
         max(1.0, measure_text_width(word, font_size, font_path))
         for word, _start, _end, _duration in details
