@@ -189,6 +189,25 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .preview-advanced summary{font-size:12px;color:var(--muted)}
 #previewCanvasContainer>div:first-of-type{z-index:5}
 
+/* Font browser and preview-only background */
+.font-picker-row{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:6px;align-items:center}
+.font-picker-row .font-browse-btn{min-height:40px;padding:7px 10px}
+.font-browser-dialog{width:min(680px,calc(100vw - 28px));max-height:min(720px,calc(100vh - 28px));padding:0;border:1px solid var(--line);border-radius:8px;background:#121719;color:var(--text)}
+.font-browser-dialog::backdrop{background:#050708b8}
+.font-browser-shell{display:grid;grid-template-rows:auto auto auto minmax(0,1fr);gap:10px;padding:14px;max-height:inherit}
+.font-browser-head{display:flex;justify-content:space-between;gap:14px;align-items:flex-start}
+.font-browser-list{display:grid;gap:1px;overflow:auto;min-height:220px;max-height:480px;background:var(--line);border:1px solid var(--line)}
+.font-browser-item{display:flex;justify-content:space-between;gap:12px;align-items:center;text-align:left;border:0;border-radius:0;background:#141a1c;padding:10px 12px;min-height:48px}
+.font-browser-item:hover{background:#1d2729}.font-browser-sample{font-size:16px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.preview-background-controls{display:grid;grid-template-columns:minmax(140px,220px) minmax(180px,1fr);gap:10px 14px;align-items:end;padding-top:12px;border-top:1px solid var(--line);margin-top:10px}
+.preview-background-controls>.small{grid-column:1/-1}
+.preview-stage.preview-bg-gradient{background:linear-gradient(180deg,#1c2530 0%,#0b0e14 100%)}
+.preview-stage.preview-bg-black{background:#000}
+.preview-stage.preview-bg-image{background:#000}
+.preview-background-grid{position:absolute;inset:0;z-index:0;background-color:#11171a;background-image:linear-gradient(45deg,#ffffff10 25%,transparent 25%),linear-gradient(-45deg,#ffffff10 25%,transparent 25%),linear-gradient(45deg,transparent 75%,#ffffff10 75%),linear-gradient(-45deg,transparent 75%,#ffffff10 75%);background-size:80px 80px;background-position:0 0,0 40px,40px -40px,-40px 0}
+#previewSvg,#assCanvasPreview{position:relative;z-index:2}
+@media(max-width:640px){.preview-background-controls{grid-template-columns:1fr}.preview-background-controls>.small{grid-column:auto}}
+
 /* Proofreading productivity */
 .sub-diff-panel{margin-top:10px;border:1px solid var(--line);background:#0f1416}
 .sub-diff-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border-bottom:1px solid var(--line);font-size:11px;font-weight:700;color:var(--muted)}
@@ -707,9 +726,16 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
         <section class="inspector-group">
           <b>样式</b>
           <label for="prevChsFont">中文字体</label>
-          <input id="prevChsFont" value="汉仪旗黑">
+          <div class="font-picker-row">
+            <input id="prevChsFont" value="汉仪旗黑" autocomplete="off">
+            <button type="button" class="secondary font-browse-btn" data-font-target="prevChsFont">浏览</button>
+          </div>
           <label for="prevPriFont">原文字体</label>
-          <input id="prevPriFont" value="Noto Sans">
+          <div class="font-picker-row">
+            <input id="prevPriFont" value="Noto Sans" autocomplete="off">
+            <button type="button" class="secondary font-browse-btn" data-font-target="prevPriFont">浏览</button>
+          </div>
+          <div id="fontResolveStatus" class="small muted inspector-help">字体名仍可直接输入；“浏览”只列出处理主机可发现的字体 family。</div>
           <div style="display:flex;justify-content:space-between;margin-top:8px">
             <label for="prevChsSize" style="margin:0">中文基础字号</label>
             <span id="prevChsSizeVal" class="small muted">52 px</span>
@@ -777,9 +803,39 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
           <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
           <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
         </div>
+        <div class="preview-background-controls">
+          <div>
+            <label for="previewBackgroundMode">工作台背景</label>
+            <select id="previewBackgroundMode">
+              <option value="gradient">中性渐变</option>
+              <option value="black">纯黑</option>
+              <option value="grid">明暗网格</option>
+              <option value="image">本地图片</option>
+            </select>
+          </div>
+          <div id="previewBackgroundFileWrap" class="hidden">
+            <label for="previewBackgroundFile">本地参考图片</label>
+            <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
+          </div>
+          <div class="small muted">背景仅存在于当前浏览器会话，用于判断可读性；不会上传、保存到项目或进入 ASS/MKV。</div>
+        </div>
       </details>
 
-      <div class="preview-stage" id="previewCanvasContainer">
+      <dialog id="fontBrowserDialog" class="font-browser-dialog">
+        <form method="dialog" class="font-browser-shell">
+          <div class="font-browser-head">
+            <div><b>主机字体浏览器</b><div class="small muted">显示处理主机可发现的字体 family；选择后仍建议用“实际 ASS 渲染”确认 libass 结果。</div></div>
+            <button type="submit" aria-label="关闭字体浏览器">关闭</button>
+          </div>
+          <input id="fontBrowserSearch" type="search" placeholder="搜索字体 family…" autocomplete="off">
+          <div id="fontBrowserMeta" class="small muted">尚未加载字体。</div>
+          <div id="fontBrowserList" class="font-browser-list"></div>
+        </form>
+      </dialog>
+
+      <div class="preview-stage preview-bg-gradient" id="previewCanvasContainer">
+        <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
+        <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
         <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
         <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
         <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
@@ -2943,6 +2999,75 @@ document.getElementById('subReferenceIntensity').onchange=saveReferenceAnnotatio
 
 
 /* Subtitle Layout Real-Time Preview Workspace JS Logic */
+let fontBrowserTargetId=null;
+let fontBrowserTimer=null;
+let previewBackgroundObjectUrl=null;
+
+async function loadFontBrowser(query=''){
+  const list=document.getElementById('fontBrowserList'),meta=document.getElementById('fontBrowserMeta');
+  if(!list||!meta)return;
+  meta.textContent='正在读取处理主机字体…';
+  try{
+    const data=await api('/api/subtitle-layout/fonts?q='+encodeURIComponent(query)+'&limit=500');
+    const families=data.families||[];
+    meta.textContent='找到 '+families.length+' 个字体 family。';
+    if(!families.length){list.innerHTML='<div class="update-empty">没有匹配字体。</div>';return}
+    list.innerHTML='';
+    for(const family of families){
+      const button=document.createElement('button');
+      button.type='button';button.className='font-browser-item';
+      button.innerHTML='<span>'+escapeHtml(family)+'</span><span class="font-browser-sample" style="font-family:'+JSON.stringify(family)+'">Aa 中 123</span>';
+      button.onclick=()=>{
+        const input=document.getElementById(fontBrowserTargetId||'');
+        if(input){input.value=family;input.dispatchEvent(new Event('input',{bubbles:true}))}
+        document.getElementById('fontResolveStatus').textContent='已选择主机字体：'+family+'。请使用实际 ASS 渲染确认最终效果。';
+        document.getElementById('fontBrowserDialog')?.close();
+      };
+      list.appendChild(button);
+    }
+  }catch(error){
+    meta.textContent='字体读取失败：'+shortError(error);
+    list.innerHTML='<div class="update-empty">无法读取主机字体列表；仍可直接输入字体名。</div>';
+  }
+}
+
+function openFontBrowser(targetId){
+  fontBrowserTargetId=targetId;
+  const dialog=document.getElementById('fontBrowserDialog');
+  const search=document.getElementById('fontBrowserSearch');
+  if(search)search.value='';
+  loadFontBrowser('');
+  if(dialog?.showModal)dialog.showModal();
+  else dialog?.setAttribute('open','');
+}
+
+function applyPreviewBackground(){
+  const stage=document.getElementById('previewCanvasContainer');
+  const mode=document.getElementById('previewBackgroundMode')?.value||'gradient';
+  const image=document.getElementById('previewBackgroundImage');
+  const grid=document.getElementById('previewBackgroundGrid');
+  const wrap=document.getElementById('previewBackgroundFileWrap');
+  if(!stage||!image||!grid)return;
+  stage.classList.remove('preview-bg-gradient','preview-bg-black','preview-bg-image');
+  grid.classList.toggle('hidden',mode!=='grid');
+  image.classList.toggle('hidden',mode!=='image'||!previewBackgroundObjectUrl);
+  if(wrap)wrap.classList.toggle('hidden',mode!=='image');
+  if(mode==='black')stage.classList.add('preview-bg-black');
+  else if(mode==='image')stage.classList.add('preview-bg-image');
+  else stage.classList.add('preview-bg-gradient');
+}
+
+function loadPreviewBackgroundFile(file){
+  if(previewBackgroundObjectUrl){URL.revokeObjectURL(previewBackgroundObjectUrl);previewBackgroundObjectUrl=null}
+  if(!file){applyPreviewBackground();return}
+  if(!/^image\/(png|jpeg|webp)$/i.test(file.type||''))throw new Error('背景只支持 PNG、JPEG 或 WebP');
+  previewBackgroundObjectUrl=URL.createObjectURL(file);
+  const image=document.getElementById('previewBackgroundImage');
+  image.src=previewBackgroundObjectUrl;
+  image.classList.remove('hidden');
+  applyPreviewBackground();
+}
+
 let previewDebounceTimer = null;
 let previewPreset = 'custom';
 let savedSubtitleSettings = null;
@@ -3292,6 +3417,21 @@ function renderCanvasSubtitleOverlay(data) {
 }
 
 // Workbench event wiring
+for(const button of document.querySelectorAll('.font-browse-btn')){
+  button.addEventListener('click',()=>openFontBrowser(button.dataset.fontTarget||'prevChsFont'));
+}
+document.getElementById('fontBrowserSearch')?.addEventListener('input',(event)=>{
+  clearTimeout(fontBrowserTimer);
+  fontBrowserTimer=setTimeout(()=>loadFontBrowser(event.target.value||''),180);
+});
+document.getElementById('previewBackgroundMode')?.addEventListener('change',applyPreviewBackground);
+document.getElementById('previewBackgroundFile')?.addEventListener('change',(event)=>{
+  try{loadPreviewBackgroundFile(event.target.files?.[0]||null)}
+  catch(error){setLog(String(error))}
+});
+window.addEventListener('beforeunload',()=>{if(previewBackgroundObjectUrl)URL.revokeObjectURL(previewBackgroundObjectUrl)});
+applyPreviewBackground();
+
 ['prevChsText','prevPriText'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',scheduleLayoutPreviewUpdate);
 });
