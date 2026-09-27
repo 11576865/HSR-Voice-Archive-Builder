@@ -284,6 +284,54 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_incremental_update_review_workbench_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("<h2>增量更新审查</h2>", html)
+        self.assertIn('id="updatePlanState" class="badge"', html)
+        self.assertIn('id="updateReviewList" class="update-review-list"', html)
+        self.assertIn('id="updateOnlyActionableBtn"', html)
+        self.assertIn('id="updateCopySummaryBtn"', html)
+        for category in (
+            "exact_existing",
+            "variant_of_existing",
+            "new_logical",
+            "changed_existing",
+            "ambiguous",
+            "all",
+        ):
+            self.assertIn(f'data-update-filter="{category}"', html)
+
+        self.assertIn("let currentUpdatePlan=null", html)
+        self.assertIn("function renderUpdateReview()", html)
+        self.assertIn("function updatePlanSummaryText(plan)", html)
+        self.assertIn("currentUpdatePlan=plan", html)
+        self.assertIn("renderUpdateReview();", html)
+        self.assertIn("CURRENT", html)
+        self.assertIn("REMOTE", html)
+        self.assertIn("audio_sha256", html)
+        self.assertIn("不会在“应用新增”时自动覆盖", html)
+        self.assertIn("不会自动下载或归入现有条目", html)
+        self.assertIn("只有明确的新增条目会自动下载", html)
+
+        # Existing update actions and counters remain the integration contract.
+        for element_id in (
+            "remoteCharacter",
+            "scanRemoteBtn",
+            "applyRemoteBtn",
+            "uExisting",
+            "uVariant",
+            "uNew",
+            "uChanged",
+            "uAmbiguous",
+            "uRows",
+            "candidatePath",
+            "scanLocalBtn",
+        ):
+            self.assertIn(f'id="{element_id}"', html)
+
     def test_job_polling_retries_and_bypasses_get_cache(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
