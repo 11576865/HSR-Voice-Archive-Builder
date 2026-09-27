@@ -26,6 +26,9 @@ ARCHIVE_FILES = (
     "build_report.json",
     "continuous.flac",
 )
+ARCHIVE_DIRS = (
+    "chapter_flac",
+)
 PUBLISHED_STAGES = (
     "stages/05_manifest.json",
     "stages/06_audio_state.json",
@@ -46,11 +49,12 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
     previously_interrupted = marker.exists()
     paths = [output / name for name in ARCHIVE_FILES]
     paths.extend(state / name for name in PUBLISHED_STAGES)
+    directory_paths = [output / name for name in ARCHIVE_DIRS]
     with tempfile.TemporaryDirectory(prefix=".hsr-published-", dir=output.parent) as td:
         backup = Path(td)
         originals: dict[Path, Path | None] = {}
         for index, path in enumerate(paths):
-            saved = backup / str(index)
+            saved = backup / f"file-{index}"
             if path.is_file():
                 if path.name in {"continuous.flac", "HSR_Voice_Archive_Black.mkv"}:
                     try:
@@ -62,6 +66,21 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
                 originals[path] = saved
             else:
                 originals[path] = None
+
+        directory_originals: dict[Path, Path | None] = {}
+        for index, path in enumerate(directory_paths):
+            saved = backup / f"dir-{index}"
+            if path.is_dir():
+                def _link_or_copy(src: str, dst: str) -> str:
+                    try:
+                        os.link(src, dst)
+                    except OSError:
+                        shutil.copy2(src, dst)
+                    return dst
+                shutil.copytree(path, saved, copy_function=_link_or_copy)
+                directory_originals[path] = saved
+            else:
+                directory_originals[path] = None
         marker.touch(exist_ok=True)
         try:
             yield
@@ -71,6 +90,12 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
                     if saved is None:
                         path.unlink(missing_ok=True)
                     else:
+                        path.parent.mkdir(parents=True, exist_ok=True)
+                        os.replace(saved, path)
+                for path, saved in directory_originals.items():
+                    if path.exists():
+                        shutil.rmtree(path)
+                    if saved is not None:
                         path.parent.mkdir(parents=True, exist_ok=True)
                         os.replace(saved, path)
             except BaseException:
