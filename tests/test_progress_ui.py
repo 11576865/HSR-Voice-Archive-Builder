@@ -253,6 +253,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("<ins>", html)
         self.assertIn("function toggleCurrentSubtitleAudio()", html)
         self.assertIn("function confirmCurrentSubtitleFromShortcut()", html)
+        self.assertIn("document.getElementById('subtitleReviewCard').addEventListener('keydown'", html)
+        self.assertNotIn("document.addEventListener('keydown'", html)
 
         self.assertIn("e.altKey&&e.key.toLowerCase()==='a'", html)
         self.assertIn("e.altKey&&e.key.toLowerCase()==='t'", html)
