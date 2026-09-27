@@ -1355,9 +1355,11 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
 
     <section class="card hidden" id="subtitleReviewCard">
       <div class="topline">
-        <h2>字幕校对</h2>
+        <div>
+          <h2>字幕校对</h2>
+          <p class="small muted" style="margin:4px 0 0">按“原文 → 语音与参考标注 → 最终中文字幕 → 官方中文 → ASS 检查”的顺序逐条处理。停止输入约 1 秒后自动保存。</p>
+        </div>
       </div>
-      <p class="small muted">逐条修正中文。停止输入约 1 秒后会自动保存。</p>
 
       <div class="row3 proofreading-filters">
         <div>
@@ -1385,7 +1387,6 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
       <div id="subtitleSaveStatus" class="small muted" style="margin-bottom:8px" role="status" aria-live="polite"></div>
 
       <div class="sub-workspace proofreading-workspace">
-        <!-- Left: Subtitle List & Navigation -->
         <div class="sub-sidebar">
           <div class="sub-sidebar-header">
             <span>字幕列表</span>
@@ -1396,7 +1397,6 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
           </div>
         </div>
 
-        <!-- Center: Single Subtitle Proofreading Panel -->
         <div class="sub-main" id="subMainWorkspace">
           <div class="sub-current-header">
             <div>
@@ -1406,109 +1406,99 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
             <div id="subStatusBadge"></div>
           </div>
 
-          <div class="sub-ref-card sub-audio-card" id="subAudioCard">
-            <div class="sub-ref-label">原始语音</div>
-            <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
-            <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后自动加载对应的原始 WAV。</div>
-          </div>
-
-          <!-- Read-only references -->
-          <div class="sub-references proofreading-references">
-            <div class="sub-ref-card">
-              <div class="sub-ref-label">
-                <span>原文</span>
-                <span id="subSourceLangBadge" class="badge">EN</span>
-              </div>
-              <div id="subSourceText" class="sub-ref-content">May this journey lead us starward.</div>
-              <div id="subSourceFileMeta" class="small muted" style="margin-top:6px">源文件：—</div>
+          <section class="proof-step proof-step-source" aria-labelledby="proofSourceLabel">
+            <div class="proof-step-kicker">01 · SOURCE</div>
+            <div class="sub-ref-label" id="proofSourceLabel">
+              <span>原文</span>
+              <span id="subSourceLangBadge" class="badge">EN</span>
             </div>
+            <div id="subSourceText" class="sub-ref-content proof-source-text">May this journey lead us starward.</div>
+            <div id="subSourceFileMeta" class="small muted" style="margin-top:6px">源文件：—</div>
+          </section>
 
-            <details class="sub-ref-card" id="subReferenceCard">
+          <section class="proof-step proof-step-audio" aria-labelledby="proofAudioLabel">
+            <div class="proof-step-kicker">02 · AUDIO / REFERENCE</div>
+            <div class="sub-ref-card sub-audio-card" id="subAudioCard">
+              <div class="sub-ref-label" id="proofAudioLabel">原始语音</div>
+              <audio id="subOriginalAudio" controls preload="metadata" style="width:100%;margin-top:4px"></audio>
+              <div id="subAudioStatus" class="small muted" style="margin-top:5px">选择字幕后自动加载对应的原始 WAV。</div>
+            </div>
+            <details class="sub-ref-card reference-annotation" id="subReferenceCard">
               <summary id="subReferenceSummary">
-                GPT-SoVITS 参考语音标注（高级）
+                参考语音标注
                 <span id="subReferenceSelectedBadge" class="badge" style="margin-left:8px">未选为参考</span>
               </summary>
               <div class="sub-reference-body" style="padding-top:8px">
-                <div class="small muted">这里仅保存 GPT-SoVITS 参考语音标注；原始 WAV 播放已移到校对主区域。</div>
-                <div class="row3" style="margin-top:8px">
+                <div class="row3">
                   <label class="check" style="margin:0"><input id="subReferenceSelected" type="checkbox"> 选为 GPT-SoVITS 参考语音</label>
                   <div>
                     <label for="subReferenceEmotion" style="margin-top:0">情绪标签</label>
-                    <select id="subReferenceEmotion" title="受控情绪分类；Other 用于当前分类无法覆盖的表演状态。">
-                      <option value="unmarked">Unmarked</option>
-                      <option value="neutral">Neutral</option>
-                      <option value="happy">Happy</option>
-                      <option value="sad">Sad</option>
-                      <option value="angry">Angry</option>
-                      <option value="fear">Fear</option>
-                      <option value="surprised">Surprised</option>
-                      <option value="other">Other</option>
+                    <select id="subReferenceEmotion">
+                      <option value="unmarked">Unmarked</option><option value="neutral">Neutral</option>
+                      <option value="happy">Happy</option><option value="sad">Sad</option>
+                      <option value="angry">Angry</option><option value="fear">Fear</option>
+                      <option value="surprised">Surprised</option><option value="other">Other</option>
                     </select>
                   </div>
                   <div>
                     <label for="subReferenceQuality" style="margin-top:0">参考质量</label>
-                    <select id="subReferenceQuality" title="A 为优先参考，B 为可用，C 为不建议用于常规参考。">
-                      <option value="unrated">Unrated</option>
-                      <option value="A">A: Recommended reference</option>
-                      <option value="B">B: Usable</option>
-                      <option value="C">C: Not recommended</option>
+                    <select id="subReferenceQuality">
+                      <option value="unrated">Unrated</option><option value="A">A: Recommended reference</option>
+                      <option value="B">B: Usable</option><option value="C">C: Not recommended</option>
                     </select>
                   </div>
                 </div>
                 <div style="margin-top:8px">
                   <div style="display:flex;justify-content:space-between;gap:8px">
-                    <label for="subReferenceIntensity" style="margin:0" title="情绪强度描述参考语音中该情绪的表现程度，不是情绪类别，也不保证生成语音达到相同强度。">情绪强度</label>
+                    <label for="subReferenceIntensity" style="margin:0">情绪强度</label>
                     <span id="subReferenceIntensityValue" class="small muted">0.50</span>
                   </div>
-                  <input id="subReferenceIntensity" type="range" min="0" max="1" step="0.05" value="0.5"
-                    title="0.00≈基本无明显情绪；0.25≈轻微；0.50≈中等；0.75≈明显；1.00≈强烈。">
-                  <div class="small muted" style="margin-top:4px">
-                    0.00 基本无明显情绪 · 0.25 轻微 · 0.50 中等 · 0.75 明显 · 1.00 强烈。该值描述参考语音的表演强度。
-                  </div>
+                  <input id="subReferenceIntensity" type="range" min="0" max="1" step="0.05" value="0.5">
                 </div>
                 <div id="subReferenceSaveStatus" class="small muted" style="margin-top:5px" role="status" aria-live="polite"></div>
               </div>
             </details>
+          </section>
 
+          <section class="proof-step proof-step-editor" aria-labelledby="proofEditorLabel">
+            <div class="proof-step-kicker">03 · FINAL SUBTITLE</div>
+            <div class="sub-edit-area">
+              <div class="sub-edit-header">
+                <label id="proofEditorLabel" for="subFinalEditor">最终中文字幕</label>
+                <span class="proof-editor-meta"><span id="subInitialSourceBadge" class="badge">初始来源 —</span><span id="subCharCounter" class="small muted">0 字</span></span>
+              </div>
+              <textarea id="subFinalEditor" class="sub-textarea" placeholder="官方中文存在时以官方中文为初始字幕；否则使用补译结果。"></textarea>
+              <div class="actions proofreading-actions">
+                <button type="button" class="secondary" id="subUseOfficialBtn" title="Alt+A">采用官方中文</button>
+                <button type="button" class="secondary" id="subUseApiBtn" title="Alt+T">采用补译</button>
+                <button type="button" class="secondary" id="subResetBtn">恢复初始字幕</button>
+                <button type="button" class="success" id="subConfirmBtn" title="Ctrl/Cmd+Enter">确认当前字幕</button>
+              </div>
+              <div id="subShortcutHelp" class="sub-shortcuts">
+                <kbd>Alt+A</kbd> 官方　<kbd>Alt+T</kbd> 补译　<kbd>Ctrl/⌘+Enter</kbd> 确认　<kbd>Alt+N</kbd> 下一待办　<kbd>Alt+Space</kbd> 播放
+              </div>
+            </div>
+          </section>
+
+          <section class="proof-step proof-step-official" aria-labelledby="proofOfficialLabel">
+            <div class="proof-step-kicker">04 · OFFICIAL REFERENCE</div>
             <div class="sub-ref-card">
-              <div class="sub-ref-label">官方中文</div>
+              <div class="sub-ref-label" id="proofOfficialLabel">官方中文</div>
               <div id="subOfficialText" class="sub-ref-content">愿此行，终抵群星。</div>
             </div>
+            <div id="subApiText" class="hidden" aria-hidden="true">—</div>
+          </section>
 
-            <div class="sub-ref-card">
-              <div class="sub-ref-label">API 翻译</div>
-              <div id="subApiText" class="sub-ref-content">—</div>
-            </div>
-          </div>
-
-          <!-- Editable Final Chinese Textarea -->
-          <div class="sub-edit-area">
-            <div class="sub-edit-header">
-              <label for="subFinalEditor">最终中文字幕</label>
-              <span id="subCharCounter" class="small muted">0 字</span>
-            </div>
-            <textarea id="subFinalEditor" class="sub-textarea" placeholder="在此输入修饰后的最终中文字幕…"></textarea>
-            <div class="actions proofreading-actions">
-              <button type="button" class="secondary" id="subUseOfficialBtn" title="Alt+A">采用官方中文</button>
-              <button type="button" class="secondary" id="subUseApiBtn" title="Alt+T">采用 API 翻译</button>
-              <button type="button" class="secondary" id="subResetBtn">恢复原始目标文本</button>
-              <button type="button" class="success" id="subConfirmBtn" title="Ctrl/Cmd+Enter">确认当前字幕</button>
-            </div>
-            <div id="subDiffPanel" class="sub-diff-panel">
-              <div class="sub-diff-head"><span>文本差异</span><span id="subDiffState" class="badge">—</span></div>
-              <div id="subDiffBody" class="sub-diff-body muted">选择字幕后显示最终文本与参考文本的字符级差异。</div>
-            </div>
-            <div id="subShortcutHelp" class="sub-shortcuts">
-              <kbd>Alt+A</kbd> 官方　<kbd>Alt+T</kbd> API　<kbd>Ctrl/⌘+Enter</kbd> 确认　<kbd>Alt+N</kbd> 下一待办　<kbd>Alt+Space</kbd> 播放　<kbd>Alt+↑/↓</kbd> 导航
-            </div>
-            <div id="subLayoutDiagnostic" class="small muted" style="margin-top:8px">ASS 排版：尚未检查。</div>
+          <section class="proof-step proof-step-layout" aria-labelledby="proofLayoutLabel">
+            <div class="proof-step-kicker">05 · ASS LAYOUT</div>
+            <div id="proofLayoutLabel" class="sub-ref-label">ASS 排版检测</div>
+            <div id="subLayoutDiagnostic" class="small muted">ASS 排版：尚未检查。</div>
             <div class="actions proofreading-secondary-actions">
               <button type="button" class="secondary" id="subOpenLayoutBtn">在排版工作台检查当前条目</button>
               <button type="button" class="secondary" id="subNextAttentionBtn">下一条未确认 / 异常字幕</button>
             </div>
-          </div>
+          </section>
 
-          <!-- Navigation controls -->
           <div class="sub-nav-bar">
             <button type="button" id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)" title="上一条字幕 (Alt+Up)">上一条</button>
             <button type="button" id="subNextBtn" aria-label="下一条字幕 (Alt+Down)" title="下一条字幕 (Alt+Down)">下一条</button>
@@ -1517,20 +1507,49 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
       </div>
     </section>
 
-    <section class="card hidden" id="gptSovitsCard">
-      <h2>GPT-SoVITS 资产导出</h2>
-      <p class="small muted">训练集使用归档中的原始语音与官方源文本；参考语音包使用你在字幕工作台中人工试听并标注的条目。两者互不替代。</p>
-      <div class="grid two">
+    <section class="card hidden export-workbench" id="gptSovitsCard">
+      <div class="topline">
+        <div>
+          <h2>导出工作台</h2>
+          <p class="small muted" style="margin:4px 0 0">训练数据、参考语音与档案成品集中在一个工作区。这里不重新构建主档案。</p>
+        </div>
+        <span id="exportProjectBadge" class="badge">未打开项目</span>
+      </div>
+
+      <div class="export-context">
         <div><label for="gptSovitsSpeaker">角色</label><input id="gptSovitsSpeaker" autocomplete="off"></div>
-        <div><label for="gptSovitsLanguage">语言</label><select id="gptSovitsLanguage"><option value="en">English</option></select></div>
+        <div><label for="gptSovitsLanguage">训练文本语言</label><select id="gptSovitsLanguage"><option value="en">English</option></select></div>
+        <div class="export-output-path"><label for="gptSovitsOutput">输出目录</label><input id="gptSovitsOutput" readonly></div>
       </div>
-      <label for="gptSovitsOutput">输出目录</label><input id="gptSovitsOutput" readonly>
-      <div class="actions">
-        <button type="button" class="success" id="gptSovitsExportBtn">导出训练集</button>
-        <button type="button" id="referencePackExportBtn">导出参考语音包</button>
+
+      <div class="export-lanes">
+        <section class="export-lane">
+          <div class="export-lane-kicker">DATASET</div>
+          <h3>GPT-SoVITS 训练集</h3>
+          <p class="small muted">导出原始语音与源文本，生成训练所需的音频/文本清单。</p>
+          <button type="button" class="success" id="gptSovitsExportBtn">导出训练集</button>
+          <div id="gptSovitsResult" class="small muted export-result" role="status" aria-live="polite">尚未导出。</div>
+        </section>
+        <section class="export-lane">
+          <div class="export-lane-kicker">REFERENCE PACK</div>
+          <h3>参考语音包</h3>
+          <p class="small muted">仅导出在校对工作台中人工试听、选中并标注的参考语音。</p>
+          <button type="button" id="referencePackExportBtn">导出参考语音包</button>
+          <div id="referencePackResult" class="small muted export-result" role="status" aria-live="polite">尚未导出。</div>
+        </section>
       </div>
-      <div id="gptSovitsResult" class="small muted" role="status" aria-live="polite"></div>
-      <div id="referencePackResult" class="small muted" role="status" aria-live="polite" style="margin-top:5px"></div>
+
+      <div class="export-artifacts-head">
+        <div><h3>当前档案成品</h3><p class="small muted">快速确认连续 FLAC、字幕与播放容器是否已经可用。</p></div>
+        <div class="actions">
+          <button type="button" id="exportGoArchiveBtn">返回档案</button>
+          <button type="button" id="exportGoReviewBtn">字幕校对</button>
+          <button type="button" id="exportGoLayoutBtn">排版工作台</button>
+        </div>
+      </div>
+      <div id="exportArtifactSummary" class="export-artifact-summary">
+        <div class="update-empty">打开项目后显示当前成品状态。</div>
+      </div>
     </section>
 
     <section class="card hidden" id="updateCard">
@@ -1573,6 +1592,36 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
           <button type="button" id="updateCopySummaryBtn">复制摘要</button>
         </div>
       </div>
+      <div class="update-review-tools">
+        <div>
+          <label for="updateSearchQuery">搜索变化</label>
+          <input id="updateSearchQuery" type="search" autocomplete="off" placeholder="文件名、角色、台词、SHA、原因…">
+        </div>
+        <div>
+          <label for="updateCategorySelect">类型</label>
+          <select id="updateCategorySelect">
+            <option value="all">全部类型</option>
+            <option value="new_logical">索引新增</option>
+            <option value="changed_existing">已有条目变化</option>
+            <option value="variant_of_existing">已有台词变量</option>
+            <option value="ambiguous">待确认身份</option>
+            <option value="exact_existing">已存在</option>
+          </select>
+        </div>
+        <div>
+          <label for="updateGroupBy">分组</label>
+          <select id="updateGroupBy">
+            <option value="category" selected>按变化类型</option>
+            <option value="chapter">按章节 / 文件组</option>
+            <option value="character">按角色</option>
+            <option value="none">不分组</option>
+          </select>
+        </div>
+        <div class="update-group-actions">
+          <button type="button" id="updateExpandGroupsBtn">展开分组</button>
+          <button type="button" id="updateCollapseGroupsBtn">折叠分组</button>
+        </div>
+      </div>
       <div id="updateReviewList" class="update-review-list">
         <div class="update-empty">尚未加载更新计划。</div>
       </div>
@@ -1586,46 +1635,46 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
     </section>
   </div>
 
-  <div class="stack" id="sideStack">
-    <section id="progressCard" class="card" role="region" aria-label="处理进度">
+  <div class="stack utility-drawer" id="sideStack" aria-label="任务与系统工具">
+    <div class="utility-drawer-head">
+      <div><span class="utility-kicker">UTILITY</span><b>任务与系统</b></div>
+      <button type="button" id="utilityCloseBtn" aria-label="关闭任务与系统面板">关闭</button>
+    </div>
+    <section id="progressCard" class="card utility-card" role="region" aria-label="处理进度">
       <div class="topline"><h2>任务中心</h2><button id="refreshBtn">刷新</button></div>
       <div id="activeJobState" class="notice" role="status" aria-live="polite">当前没有运行中的构建。</div>
       <div id="progressTrack" class="progress-track" role="progressbar" aria-label="任务进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0"><div id="progressBar" class="progress-bar"></div></div>
       <div id="progressText" class="small muted">等待任务。</div>
-      <div id="failureSummary" class="notice bad hidden" role="alert" style="margin-top:12px"></div>
-      <details id="runReportDetails" style="margin-top:14px">
+      <div id="failureSummary" class="notice bad hidden" role="alert" style="margin-top:10px"></div>
+      <details id="runReportDetails" class="utility-detail">
         <summary>运行报告</summary>
         <pre id="runReport" style="margin-top:8px">等待任务。</pre>
       </details>
-      <details style="margin-top:14px">
+      <details class="utility-detail">
         <summary>任务历史</summary>
         <div id="jobs" class="muted small" style="margin-top:8px">暂无任务。</div>
       </details>
     </section>
-    <section class="card" id="diagnosticCard">
+    <section class="card utility-card" id="diagnosticCard">
       <details id="diagnosticLog">
-        <summary>诊断日志（出错时查看）</summary>
-        <p class="small muted">这里保留完整异常和调试信息；正常使用时无需阅读。</p>
+        <summary>诊断日志</summary>
+        <p class="small muted">仅在任务失败或排查异常时需要。</p>
         <pre id="log">等待后端状态。</pre>
       </details>
     </section>
-    <section class="card">
+    <section class="card utility-card" id="localControlCard">
       <details>
-        <summary>本地优先与局域网控制</summary>
-        <p class="small muted">默认地址仅绑定 127.0.0.1。使用 <code>python -m app.launch --lan</code> 时，后端会绑定局域网并生成临时控制 token。手机或平板可以控制电脑处理，但原始音频仍留在电脑。</p>
-        <p class="small muted">AI 翻译凭据只保存在处理设备本地。首次配置请使用所选服务的 OpenAI-compatible Base URL，例如 <code>python -m app.credentials configure --provider custom --base-url https://你的工作空间.cn-beijing.maas.aliyuncs.com/compatible-mode/v1</code>；之后启动器会自动读取，无需每次 export。</p>
+        <summary>本地优先 / 局域网控制</summary>
+        <p class="small muted">默认仅绑定 127.0.0.1。使用 <code>python -m app.launch --lan</code> 后可由局域网设备控制；原始音频仍留在处理设备。</p>
+        <p class="small muted">AI 翻译凭据只保存在处理设备本地。</p>
       </details>
     </section>
-  </div>
+  </div></div>
 </div>
 </main>
 <script>
 const injectedToken=__HSR_API_TOKEN_JSON__;
 const workspaceButtons=[...document.querySelectorAll('[data-workspace-target]')];
-const reviewEditor=document.querySelector('#subMainWorkspace .sub-edit-area');
-const reviewReferences=document.querySelector('#subMainWorkspace .sub-references');
-if(reviewEditor&&reviewReferences)reviewReferences.before(reviewEditor);
-
 const THEME_KEY='hsr-ui-theme-v1';
 const systemThemeQuery=window.matchMedia('(prefers-color-scheme: dark)');
 let themePreference=localStorage.getItem(THEME_KEY)||document.documentElement.dataset.themePreference||'system';
