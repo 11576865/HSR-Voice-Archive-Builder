@@ -381,6 +381,56 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="actions proofreading-secondary-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_theme_coherence_and_single_layer_utility_drawer_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        # Theme chrome and light-mode overrides must stay coherent.
+        self.assertIn('<meta name="theme-color" content="#0d1725">', html)
+        self.assertIn("themeMeta.setAttribute('content',theme==='light'?'#eef4f8':'#0d1725')", html)
+        self.assertIn("--surface-terminal:#f1f5f9", html)
+        self.assertIn(
+            "button:disabled{\n  background:var(--surface-subtle)!important;",
+            html,
+        )
+        self.assertIn(
+            "pre,\n.log{\n  background:var(--surface-terminal)!important;",
+            html,
+        )
+
+        # Drawer close control must remain visible and reopening starts at top.
+        self.assertIn(
+            ".utility-drawer-head{\n  position:sticky!important;",
+            html,
+        )
+        self.assertIn("drawer.scrollTop=0;", html)
+        self.assertIn("close?.focus({preventScroll:true})", html)
+
+        # Diagnostic and LAN control use one outer collapsible card only.
+        self.assertIn(
+            '<div class="utility-panel-body" id="diagnosticLog">',
+            html,
+        )
+        self.assertNotIn('<details id="diagnosticLog">', html)
+        self.assertIn(
+            'class="card utility-card utility-network" id="localControlCard"',
+            html,
+        )
+        self.assertNotIn(
+            '<summary>本地优先 / 局域网控制</summary>',
+            html,
+        )
+        self.assertIn(
+            "const panel=document.getElementById('diagnosticCard');",
+            html,
+        )
+
+        # Utility panels retain separate semantic accents.
+        self.assertIn("--task:#60a5fa", html)
+        self.assertIn("--diagnostic:#a78bfa", html)
+        self.assertIn("--network:#2dd4bf", html)
+
     def test_mobile_single_column_workbench_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
