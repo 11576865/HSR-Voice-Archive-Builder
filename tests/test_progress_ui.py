@@ -238,6 +238,51 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertGreater(mobile_pos, desktop_pos)
         self.assertNotIn('.actions{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}', html)
 
+    def test_proofreading_productivity_shortcuts_and_diff_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="subDiffPanel" class="sub-diff-panel"', html)
+        self.assertIn('id="subDiffState" class="badge"', html)
+        self.assertIn('id="subShortcutHelp" class="sub-shortcuts"', html)
+        self.assertIn("function subtitleDiffOps(before,after)", html)
+        self.assertIn("function renderSubtitleDiff()", html)
+        self.assertIn("new Uint16Array(b.length+1)", html)
+        self.assertIn("<del>", html)
+        self.assertIn("<ins>", html)
+        self.assertIn("function toggleCurrentSubtitleAudio()", html)
+        self.assertIn("function confirmCurrentSubtitleFromShortcut()", html)
+
+        self.assertIn("e.altKey&&e.key.toLowerCase()==='a'", html)
+        self.assertIn("e.altKey&&e.key.toLowerCase()==='t'", html)
+        self.assertIn("e.altKey&&e.key.toLowerCase()==='n'", html)
+        self.assertIn("e.altKey&&e.code==='Space'", html)
+        self.assertIn("(e.ctrlKey||e.metaKey)&&e.key==='Enter'", html)
+        self.assertIn("await setSubtitleConfirmation(true)", html)
+        self.assertIn("goToNextAttentionSubtitle()", html)
+
+        # Ctrl/Cmd+Enter must no longer mean ordinary next-row navigation.
+        shortcut_start = html.index(
+            "subtitleEditor.addEventListener('keydown',(e)=>{"
+        )
+        shortcut_end = html.index("subtitleEditor.oninput=()=>{", shortcut_start)
+        shortcut_block = html[shortcut_start:shortcut_end]
+        ctrl_enter_pos = shortcut_block.index(
+            "(e.ctrlKey||e.metaKey)&&e.key==='Enter'"
+        )
+        next_attention_pos = shortcut_block.index(
+            "confirmCurrentSubtitleFromShortcut()"
+        )
+        self.assertGreater(next_attention_pos, ctrl_enter_pos)
+        self.assertNotIn(
+            "||((e.ctrlKey||e.metaKey)&&e.key==='Enter')",
+            shortcut_block,
+        )
+
+        self.assertIn("confirmedCount=loadedSubtitles.filter(sub=>sub.confirmed).length", html)
+        self.assertIn("confirmedCount+' 已确认'", html)
+
     def test_project_overview_job_center_and_artifact_browser_contract(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
