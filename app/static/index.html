@@ -817,6 +817,92 @@ body[data-panel-mode="auto"] #panelExpandAllBtn,body[data-panel-mode="auto"] #pa
   .panel-mode-control{display:none}
 }
 
+
+/* Workflow density revision ------------------------------------------------ */
+.grid{grid-template-columns:minmax(0,1fr)!important;max-width:1500px}
+#primaryStack{min-width:0}
+#sideStack.utility-drawer{
+  display:flex!important;position:fixed;z-index:70;top:calc(var(--topbar-height) + 48px);right:16px;bottom:16px;
+  width:min(390px,calc(100vw - 24px));margin:0!important;padding:10px;gap:8px;overflow:auto;
+  background:color-mix(in srgb,var(--surface-header) 96%,transparent);
+  border:1px solid var(--line);box-shadow:0 24px 70px rgba(0,0,0,.32);
+  backdrop-filter:blur(18px) saturate(1.08);
+  transform:translateX(calc(100% + 28px));opacity:0;pointer-events:none;
+  transition:transform .18s ease,opacity .18s ease;
+}
+body.utility-drawer-open #sideStack{transform:translateX(0);opacity:1;pointer-events:auto}
+body:not([data-workspace="project"]) #sideStack{display:flex!important}
+.utility-drawer-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:2px 2px 7px;border-bottom:1px solid var(--line)}
+.utility-drawer-head>div{display:flex;align-items:baseline;gap:8px}.utility-kicker{color:var(--muted);font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.11em}
+.utility-drawer-head button{min-height:30px;padding:4px 9px}
+#sideStack .card{flex:0 0 auto!important;min-height:0!important;margin:0;padding:12px;background:var(--surface-utility)}
+#sideStack .ui-collapse-head{min-height:30px}
+#sideStack .ui-collapse-head h2{font-size:13px}
+#sideStack .notice{padding:8px 9px;font-size:12px}
+#sideStack .progress-track{margin:7px 0;height:4px}
+#sideStack .utility-detail{margin-top:8px!important}
+#sideStack pre{max-height:220px}
+#progressCard{position:relative!important;top:auto!important;z-index:auto!important}
+#mobileProgressSlot{display:none!important}
+
+.proofreading-workspace .sub-main{gap:9px}
+.proof-step{padding:12px;border:1px solid var(--line);border-radius:5px;background:var(--surface-secondary)}
+.proof-step-kicker{margin-bottom:7px;color:var(--muted);font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.1em}
+.proof-step-source{border-left:3px solid var(--blue)}
+.proof-step-audio{border-left:3px solid var(--accent)}
+.proof-step-editor{border-left:3px solid var(--workspace-accent);background:var(--surface-primary)}
+.proof-step-official{border-left:3px solid var(--ok)}
+.proof-step-layout{border-left:3px solid var(--purple)}
+.proof-step .sub-ref-card{padding:0;border:0;background:transparent}
+.proof-step-audio .reference-annotation{margin-top:9px;padding-top:8px;border-top:1px solid var(--line)}
+.proof-source-text{font-size:15px;line-height:1.58}
+.proof-editor-meta{display:flex;align-items:center;gap:8px}
+.proof-step-editor .sub-textarea{min-height:116px;background:var(--surface-input)}
+.proof-step-official .sub-ref-content{font-size:14px}
+.proof-step-layout .actions{margin-top:9px}
+#subDiffPanel{display:none!important}
+
+.export-workbench{min-height:0}
+.export-context{display:grid;grid-template-columns:minmax(160px,.7fr) minmax(140px,.45fr) minmax(280px,1.3fr);gap:10px;padding:12px;background:var(--surface-subtle);border:1px solid var(--line)}
+.export-context label{margin-top:0}
+.export-lanes{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin-top:12px}
+.export-lane{display:grid;align-content:start;gap:8px;min-height:190px;padding:14px;border:1px solid var(--line);background:var(--surface-secondary)}
+.export-lane-kicker{color:var(--workspace-accent);font:700 9px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.1em}
+.export-lane h3,.export-artifacts-head h3{margin:0;font-size:15px}
+.export-lane p{margin:0;min-height:3.2em}.export-lane button{width:max-content}.export-result{margin-top:auto;padding-top:8px;border-top:1px solid var(--line)}
+.export-artifacts-head{display:flex;align-items:flex-end;justify-content:space-between;gap:12px;margin-top:16px;padding-top:14px;border-top:1px solid var(--line)}
+.export-artifacts-head p{margin:3px 0 0}.export-artifacts-head .actions{margin:0}
+.export-artifact-summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:7px;margin-top:10px}
+.export-artifact{display:grid;gap:3px;min-width:0;padding:10px;border:1px solid var(--line);background:var(--surface-subtle)}
+.export-artifact.audio{border-top:2px solid var(--ok)}.export-artifact.subtitle{border-top:2px solid var(--purple)}.export-artifact.video{border-top:2px solid var(--blue)}
+.export-artifact-kind{color:var(--muted);font:700 8px/1 ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:.08em}
+.export-artifact b{font-size:12px}.export-artifact small{color:var(--muted)}.export-artifact.missing{opacity:.68}
+
+.update-review-tools{display:grid;grid-template-columns:minmax(220px,1.5fr) minmax(150px,.65fr) minmax(170px,.75fr) auto;gap:9px;align-items:end;padding:10px 0;border-bottom:1px solid var(--line)}
+.update-review-tools label{margin:0 0 4px}.update-group-actions{display:flex;gap:6px}.update-group-actions button{min-height:40px;padding:6px 9px}
+.update-review-list{display:grid;gap:9px;background:transparent!important;border:0!important;margin-top:10px}
+.update-group{border:1px solid var(--line);background:var(--surface-secondary)}
+.update-group>summary{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:9px 11px;background:var(--surface-subtle)}
+.update-group-body{display:grid;gap:1px;background:var(--line);border-top:1px solid var(--line)}
+.update-change{margin:0!important;border:0!important;border-radius:0!important;background:var(--surface-secondary)!important}
+.update-change>summary.update-change-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;padding:10px 12px;background:var(--surface-secondary)}
+.update-change-body{padding:0 12px 12px}.update-change-meta{padding:0 12px 8px}
+.update-change:not([open]) .update-change-summary{background:var(--surface-utility)}
+.update-change-title{font-weight:650;min-width:0;overflow-wrap:anywhere}
+.update-change-badges{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+
+@media(max-width:900px){
+  .export-context{grid-template-columns:1fr 1fr}.export-output-path{grid-column:1/-1}
+  .export-artifact-summary{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .update-review-tools{grid-template-columns:1fr 1fr}.update-group-actions{align-self:end}
+}
+@media(max-width:640px){
+  #sideStack.utility-drawer{top:58px;right:6px;bottom:8px;width:calc(100vw - 12px)}
+  .export-lanes,.export-context,.export-artifact-summary,.update-review-tools{grid-template-columns:1fr}
+  .export-output-path{grid-column:auto}.export-artifacts-head{align-items:flex-start;flex-direction:column}
+  .proof-step{padding:10px}.proof-editor-meta{align-items:flex-end;flex-direction:column;gap:3px}
+}
+
 </style>
 </head>
 <body>
@@ -1920,35 +2006,39 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(scroll)window.scrollTo({top:0,behavior:'instant'});
 }
 for(const button of workspaceButtons)button.addEventListener('click',()=>showWorkspace(button.dataset.workspaceTarget));
-document.getElementById('jobCenterToggle').onclick=()=>{
-  autoPinnedPanelKey='progressCard';
-  showWorkspace('project',{preservePanelPin:true});
-  requestAnimationFrame(()=>{
-    const panel=document.getElementById('progressCard');
-    if(panelCollapseMode==='auto')setPanelCollapsed(panel,false);
-    panel?.scrollIntoView({behavior:'smooth',block:'start'});
-  });
-};
+function setUtilityDrawer(open){
+  document.body.classList.toggle('utility-drawer-open',!!open);
+  document.getElementById('jobCenterToggle')?.setAttribute('aria-expanded',open?'true':'false');
+}
+const jobCenterToggle=document.getElementById('jobCenterToggle');
+if(jobCenterToggle){
+  jobCenterToggle.setAttribute('aria-expanded','false');
+  jobCenterToggle.onclick=()=>{
+    const next=!document.body.classList.contains('utility-drawer-open');
+    if(next){
+      autoPinnedPanelKey='progressCard';
+      const panel=document.getElementById('progressCard');
+      if(panelCollapseMode==='auto')setPanelCollapsed(panel,false);
+    }
+    setUtilityDrawer(next);
+  };
+}
+document.getElementById('utilityCloseBtn')?.addEventListener('click',()=>setUtilityDrawer(false));
+document.addEventListener('keydown',event=>{if(event.key==='Escape')setUtilityDrawer(false)});
 showWorkspace('project',{scroll:false});
 const token=typeof injectedToken==="string"?injectedToken:"";
 if(location.search){history.replaceState(null,'',location.pathname)}
 const headers=()=>token?{'X-HSR-Token':token}:{};
 const log=document.getElementById('log');
 let currentProject=null,pollTimer=null;
-const narrowLayout=window.matchMedia('(max-width:767px)');
 function syncProgressPlacement(){
   const card=document.getElementById('progressCard');
-  const mobileSlot=document.getElementById('mobileProgressSlot');
   const sideStack=document.getElementById('sideStack');
-  if(!card||!mobileSlot||!sideStack)return;
-  if(narrowLayout.matches){
-    if(card.parentElement!==mobileSlot)mobileSlot.appendChild(card);
-  }else if(card.parentElement!==sideStack){
-    sideStack.prepend(card);
+  if(card&&sideStack&&card.parentElement!==sideStack){
+    const head=sideStack.querySelector('.utility-drawer-head');
+    if(head)head.after(card);else sideStack.prepend(card);
   }
 }
-if(narrowLayout.addEventListener)narrowLayout.addEventListener('change',syncProgressPlacement);
-else if(narrowLayout.addListener)narrowLayout.addListener(syncProgressPlacement);
 syncProgressPlacement();
 
 async function api(url,opts={}){
@@ -2002,6 +2092,9 @@ document.getElementById('gptSovitsSpeaker').addEventListener('input',()=>{
     (currentProject.root||'')+' / '+(currentProject.config.output_dir||'output')+
     ' / '+document.getElementById('gptSovitsSpeaker').value+'_GPTSoVITS';
 });
+document.getElementById('exportGoArchiveBtn')?.addEventListener('click',()=>showWorkspace('project'));
+document.getElementById('exportGoReviewBtn')?.addEventListener('click',()=>showWorkspace('review'));
+document.getElementById('exportGoLayoutBtn')?.addEventListener('click',()=>showWorkspace('layout'));
 function fd(form){return new FormData(form)}
 function setLog(x){log.textContent=typeof x==='string'?x:JSON.stringify(x,null,2)}
 function showDiagnosticLog(){
@@ -2252,6 +2345,34 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   if(count)count.textContent=cards.filter(x=>!x.classList.contains('missing')).length+' 项可用';
 }
 
+function renderExportWorkspace(p){
+  const badge=document.getElementById('exportProjectBadge');
+  const box=document.getElementById('exportArtifactSummary');
+  if(badge)badge.textContent=p?.name||'未打开项目';
+  if(!box)return;
+  if(!p){
+    box.innerHTML='<div class="update-empty">打开项目后显示当前成品状态。</div>';
+    return;
+  }
+  const outputs=p.outputs||{},groups=p.output_groups||{},finalProducts=groups.final_products||{};
+  const specs=[
+    ['continuous.flac','audio','连续 FLAC'],
+    ['HSR_Voice_Archive.srt','subtitle','SRT 字幕'],
+    ['HSR_Voice_Archive.ass','subtitle','ASS 字幕'],
+    ['HSR_Voice_Archive_Black.mkv','video','黑屏 MKV'],
+  ];
+  box.innerHTML=specs.map(([name,kind,label])=>{
+    const item=finalProducts[name]||outputs[name]||{};
+    const exists=!!item.exists;
+    return '<div class="export-artifact '+kind+(exists?' ready':' missing')+'>'+
+      '<span class="export-artifact-kind">'+kind.toUpperCase()+'</span>'+
+      '<b>'+escapeHtml(label)+'</b>'+
+      '<span class="'+(exists?'status-ok':'muted')+'">'+(exists?'可用':'未生成')+'</span>'+
+      (exists&&item.size_bytes?'<small>'+bytes(item.size_bytes)+'</small>':'')+
+      '</div>';
+  }).join('');
+}
+
 function renderProjectOverview(p){
   const overview=document.getElementById('projectOverview'),settings=document.getElementById('projectSettingsPanel');
   if(!overview||!settings)return;
@@ -2302,6 +2423,7 @@ function fillProject(p){
   document.getElementById('noProject').classList.toggle('hidden',!!p);
   document.getElementById('projectForm').classList.toggle('hidden',!p);
   renderProjectOverview(p);
+  renderExportWorkspace(p);
   document.getElementById('archiveCard').classList.toggle('hidden',!p);
   document.getElementById('gptSovitsCard').classList.toggle('hidden',!p);
   document.getElementById('updateCard').classList.toggle('hidden',!p);
@@ -2441,6 +2563,8 @@ function fillProject(p){
 let currentUpdatePlan=null;
 let currentUpdateFilter='all';
 let updateOnlyActionable=false;
+let updateSearchQuery='';
+let updateGroupBy='category';
 
 function updateItemFilename(item){
   if(typeof item==='string')return item;
@@ -2466,6 +2590,67 @@ function updatePlanEntries(plan){
   }
   return rows;
 }
+function updateRowSearchText(row){
+  const item=row.item,md=updateItemMetadata(item);
+  return [
+    row.category,updateCategoryLabel(row.category),updateItemFilename(item),
+    md.character,md.battle,md.hash,md.english,item?.reason,
+    item?.previous?.source_text,Array.isArray(item?.existing)?item.existing.join(' '):''
+  ].filter(Boolean).join(' ').toLocaleLowerCase();
+}
+function updateChapterGroup(row){
+  const filename=updateItemFilename(row.item);
+  const match=filename.match(/^(chapter[^_]+(?:_[^_]+)?)/i);
+  if(match)return match[1];
+  const parts=filename.split('_').filter(Boolean);
+  return parts.length>1?parts.slice(0,2).join('_'):'其他';
+}
+function updateGroupInfo(row){
+  const md=updateItemMetadata(row.item);
+  if(updateGroupBy==='category')return {key:row.category,label:updateCategoryLabel(row.category)};
+  if(updateGroupBy==='character')return {key:String(md.character||'未标注角色'),label:String(md.character||'未标注角色')};
+  if(updateGroupBy==='chapter')return {key:updateChapterGroup(row),label:updateChapterGroup(row)};
+  return {key:'all',label:'全部条目'};
+}
+function buildUpdateChange(row){
+  const {category,item}=row;
+  const filename=updateItemFilename(item)||'未命名条目';
+  const md=updateItemMetadata(item);
+  const card=document.createElement('details');
+  card.className='update-change';
+  card.open=category!=='exact_existing';
+  const badges=['<span class="badge">'+escapeHtml(updateCategoryLabel(category))+'</span>'];
+  if(category==='changed_existing'&&Array.isArray(item?.changes)){
+    for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'文本变化':change==='audio_sha256'?'音频变化':change)+'</span>');
+  }
+  const metaBits=[];
+  if(md.character)metaBits.push('角色 '+md.character);
+  if(md.battle)metaBits.push('战斗语音 '+md.battle);
+  if(md.hash)metaBits.push('SHA '+String(md.hash).slice(0,12)+'…');
+  let body='';
+  if(category==='changed_existing'){
+    const oldText=String(item?.previous?.source_text||'');
+    const newText=String(md.english||'');
+    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div>';
+    if(item?.changes?.includes('audio_sha256'))body+='<div class="update-change-detail">音频 SHA-256 与当前档案不同；不会被“应用新增”静默覆盖。</div>';
+  }else if(category==='variant_of_existing'){
+    const existing=Array.isArray(item?.existing)?item.existing.join('、'):'—';
+    body='<div class="update-change-detail">候选属于已有逻辑语音的文件变量。当前已有：'+escapeHtml(existing)+'</div>';
+    if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
+  }else if(category==='ambiguous'){
+    body='<div class="update-change-detail">无法安全确定身份：'+escapeHtml(item?.reason||'unknown')+'。不会自动下载或归入现有条目。</div>';
+  }else if(category==='new_logical'){
+    body='<div class="update-change-detail">远程索引首次出现的逻辑语音；应用更新时将尝试精确定位并下载。</div>';
+    if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
+  }else{
+    body='<div class="update-change-detail">当前档案中已存在同一条目，远程元数据没有可比较的变化。</div>';
+  }
+  card.innerHTML=
+    '<summary class="update-change-summary"><span class="update-change-title">'+escapeHtml(filename)+'</span><span class="update-change-badges">'+badges.join('')+'</span></summary>'+
+    (metaBits.length?'<div class="update-change-meta">'+metaBits.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+
+    '<div class="update-change-body">'+body+'</div>';
+  return card;
+}
 function renderUpdateReview(){
   const list=document.getElementById('updateReviewList'),title=document.getElementById('updateReviewTitle'),meta=document.getElementById('updateReviewMeta');
   if(!list||!title||!meta)return;
@@ -2476,47 +2661,39 @@ function renderUpdateReview(){
   let rows=updatePlanEntries(currentUpdatePlan);
   if(currentUpdateFilter!=='all')rows=rows.filter(row=>row.category===currentUpdateFilter);
   if(updateOnlyActionable)rows=rows.filter(row=>['new_logical','changed_existing','ambiguous','variant_of_existing'].includes(row.category));
+  const query=updateSearchQuery.trim().toLocaleLowerCase();
+  if(query)rows=rows.filter(row=>updateRowSearchText(row).includes(query));
+
   title.textContent=currentUpdateFilter==='all'?'全部变化':updateCategoryLabel(currentUpdateFilter);
-  meta.textContent='显示 '+rows.length+' 项'+(updateOnlyActionable?' · 已隐藏无需处理的已存在条目':'');
+  const groupHint=updateGroupBy==='none'?'不分组':' · '+document.getElementById('updateGroupBy')?.selectedOptions?.[0]?.textContent;
+  meta.textContent='显示 '+rows.length+' 项'+(updateOnlyActionable?' · 只看需处理':'')+(query?' · 已搜索':'')+groupHint;
+  const categorySelect=document.getElementById('updateCategorySelect');
+  if(categorySelect&&categorySelect.value!==currentUpdateFilter)categorySelect.value=currentUpdateFilter;
   for(const button of document.querySelectorAll('.update-filter')){
     button.setAttribute('aria-pressed',button.dataset.updateFilter===currentUpdateFilter?'true':'false');
   }
-  if(!rows.length){list.innerHTML='<div class="update-empty">当前筛选没有条目。</div>';return}
-  list.innerHTML='';
+  if(!rows.length){list.innerHTML='<div class="update-empty">当前筛选 / 搜索没有条目。</div>';return}
+
+  const groups=new Map();
   for(const row of rows){
-    const {category,item}=row;
-    const filename=updateItemFilename(item)||'未命名条目';
-    const md=updateItemMetadata(item);
-    const card=document.createElement('article');card.className='update-change';
-    const badges=['<span class="badge">'+escapeHtml(updateCategoryLabel(category))+'</span>'];
-    if(category==='changed_existing'&&Array.isArray(item?.changes)){
-      for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'文本变化':change==='audio_sha256'?'音频变化':change)+'</span>');
+    const info=updateGroupInfo(row);
+    if(!groups.has(info.key))groups.set(info.key,{label:info.label,rows:[]});
+    groups.get(info.key).rows.push(row);
+  }
+  list.innerHTML='';
+  for(const group of groups.values()){
+    if(updateGroupBy==='none'){
+      for(const row of group.rows)list.appendChild(buildUpdateChange(row));
+      continue;
     }
-    const top='<div class="update-change-top"><div class="update-change-title">'+escapeHtml(filename)+'</div><div class="update-change-badges">'+badges.join('')+'</div></div>';
-    const metaBits=[];
-    if(md.character)metaBits.push('角色 '+md.character);
-    if(md.battle)metaBits.push('战斗语音 '+md.battle);
-    if(md.hash)metaBits.push('SHA '+String(md.hash).slice(0,12)+'…');
-    let body='';
-    if(category==='changed_existing'){
-      const oldText=String(item?.previous?.source_text||'');
-      const newText=String(md.english||'');
-      body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div>';
-      if(item?.changes?.includes('audio_sha256'))body+='<div class="update-change-detail">音频 SHA-256 与当前档案不同。该变化不会在“应用新增”时自动覆盖。</div>';
-    }else if(category==='variant_of_existing'){
-      const existing=Array.isArray(item?.existing)?item.existing.join('、'):'—';
-      body='<div class="update-change-detail">候选属于已有逻辑语音的另一个文件变量。当前已有：'+escapeHtml(existing)+'</div>';
-      if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
-    }else if(category==='ambiguous'){
-      body='<div class="update-change-detail">无法安全确定身份：'+escapeHtml(item?.reason||'unknown')+'。不会自动下载或归入现有条目。</div>';
-    }else if(category==='new_logical'){
-      body='<div class="update-change-detail">远程索引中首次出现的逻辑语音。应用更新时将尝试精确定位并下载。</div>';
-      if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
-    }else{
-      body='<div class="update-change-detail">当前档案中已存在同一条目，远程元数据没有可比较的变化。</div>';
-    }
-    card.innerHTML=top+(metaBits.length?'<div class="update-change-meta">'+metaBits.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+body;
-    list.appendChild(card);
+    const block=document.createElement('details');
+    block.className='update-group';
+    block.open=true;
+    const actionable=group.rows.filter(row=>row.category!=='exact_existing').length;
+    block.innerHTML='<summary><span>'+escapeHtml(group.label)+'</span><span class="badge">'+group.rows.length+' 项'+(actionable?' · '+actionable+' 需处理':'')+'</span></summary><div class="update-group-body"></div>';
+    const body=block.querySelector('.update-group-body');
+    for(const row of group.rows)body.appendChild(buildUpdateChange(row));
+    list.appendChild(block);
   }
 }
 function updatePlanSummaryText(plan){
@@ -2871,8 +3048,17 @@ async function watchJob(id){
 }
 
 for(const button of document.querySelectorAll('.update-filter')){
-  button.addEventListener('click',()=>{currentUpdateFilter=button.dataset.updateFilter||'all';renderUpdateReview()});
+  button.addEventListener('click',()=>{
+    currentUpdateFilter=button.dataset.updateFilter||'all';
+    const select=document.getElementById('updateCategorySelect');if(select)select.value=currentUpdateFilter;
+    renderUpdateReview();
+  });
 }
+document.getElementById('updateSearchQuery')?.addEventListener('input',event=>{updateSearchQuery=event.target.value||'';renderUpdateReview()});
+document.getElementById('updateCategorySelect')?.addEventListener('change',event=>{currentUpdateFilter=event.target.value||'all';renderUpdateReview()});
+document.getElementById('updateGroupBy')?.addEventListener('change',event=>{updateGroupBy=event.target.value||'category';renderUpdateReview()});
+document.getElementById('updateExpandGroupsBtn')?.addEventListener('click',()=>document.querySelectorAll('#updateReviewList .update-group').forEach(group=>group.open=true));
+document.getElementById('updateCollapseGroupsBtn')?.addEventListener('click',()=>document.querySelectorAll('#updateReviewList .update-group').forEach(group=>group.open=false));
 document.getElementById('updateOnlyActionableBtn').onclick=()=>{
   updateOnlyActionable=!updateOnlyActionable;
   document.getElementById('updateOnlyActionableBtn').textContent=updateOnlyActionable?'显示全部':'只看需处理';
@@ -3428,6 +3614,16 @@ function renderSubtitleDiff(){
     '<div class="sub-diff-row"><span class="sub-diff-label">最终</span><span class="sub-diff-text">'+(afterHtml||'—')+'</span></div>';
 }
 
+function subtitleInitialText(sub){
+  return String(sub?.official_chs||sub?.api_chs||sub?.original_chs||'');
+}
+function subtitleInitialSource(sub){
+  if(sub?.official_chs)return '官方中文';
+  if(sub?.api_chs)return 'API 补译';
+  if(sub?.original_chs)return '初始目标文本';
+  return '无初始文本';
+}
+
 function renderActiveSubtitle(){
   if(!loadedSubtitles.length||activeSubIndex<0||activeSubIndex>=loadedSubtitles.length){
     document.getElementById('subCurrentIndexTag').textContent='无字幕条目';
@@ -3445,6 +3641,7 @@ function renderActiveSubtitle(){
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
+    const initialBadge=document.getElementById('subInitialSourceBadge');if(initialBadge)initialBadge.textContent='初始来源 —';
     for(const id of ['subUseOfficialBtn','subUseApiBtn','subResetBtn','subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
       const button=document.getElementById(id);if(button)button.disabled=true;
     }
@@ -3477,11 +3674,15 @@ function renderActiveSubtitle(){
   apiEl.className=sub.api_chs?'sub-ref-content':'sub-ref-content empty';
 
   const editor=document.getElementById('subFinalEditor');
+  const initialText=subtitleInitialText(sub);
+  const displayText=String(sub.final_chs||initialText);
+  const initialBadge=document.getElementById('subInitialSourceBadge');
+  if(initialBadge)initialBadge.textContent='初始来源 · '+subtitleInitialSource(sub);
   editor.disabled=false;
   if(document.activeElement!==editor){
-    editor.value=sub.final_chs||'';
-  }else if(editor.value!==sub.final_chs){
-    editor.value=sub.final_chs||'';
+    editor.value=displayText;
+  }else if(editor.value!==displayText&&!sub._dirty){
+    editor.value=displayText;
   }
 
   document.getElementById('subPrevBtn').disabled=activeSubIndex<=0;
@@ -3499,7 +3700,7 @@ function renderActiveSubtitle(){
   const confirm=document.getElementById('subConfirmBtn');
   if(useOfficial)useOfficial.disabled=!sub.official_chs;
   if(useApi)useApi.disabled=!sub.api_chs;
-  if(reset)reset.disabled=String(sub.final_chs||'')===String(sub.original_chs||'');
+  if(reset)reset.disabled=String(sub.final_chs||subtitleInitialText(sub))===subtitleInitialText(sub);
   if(confirm){confirm.textContent=sub.confirmed?'取消确认':'确认当前字幕';confirm.classList.toggle('success',!sub.confirmed);}
   const diag=document.getElementById('subLayoutDiagnostic');
   if(diag){
@@ -3679,7 +3880,7 @@ document.getElementById('subPrevBtn').onclick=goToPrevSubtitle;
 document.getElementById('subNextBtn').onclick=goToNextSubtitle;
 document.getElementById('subUseOfficialBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.official_chs||'');
 document.getElementById('subUseApiBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.api_chs||'');
-document.getElementById('subResetBtn').onclick=()=>applySubtitleCandidate(currentSubtitle()?.original_chs||'');
+document.getElementById('subResetBtn').onclick=()=>applySubtitleCandidate(subtitleInitialText(currentSubtitle()));
 document.getElementById('subConfirmBtn').onclick=()=>setSubtitleConfirmation(!currentSubtitle()?.confirmed).catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认状态保存失败：'+shortError(x));});
 document.getElementById('subNextAttentionBtn').onclick=goToNextAttentionSubtitle;
 document.getElementById('subOpenLayoutBtn').onclick=()=>openCurrentSubtitleInLayout().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','打开排版工作台失败：'+shortError(x));});
