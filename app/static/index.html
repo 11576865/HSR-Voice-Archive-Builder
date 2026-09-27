@@ -189,6 +189,19 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .preview-advanced summary{font-size:12px;color:var(--muted)}
 #previewCanvasContainer>div:first-of-type{z-index:5}
 
+/* Proofreading productivity */
+.sub-diff-panel{margin-top:10px;border:1px solid var(--line);background:#0f1416}
+.sub-diff-head{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:7px 9px;border-bottom:1px solid var(--line);font-size:11px;font-weight:700;color:var(--muted)}
+.sub-diff-body{padding:9px 10px;font-size:12px;line-height:1.65;display:grid;gap:6px}
+.sub-diff-row{display:grid;grid-template-columns:72px minmax(0,1fr);gap:8px;align-items:start}
+.sub-diff-label{font-size:10px;letter-spacing:.05em;text-transform:uppercase;color:var(--muted);padding-top:2px}
+.sub-diff-text{white-space:pre-wrap;overflow-wrap:anywhere}
+.sub-diff-text del{background:#5d2329;color:#ffd7da;text-decoration:none;border-radius:2px;padding:0 1px}
+.sub-diff-text ins{background:#1f513a;color:#d9ffe8;text-decoration:none;border-radius:2px;padding:0 1px}
+.sub-shortcuts{font-size:10px;color:var(--muted);line-height:1.8;margin-top:8px}
+.sub-shortcuts kbd{font:inherit;font-weight:700;color:#cbd5d2;background:#111719;border:1px solid var(--line);border-bottom-color:#4a575a;border-radius:3px;padding:1px 4px;white-space:nowrap}
+@media(max-width:640px){.sub-shortcuts{display:none}.sub-diff-row{grid-template-columns:58px minmax(0,1fr)}}
+
 /* Project overview, global job center, and artifact browser */
 .job-center-bar{position:sticky;top:49px;z-index:28;max-width:1220px;margin:0 auto;background:#111619;border:1px solid var(--line);border-top:0}
 .job-center-toggle{width:100%;min-height:48px;border:0;border-radius:0;background:transparent;display:grid;grid-template-columns:auto minmax(0,1fr) auto;gap:10px;align-items:center;text-align:left;padding:8px 16px}
@@ -917,10 +930,17 @@ body:not([data-workspace="project"]) #primaryStack{display:block}
             </div>
             <textarea id="subFinalEditor" class="sub-textarea" placeholder="在此输入修饰后的最终中文字幕…"></textarea>
             <div class="actions proofreading-actions">
-              <button type="button" class="secondary" id="subUseOfficialBtn">采用官方中文</button>
-              <button type="button" class="secondary" id="subUseApiBtn">采用 API 翻译</button>
+              <button type="button" class="secondary" id="subUseOfficialBtn" title="Alt+A">采用官方中文</button>
+              <button type="button" class="secondary" id="subUseApiBtn" title="Alt+T">采用 API 翻译</button>
               <button type="button" class="secondary" id="subResetBtn">恢复原始目标文本</button>
-              <button type="button" class="success" id="subConfirmBtn">确认当前字幕</button>
+              <button type="button" class="success" id="subConfirmBtn" title="Ctrl/Cmd+Enter">确认当前字幕</button>
+            </div>
+            <div id="subDiffPanel" class="sub-diff-panel">
+              <div class="sub-diff-head"><span>文本差异</span><span id="subDiffState" class="badge">—</span></div>
+              <div id="subDiffBody" class="sub-diff-body muted">选择字幕后显示最终文本与参考文本的字符级差异。</div>
+            </div>
+            <div id="subShortcutHelp" class="sub-shortcuts">
+              <kbd>Alt+A</kbd> 官方　<kbd>Alt+T</kbd> API　<kbd>Ctrl/⌘+Enter</kbd> 确认　<kbd>Alt+N</kbd> 下一待办　<kbd>Alt+Space</kbd> 播放　<kbd>Alt+↑/↓</kbd> 导航
             </div>
             <div id="subLayoutDiagnostic" class="small muted" style="margin-top:8px">ASS 排版：尚未检查。</div>
             <div class="actions proofreading-secondary-actions">
@@ -2423,7 +2443,8 @@ function renderSubtitleList(){
   const listView=document.getElementById('subListView');
   const countTag=document.getElementById('subListCount');
   if(!listView||!countTag)return;
-  countTag.textContent=loadedSubtitles.length+' 条';
+  const confirmedCount=loadedSubtitles.filter(sub=>sub.confirmed).length;
+  countTag.textContent=loadedSubtitles.length+' 条 · '+confirmedCount+' 已确认';
 
   if(!loadedSubtitles.length){
     listView.innerHTML='<div class="muted small" style="padding:16px;text-align:center">无匹配字幕记录。</div>';
@@ -2500,6 +2521,65 @@ function renderSubtitleEditState(){
   badge.innerHTML=parts.join(' ');
 }
 
+function subtitleDiffOps(before,after){
+  const a=[...String(before||'')],b=[...String(after||'')];
+  if(a.length>500||b.length>500){
+    return a.join('')===b.join('')?[{kind:'same',text:a.join('')}]:[
+      {kind:'del',text:a.join('')},{kind:'add',text:b.join('')}
+    ];
+  }
+  const dp=Array.from({length:a.length+1},()=>new Uint16Array(b.length+1));
+  for(let i=a.length-1;i>=0;i--){
+    for(let j=b.length-1;j>=0;j--){
+      dp[i][j]=a[i]===b[j]?dp[i+1][j+1]+1:Math.max(dp[i+1][j],dp[i][j+1]);
+    }
+  }
+  const raw=[];let i=0,j=0;
+  while(i<a.length||j<b.length){
+    if(i<a.length&&j<b.length&&a[i]===b[j]){raw.push({kind:'same',text:a[i]});i++;j++}
+    else if(j<b.length&&(i>=a.length||dp[i][j+1]>=dp[i+1][j])){raw.push({kind:'add',text:b[j++]})}
+    else{raw.push({kind:'del',text:a[i++]})}
+  }
+  const merged=[];
+  for(const op of raw){
+    const last=merged[merged.length-1];
+    if(last&&last.kind===op.kind)last.text+=op.text;
+    else merged.push({...op});
+  }
+  return merged;
+}
+
+function renderSubtitleDiff(){
+  const panel=document.getElementById('subDiffPanel'),body=document.getElementById('subDiffBody'),state=document.getElementById('subDiffState');
+  const sub=currentSubtitle();
+  if(!panel||!body||!state)return;
+  if(!sub){
+    state.textContent='—';body.className='sub-diff-body muted';body.textContent='选择字幕后显示最终文本与参考文本的字符级差异。';return;
+  }
+  const candidates=[
+    ['官方',sub.official_chs],
+    ['API',sub.api_chs],
+    ['原始',sub.original_chs],
+  ];
+  const [label,baseline]=candidates.find(([,value])=>String(value||'').length)||['原始',''];
+  const finalText=String(sub.final_chs||'');
+  const before=String(baseline||'');
+  if(before===finalText){
+    state.textContent='与'+label+'一致';
+    body.className='sub-diff-body';
+    body.innerHTML='<div class="sub-diff-row"><span class="sub-diff-label">'+label+'</span><span class="sub-diff-text">'+escapeHtml(finalText||'—')+'</span></div>';
+    return;
+  }
+  state.textContent='已修改 · 对比'+label;
+  const ops=subtitleDiffOps(before,finalText);
+  const beforeHtml=ops.map(op=>op.kind==='add'?'':op.kind==='del'?'<del>'+escapeHtml(op.text)+'</del>':escapeHtml(op.text)).join('');
+  const afterHtml=ops.map(op=>op.kind==='del'?'':op.kind==='add'?'<ins>'+escapeHtml(op.text)+'</ins>':escapeHtml(op.text)).join('');
+  body.className='sub-diff-body';
+  body.innerHTML=
+    '<div class="sub-diff-row"><span class="sub-diff-label">'+label+'</span><span class="sub-diff-text">'+(beforeHtml||'—')+'</span></div>'+
+    '<div class="sub-diff-row"><span class="sub-diff-label">最终</span><span class="sub-diff-text">'+(afterHtml||'—')+'</span></div>';
+}
+
 function renderActiveSubtitle(){
   if(!loadedSubtitles.length||activeSubIndex<0||activeSubIndex>=loadedSubtitles.length){
     document.getElementById('subCurrentIndexTag').textContent='无字幕条目';
@@ -2520,7 +2600,8 @@ function renderActiveSubtitle(){
     for(const id of ['subUseOfficialBtn','subUseApiBtn','subResetBtn','subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
       const button=document.getElementById(id);if(button)button.disabled=true;
     }
-    const diag=document.getElementById('subLayoutDiagnostic');
+    renderSubtitleDiff();
+        const diag=document.getElementById('subLayoutDiagnostic');
     if(diag){diag.textContent='ASS 排版：尚未检查。';diag.className='small muted';}
     renderReferenceControls(null);
     clearReferenceAudio();
@@ -2558,6 +2639,7 @@ function renderActiveSubtitle(){
   document.getElementById('subPrevBtn').disabled=activeSubIndex<=0;
   document.getElementById('subNextBtn').disabled=activeSubIndex>=loadedSubtitles.length-1;
   updateCharCounter();
+  renderSubtitleDiff();
   renderReferenceControls(sub);
   const refStatus=document.getElementById('subReferenceSaveStatus');if(refStatus)refStatus.textContent='';
   for(const id of ['subConfirmBtn','subOpenLayoutBtn','subNextAttentionBtn']){
@@ -2677,6 +2759,7 @@ function applySubtitleCandidate(value){
   syncEditorToMemory();
   updateCharCounter();
   renderSubtitleEditState();
+  renderSubtitleDiff();
   renderSubtitleList();
   scheduleSubtitleAutosave();
 }
@@ -2752,21 +2835,46 @@ document.getElementById('subResetBtn').onclick=()=>applySubtitleCandidate(curren
 document.getElementById('subConfirmBtn').onclick=()=>setSubtitleConfirmation(!currentSubtitle()?.confirmed).catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认状态保存失败：'+shortError(x));});
 document.getElementById('subNextAttentionBtn').onclick=goToNextAttentionSubtitle;
 document.getElementById('subOpenLayoutBtn').onclick=()=>openCurrentSubtitleInLayout().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','打开排版工作台失败：'+shortError(x));});
+function toggleCurrentSubtitleAudio(){
+  const audio=document.getElementById('subOriginalAudio');
+  if(!audio?.src)return;
+  if(audio.paused){
+    audio.play().catch(error=>setSubtitleSaveUi('error','播放失败：'+shortError(error)));
+  }else{
+    audio.pause();
+  }
+}
+
+async function confirmCurrentSubtitleFromShortcut(){
+  const sub=currentSubtitle();
+  if(!sub)return;
+  await setSubtitleConfirmation(true);
+  goToNextAttentionSubtitle();
+  document.getElementById('subFinalEditor')?.focus();
+}
+
 const subtitleEditor=document.getElementById('subFinalEditor');
 subtitleEditor.addEventListener('keydown',(e)=>{
-  if((e.altKey&&e.key==='ArrowUp')||(e.ctrlKey&&e.key==='ArrowUp')){
-    e.preventDefault();
-    goToPrevSubtitle();
-    subtitleEditor.focus();
-  }else if((e.altKey&&e.key==='ArrowDown')||(e.ctrlKey&&e.key==='ArrowDown')||((e.ctrlKey||e.metaKey)&&e.key==='Enter')){
-    e.preventDefault();
-    goToNextSubtitle();
-    subtitleEditor.focus();
+  if(e.altKey&&e.key==='ArrowUp'){
+    e.preventDefault();goToPrevSubtitle();subtitleEditor.focus();
+  }else if(e.altKey&&e.key==='ArrowDown'){
+    e.preventDefault();goToNextSubtitle();subtitleEditor.focus();
+  }else if((e.ctrlKey||e.metaKey)&&e.key==='Enter'){
+    e.preventDefault();confirmCurrentSubtitleFromShortcut().catch(x=>{setLog(String(x));setSubtitleSaveUi('error','确认失败：'+shortError(x))});
+  }else if(e.altKey&&e.key.toLowerCase()==='a'){
+    e.preventDefault();const value=currentSubtitle()?.official_chs;if(value)applySubtitleCandidate(value);
+  }else if(e.altKey&&e.key.toLowerCase()==='t'){
+    e.preventDefault();const value=currentSubtitle()?.api_chs;if(value)applySubtitleCandidate(value);
+  }else if(e.altKey&&e.key.toLowerCase()==='n'){
+    e.preventDefault();goToNextAttentionSubtitle();subtitleEditor.focus();
+  }else if(e.altKey&&e.code==='Space'){
+    e.preventDefault();toggleCurrentSubtitleAudio();
   }
 });
 subtitleEditor.oninput=()=>{
   syncEditorToMemory();
   updateCharCounter();
+  renderSubtitleDiff();
   renderSubtitleList();
   renderSubtitleEditState();
   scheduleSubtitleAutosave();
@@ -2779,6 +2887,7 @@ subtitleEditor.addEventListener('compositionend',()=>{
   subtitleEditorComposing=false;
   syncEditorToMemory();
   updateCharCounter();
+  renderSubtitleDiff();
   renderSubtitleList();
   renderSubtitleEditState();
   scheduleSubtitleAutosave();
@@ -2789,6 +2898,13 @@ subtitleEditor.addEventListener('blur',()=>{
 document.getElementById('subSearchQuery').oninput=scheduleSubtitleFetch;
 document.getElementById('subTimeRange').onchange=fetchSubtitlesAfterSaving;
 document.getElementById('subSelector').onchange=fetchSubtitlesAfterSaving;
+document.getElementById('subtitleReviewCard').addEventListener('keydown',(e)=>{
+  if(document.body.dataset.workspace!=='review'||document.activeElement===subtitleEditor)return;
+  if(e.altKey&&e.code==='Space'){e.preventDefault();toggleCurrentSubtitleAudio()}
+  else if(e.altKey&&e.key.toLowerCase()==='n'){e.preventDefault();goToNextAttentionSubtitle()}
+  else if(e.altKey&&e.key==='ArrowUp'){e.preventDefault();goToPrevSubtitle()}
+  else if(e.altKey&&e.key==='ArrowDown'){e.preventDefault();goToNextSubtitle()}
+});
 const originalAudio=document.getElementById('subOriginalAudio');
 originalAudio.addEventListener('loadedmetadata',()=>{
   if(!referenceAudioObjectUrl||originalAudio.src!==referenceAudioObjectUrl)return;
