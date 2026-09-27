@@ -53,7 +53,7 @@ from .project import (
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
-from subtitle_layout.fonts import validate_ass_font_name
+from subtitle_layout.fonts import list_font_families, validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -106,7 +106,7 @@ async def control_surface_guard(request: Request, call_next):
             "script-src 'self' 'unsafe-inline'; "
             "style-src 'self' 'unsafe-inline'; "
             "connect-src 'self'; "
-            "img-src 'self' data:; "
+            "img-src 'self' data: blob:; "
             "media-src 'self' blob:; "
             "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         )
@@ -129,6 +129,15 @@ def _progress_event_sse(job: dict, full_payload: bool = True, heartbeat_log: boo
         payload["log"] = job.get("log", "")
     data = json.dumps(payload, ensure_ascii=False)
     return f"event: progress\ndata: {data}\n\n"
+
+
+@app.get("/api/subtitle-layout/fonts")
+def api_subtitle_layout_fonts(q: str = Query(""), limit: int = Query(400)):
+    try:
+        families = list_font_families(q, limit)
+        return {"ok": True, "families": families, "count": len(families)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.get("/", response_class=HTMLResponse)

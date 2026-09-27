@@ -13,7 +13,7 @@ from subtitle_layout.ass_writer import (
 )
 from subtitle_layout.layout_solver import SubtitleLinePos
 from subtitle_layout.safe_area import DEFAULT_SAFE_AREA
-from subtitle_layout.fonts import validate_ass_font_name
+from subtitle_layout.fonts import _installed_font_families, list_font_families, validate_ass_font_name
 
 
 @dataclass
@@ -84,6 +84,22 @@ class TestAdvancedTypography(unittest.TestCase):
             ],
         )
         self.assertEqual(formatted, text)
+
+    def test_list_font_families_uses_fc_list_without_exposing_paths(self):
+        from unittest.mock import patch
+        _installed_font_families.cache_clear()
+        completed = type("Completed", (), {
+            "returncode": 0,
+            "stdout": "Noto Sans,Noto Sans CJK SC\nInter\nNoto Sans\n",
+        })()
+        with patch("subtitle_layout.fonts.shutil.which", return_value="/usr/bin/fc-list"), patch(
+            "subtitle_layout.fonts.subprocess.run", return_value=completed
+        ):
+            families = list_font_families()
+        self.assertEqual(families, ["Inter", "Noto Sans", "Noto Sans CJK SC"])
+        self.assertEqual(list_font_families("noto", 1), ["Noto Sans"])
+        self.assertTrue(all("/" not in family for family in families))
+        _installed_font_families.cache_clear()
 
     def test_ass_font_name_rejects_delimiters(self):
         with self.assertRaises(ValueError):

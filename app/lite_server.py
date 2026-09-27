@@ -55,7 +55,7 @@ from .project import (
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
 from .security import api_token, host_allowed, lan_mode, token_matches
-from subtitle_layout.fonts import validate_ass_font_name
+from subtitle_layout.fonts import list_font_families, validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -262,7 +262,7 @@ class Handler(BaseHTTPRequestHandler):
                 "Content-Security-Policy": (
                     "default-src 'self'; script-src 'self' 'unsafe-inline'; "
                     "style-src 'self' 'unsafe-inline'; connect-src 'self'; "
-                    "img-src 'self' data:; media-src 'self' blob:; "
+                    "img-src 'self' data: blob:; media-src 'self' blob:; "
                     "object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
                 )
             }
@@ -297,6 +297,13 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/subtitle-layout/fonts":
+            query = parse_qs(urlsplit(self.path).query)
+            q = (query.get("q") or [""])[-1]
+            limit_raw = (query.get("limit") or ["400"])[-1]
+            families = list_font_families(q, _int(limit_raw, 400))
+            self._json({"ok": True, "families": families, "count": len(families)})
+            return
         if path == "/api/status":
             project = None
             if _active_root is not None:

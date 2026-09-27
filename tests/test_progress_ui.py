@@ -312,6 +312,33 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('background:#fafafa', html)
         self.assertNotIn('border-bottom:1px solid #eee', html)
 
+    def test_font_browser_and_preview_background_contract(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+        server_py = (
+            Path(__file__).resolve().parents[1] / "app" / "server.py"
+        ).read_text(encoding="utf-8")
+        lite_server_py = (
+            Path(__file__).resolve().parents[1] / "app" / "lite_server.py"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="fontBrowserDialog" class="font-browser-dialog"', html)
+        self.assertIn('data-font-target="prevChsFont"', html)
+        self.assertIn('data-font-target="prevPriFont"', html)
+        self.assertIn("'/api/subtitle-layout/fonts?q='", html)
+        self.assertIn("sample.style.fontFamily=family", html)
+        self.assertIn('id="previewBackgroundMode"', html)
+        self.assertIn('<option value="image">本地图片</option>', html)
+        self.assertIn('id="previewBackgroundFile" type="file"', html)
+        self.assertIn("URL.createObjectURL(file)", html)
+        self.assertIn("URL.revokeObjectURL(previewBackgroundObjectUrl)", html)
+        self.assertIn("背景仅存在于当前浏览器会话", html)
+        self.assertNotIn("bgGradient", html)
+        self.assertIn("img-src 'self' data: blob:", server_py)
+        self.assertIn("img-src 'self' data: blob:", lite_server_py)
+        self.assertIn('path == "/api/subtitle-layout/fonts"', lite_server_py)
+
     def test_workbench_visual_structure_uses_canvas_and_inspector_hierarchy(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
