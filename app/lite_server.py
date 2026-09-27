@@ -23,7 +23,7 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
-from .word_alignment import alignment_diagnostics, import_word_alignments
+from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -350,6 +350,16 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
+            return
+        if path.startswith("/api/project/") and "/word-alignments/" in path:
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            item_id = path.split("/word-alignments/", 1)[1].strip("/")
+            if not item_id:
+                raise ValueError("Subtitle id is required")
+            self._json({"ok": True, "alignment": get_word_alignment(output, item_id)})
             return
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
