@@ -27,7 +27,6 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
             chinese_text="愿此行，终抵群星。",
             base_chs_size=52,
             base_primary_size=42,
-            margin_left_percent=0.10,
             margin_top_percent=0.05,
             min_central_gap=20.0,
         )
