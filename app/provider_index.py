@@ -26,6 +26,8 @@ GENSHIN_INDEX_LOCAL_FILE_ENV = "GENSHIN_VOICE_INDEX_FILE"
 def provider_index_label(game_id: str, url: str) -> str:
     provider = game_provider(game_id)
     name = Path(urlparse(str(url or "")).path).name or "index"
+    if str(provider.get("game_id", "")) == "honkai-star-rail":
+        return f"AI-Hobbyist {name}"
     return f"AI-Hobbyist {provider.get('label', game_id)} {name}"
 
 
