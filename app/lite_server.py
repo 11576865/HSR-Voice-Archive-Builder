@@ -19,7 +19,7 @@ from .black_video_exporter import BlackVideoExporter
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
-from .game_profiles import remote_updates_supported
+from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
@@ -56,7 +56,8 @@ from .project import (
     update_project,
 )
 from .version import APP_VERSION, runtime_version
-from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
+from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
+from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
@@ -1091,7 +1092,7 @@ class Handler(BaseHTTPRequestHandler):
                     "Local WAV+LAB archive building remains supported."
                 )
             requested_character = data.get("character", "").strip()
-            remote_url = data.get("remote_index_url", "").strip() or config.remote_index_url
+            remote_url = data.get("remote_index_url", "").strip() or config.remote_index_url or game_index_url(config.game_id, config.source_text_language)
             characters = remote_character_candidates(config, requested_character)
             if not characters:
                 raise ValueError(
@@ -1112,7 +1113,7 @@ class Handler(BaseHTTPRequestHandler):
                 attempted: list[str] = []
                 for candidate in characters:
                     attempted.append(candidate)
-                    rows = fetch_ai_hobbyist_index(candidate, remote_url)
+                    rows = fetch_provider_index(config.game_id, candidate, language=config.source_text_language, url=remote_url)
                     if rows:
                         matched_character = candidate
                         break
@@ -1173,12 +1174,15 @@ class Handler(BaseHTTPRequestHandler):
             project_root = Path(config.root).resolve()
 
             def run(report_progress):
-                state = project_root / ".state" / "huggingface"
+                dataset = game_audio_dataset(config.game_id)
+                if not dataset:
+                    raise RuntimeError(f"No audio dataset is configured for {config.game_id}")
+                state = project_root / ".state" / "providers" / config.game_id / dataset.replace("/", "--")
                 generated = project_root / ".generated"
                 result_json = state / "result.json"
                 report_progress("metadata", "正在取得 Hugging Face 定位索引", 0, 1)
-                download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1))
-                resolved = resolve_targets(result_json, targets)
+                download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1), dataset=dataset)
+                resolved = resolve_targets(result_json, targets, dataset=dataset)
                 report_progress("resolve", f"已可靠定位 {len(resolved['targets'])}/{len(targets)} 条新增语音", len(targets), len(targets))
                 atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
                 if not resolved["targets"]:
@@ -1209,6 +1213,7 @@ class Handler(BaseHTTPRequestHandler):
                 downloaded = download_resolved_audio(
                     resolved, incoming,
                     lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
+                    dataset=dataset,
                 )
                 successful = {Path(row["filename"]).name for row in downloaded["completed"]}
                 atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
