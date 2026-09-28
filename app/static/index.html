@@ -288,7 +288,10 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 .artifact-card-actions{display:flex;gap:6px;flex-wrap:wrap;margin-top:auto}.artifact-card-actions button{min-height:30px;padding:4px 8px;font-size:11px}
 .artifact-card.missing{border-style:dashed;opacity:.88}.artifact-card.audio{border-left:2px solid var(--ok)}.artifact-card.subtitle{border-left:2px solid var(--purple)}.artifact-card.video{border-left:2px solid var(--blue)}
 .artifact-file-list{margin-top:10px}.artifact-status{margin-top:8px}
-.quick-plan{margin-top:12px;background:#111318;color:var(--text);border:1px solid var(--line);max-height:none}
+.quick-plan{margin-top:12px;min-height:74px;background:#111318;color:var(--text);border:1px solid var(--line);max-height:none}
+.quick-plan.is-running{border-color:var(--blue)!important}
+.quick-plan.is-ok{border-color:var(--ok)!important}
+.quick-plan.is-error{border-color:var(--bad)!important;color:var(--bad)!important}
 #sideStack #progressCard{border-left:2px solid #536166}
 @media(max-width:820px){.job-center-bar{top:49px;margin:0 14px}.overview-metrics{grid-template-columns:1fr 1fr}.overview-panels{grid-template-columns:1fr}.artifact-browser{grid-template-columns:1fr}}
 
@@ -2067,7 +2070,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           <button type="button" id="quickRefreshBtn">刷新本机文件</button>
           <button type="button" class="primary" id="quickScanBtn">扫描 / 预检</button>
         </div>
-        <pre id="quickPlan" class="quick-plan">尚未扫描。</pre>
+        <pre id="quickPlan" class="quick-plan" role="status" aria-live="polite" aria-atomic="true">尚未扫描。</pre>
         <div class="row3">
           <div><label>开头留白（秒）</label><input id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"></div>
           <div><label>同组语音间隔（秒）</label><input id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"></div>
@@ -3790,14 +3793,27 @@ async function loadQuickCandidates(){
     const hintedZh=items.find(x=>x.role_hint==='chinese');if(hintedZh)target.value=hintedZh.path;
   }catch(e){document.getElementById('quickPlan').textContent=String(e)}
 }
+function setQuickPlanMessage(message,state=''){
+  const box=document.getElementById('quickPlan');
+  if(!box)return;
+  box.textContent=String(message||'');
+  box.classList.remove('is-running','is-ok','is-error');
+  if(state)box.classList.add('is-'+state);
+}
 function renderQuickPlan(plan){
+  if(!plan||typeof plan!=='object')throw new Error('扫描完成，但后端未返回有效的预检结果');
   quickPlanState=plan;
-  const e=plan.english||{},z=plan.chinese||{},ref=plan.reference||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{},game=plan.game_profile||{};
+  const e=plan.english||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{},game=plan.game_profile||{};
+  const indexLabel=idx.source==='remote'
+    ? (idx.provider||idx.url||'远程索引')
+    : idx.source==='primary-package-lab'
+      ? (idx.provider||'包内同名 LAB')
+      : (idx.path||idx.provider||idx.source||'未找到');
   const lines=[
     '游戏识别：'+(game.label||'Generic voice package')+' ('+(game.confidence||'none')+')',
     '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
-    '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+(idx.source==='remote'?(idx.provider||'远程索引'):(idx.path||'未找到'))+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
+    '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+indexLabel+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '官方中文字幕：'+(plan.chinese
       ? (n(tr.official_chinese_matches)+' / '+n(e.wav_count)+' · 精确匹配 '+n(tr.official_chinese_exact)+' · 跨语言 ID 匹配 '+n(tr.official_chinese_structural)+' · 无法匹配 '+n(tr.official_chinese_unmatched||0)+' · 冲突 '+n(tr.official_chinese_conflicts||0))
       : (tr.source_text_language==='zh-CN'?n(tr.official_chinese_matches)+'（来自主音频包）':'未提供')),
@@ -3810,24 +3826,51 @@ function renderQuickPlan(plan){
     'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置'),
     '待翻译：'+n(tr.pending_translation_count)+' · 预计 Token：'+n(tr.translation_estimated_total_tokens)+(tr.translation_estimate_excludes_repair_pass?'（不含可能的修复 pass）':'')
   ];
-  if(game.game_id==='genshin-impact'&&!game.remote_updates_supported)lines.push('兼容模式：原神本地 WAV + LAB 已支持；原神远程 JSON 索引与增量下载尚未启用。');
   if(plan.blockers?.length)lines.push('阻塞：'+plan.blockers.join('；'));
   if(plan.warnings?.length)lines.push('提示：'+plan.warnings.join('；'));
   lines.push(plan.ready?'预检通过：可以开始构建。':'预检未通过：不会开始构建。');
-  document.getElementById('quickPlan').textContent=lines.join('\n');
+  setQuickPlanMessage(lines.join('\n'),plan.ready?'ok':'error');
   document.getElementById('quickBuildBtn').disabled=!plan.ready;
   const aiBudget=document.getElementById('quickAiBudget');
-  if(aiBudget)aiBudget.classList.toggle('hidden',n(tr.pending_translation_count)===0);
+  if(aiBudget)aiBudget.classList.toggle('hidden',Number(tr.pending_translation_count||0)===0);
 }
 async function quickScan(){
-  const english=document.getElementById('quickEnglish').value;if(!english)throw new Error('请选择主音频包');
-  const d=new FormData();d.set('english_source',english);
-  const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
-  const reference=document.getElementById('quickReference').value;if(reference)d.set('reference_source',reference);
-  d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
-  d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
-  d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
-  const j=await api('/api/quick/scan',{method:'POST',body:d});renderQuickPlan(j.plan);setLog(j.plan);return j.plan;
+  const english=document.getElementById('quickEnglish').value;
+  if(!english){
+    setQuickPlanMessage('预检无法开始：请选择主音频包。','error');
+    throw new Error('请选择主音频包');
+  }
+  const button=document.getElementById('quickScanBtn');
+  const buildButton=document.getElementById('quickBuildBtn');
+  quickPlanState=null;
+  if(buildButton)buildButton.disabled=true;
+  if(button){button.disabled=true;button.textContent='正在扫描…'}
+  setQuickPlanMessage(
+    '正在扫描 / 预检…\n'+
+    '主音频：'+english+'\n'+
+    '正在读取包内容、匹配 LAB / 远程索引并计算构建条件；较大的压缩包或首次下载索引可能需要一些时间。',
+    'running'
+  );
+  try{
+    const d=new FormData();d.set('english_source',english);
+    const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
+    const reference=document.getElementById('quickReference').value;if(reference)d.set('reference_source',reference);
+    d.set('source_text_language',document.getElementById('quickSourceTextLanguage').value||'en');
+    d.set('target_language',document.getElementById('quickTargetLanguage').value||'zh-CN');
+    d.set('reference_language',document.getElementById('quickReferenceLanguage').value||'auto');
+    const j=await api('/api/quick/scan',{method:'POST',body:d});
+    if(!j?.plan)throw new Error('扫描完成，但响应中没有预检结果');
+    renderQuickPlan(j.plan);
+    setLog(j.plan);
+    return j.plan;
+  }catch(error){
+    const message=shortError(error);
+    setQuickPlanMessage('扫描 / 预检失败：'+message+'\n\n详细错误已写入诊断日志。','error');
+    setLog(String(error));
+    throw error;
+  }finally{
+    if(button){button.disabled=false;button.textContent='扫描 / 预检'}
+  }
 }
 function setBuildButtonsDisabled(disabled){
   const a=document.getElementById('buildBtn'),b=document.getElementById('quickBuildBtn');
@@ -4124,8 +4167,8 @@ document.getElementById('updateCopySummaryBtn').onclick=()=>{
   }).catch(e=>setLog(String(e)));
 };
 
-document.getElementById('quickRefreshBtn').onclick=async()=>{quickPlanState=null;document.getElementById('quickBuildBtn').disabled=true;document.getElementById('quickPlan').textContent='正在扫描本机文件…';await loadQuickCandidates()};
-document.getElementById('quickScanBtn').onclick=async()=>{try{await quickScan()}catch(x){setLog(String(x));document.getElementById('quickBuildBtn').disabled=true}};
+document.getElementById('quickRefreshBtn').onclick=async()=>{quickPlanState=null;document.getElementById('quickBuildBtn').disabled=true;setQuickPlanMessage('正在扫描本机文件…','running');await loadQuickCandidates()};
+document.getElementById('quickScanBtn').onclick=async()=>{try{await quickScan()}catch(x){document.getElementById('quickBuildBtn').disabled=true}};
 document.getElementById('quickBuildBtn').onclick=async()=>{try{
   beginBuildLaunch();
   if(!quickPlanState?.ready)await quickScan();
