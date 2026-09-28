@@ -133,7 +133,7 @@ def resolve_targets(
             row_index = total
             total += 1
             language_prefix = key.split("/", 1)[0].casefold()
-            if language_prefix in {"english", "chinese(prc)"}:
+            if language_prefix in {"english", "english(us)", "chinese(prc)"}:
                 stem = Path(key).stem
                 ingame = _field(chunk, "inGameFilename")
                 transcription = _field(chunk, "transcription")
