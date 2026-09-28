@@ -21,14 +21,14 @@ from .builder import (
     sha256_file,
 )
 from .credentials import credentials_status
-from .game_profiles import detect_game_profile, genshin_voice_parts
+from .game_profiles import detect_game_profile, genshin_voice_parts, game_index_url
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
-from .remote_index import (
-    DEFAULT_EN_INDEX_URL,
-    ai_hobbyist_index_label,
-    ai_hobbyist_index_url,
-    fetch_ai_hobbyist_index_for_filenames_cached,
+from .remote_index import DEFAULT_EN_INDEX_URL, ai_hobbyist_index_label, ai_hobbyist_index_url
+from .provider_index import (
+    fetch_provider_index_for_filenames_cached,
+    provider_index_label,
+    provider_order_basis,
 )
 from .schema import normalize_index
 from .translation_runtime import estimate_workload_tokens
@@ -644,7 +644,7 @@ def _remote_candidate(
     primary_character, primary_count = character_counts.most_common(1)[0] if character_counts else ("", 0)
     return {
         "source": "remote",
-        "provider": ai_hobbyist_index_label(url),
+        "provider": provider_index_label("genshin-impact" if url.lower().endswith(".json") else "honkai-star-rail", url),
         "source_text_language": source_text_language,
         "url": url,
         "row_count": len(records),
@@ -656,7 +656,7 @@ def _remote_candidate(
         "character_counts": dict(character_counts.most_common()),
         "primary_character": primary_character,
         "primary_character_share": round(primary_count / max(1, len(matched)), 6),
-        "order_basis": "workbook_row_order",
+        "order_basis": "json_source_order" if url.lower().endswith(".json") else "workbook_row_order",
         "records_fingerprint": _index_fingerprint(records),
         "cache": cache,
     }
@@ -781,14 +781,13 @@ def quick_scan(
     )
 
     remote_index_url = remote_index_url.strip()
-    if game_profile.get("game_id") == "genshin-impact":
-        if not complete_primary_lab:
-            blockers.append(
-                "Detected a Genshin Impact voice package, but not every WAV has a matching LAB file. "
-                "Local Genshin WAV+LAB archives are supported; the Genshin JSON remote-index provider "
-                "is not enabled yet."
-            )
-        remote_index_url = ""
+    game_id = str(game_profile.get("game_id") or "generic")
+    if game_id == "genshin-impact" and not remote_index_url:
+        try:
+            remote_index_url = game_index_url(game_id, source_text_language)
+        except ValueError as exc:
+            if not complete_primary_lab:
+                blockers.append(str(exc))
     elif not remote_index_url:
         try:
             remote_index_url = ai_hobbyist_index_url(source_text_language)
@@ -842,10 +841,13 @@ def quick_scan(
     )
     remote_attempt: dict[str, Any] | None = None
     remote_records: list[dict[str, str]] = []
-    if not local_full and not blockers and game_profile.get("game_id") != "genshin-impact":
+    if not local_full and not blockers:
         try:
-            remote_records, cache = fetch_ai_hobbyist_index_for_filenames_cached(
-                wav_names, remote_index_url
+            remote_records, cache = fetch_provider_index_for_filenames_cached(
+                game_id,
+                wav_names,
+                language=source_text_language,
+                url=remote_index_url,
             )
             remote_attempt = _remote_candidate(
                 remote_records,
@@ -971,11 +973,18 @@ def quick_scan(
             )
         else:
             try:
-                reference_index_url = ai_hobbyist_index_url(reference_language)
+                reference_index_url = (
+                    game_index_url(game_id, reference_language)
+                    if game_id != "generic"
+                    else ai_hobbyist_index_url(reference_language)
+                )
                 reference_wavs = {Path(name).name for name in reference["wav_names"]}
                 reference_records, reference_cache = (
-                    fetch_ai_hobbyist_index_for_filenames_cached(
-                        reference_wavs, reference_index_url
+                    fetch_provider_index_for_filenames_cached(
+                        game_id,
+                        reference_wavs,
+                        language=reference_language,
+                        url=reference_index_url,
                     )
                 )
                 reference_index_attempt = _remote_candidate(
@@ -1031,7 +1040,7 @@ def quick_scan(
             index_rows, _ambiguous_rows = _remote_rows(
                 remote_records,
                 wav_names,
-                str(selected_index.get("provider") or ai_hobbyist_index_label(remote_index_url)),
+                str(selected_index.get("provider") or provider_index_label(game_id, remote_index_url)),
             )
         elif selected_index.get("source") == "primary-package-lab":
             index_rows = _package_lab_rows(Path(english["source"]), english)
@@ -1315,16 +1324,18 @@ def create_quick_project(
     if package_lab_index:
         base_rows = _package_lab_rows(english_source, current_inventory)
     elif selected_index.get("source") == "remote":
-        remote_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+        remote_records, _ = fetch_provider_index_for_filenames_cached(
+            str(plan.get("game_profile", {}).get("game_id") or "generic"),
             wanted,
-            str(selected_index["url"]),
+            language=source_text_language,
+            url=str(selected_index["url"]),
         )
         if _index_fingerprint(remote_records) != selected_index["records_fingerprint"]:
             raise RuntimeError("Remote index changed after Quick Scan; scan again before building")
         base_rows, _ambiguous = _remote_rows(
             remote_records,
             wanted,
-            str(selected_index.get("provider") or ai_hobbyist_index_label(str(selected_index["url"]))),
+            str(selected_index.get("provider") or provider_index_label(str(plan.get("game_profile", {}).get("game_id") or "generic"), str(selected_index["url"]))),
         )
     else:
         local_index = Path(selected_index["path"])
@@ -1404,9 +1415,11 @@ def create_quick_project(
         reference_wavs = {
             Path(name).name for name in current_reference.get("wav_names", [])
         }
-        reference_records, _ = fetch_ai_hobbyist_index_for_filenames_cached(
+        reference_records, _ = fetch_provider_index_for_filenames_cached(
+            str(plan.get("game_profile", {}).get("game_id") or "generic"),
             reference_wavs,
-            str(reference_attempt["url"]),
+            language=reference_language,
+            url=str(reference_attempt["url"]),
         )
         if _index_fingerprint(reference_records) != reference_attempt.get(
             "records_fingerprint"
