@@ -154,6 +154,34 @@ class QuickModeTests(unittest.TestCase):
         self.assertEqual(result["value"], "evanescia")
         self.assertEqual(result["confidence"], "high")
 
+    def test_genshin_remote_index_can_raise_character_confidence(self) -> None:
+        from app.quick import _reconcile_character_with_index
+
+        character = {
+            "value": "hutao",
+            "confidence": "low",
+            "share": 0.18,
+            "top_candidates": [["hutao", 180]],
+            "method": "genshin_filename_schema",
+        }
+        selected_index = {
+            "source": "remote",
+            "primary_character": "Hu Tao",
+            "primary_character_share": 0.94,
+            "matched_wavs": 1000,
+            "character_counts": {"Hu Tao": 940, "Other": 60},
+        }
+        result = _reconcile_character_with_index(
+            character,
+            selected_index,
+            total_wavs=1040,
+            game_id="genshin-impact",
+        )
+        self.assertEqual(result["value"], "Hu Tao")
+        self.assertEqual(result["confidence"], "high")
+        self.assertEqual(result["method"], "remote_index_character")
+        self.assertEqual(result["matched_wavs"], 1000)
+
     def test_quick_scan_auto_matches_covering_index(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
