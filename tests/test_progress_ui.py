@@ -471,6 +471,15 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="sub-nav-bar proofreading-nav-actions"', html)
         self.assertIn('@media(max-width:1000px)', html)
 
+    def test_light_theme_quick_scan_result_remains_readable(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn(':root[data-theme="light"] pre{color:var(--terminal-text)}', html)
+        self.assertIn(':root[data-theme="light"] #quickPlan{color:var(--text)!important}', html)
+        self.assertNotIn(':root[data-theme="light"] #quickPlan{color:#edf4fb!important}', html)
+
     def test_layout_light_theme_has_authoritative_tokens(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
