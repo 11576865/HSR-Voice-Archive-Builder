@@ -95,6 +95,16 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn(".quick-plan.is-ok", html)
         self.assertIn(".quick-plan.is-error", html)
 
+    def test_quick_scan_shows_chapter_classification_coverage(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn("章节 / 大组识别：", html)
+        self.assertIn("章节分组：", html)
+        self.assertIn("未归类示例：", html)
+        self.assertIn("plan.chapter_classification||{}", html)
+
     def test_language_package_roles_and_chinese_translation_visibility_are_clear(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
