@@ -680,6 +680,64 @@ def infer_character(wav_names: list[str]) -> dict[str, Any]:
     }
 
 
+def _reconcile_character_with_index(
+    character: dict[str, Any],
+    selected_index: dict[str, Any] | None,
+    *,
+    total_wavs: int,
+    game_id: str,
+) -> dict[str, Any]:
+    """Prefer exact remote index speaker evidence when filename coverage is weak.
+
+    Genshin character packs contain several filename families. Only some of
+    them expose the character token directly, so filename-only confidence can
+    be low even when the remote JSON index matches the whole package exactly.
+    """
+    if game_id != "genshin-impact" or not selected_index:
+        return character
+    if selected_index.get("source") != "remote":
+        return character
+
+    primary = str(selected_index.get("primary_character", "") or "").strip()
+    matched = int(selected_index.get("matched_wavs", 0) or 0)
+    dominance = float(selected_index.get("primary_character_share", 0.0) or 0.0)
+    if not primary or matched <= 0:
+        return character
+
+    coverage = matched / max(1, int(total_wavs))
+    evidence = min(dominance, coverage)
+    if evidence >= 0.75:
+        confidence = "high"
+    elif evidence >= 0.40:
+        confidence = "medium"
+    else:
+        confidence = "low"
+
+    rank = {"none": 0, "low": 1, "medium": 2, "high": 3}
+    current_confidence = str(character.get("confidence", "none") or "none")
+    if rank.get(confidence, 0) < rank.get(current_confidence, 0):
+        return character
+
+    counts = selected_index.get("character_counts") or {}
+    top_candidates = (
+        sorted(
+            ((str(name), int(count)) for name, count in counts.items()),
+            key=lambda item: (-item[1], item[0].casefold()),
+        )[:5]
+        if isinstance(counts, dict)
+        else []
+    )
+    return {
+        "value": primary,
+        "confidence": confidence,
+        "share": round(dominance, 4),
+        "coverage": round(coverage, 4),
+        "matched_wavs": matched,
+        "top_candidates": top_candidates,
+        "method": "remote_index_character",
+    }
+
+
 def _index_fingerprint(rows: list[dict[str, str]]) -> str:
     canonical = [
         {
@@ -1096,6 +1154,12 @@ def quick_scan(
                     f"Reference text index fallback failed: {type(exc).__name__}: {exc}"
                 )
 
+    character = _reconcile_character_with_index(
+        character,
+        selected_index,
+        total_wavs=total_wavs,
+        game_id=game_id,
+    )
     if character["confidence"] == "low":
         warnings.append("Character inference confidence is low; review before building")
 
