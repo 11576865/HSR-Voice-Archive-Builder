@@ -1203,7 +1203,11 @@ def build_chapter_flac_collection(
     grouped: dict[str, list[Entry]] = defaultdict(list)
     unassigned: list[dict[str, object]] = []
     for entry in entries:
-        group_id = extract_major_group(entry)
+        classification = classify_major_group(
+            entry.source_member_id or entry.filename,
+            str(entry.group or ""),
+        )
+        group_id = classification.major_group or None
         if group_id is None:
             unassigned.append(
                 {
@@ -1211,6 +1215,8 @@ def build_chapter_flac_collection(
                     "filename": entry.filename,
                     "source_member_id": entry.source_member_id,
                     "group": entry.group,
+                    "classification_confidence": classification.confidence,
+                    "classification_method": classification.method,
                 }
             )
             continue
