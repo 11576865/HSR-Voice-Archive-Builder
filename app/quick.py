@@ -24,7 +24,12 @@ from .credentials import credentials_status
 from .game_profiles import detect_game_profile, genshin_voice_parts, game_index_url
 from .identity import parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
-from .remote_index import DEFAULT_EN_INDEX_URL, ai_hobbyist_index_label, ai_hobbyist_index_url
+from .remote_index import (
+    DEFAULT_EN_INDEX_URL,
+    ai_hobbyist_index_label,
+    ai_hobbyist_index_url,
+    fetch_ai_hobbyist_index_for_filenames_cached,
+)
 from .provider_index import (
     fetch_provider_index_for_filenames_cached,
     provider_index_label,
@@ -39,6 +44,25 @@ MAX_SCAN_FILES = 100_000
 # Partial index coverage is allowed, but below this share the scan still
 # blocks: the continuous archive would be ordered mostly by guesswork.
 MIN_INDEX_COVERAGE = 0.5
+
+
+def _fetch_provider_records(
+    game_id: str,
+    filenames: set[str],
+    *,
+    language: str,
+    url: str,
+) -> tuple[list[dict[str, str]], dict[str, Any]]:
+    """Dispatch remote index reads while preserving the legacy HSR patch seam."""
+    if game_id == "honkai-star-rail":
+        return fetch_ai_hobbyist_index_for_filenames_cached(filenames, url)
+    return fetch_provider_index_for_filenames_cached(
+        game_id,
+        filenames,
+        language=language,
+        url=url,
+    )
+
 
 _STOP_TOKENS = {
     "archive", "vo", "avatar", "audio", "voice", "chapter", "companion", "side",
@@ -844,7 +868,7 @@ def quick_scan(
     remote_records: list[dict[str, str]] = []
     if not local_full and not blockers:
         try:
-            remote_records, cache = fetch_provider_index_for_filenames_cached(
+            remote_records, cache = _fetch_provider_records(
                 provider_game_id,
                 wav_names,
                 language=source_text_language,
@@ -980,13 +1004,11 @@ def quick_scan(
                     else ai_hobbyist_index_url(reference_language)
                 )
                 reference_wavs = {Path(name).name for name in reference["wav_names"]}
-                reference_records, reference_cache = (
-                    fetch_provider_index_for_filenames_cached(
-                        provider_game_id,
-                        reference_wavs,
-                        language=reference_language,
-                        url=reference_index_url,
-                    )
+                reference_records, reference_cache = _fetch_provider_records(
+                    provider_game_id,
+                    reference_wavs,
+                    language=reference_language,
+                    url=reference_index_url,
                 )
                 reference_index_attempt = _remote_candidate(
                     reference_records,
@@ -1325,8 +1347,11 @@ def create_quick_project(
     if package_lab_index:
         base_rows = _package_lab_rows(english_source, current_inventory)
     elif selected_index.get("source") == "remote":
-        remote_records, _ = fetch_provider_index_for_filenames_cached(
-            (str(plan.get("game_profile", {}).get("game_id") or "generic") if str(plan.get("game_profile", {}).get("game_id") or "generic") != "generic" else "honkai-star-rail"),
+        build_game_id = str(plan.get("game_profile", {}).get("game_id") or "generic")
+        if build_game_id == "generic":
+            build_game_id = "honkai-star-rail"
+        remote_records, _ = _fetch_provider_records(
+            build_game_id,
             wanted,
             language=source_text_language,
             url=str(selected_index["url"]),
@@ -1416,8 +1441,11 @@ def create_quick_project(
         reference_wavs = {
             Path(name).name for name in current_reference.get("wav_names", [])
         }
-        reference_records, _ = fetch_provider_index_for_filenames_cached(
-            (str(plan.get("game_profile", {}).get("game_id") or "generic") if str(plan.get("game_profile", {}).get("game_id") or "generic") != "generic" else "honkai-star-rail"),
+        build_game_id = str(plan.get("game_profile", {}).get("game_id") or "generic")
+        if build_game_id == "generic":
+            build_game_id = "honkai-star-rail"
+        reference_records, _ = _fetch_provider_records(
+            build_game_id,
             reference_wavs,
             language=reference_language,
             url=str(reference_attempt["url"]),
