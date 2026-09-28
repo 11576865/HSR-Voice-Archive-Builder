@@ -22,7 +22,7 @@ from .builder import (
 )
 from .credentials import credentials_status
 from .game_profiles import detect_game_profile, genshin_voice_parts, game_index_url
-from .identity import parse_voice_identity
+from .identity import classify_major_group, parse_voice_identity
 from .project import ProjectConfig, create_project, update_project
 from .remote_index import (
     DEFAULT_EN_INDEX_URL,
@@ -44,6 +44,58 @@ MAX_SCAN_FILES = 100_000
 # Partial index coverage is allowed, but below this share the scan still
 # blocks: the continuous archive would be ordered mostly by guesswork.
 MIN_INDEX_COVERAGE = 0.5
+
+
+def _chapter_classification_summary(
+    wav_members: list[str],
+    index_rows: list[dict[str, str]],
+) -> dict[str, Any]:
+    groups_by_name: dict[str, str] = {}
+    for row in index_rows:
+        name = Path(str(row.get("filename", ""))).name.casefold()
+        group = str(row.get("group", "") or "")
+        if name and name not in groups_by_name:
+            groups_by_name[name] = group
+
+    counts = {"confirmed": 0, "inferred": 0, "unknown": 0}
+    major_groups: Counter[str] = Counter()
+    unknown_examples: list[str] = []
+    inferred_examples: list[str] = []
+    method_counts: Counter[str] = Counter()
+
+    for member in wav_members:
+        basename = Path(member).name
+        classification = classify_major_group(
+            member,
+            groups_by_name.get(basename.casefold(), ""),
+        )
+        counts[classification.confidence] += 1
+        method_counts[classification.method] += 1
+        if classification.major_group:
+            major_groups[classification.major_group] += 1
+        if classification.confidence == "unknown" and len(unknown_examples) < 20:
+            unknown_examples.append(member)
+        elif classification.confidence == "inferred" and len(inferred_examples) < 20:
+            inferred_examples.append(member)
+
+    total = len(wav_members)
+    classified = counts["confirmed"] + counts["inferred"]
+    return {
+        "total": total,
+        "confirmed": counts["confirmed"],
+        "inferred": counts["inferred"],
+        "unknown": counts["unknown"],
+        "classified": classified,
+        "coverage": round(classified / max(1, total), 4),
+        "confirmed_share": round(counts["confirmed"] / max(1, total), 4),
+        "major_groups": [
+            {"group_id": group_id, "count": count}
+            for group_id, count in sorted(major_groups.items())
+        ],
+        "methods": dict(sorted(method_counts.items())),
+        "unknown_examples": unknown_examples,
+        "inferred_examples": inferred_examples,
+    }
 
 
 def _fetch_provider_records(
@@ -1168,6 +1220,16 @@ def quick_scan(
             )
 
     translation_estimate = estimate_workload_tokens(pending_records, 80)
+    chapter_classification = _chapter_classification_summary(
+        [str(member) for member in english.get("wav_members", [])],
+        index_rows,
+    )
+    if chapter_classification["unknown"]:
+        warnings.append(
+            f"章节 / 大组识别仍有 {chapter_classification['unknown']} / "
+            f"{chapter_classification['total']} 条无法安全归属；"
+            "这些条目不会被伪装成 vo/ev 等章节，章节 FLAC 会将其列为未归类"
+        )
 
     return {
         "schema_version": 2,
@@ -1200,6 +1262,7 @@ def quick_scan(
             else None
         ),
         "duplicates": duplicate_report,
+        "chapter_classification": chapter_classification,
         "character": character,
         "index": selected_index,
         "index_coverage": {
