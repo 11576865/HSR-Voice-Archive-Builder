@@ -782,6 +782,7 @@ def quick_scan(
 
     remote_index_url = remote_index_url.strip()
     game_id = str(game_profile.get("game_id") or "generic")
+    provider_game_id = game_id if game_id != "generic" else "honkai-star-rail"
     if game_id == "genshin-impact" and not remote_index_url:
         try:
             remote_index_url = game_index_url(game_id, source_text_language)
@@ -844,7 +845,7 @@ def quick_scan(
     if not local_full and not blockers:
         try:
             remote_records, cache = fetch_provider_index_for_filenames_cached(
-                game_id,
+                provider_game_id,
                 wav_names,
                 language=source_text_language,
                 url=remote_index_url,
@@ -974,14 +975,14 @@ def quick_scan(
         else:
             try:
                 reference_index_url = (
-                    game_index_url(game_id, reference_language)
-                    if game_id != "generic"
+                    game_index_url(provider_game_id, reference_language)
+                    if provider_game_id != "generic"
                     else ai_hobbyist_index_url(reference_language)
                 )
                 reference_wavs = {Path(name).name for name in reference["wav_names"]}
                 reference_records, reference_cache = (
                     fetch_provider_index_for_filenames_cached(
-                        game_id,
+                        provider_game_id,
                         reference_wavs,
                         language=reference_language,
                         url=reference_index_url,
@@ -1325,7 +1326,7 @@ def create_quick_project(
         base_rows = _package_lab_rows(english_source, current_inventory)
     elif selected_index.get("source") == "remote":
         remote_records, _ = fetch_provider_index_for_filenames_cached(
-            str(plan.get("game_profile", {}).get("game_id") or "generic"),
+            (str(plan.get("game_profile", {}).get("game_id") or "generic") if str(plan.get("game_profile", {}).get("game_id") or "generic") != "generic" else "honkai-star-rail"),
             wanted,
             language=source_text_language,
             url=str(selected_index["url"]),
@@ -1416,7 +1417,7 @@ def create_quick_project(
             Path(name).name for name in current_reference.get("wav_names", [])
         }
         reference_records, _ = fetch_provider_index_for_filenames_cached(
-            str(plan.get("game_profile", {}).get("game_id") or "generic"),
+            (str(plan.get("game_profile", {}).get("game_id") or "generic") if str(plan.get("game_profile", {}).get("game_id") or "generic") != "generic" else "honkai-star-rail"),
             reference_wavs,
             language=reference_language,
             url=str(reference_attempt["url"]),
