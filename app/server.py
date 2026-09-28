@@ -1383,7 +1383,7 @@ def api_update_apply_remote():
                     # the member id is the bare filename by construction.
                     "source_member_id": filename,
                     "source": "huggingface",
-                    "source_detail": "simon3000/starrail-voice",
+                    "source_detail": dataset,
                     "english": str(metadata.get("english", "")),
                     "reference_text": str(reference.get("reference_text", "")),
                     "reference_language": str(reference.get("reference_language", "")),
