@@ -3803,7 +3803,7 @@ function setQuickPlanMessage(message,state=''){
 function renderQuickPlan(plan){
   if(!plan||typeof plan!=='object')throw new Error('扫描完成，但后端未返回有效的预检结果');
   quickPlanState=plan;
-  const e=plan.english||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{},game=plan.game_profile||{};
+  const e=plan.english||{},idx=plan.index||{},ch=plan.character||{},tr=plan.translation||{},game=plan.game_profile||{},chap=plan.chapter_classification||{};
   const indexLabel=idx.source==='remote'
     ? (idx.provider||idx.url||'远程索引')
     : idx.source==='primary-package-lab'
@@ -3813,6 +3813,7 @@ function renderQuickPlan(plan){
     '游戏识别：'+(game.label||'Generic voice package')+' ('+(game.confidence||'none')+')',
     '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
+    '章节 / 大组识别：'+n(chap.classified)+' / '+n(chap.total)+' · 明确 '+n(chap.confirmed)+' · 推断 '+n(chap.inferred)+' · 未归类 '+n(chap.unknown),
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+indexLabel+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),
     '官方中文字幕：'+(plan.chinese
       ? (n(tr.official_chinese_matches)+' / '+n(e.wav_count)+' · 精确匹配 '+n(tr.official_chinese_exact)+' · 跨语言 ID 匹配 '+n(tr.official_chinese_structural)+' · 无法匹配 '+n(tr.official_chinese_unmatched||0)+' · 冲突 '+n(tr.official_chinese_conflicts||0))
@@ -3826,6 +3827,12 @@ function renderQuickPlan(plan){
     'AI 翻译：'+(tr.configured?((tr.provider||'AI')+' · '+(tr.model||'')):'未配置'),
     '待翻译：'+n(tr.pending_translation_count)+' · 预计 Token：'+n(tr.translation_estimated_total_tokens)+(tr.translation_estimate_excludes_repair_pass?'（不含可能的修复 pass）':'')
   ];
+  if(Array.isArray(chap.major_groups)&&chap.major_groups.length){
+    lines.push('章节分组：'+chap.major_groups.slice(0,12).map(x=>x.group_id+' '+x.count).join(' · ')+(chap.major_groups.length>12?' · …':''));
+  }
+  if(Array.isArray(chap.unknown_examples)&&chap.unknown_examples.length){
+    lines.push('未归类示例：'+chap.unknown_examples.slice(0,5).join('；')+(chap.unknown_examples.length>5?'；…':''));
+  }
   if(plan.blockers?.length)lines.push('阻塞：'+plan.blockers.join('；'));
   if(plan.warnings?.length)lines.push('提示：'+plan.warnings.join('；'));
   lines.push(plan.ready?'预检通过：可以开始构建。':'预检未通过：不会开始构建。');

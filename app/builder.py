@@ -16,6 +16,7 @@ from pathlib import Path, PurePosixPath
 from types import SimpleNamespace
 from typing import Iterable, Mapping
 
+from .identity import classify_major_group
 from .timeline import (
     resolve_timeline,
     write_ass,
@@ -1109,33 +1110,11 @@ def build_continuous_flac(
 
 
 def extract_major_group(entry: Entry) -> str | None:
-    raw_group = str(entry.group or "").strip()
-    if not raw_group or raw_group.lower() == "unknown":
-        from .identity import infer_group
-        raw_group = infer_group(entry.source_member_id or entry.filename)
-    if not raw_group or raw_group.lower() == "unknown":
-        return None
-
-    m_chap = re.match(r"^(chapter\d+)", raw_group, re.IGNORECASE)
-    if m_chap:
-        return m_chap.group(1).lower()
-
-    m_fin = re.match(r"^(chapterfinality\d*|finality)", raw_group, re.IGNORECASE)
-    if m_fin:
-        return m_fin.group(1).lower()
-
-    if re.match(r"^archive", raw_group, re.IGNORECASE):
-        return "archive"
-
-    m_side = re.match(r"^(side(?:\d+|x)?)", raw_group, re.IGNORECASE)
-    if m_side:
-        return m_side.group(1).lower()
-
-    m_comp = re.match(r"^(companion\d*)", raw_group, re.IGNORECASE)
-    if m_comp:
-        return m_comp.group(1).lower()
-
-    return raw_group.lower()
+    classification = classify_major_group(
+        entry.source_member_id or entry.filename,
+        str(entry.group or ""),
+    )
+    return classification.major_group or None
 
 
 def major_group_sort_key(mg: str) -> tuple[int, int | str, str]:
@@ -1224,7 +1203,11 @@ def build_chapter_flac_collection(
     grouped: dict[str, list[Entry]] = defaultdict(list)
     unassigned: list[dict[str, object]] = []
     for entry in entries:
-        group_id = extract_major_group(entry)
+        classification = classify_major_group(
+            entry.source_member_id or entry.filename,
+            str(entry.group or ""),
+        )
+        group_id = classification.major_group or None
         if group_id is None:
             unassigned.append(
                 {
@@ -1232,6 +1215,8 @@ def build_chapter_flac_collection(
                     "filename": entry.filename,
                     "source_member_id": entry.source_member_id,
                     "group": entry.group,
+                    "classification_confidence": classification.confidence,
+                    "classification_method": classification.method,
                 }
             )
             continue
