@@ -32,6 +32,39 @@ class HuggingFaceAudioTests(unittest.TestCase):
         self.assertEqual(plan["targets"]["Ev_archive_vo_avatar_cast_hero_98765.wav"]["method"], "media_id")
         self.assertEqual(plan["targets"]["chapter5_1_hero_104.wav"]["method"], "unique_transcription")
 
+
+    def test_genshin_resolves_by_ingame_basename_and_keeps_dataset_identity(self) -> None:
+        records = {
+            "English(US)/aaa.wav": {
+                "filename": "aaa",
+                "inGameFilename": "VO_anecdote\\vo_anecdote_106701_hutao_01.wem",
+                "transcription": "A Genshin line.",
+                "speaker": "Hu Tao",
+            },
+            "Chinese(PRC)/bbb.wav": {
+                "filename": "bbb",
+                "inGameFilename": "VO_anecdote\\vo_anecdote_106701_hutao_01.wem",
+                "transcription": "原神中文台词。",
+                "speaker": "胡桃",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            plan = resolve_targets(
+                path,
+                [{
+                    "filename": "vo_anecdote_106701_hutao_01.wav",
+                    "english": "A Genshin line.",
+                }],
+                dataset="simon3000/genshin-voice",
+            )
+        self.assertEqual(plan["dataset"], "simon3000/genshin-voice")
+        row = plan["targets"]["vo_anecdote_106701_hutao_01.wav"]
+        self.assertEqual(row["method"], "inGameFilenameBasename")
+        ref = plan["reference_targets"]["vo_anecdote_106701_hutao_01.wav"]
+        self.assertEqual(ref["transcription"], "原神中文台词。")
+
     def test_does_not_guess_duplicate_transcription(self) -> None:
         records = {
             "English/1.wav": {"filename": "a", "transcription": "Again"},
