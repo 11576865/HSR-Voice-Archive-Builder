@@ -1427,6 +1427,7 @@ def build_project_v02(
     reference_text_embedded: bool = False,
     state_dir: Path | None = None,
     review_official_target: bool = False,
+    game_id: str = "honkai-star-rail",
     recovery_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
     out_dir = out_dir.expanduser().resolve()
@@ -1455,7 +1456,11 @@ def build_project_v02(
     )
 
     glossary_overlay = load_glossary_overlay(glossary_path)
-    built_in_glossary = CORE_GLOSSARY if target_language == "zh-CN" else {}
+    built_in_glossary = (
+        CORE_GLOSSARY
+        if target_language == "zh-CN" and str(game_id or "").casefold() in {"honkai-star-rail", "hsr", "star-rail"}
+        else {}
+    )
     active_glossary = merge_glossary(built_in_glossary, glossary_overlay)
     active_glossary_fingerprint = glossary_fingerprint(active_glossary)
 
@@ -1482,6 +1487,7 @@ def build_project_v02(
         "target_language": target_language,
         "reference_language": reference_language,
         "reference_text_embedded": bool(reference_text_embedded),
+        "game_id": str(game_id or "generic"),
         "intro_gap": intro_gap,
         "same_group_gap": same_group_gap,
         "group_gap": group_gap,

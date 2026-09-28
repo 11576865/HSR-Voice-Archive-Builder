@@ -4,6 +4,8 @@ import re
 from dataclasses import dataclass
 from pathlib import Path
 
+from .game_profiles import genshin_voice_parts
+
 _VARIANT_RE = re.compile(r"^(?P<base>.+)_(?P<variant>[fm])$", re.IGNORECASE)
 _GROUP_RE = re.compile(r"^(archive|chapter\d+(?:_\d+)?|companion\d+(?:_\d+)?|side\d+(?:_\w+)?)_", re.IGNORECASE)
 
@@ -18,6 +20,9 @@ class VoiceIdentity:
 
 
 def infer_group(stem: str) -> str:
+    genshin = genshin_voice_parts(stem)
+    if genshin:
+        return genshin["group"]
     match = _GROUP_RE.match(stem)
     if match:
         return match.group(1)

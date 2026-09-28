@@ -17,6 +17,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
+from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
@@ -53,7 +54,8 @@ from .project import (
     update_project,
 )
 from .version import runtime_version
-from .remote_index import exclude_applied_updates, exclude_indexed_updates, fetch_ai_hobbyist_index, remote_update_plan
+from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
+from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
 from subtitle_layout.preview import preview_subtitle_layout
@@ -803,6 +805,7 @@ def api_quick_build(
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
                 review_official_target=config.review_official_target,
+                game_id=getattr(config, "game_id", "honkai-star-rail"),
                 recovery_callback=auto_recovery,
             )
             auto_recovery("build-complete")
@@ -1100,6 +1103,7 @@ def api_project_build():
                 reference_text_embedded=config.reference_text_embedded,
                 state_dir=paths["state"],
                 review_official_target=config.review_official_target,
+                game_id=getattr(config, "game_id", "honkai-star-rail"),
             )
 
         job = create_job(
@@ -1166,8 +1170,13 @@ def api_update_check_remote(
 ):
     try:
         config = _active_config()
+        if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
+            raise ValueError(
+                "Remote update checks are not enabled for this game's provider yet. "
+                "Local WAV+LAB archive building remains supported."
+            )
         requested_character = character.strip()
-        remote_index_url = remote_index_url.strip() or config.remote_index_url
+        remote_index_url = remote_index_url.strip() or config.remote_index_url or game_index_url(config.game_id, config.source_text_language)
         characters = remote_character_candidates(config, requested_character)
         if not characters:
             raise ValueError(
@@ -1189,7 +1198,7 @@ def api_update_check_remote(
             attempted: list[str] = []
             for candidate in characters:
                 attempted.append(candidate)
-                rows = fetch_ai_hobbyist_index(candidate, remote_index_url)
+                rows = fetch_provider_index(config.game_id, candidate, language=config.source_text_language, url=remote_index_url)
                 if rows:
                     matched_character = candidate
                     break
@@ -1234,6 +1243,10 @@ def api_update_apply_remote():
     """Download reliably resolved additions, adopt a combined source, and leave rebuild explicit."""
     try:
         config = _active_config()
+        if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
+            raise ValueError(
+                "Remote update downloads are not enabled for this game's provider yet."
+            )
         paths = _project_paths(config)
         output, source, index = paths["output"], paths["wavs"], paths["index"]
         if output is None or source is None or index is None:
@@ -1254,13 +1267,16 @@ def api_update_apply_remote():
         project_root = Path(config.root).resolve()
 
         def run(report_progress):
-            state = project_root / ".state" / "huggingface"
+            dataset = game_audio_dataset(config.game_id)
+            if not dataset:
+                raise RuntimeError(f"No audio dataset is configured for {config.game_id}")
+            state = project_root / ".state" / "providers" / config.game_id / dataset.replace("/", "--")
             generated = project_root / ".generated"
             result_json = state / "result.json"
             report_progress("metadata", "正在取得 Hugging Face 定位索引", 0, 1)
-            download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1))
+            download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1), dataset=dataset)
             report_progress("resolve", "正在将新增条目定位到精确数据集行", 0, len(targets))
-            resolved = resolve_targets(result_json, targets)
+            resolved = resolve_targets(result_json, targets, dataset=dataset)
             report_progress("resolve", f"已可靠定位 {len(resolved['targets'])}/{len(targets)} 条新增语音", len(targets), len(targets))
             atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
             if not resolved["targets"]:
@@ -1270,6 +1286,7 @@ def api_update_apply_remote():
                 resolved,
                 incoming,
                 lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
+                dataset=dataset,
             )
             if downloaded["failed"]:
                 atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
@@ -1291,6 +1308,7 @@ def api_update_apply_remote():
                     lambda current, total, name: report_progress(
                         "reference", f"正在同步下载中文对照语音：{current}/{total} · {name}", current, total
                     ),
+                    dataset=dataset,
                 )
                 atomic_write_text(
                     state / "incremental_reference_download.json",
@@ -1365,7 +1383,7 @@ def api_update_apply_remote():
                     # the member id is the bare filename by construction.
                     "source_member_id": filename,
                     "source": "huggingface",
-                    "source_detail": "simon3000/starrail-voice",
+                    "source_detail": dataset,
                     "english": str(metadata.get("english", "")),
                     "reference_text": str(reference.get("reference_text", "")),
                     "reference_language": str(reference.get("reference_language", "")),

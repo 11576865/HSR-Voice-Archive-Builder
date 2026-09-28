@@ -1,6 +1,6 @@
 # HSR Voice Archive Builder
 
-Local-first archive builder for **Honkai: Star Rail** character voice packages.
+Archive builder for **Honkai: Star Rail** character voice packages.
 
 It turns indexed voice resources into a reproducible archive with a continuous FLAC, timed subtitles, manifests, update metadata, and optional translation assistance. The browser UI is only a controller; source voice packages and finished audio remain on the processing device.
 
@@ -25,7 +25,7 @@ The normal project workflow can:
 - check remote indexes for new voice lines, download confirmed additions, and rebuild only affected stages;
 - resume validated stages after interruption.
 
-The deterministic manifest and Timeline remain the durable machine-readable archive state. Presentation outputs are derived from them.
+The manifest and Timeline remain the durable machine-readable archive state; presentation outputs are derived from them.
 
 ## Recommended workflow
 

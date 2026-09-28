@@ -17,10 +17,11 @@ from typing import Any, Callable
 
 DATASET = "simon3000/starrail-voice"
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
-RESULT_URL = (
-    "https://huggingface.co/datasets/simon3000/starrail-voice/"
-    "resolve/main/result.json?download=true"
-)
+
+
+def result_url(dataset: str = DATASET) -> str:
+    dataset = str(dataset or DATASET).strip()
+    return f"https://huggingface.co/datasets/{dataset}/resolve/main/result.json?download=true"
 ENTRY_RE = re.compile(br'"([^"\\]+\.wav)":\{"filename":')
 JSON_STR = rb'"(?:\\.|[^"\\])*"'
 
@@ -44,15 +45,30 @@ def _normal_text(value: str) -> str:
 
 
 def _voice_relative_path(value: str) -> str:
-    """Return the language-independent path below a package's voice directory."""
-    normalized = str(value or "").replace("\\", "/").strip().casefold()
+    """Return a language-independent in-game voice path."""
+    normalized = str(value or "").replace("\\", "/").strip().casefold().lstrip("/")
+    if not normalized:
+        return ""
     marker = "/voice/"
-    if marker in normalized:
-        return normalized.split(marker, 1)[1]
-    return ""
+    if marker in "/" + normalized:
+        return ("/" + normalized).split(marker, 1)[1]
+    prefixes = (
+        "english(us)/", "english/", "chinese(prc)/", "chinese/",
+        "japanese/", "korean/", "en-us/", "zh-cn/", "ja-jp/", "ko-kr/",
+    )
+    for prefix in prefixes:
+        if normalized.startswith(prefix):
+            normalized = normalized[len(prefix):]
+            break
+    return normalized
 
 
-def download_result_json(destination: Path, progress: Callable[[str], None] | None = None) -> Path:
+def download_result_json(
+    destination: Path,
+    progress: Callable[[str], None] | None = None,
+    *,
+    dataset: str = DATASET,
+) -> Path:
     """Resume the dataset metadata download without replacing a valid local copy."""
     destination.parent.mkdir(parents=True, exist_ok=True)
     part = destination.with_suffix(destination.suffix + ".part")
@@ -60,7 +76,7 @@ def download_result_json(destination: Path, progress: Callable[[str], None] | No
         return destination
     for attempt in range(8):
         start = part.stat().st_size if part.exists() else 0
-        request = urllib.request.Request(RESULT_URL, headers={"User-Agent": "HSR-Voice-Archive-Builder/0.9"})
+        request = urllib.request.Request(result_url(dataset), headers={"User-Agent": "HSR-Voice-Archive-Builder/0.9"})
         if start:
             request.add_header("Range", f"bytes={start}-")
         try:
@@ -85,7 +101,12 @@ def download_result_json(destination: Path, progress: Callable[[str], None] | No
     raise RuntimeError("无法下载 result.json")
 
 
-def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[str, Any]:
+def resolve_targets(
+    result_json: Path,
+    targets: list[dict[str, str]],
+    *,
+    dataset: str = DATASET,
+) -> dict[str, Any]:
     """Resolve English rows and same-file Chinese reference rows conservatively."""
     by_name = {Path(str(t.get("filename", ""))).stem: t for t in targets}
     by_hash = {str(t.get("hash", "")).casefold(): t for t in targets if t.get("hash")}
@@ -96,6 +117,7 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
         if match:
             by_media[match.group(1)] = target
     by_path = {f"english/voice/{name}.wem".casefold(): t for name, t in by_name.items()}
+    by_ingame_basename = {(Path(name).stem + ".wem").casefold(): t for name, t in by_name.items()}
     resolved: dict[str, dict[str, Any]] = {}
     chinese_by_path: dict[str, dict[str, Any]] = {}
     text_rows: dict[str, list[dict[str, Any]]] = {}
@@ -111,7 +133,7 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
             row_index = total
             total += 1
             language_prefix = key.split("/", 1)[0].casefold()
-            if language_prefix in {"english", "chinese(prc)"}:
+            if language_prefix in {"english", "english(us)", "chinese(prc)"}:
                 stem = Path(key).stem
                 ingame = _field(chunk, "inGameFilename")
                 transcription = _field(chunk, "transcription")
@@ -132,6 +154,11 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
                     continue
                 target = by_path.get(ingame.casefold()) if ingame else None
                 method = "inGameFilename"
+                if target is None and ingame:
+                    ingame_base = Path(ingame.replace("\\", "/")).name.casefold()
+                    target = by_ingame_basename.get(ingame_base)
+                    if target is not None:
+                        method = "inGameFilenameBasename"
                 if target is None:
                     target, method = by_hash.get(stem.casefold()), "wav_hash"
                 if target is None:
@@ -162,7 +189,7 @@ def resolve_targets(result_json: Path, targets: list[dict[str, str]]) -> dict[st
             }
     unresolved = [str(t.get("filename", "")) for t in targets if str(t.get("filename", "")) not in resolved]
     return {
-        "dataset": DATASET,
+        "dataset": dataset,
         "total_rows": total,
         "targets": resolved,
         "reference_targets": reference_targets,
@@ -206,8 +233,15 @@ def _audio_src(value: Any) -> str:
     return ""
 
 
-def download_resolved_audio(plan: dict[str, Any], destination: Path, progress: Callable[[int, int, str], None] | None = None) -> dict[str, Any]:
+def download_resolved_audio(
+    plan: dict[str, Any],
+    destination: Path,
+    progress: Callable[[int, int, str], None] | None = None,
+    *,
+    dataset: str = "",
+) -> dict[str, Any]:
     destination.mkdir(parents=True, exist_ok=True)
+    dataset = str(dataset or plan.get("dataset") or DATASET)
     targets = plan.get("targets", {})
     blocks: dict[int, list[tuple[str, int]]] = {}
     for filename, row in targets.items():
@@ -216,7 +250,7 @@ def download_resolved_audio(plan: dict[str, Any], destination: Path, progress: C
     completed, failed = [], []
     total = len(targets)
     for start, group in sorted(blocks.items()):
-        payload = _json_get(ROWS_URL, {"dataset": DATASET, "config": "default", "split": "train", "offset": start, "length": 100})
+        payload = _json_get(ROWS_URL, {"dataset": dataset, "config": "default", "split": "train", "offset": start, "length": 100})
         rows = {int(item["row_idx"]): item for item in payload.get("rows", []) if item.get("row_idx") is not None}
         for filename, index in group:
             stem = Path(filename).stem
