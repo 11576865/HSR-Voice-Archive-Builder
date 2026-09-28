@@ -79,6 +79,22 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("d.set('group_gap'", html)
         self.assertIn("d.set('review_official_target'", html)
 
+    def test_quick_scan_preflight_has_visible_progress_result_and_error_states(self) -> None:
+        html = (
+            Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        self.assertIn('id="quickPlan" class="quick-plan" role="status" aria-live="polite"', html)
+        self.assertIn("function setQuickPlanMessage", html)
+        self.assertIn("正在扫描 / 预检…", html)
+        self.assertIn("扫描 / 预检失败：", html)
+        self.assertIn("button.textContent='正在扫描…'", html)
+        self.assertIn("button.textContent='扫描 / 预检'", html)
+        self.assertIn("if(!j?.plan)throw new Error('扫描完成，但响应中没有预检结果')", html)
+        self.assertIn(".quick-plan.is-running", html)
+        self.assertIn(".quick-plan.is-ok", html)
+        self.assertIn(".quick-plan.is-error", html)
+
     def test_language_package_roles_and_chinese_translation_visibility_are_clear(self) -> None:
         html = (
             Path(__file__).resolve().parents[1] / "app" / "static" / "index.html"
