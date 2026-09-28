@@ -50,15 +50,15 @@ class GenshinCompatibilityTests(unittest.TestCase):
         ])
         self.assertEqual(profile["game_id"], "genshin-impact")
         self.assertEqual(profile["label"], "Genshin Impact")
-        self.assertFalse(profile["remote_updates_supported"])
+        self.assertTrue(profile["remote_updates_supported"])
 
     def test_quick_scan_uses_complete_genshin_labs_without_hsr_remote_index(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             archive = Path(td) / "Hutao.zip"
             self._make_hutao_zip(archive)
             with patch(
-                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
-                side_effect=AssertionError("Genshin local LAB mode must not query the HSR workbook"),
+                "app.quick.fetch_provider_index_for_filenames_cached",
+                side_effect=OSError("offline provider index"),
             ), patch(
                 "app.quick.credentials_status",
                 return_value={
@@ -74,15 +74,24 @@ class GenshinCompatibilityTests(unittest.TestCase):
             self.assertEqual(plan["character"]["value"], "hutao")
             self.assertEqual(plan["index"]["source"], "primary-package-lab")
             self.assertEqual(plan["index"]["order_basis"], "package_member_path")
-            self.assertEqual(plan["translation"]["remote_index_url"], "")
+            self.assertIn("Genshin_Voice_Sorting_Scripts", plan["translation"]["remote_index_url"])
 
-    def test_genshin_without_complete_labs_fails_closed(self) -> None:
+    def test_genshin_without_complete_labs_uses_genshin_remote_index(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             archive = Path(td) / "Hutao.zip"
-            self._make_hutao_zip(archive, complete_labs=False)
+            names = self._make_hutao_zip(archive, complete_labs=False)
+            records = [
+                {
+                    "filename": name,
+                    "english": f"Remote Hu Tao line {i}.",
+                    "hash": f"{i:016x}",
+                    "character": "Hu Tao",
+                }
+                for i, name in enumerate(names, 1)
+            ]
             with patch(
-                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
-                side_effect=AssertionError("Genshin must not fall through to the HSR workbook"),
+                "app.quick.fetch_provider_index_for_filenames_cached",
+                return_value=(records, {"cache_hit": False, "stale": False}),
             ), patch(
                 "app.quick.credentials_status",
                 return_value={
@@ -93,8 +102,10 @@ class GenshinCompatibilityTests(unittest.TestCase):
             ):
                 plan = quick_scan(archive)
 
-            self.assertFalse(plan["ready"])
-            self.assertTrue(any("Genshin JSON remote-index provider" in item for item in plan["blockers"]))
+            self.assertTrue(plan["ready"], plan["blockers"])
+            self.assertEqual(plan["index"]["source"], "remote")
+            self.assertEqual(plan["index"]["matched_wavs"], len(names))
+            self.assertIn("Genshin_Voice_Sorting_Scripts", plan["index"]["url"])
 
     def test_created_genshin_project_persists_game_identity_and_groups(self) -> None:
         with tempfile.TemporaryDirectory() as td:
@@ -102,8 +113,8 @@ class GenshinCompatibilityTests(unittest.TestCase):
             archive = root / "Hutao.zip"
             self._make_hutao_zip(archive)
             with patch(
-                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
-                side_effect=AssertionError("Genshin local LAB mode must not query the HSR workbook"),
+                "app.quick.fetch_provider_index_for_filenames_cached",
+                side_effect=OSError("offline provider index"),
             ), patch(
                 "app.quick.credentials_status",
                 return_value={
@@ -115,7 +126,7 @@ class GenshinCompatibilityTests(unittest.TestCase):
                 config, plan = create_quick_project(archive, root=root / "project")
 
             self.assertEqual(config.game_id, "genshin-impact")
-            self.assertEqual(config.remote_index_url, "")
+            self.assertIn("Genshin_Voice_Sorting_Scripts", config.remote_index_url)
             index_path = Path(config.root) / config.index_csv
             rows = index_path.read_text(encoding="utf-8-sig")
             self.assertIn("anecdote_106701", rows)
