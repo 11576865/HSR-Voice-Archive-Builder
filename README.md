@@ -25,7 +25,7 @@ The normal project workflow can:
 - check remote indexes for new voice lines, download confirmed additions, and rebuild only affected stages;
 - resume validated stages after interruption.
 
-The deterministic manifest and Timeline remain the durable machine-readable archive state. Presentation outputs are derived from them.
+The manifest and Timeline remain the durable machine-readable archive state; presentation outputs are derived from them.
 
 ## Recommended workflow
 
