@@ -1942,6 +1942,215 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
     padding:4px 8px!important;
   }
 }
+
+/* Proofreading responsive authority v12 ------------------------------------
+   Tablets are work surfaces, not oversized phones. Keep the subtitle index
+   beside the editor whenever there is enough horizontal room, and reserve the
+   single-column flow for genuinely narrow screens. */
+@media (min-width:700px) and (max-width:1200px){
+  body[data-workspace="review"] main{
+    padding:6px 6px calc(42px + env(safe-area-inset-bottom))!important;
+  }
+
+  #subtitleReviewCard>.topline{
+    padding:8px 10px 6px!important;
+  }
+
+  #subtitleReviewCard>.topline h2{
+    font-size:18px!important;
+    margin:0!important;
+  }
+
+  #subtitleReviewCard>.topline p.small.muted{
+    margin:2px 0 0!important;
+    font-size:11px!important;
+    line-height:1.35!important;
+  }
+
+  .proofreading-filters{
+    display:grid!important;
+    grid-template-columns:minmax(0,1.45fr) minmax(150px,.72fr) minmax(170px,.88fr)!important;
+    gap:8px!important;
+    padding:0 10px 8px!important;
+    align-items:end!important;
+  }
+
+  .proofreading-filters>div{
+    min-width:0!important;
+  }
+
+  .proofreading-filters label{
+    margin:3px 0 3px!important;
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+
+  .proofreading-filters input,
+  .proofreading-filters select{
+    min-height:34px!important;
+    height:34px!important;
+    padding:5px 8px!important;
+    font-size:13px!important;
+  }
+
+  #subtitleSaveStatus{
+    min-height:0!important;
+    padding:4px 10px!important;
+    font-size:11px!important;
+    line-height:1.3!important;
+  }
+
+  .sub-workspace.proofreading-workspace{
+    display:grid!important;
+    grid-template-columns:clamp(220px,27vw,300px) minmax(0,1fr)!important;
+    gap:0!important;
+    width:100%!important;
+    min-height:0!important;
+    align-items:start!important;
+  }
+
+  .proofreading-workspace .sub-sidebar{
+    width:auto!important;
+    min-width:0!important;
+    height:clamp(360px,calc(100dvh - 150px),760px)!important;
+    min-height:0!important;
+    max-height:none!important;
+    border-right:1px solid var(--line)!important;
+    border-bottom:0!important;
+    align-self:start!important;
+  }
+
+  .proofreading-workspace .sub-sidebar-header{
+    padding:7px 9px!important;
+    min-height:34px!important;
+  }
+
+  .proofreading-workspace .sub-list{
+    display:flex!important;
+    flex-direction:column!important;
+    width:100%!important;
+    max-width:100%!important;
+    min-height:0!important;
+    overflow-x:hidden!important;
+    overflow-y:auto!important;
+    padding:3px!important;
+    gap:2px!important;
+  }
+
+  .proofreading-workspace .sub-item{
+    flex:0 0 auto!important;
+    width:100%!important;
+    min-width:0!important;
+    max-height:none!important;
+    height:auto!important;
+    padding:7px 8px!important;
+  }
+
+  .proofreading-workspace .sub-item-preview{
+    display:-webkit-box!important;
+    -webkit-box-orient:vertical!important;
+    -webkit-line-clamp:2!important;
+    white-space:normal!important;
+    overflow:hidden!important;
+  }
+
+  .proofreading-workspace .sub-main{
+    width:100%!important;
+    min-width:0!important;
+    padding:9px 10px 12px!important;
+    gap:8px!important;
+  }
+
+  .proofreading-workspace .sub-current-header{
+    padding-bottom:7px!important;
+  }
+
+  .proofreading-workspace .proof-step{
+    padding:8px 9px!important;
+  }
+
+  .proofreading-workspace .proof-step-kicker{
+    margin-bottom:3px!important;
+  }
+
+  .proofreading-workspace .sub-audio-card{
+    padding:5px 0 7px!important;
+  }
+
+  .proofreading-workspace .sub-audio-card audio{
+    height:32px!important;
+  }
+
+  .proofreading-workspace .proof-step-editor .sub-textarea,
+  .proofreading-workspace #subFinalEditor{
+    min-height:210px!important;
+  }
+}
+
+@media (max-width:699px){
+  #subtitleReviewCard>.topline{
+    padding:8px 9px 6px!important;
+  }
+
+  #subtitleReviewCard>.topline p.small.muted{
+    margin:2px 0 0!important;
+    font-size:11px!important;
+    line-height:1.35!important;
+  }
+
+  .proofreading-filters{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) minmax(0,1fr)!important;
+    gap:6px!important;
+    padding:0 9px 8px!important;
+  }
+
+  .proofreading-filters>div:first-child{
+    grid-column:1 / -1!important;
+  }
+
+  .proofreading-filters>div{
+    min-width:0!important;
+  }
+
+  .proofreading-filters label{
+    margin:3px 0!important;
+    font-size:10px!important;
+    line-height:1.2!important;
+  }
+
+  .proofreading-filters input,
+  .proofreading-filters select{
+    min-height:36px!important;
+    height:36px!important;
+    padding:6px 8px!important;
+    font-size:13px!important;
+  }
+
+  #subtitleSaveStatus{
+    padding:4px 9px!important;
+    font-size:11px!important;
+    line-height:1.3!important;
+  }
+
+  .proofreading-workspace .sub-sidebar{
+    max-height:176px!important;
+  }
+
+  .proofreading-workspace .sub-sidebar-header{
+    padding:6px 8px!important;
+  }
+
+  .proofreading-workspace .sub-list{
+    padding:3px!important;
+    gap:2px!important;
+  }
+
+  .proofreading-workspace .sub-item{
+    padding:6px 7px!important;
+  }
+}
+
 </style>
 </head>
 <body>
