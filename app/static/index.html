@@ -1744,6 +1744,43 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
 }
 
 
+/* Desktop utility docking authority v13 ------------------------------------
+   Wide desktop windows dock Utility beside the active workspace instead of
+   covering form controls. Narrow desktops and touch layouts keep the overlay
+   drawer so the primary work surface does not become unusably narrow. */
+@media (min-width:1360px) and (hover:hover) and (pointer:fine){
+  body.utility-drawer-open .grid{
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) clamp(320px,21vw,390px)!important;
+    gap:16px!important;
+    width:100%!important;
+    max-width:none!important;
+    margin:0!important;
+    align-items:start!important;
+  }
+
+  body.utility-drawer-open #primaryStack{
+    min-width:0!important;
+  }
+
+  body.utility-drawer-open #sideStack.utility-drawer{
+    position:sticky!important;
+    top:calc(var(--topbar-height) + 48px)!important;
+    right:auto!important;
+    bottom:auto!important;
+    width:100%!important;
+    max-width:none!important;
+    height:auto!important;
+    max-height:calc(100dvh - var(--topbar-height) - 64px)!important;
+    margin:0!important;
+    align-self:start!important;
+    transform:none!important;
+    opacity:1!important;
+    pointer-events:auto!important;
+  }
+}
+
+
 /* Final mobile proofreading navigation authority -------------------------- */
 @media (max-width:960px), (hover:none) and (pointer:coarse) and (max-width:1200px){
   .proofreading-workspace .sub-edit-area .proofreading-nav-actions{

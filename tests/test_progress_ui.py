@@ -600,6 +600,23 @@ class QuickBuildUiTests(unittest.TestCase):
             'body[data-workspace="update"] .grid{\n    width:min(100%,1900px)!important;',
             html,
         )
+        self.assertIn("/* Desktop utility docking authority v13", html)
+        self.assertIn(
+            "@media (min-width:1360px) and (hover:hover) and (pointer:fine)",
+            html,
+        )
+        self.assertIn(
+            "body.utility-drawer-open .grid{\n    display:grid!important;\n    grid-template-columns:minmax(0,1fr) clamp(320px,21vw,390px)!important;",
+            html,
+        )
+        self.assertIn(
+            "body.utility-drawer-open #sideStack.utility-drawer{\n    position:sticky!important;",
+            html,
+        )
+        self.assertIn(
+            "max-height:calc(100dvh - var(--topbar-height) - 64px)!important;",
+            html,
+        )
 
     def test_mobile_single_column_workbench_contract(self) -> None:
         html = (
