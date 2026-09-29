@@ -161,6 +161,99 @@ def _parse_7z_slt(text: str) -> list[dict[str, str]]:
     return records
 
 
+def _find_7z_cli() -> str:
+    """Find a native 7-Zip CLI, including common Windows install paths."""
+    for name in ("7zz", "7z"):
+        found = shutil.which(name)
+        if found:
+            return found
+
+    if os.name == "nt":
+        candidates: list[Path] = []
+        for env_name in ("ProgramW6432", "ProgramFiles", "ProgramFiles(x86)"):
+            root = os.environ.get(env_name, "").strip()
+            if root:
+                candidates.append(Path(root) / "7-Zip" / "7z.exe")
+        local_app_data = os.environ.get("LOCALAPPDATA", "").strip()
+        if local_app_data:
+            candidates.append(Path(local_app_data) / "Programs" / "7-Zip" / "7z.exe")
+        for candidate in candidates:
+            if candidate.is_file():
+                return str(candidate)
+    return ""
+
+
+def _list_7z_members(source: Path) -> tuple[list[dict[str, Any]], str]:
+    """List a 7z package without extracting it.
+
+    Native 7-Zip remains preferred when available (especially on Termux), but
+    desktop installs already depend on py7zr. Falling back to py7zr keeps Quick
+    Scan from failing merely because 7z.exe is not on PATH.
+    """
+    exe = _find_7z_cli()
+    if exe:
+        listed = subprocess.run(
+            [exe, "l", "-slt", str(source)],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            errors="replace",
+            check=False,
+        )
+        if listed.returncode != 0:
+            raise RuntimeError(
+                f"7-Zip listing failed ({listed.returncode}): {listed.stderr.strip()}"
+            )
+        records = _parse_7z_slt(listed.stdout)
+        if len(records) > MAX_ARCHIVE_MEMBERS:
+            raise ValueError(f"7z has too many members: {len(records)}")
+        files: list[dict[str, Any]] = []
+        for record in records:
+            name = record.get("Path", "")
+            if not name:
+                continue
+            attrs = record.get("Attributes", "")
+            if attrs.startswith("D"):
+                continue
+            try:
+                size = int(record.get("Size", "0") or "0")
+            except ValueError:
+                size = 0
+            files.append({"name": _safe_member_name(name), "size": max(0, size)})
+        return files, f"7zip-cli:{exe}"
+
+    try:
+        import py7zr  # type: ignore
+    except ImportError as exc:
+        raise RuntimeError(
+            "Scanning .7z requires py7zr>=1.1.3 or a native 7zz/7z executable"
+        ) from exc
+
+    try:
+        with py7zr.SevenZipFile(source, mode="r") as archive:
+            infos = archive.list()
+    except Exception as exc:
+        raise RuntimeError(
+            f"py7zr listing failed ({type(exc).__name__}): {exc}"
+        ) from exc
+
+    if len(infos) > MAX_ARCHIVE_MEMBERS:
+        raise ValueError(f"7z has too many members: {len(infos)}")
+    files = []
+    for info in infos:
+        if bool(getattr(info, "is_directory", False)):
+            continue
+        name = str(getattr(info, "filename", "") or "")
+        if not name:
+            continue
+        try:
+            size = int(getattr(info, "uncompressed", 0) or 0)
+        except (TypeError, ValueError):
+            size = 0
+        files.append({"name": _safe_member_name(name), "size": max(0, size)})
+    return files, "py7zr"
+
+
 def source_inventory(source: Path) -> dict[str, Any]:
     source = source.expanduser().resolve()
     if not source.exists():
@@ -169,6 +262,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
     files: list[dict[str, Any]] = []
     source_stat = source.stat()
     content_hash = hashlib.sha256()
+    archive_reader = "filesystem"
     if source.is_dir():
         for idx, path in enumerate(sorted(source.rglob("*"), key=lambda p: p.as_posix()), 1):
             if idx > MAX_SCAN_FILES:
@@ -192,6 +286,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
             content_hash.update(b"\n")
             files.append({"name": rel, "size": size})
     elif source.is_file() and source.suffix.lower() == ".zip":
+        archive_reader = "zipfile"
         with source.open("rb") as f:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 content_hash.update(chunk)
@@ -210,36 +305,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
         with source.open("rb") as f:
             for chunk in iter(lambda: f.read(1024 * 1024), b""):
                 content_hash.update(chunk)
-        exe = shutil.which("7zz") or shutil.which("7z")
-        if not exe:
-            raise RuntimeError("7-Zip CLI is required to scan .7z packages")
-        listed = subprocess.run(
-            [exe, "l", "-slt", str(source)],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            errors="replace",
-            check=False,
-        )
-        if listed.returncode != 0:
-            raise RuntimeError(
-                f"7-Zip listing failed ({listed.returncode}): {listed.stderr.strip()}"
-            )
-        records = _parse_7z_slt(listed.stdout)
-        if len(records) > MAX_ARCHIVE_MEMBERS:
-            raise ValueError(f"7z has too many members: {len(records)}")
-        for record in records:
-            name = record.get("Path", "")
-            if not name:
-                continue
-            attrs = record.get("Attributes", "")
-            if attrs.startswith("D"):
-                continue
-            try:
-                size = int(record.get("Size", "0") or "0")
-            except ValueError:
-                size = 0
-            files.append({"name": _safe_member_name(name), "size": max(0, size)})
+        files, archive_reader = _list_7z_members(source)
     else:
         raise ValueError("Quick mode accepts a directory, .zip, or .7z source")
 
@@ -277,6 +343,7 @@ def source_inventory(source: Path) -> dict[str, Any]:
     return {
         "source": str(source),
         "kind": "directory" if source.is_dir() else source.suffix.lower().lstrip("."),
+        "archive_reader": archive_reader,
         "file_count": len(files),
         "wav_count": len(wavs),
         "lab_count": len(labs),
@@ -349,32 +416,81 @@ def _extract_source_members(
                 out[canonical] = target
         return out
     if suffix == ".7z":
-        exe = shutil.which("7zz") or shutil.which("7z")
-        if not exe:
-            raise RuntimeError("7-Zip CLI is required to inspect .7z packages")
+        exe = _find_7z_cli()
         dest.mkdir(parents=True, exist_ok=True)
-        # Windows command lines cap at ~32k characters, so extract in chunks.
-        chunk_size = 200
-        member_list = [str(member) for member in members]
-        for start in range(0, len(member_list), chunk_size):
-            chunk = member_list[start : start + chunk_size]
-            extracted = subprocess.run(
-                [exe, "x", "-y", f"-o{dest}", str(source), *chunk],
-                stdout=subprocess.PIPE,
-                stderr=subprocess.PIPE,
-                text=True,
-                errors="replace",
-                check=False,
-            )
-            if extracted.returncode != 0:
-                raise RuntimeError(
-                    f"7-Zip member extraction failed ({extracted.returncode}): "
-                    f"{extracted.stderr.strip()}"
+        if exe:
+            # Windows command lines cap at ~32k characters, so extract in chunks.
+            chunk_size = 200
+            member_list = [str(member) for member in members]
+            for start in range(0, len(member_list), chunk_size):
+                chunk = member_list[start : start + chunk_size]
+                extracted = subprocess.run(
+                    [exe, "x", "-y", f"-o{dest}", str(source), *chunk],
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                    errors="replace",
+                    check=False,
                 )
+                if extracted.returncode != 0:
+                    raise RuntimeError(
+                        f"7-Zip member extraction failed ({extracted.returncode}): "
+                        f"{extracted.stderr.strip()}"
+                    )
+        else:
+            try:
+                import py7zr  # type: ignore
+            except ImportError as exc:
+                raise RuntimeError(
+                    "Inspecting .7z requires py7zr>=1.1.3 or a native 7zz/7z executable"
+                ) from exc
+
+            try:
+                with py7zr.SevenZipFile(source, mode="r") as archive:
+                    infos = archive.list()
+                    available: dict[str, tuple[str, Any]] = {}
+                    for info in infos:
+                        if bool(getattr(info, "is_directory", False)):
+                            continue
+                        name = _safe_member_name(
+                            str(getattr(info, "filename", "") or "")
+                        )
+                        available[name.casefold()] = (name, info)
+
+                    targets: list[str] = []
+                    for folded in requested:
+                        match = available.get(folded)
+                        if match is None:
+                            continue
+                        name, info = match
+                        if bool(getattr(info, "is_symlink", False)):
+                            raise ValueError(
+                                f"7z symbolic links are not accepted: {name}"
+                            )
+                        targets.append(name)
+
+                    if targets:
+                        archive.extract(path=dest, targets=targets, recursive=True)
+            except (RuntimeError, ValueError):
+                raise
+            except Exception as exc:
+                raise RuntimeError(
+                    f"py7zr member extraction failed ({type(exc).__name__}): {exc}"
+                ) from exc
+
+        root = dest.resolve()
         extracted_files: dict[str, Path] = {}
         for path in dest.rglob("*"):
-            if path.is_file():
-                extracted_files[path.relative_to(dest).as_posix().casefold()] = path
+            if path.is_symlink():
+                raise ValueError(f"Extracted symbolic links are not accepted: {path}")
+            if not path.is_file():
+                continue
+            try:
+                resolved = path.resolve()
+                resolved.relative_to(root)
+            except ValueError as exc:
+                raise ValueError(f"Extracted path escapes destination: {path}") from exc
+            extracted_files[path.relative_to(dest).as_posix().casefold()] = path
         for folded, canonical in requested.items():
             path = extracted_files.get(folded)
             if path is not None:
