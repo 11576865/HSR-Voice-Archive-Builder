@@ -12,6 +12,7 @@ from unittest.mock import patch
 from app.quick import (
     _default_project_base,
     _default_project_root,
+    _member_lab_texts,
     _remote_candidate,
     _safe_project_dir_name,
     create_quick_project,
@@ -142,6 +143,36 @@ class QuickModeTests(unittest.TestCase):
             self.assertEqual(inv["wav_lab_pairs"], 2)
             self.assertEqual(inv["duplicate_wav_names"], [])
             self.assertEqual(before, after)
+
+    def test_7z_quick_scan_falls_back_to_py7zr_without_cli(self) -> None:
+        import py7zr
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            source_dir = root / "source"
+            (source_dir / "chapter1").mkdir(parents=True)
+            wav = source_dir / "chapter1" / "voice.wav"
+            lab = source_dir / "chapter1" / "voice.lab"
+            wav.write_bytes(b"not-real-wav")
+            lab.write_text("A line from the package.", encoding="utf-8")
+
+            archive = root / "English.7z"
+            with py7zr.SevenZipFile(archive, mode="w") as z:
+                z.write(wav, arcname="chapter1/voice.wav")
+                z.write(lab, arcname="chapter1/voice.lab")
+
+            with patch("app.quick._find_7z_cli", return_value=""):
+                inv = source_inventory(archive)
+                texts = _member_lab_texts(archive, inv["wav_members"])
+
+            self.assertEqual(inv["archive_reader"], "py7zr")
+            self.assertEqual(inv["wav_count"], 1)
+            self.assertEqual(inv["lab_count"], 1)
+            self.assertEqual(inv["wav_lab_member_pairs"], 1)
+            self.assertEqual(
+                texts["chapter1/voice.wav"],
+                "A line from the package.",
+            )
 
     def test_character_inference_finds_repeated_name(self) -> None:
         result = infer_character(
