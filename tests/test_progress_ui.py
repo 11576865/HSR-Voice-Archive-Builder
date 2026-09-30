@@ -446,22 +446,23 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn("淡入淡出 / 动态进入", html)
         self.assertIn('class="preview-stage" id="previewCanvasContainer"', html)
         self.assertIn('class="preview-workbench"', html)
-        self.assertIn('class="preview-inspector" aria-label="字幕排版参数与操作"', html)
+        self.assertIn('class="preview-inspector" aria-label="字幕样式参数与操作"', html)
+        self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
-            '.preview-workbench{\n  position:relative;\n  min-width:0;\n  padding-right:350px;',
+            'grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px)!important;',
             html,
         )
         self.assertIn(
-            '.preview-inspector{\n  position:absolute;\n  top:0;\n  right:0;\n  bottom:0;\n  width:350px;',
+            '.preview-inspector{\n  position:sticky!important;',
             html,
         )
-        self.assertIn('overflow-y:auto;', html)
+        self.assertIn('overflow-y:auto!important;', html)
         self.assertIn(
-            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  display:block!important;\n  background:var(--layout-shell)!important;',
+            'body[data-workspace="layout"] #subtitleLayoutPreviewCard{\n  overflow:visible!important;',
             html,
         )
         self.assertIn(
-            '.preview-workbench .preview-stage{\n  width:100%!important;\n  margin:0!important;\n  aspect-ratio:16/9;\n  background:var(--layout-canvas)!important;',
+            'aspect-ratio:16 / 9!important;',
             html,
         )
         self.assertIn('class="sub-workspace proofreading-workspace"', html)

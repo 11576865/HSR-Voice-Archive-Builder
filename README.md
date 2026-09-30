@@ -4,7 +4,7 @@
 
 项目最初为 **Honkai: Star Rail（崩坏：星穹铁道）** 角色语音归档而写；当前 Quick Mode 也已内置对部分可可靠识别的 **Genshin Impact（原神）** 角色语音包与对应索引源的兼容。项目不会附带游戏语音、完整文本数据集或角色资源，所有处理都基于用户自行提供或自行取得的本地素材。
 
-**Current development version:** v0.9-M  
+**Current development version:** v0.9-N  
 **Web entry:** https://11576865.github.io/HSR-Voice-Archive-Builder/
 
 > Unofficial processing utility. Source packages, extracted audio and finished archives remain on the processing device.

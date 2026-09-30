@@ -2188,6 +2188,390 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
   }
 }
 
+
+/* Subtitle Style Workbench redesign v14 -------------------------------------
+   Adaptive split-pane editor: visual canvas is primary, inspector is compact
+   and grouped. Existing control IDs remain unchanged. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+  overflow:visible!important;
+  border-radius:5px!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{
+  display:flex!important;
+  align-items:flex-start!important;
+  min-height:66px!important;
+  padding:12px 16px 10px!important;
+}
+.layout-workbench-kicker{
+  margin-bottom:3px;
+  font:700 9px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;
+  letter-spacing:.11em;
+  color:var(--layout-muted);
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline h2{
+  margin:0!important;
+  font-size:20px!important;
+  letter-spacing:-.025em;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
+  margin:0!important;
+  padding:8px 16px 10px!important;
+  border-bottom:1px solid var(--layout-border);
+  font-size:11px;
+  line-height:1.45;
+}
+.preview-workbench{
+  position:relative!important;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px)!important;
+  gap:0!important;
+  width:100%!important;
+  min-width:0!important;
+  padding:0!important;
+  align-items:start!important;
+  background:var(--layout-shell)!important;
+}
+.preview-workbench .preview-stage{
+  position:sticky!important;
+  top:calc(var(--topbar-height) + 46px)!important;
+  width:100%!important;
+  min-width:0!important;
+  max-width:none!important;
+  aspect-ratio:16 / 9!important;
+  align-self:start!important;
+  background:#05070b!important;
+  border-right:1px solid var(--layout-border)!important;
+}
+.preview-inspector{
+  position:sticky!important;
+  top:calc(var(--topbar-height) + 46px)!important;
+  right:auto!important;
+  bottom:auto!important;
+  width:auto!important;
+  min-width:0!important;
+  max-height:calc(100dvh - var(--topbar-height) - 58px)!important;
+  overflow-x:hidden!important;
+  overflow-y:auto!important;
+  border-left:0!important;
+  background:var(--layout-inspector)!important;
+  scrollbar-gutter:stable;
+}
+.layout-inspector-head{
+  position:sticky;
+  top:0;
+  z-index:7;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  gap:12px;
+  min-height:48px;
+  padding:9px 12px;
+  border-bottom:1px solid var(--layout-border);
+  background:color-mix(in srgb,var(--layout-inspector) 94%,transparent);
+  backdrop-filter:blur(12px);
+}
+.layout-inspector-head>div{
+  display:grid;
+  gap:1px;
+}
+.layout-inspector-head span:first-child{
+  font:700 9px/1.2 ui-monospace,SFMono-Regular,Consolas,monospace;
+  letter-spacing:.08em;
+  color:var(--layout-muted);
+}
+.layout-inspector-head strong{
+  font-size:14px;
+}
+.layout-inspector-resolution{
+  font:600 10px/1 ui-monospace,SFMono-Regular,Consolas,monospace;
+  color:var(--layout-muted);
+}
+.preview-inspector .preview-copy-fields{
+  display:grid!important;
+  grid-template-columns:1fr!important;
+  gap:7px!important;
+  padding:10px 12px 8px!important;
+  border-bottom:1px solid var(--layout-border);
+}
+.preview-copy-fields>div{
+  min-width:0;
+}
+.preview-copy-fields label{
+  margin:0 0 3px!important;
+  font-size:10px!important;
+  text-transform:uppercase;
+  letter-spacing:.045em;
+}
+.preview-copy-fields input{
+  min-height:34px!important;
+  height:34px!important;
+  padding:5px 8px!important;
+  font-size:12px!important;
+}
+.preview-inspector .layout-corpus-status{
+  margin:1px 0 0!important;
+  padding:6px 8px!important;
+  border-left:2px solid var(--layout-border)!important;
+  font-size:10px!important;
+  line-height:1.4!important;
+}
+.preview-inspector .preview-actions{
+  position:sticky!important;
+  top:48px!important;
+  z-index:6!important;
+  padding:8px 10px!important;
+  border-bottom:1px solid var(--layout-border)!important;
+  background:color-mix(in srgb,var(--layout-inspector) 96%,transparent)!important;
+  backdrop-filter:blur(10px);
+}
+.preview-inspector .preview-actions>.actions{
+  display:grid!important;
+  grid-template-columns:1fr 1fr!important;
+  gap:6px!important;
+}
+.preview-inspector .preview-actions button{
+  min-width:0!important;
+  min-height:34px!important;
+  padding:5px 7px!important;
+  font-size:11px!important;
+}
+#generateSubtitleAssBtn{
+  grid-column:1 / -1;
+  min-height:38px!important;
+  font-weight:750!important;
+}
+.preview-inspector #libassPreviewStatus{
+  padding:6px 12px!important;
+  border-bottom:1px solid var(--layout-border)!important;
+  border-top:0!important;
+  font-size:10px!important;
+  line-height:1.4!important;
+}
+.preview-inspector .preview-controls{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr)!important;
+  gap:0!important;
+  padding:0!important;
+}
+.layout-inspector-section{
+  margin:0!important;
+  border:0!important;
+  border-bottom:1px solid var(--layout-border)!important;
+  border-radius:0!important;
+  background:transparent!important;
+}
+.layout-inspector-section>summary{
+  position:relative;
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) auto;
+  align-items:center;
+  gap:8px;
+  min-height:42px;
+  padding:8px 12px!important;
+  cursor:pointer;
+  list-style:none;
+  color:var(--layout-text)!important;
+  background:transparent!important;
+}
+.layout-inspector-section>summary::-webkit-details-marker{display:none}
+.layout-inspector-section>summary::before{
+  content:"›";
+  width:12px;
+  grid-column:1;
+  position:absolute;
+  left:2px;
+  color:var(--layout-muted);
+  transform:rotate(0deg);
+  transition:transform .12s ease;
+}
+.layout-inspector-section[open]>summary::before{transform:rotate(90deg)}
+.layout-inspector-section>summary span{
+  padding-left:8px;
+  font-size:12px;
+  font-weight:720;
+}
+.layout-inspector-section>summary small{
+  font-size:9px;
+  color:var(--layout-muted);
+  font-weight:600;
+  letter-spacing:.025em;
+}
+.layout-section-advanced>summary small::after{
+  content:" · 高级";
+}
+.layout-inspector-section[open]>summary{
+  background:color-mix(in srgb,var(--layout-section) 62%,transparent)!important;
+}
+.layout-inspector-section-body{
+  padding:0 12px 10px;
+}
+.preview-inspector .layout-inspector-section .inspector-group{
+  margin:0!important;
+  padding:4px 0 0!important;
+  border:0!important;
+}
+.preview-inspector .layout-inspector-section .inspector-group>b{
+  display:none!important;
+}
+.preview-inspector .layout-inspector-section label{
+  margin-top:7px!important;
+  font-size:11px!important;
+}
+.preview-inspector .layout-inspector-section input:not([type="range"]),
+.preview-inspector .layout-inspector-section select{
+  min-height:34px!important;
+  height:34px!important;
+  padding:5px 8px!important;
+  font-size:12px!important;
+}
+.preview-inspector .layout-inspector-section input[type="range"]{
+  min-height:18px!important;
+  margin:2px 0 3px!important;
+  padding:0!important;
+}
+.preview-inspector .font-picker-row{
+  grid-template-columns:minmax(0,1fr) 58px!important;
+  gap:5px!important;
+}
+.preview-inspector .font-picker-row .font-browse-btn{
+  min-height:34px!important;
+  height:34px!important;
+  padding:4px 6px!important;
+  font-size:11px!important;
+}
+.preview-inspector .inspector-help{
+  margin-top:5px!important;
+  font-size:10px!important;
+  line-height:1.4!important;
+}
+.layout-section-compact .actions{
+  display:grid!important;
+  grid-template-columns:repeat(3,minmax(0,1fr))!important;
+  gap:5px!important;
+  margin:4px 0 0!important;
+}
+.layout-section-compact .actions button{
+  min-width:0!important;
+  padding:5px 4px!important;
+  font-size:11px!important;
+}
+.preview-inspector .preview-advanced{
+  margin:0!important;
+  padding:0!important;
+  border-top:0!important;
+  border-bottom:1px solid var(--layout-border)!important;
+}
+.preview-inspector .preview-advanced>summary{
+  min-height:42px;
+  padding:8px 12px!important;
+  font-size:11px;
+  font-weight:700;
+  color:var(--layout-text-soft)!important;
+}
+.preview-inspector .preview-advanced>div{
+  padding-left:12px!important;
+  padding-right:12px!important;
+}
+.preview-inspector .preview-background-controls{
+  grid-template-columns:1fr!important;
+  gap:7px!important;
+  margin-top:6px!important;
+  padding-top:8px!important;
+}
+body[data-workspace="layout"] .grid{
+  width:min(100%,1760px)!important;
+  max-width:1760px!important;
+  margin:0 auto!important;
+}
+body[data-workspace="layout"] #primaryStack,
+body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+  width:100%!important;
+  max-width:none!important;
+}
+@media (min-width:1500px){
+  .preview-workbench{
+    grid-template-columns:minmax(0,1fr) clamp(410px,25vw,470px)!important;
+  }
+}
+@media (min-width:760px) and (max-width:1200px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+    display:block!important;
+  }
+  .preview-workbench{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+  }
+  .preview-workbench .preview-stage{
+    position:relative!important;
+    top:auto!important;
+    width:100%!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--layout-border)!important;
+  }
+  .preview-inspector{
+    position:relative!important;
+    top:auto!important;
+    width:100%!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+  .preview-inspector .preview-controls{
+    grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:1px!important;
+    background:var(--layout-border)!important;
+  }
+  .layout-inspector-section{
+    background:var(--layout-inspector)!important;
+  }
+  .preview-inspector .preview-actions{
+    position:sticky!important;
+    top:calc(var(--topbar-height) + 40px)!important;
+  }
+  .preview-inspector .preview-advanced{
+    grid-column:1 / -1;
+  }
+}
+@media (max-width:759px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+    display:block!important;
+    border-radius:0!important;
+  }
+  body[data-workspace="layout"] main{
+    padding-left:0!important;
+    padding-right:0!important;
+  }
+  .preview-workbench{
+    display:grid!important;
+    grid-template-columns:1fr!important;
+  }
+  .preview-workbench .preview-stage{
+    position:relative!important;
+    top:auto!important;
+    border-right:0!important;
+    border-bottom:1px solid var(--layout-border)!important;
+  }
+  .preview-inspector{
+    position:relative!important;
+    top:auto!important;
+    width:100%!important;
+    max-height:none!important;
+    overflow:visible!important;
+  }
+  .layout-inspector-head{
+    position:relative;
+  }
+  .preview-inspector .preview-actions{
+    position:sticky!important;
+    top:calc(var(--topbar-height) + 40px)!important;
+  }
+  .preview-inspector .preview-controls{
+    grid-template-columns:1fr!important;
+  }
+  #previewHeaderBadges{
+    gap:4px!important;
+  }
+}
+
 </style>
 </head>
 <body>
@@ -2564,15 +2948,15 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
     <section class="card" id="subtitleLayoutPreviewCard">
       <div class="topline">
         <div>
-          <h2 style="margin-bottom:4px">字幕排版工作台</h2>
-          <div id="previewSaveStatus" class="small muted">当前为试调值；打开项目后可保存为 ASS 导出设置。</div>
+          <div class="layout-workbench-kicker">SUBTITLE STYLE WORKBENCH</div><h2 style="margin-bottom:4px">字幕样式工作台</h2>
+          <div id="previewSaveStatus" class="small muted">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
           <span id="previewScaleBadge" class="badge">100%</span>
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
       </div>
-      <p class="small muted">浏览器预览与 ASS 导出共用同一个排版求解器。浏览器只模拟文字几何；libass / FFmpeg 的实际字体栅格化仍可能有细微差异。</p>
+      <p class="small muted">左侧保持 1920×1080 的 16:9 画布；右侧只放当前需要调整的样式参数。浏览器几何预览用于快速调节，实际 ASS 渲染用于最终确认。</p>
 
       <div class="preview-workbench">
   <div class="preview-stage" id="previewCanvasContainer">
@@ -2591,7 +2975,8 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           </div>
         </div>
 
-        <aside class="preview-inspector" aria-label="字幕排版参数与操作">
+        <aside class="preview-inspector" aria-label="字幕样式参数与操作">
+          <div class="layout-inspector-head"><div><span>STYLE INSPECTOR</span><strong>字幕样式</strong></div><span class="layout-inspector-resolution">1920×1080</span></div>
   <div class="row preview-copy-fields">
           <div>
             <label for="prevChsText">中文字幕</label>
@@ -2604,9 +2989,21 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           <div id="layoutCorpusCheckStatus" class="small muted layout-corpus-status">打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。</div>
         </div>
 
+        <div class="preview-actions">
+                  <div class="actions" style="margin:0">
+                    <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
+                    <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
+                    <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
+                    <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
+                  </div>
+                </div>
+                <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+
         <div class="preview-controls">
-          <section class="inspector-group">
-            <b>样式</b>
+          <details class="layout-inspector-section layout-section-primary" open>
+            <summary><span>文字与字体</span><small>Font & type</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <label for="prevChsFont">中文字体</label>
             <div class="font-picker-row">
               <input id="prevChsFont" value="汉仪旗黑" autocomplete="off">
@@ -2629,9 +3026,13 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             </div>
             <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
           </section>
+            </div>
+          </details>
 
-          <section class="inspector-group">
-            <b>位置</b>
+          <details class="layout-inspector-section layout-section-primary" open>
+            <summary><span>位置与安全区</span><small>Position</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevCentralGap" style="margin:0">中央间隔</label>
               <span id="prevCentralGapVal" class="small muted">20 px</span>
@@ -2648,18 +3049,26 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             </div>
             <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
           </section>
+            </div>
+          </details>
 
-          <section class="inspector-group">
-            <b>预设</b>
+          <details class="layout-inspector-section layout-section-compact" open>
+            <summary><span>预设</span><small>Presets</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <div class="actions" style="margin:8px 0">
               <button type="button" class="small" id="prevPresetDefault">标准</button>
               <button type="button" class="small" id="prevPresetPlain">纯净</button>
               <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
             </div>
           </section>
+            </div>
+          </details>
 
-          <section class="inspector-group">
-            <b>可读性增强</b>
+          <details class="layout-inspector-section layout-section-primary" open>
+            <summary><span>外观与可读性</span><small>Readability</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <div style="display:flex;justify-content:space-between">
               <label for="prevOutlineWidth" style="margin:0">描边宽度</label>
               <span id="prevOutlineWidthVal" class="small muted">3.0</span>
@@ -2684,9 +3093,13 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <input type="range" id="prevCardOpacity" min="0" max="100" value="62" step="1">
             <div class="small muted inspector-help"><code>\blur</code> 只柔化 ASS 字形、描边和轮廓，不会模糊底层视频画面。</div>
           </section>
+            </div>
+          </details>
 
-          <section class="inspector-group">
-            <b>进入 / 退出</b>
+          <details class="layout-inspector-section layout-section-advanced">
+            <summary><span>动效</span><small>Motion</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 平滑淡入淡出</label>
             <label class="check"><input type="checkbox" id="prevAudioAwareFade" checked> 根据相邻语音间隔自动调整 Fade</label>
             <div style="display:flex;justify-content:space-between">
@@ -2717,9 +3130,13 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <input type="range" id="prevSoftEntryMs" min="60" max="400" value="160" step="10">
             <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：轻微缩放与 Blur 在短时间内回到正常值，不加入弹跳。</div>
           </section>
+            </div>
+          </details>
 
-          <section class="inspector-group">
-            <b>同步</b>
+          <details class="layout-inspector-section layout-section-advanced">
+            <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 逐词高亮</label>
             <label for="prevKaraokeMode">高亮模式</label>
             <select id="prevKaraokeMode">
@@ -2742,9 +3159,13 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
             <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。本地生成使用可选 WhisperX forced alignment；未安装时不会自动下载或伪造时间。导入/生成结果写入 <code>word_alignments.json</code>，不会改写 manifest 的文本来源。</div>
           </section>
+            </div>
+          </details>
 
-          <section class="inspector-group">
-            <b>档案增强</b>
+          <details class="layout-inspector-section layout-section-advanced">
+            <summary><span>档案增强</span><small>Archive HUD</small></summary>
+            <div class="layout-inspector-section-body">
+              <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableArchiveHud"> Archive HUD</label>
             <div style="display:flex;justify-content:space-between">
               <label for="prevArchiveHudSize" style="margin:0">信息字号</label>
@@ -2758,20 +3179,13 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <input type="range" id="prevArchiveHudOpacity" min="10" max="100" value="72" step="1">
             <div class="small muted inspector-help">HUD 使用项目角色名、条目 <code>group</code>（章节/大组）和条目编号，作为低视觉权重的独立 ASS Layer；不改动字幕正文。</div>
           </section>
+            </div>
+          </details>
         </div>
 
-        <div class="preview-actions">
-          <div class="actions" style="margin:0">
-            <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
-            <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
-            <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
-            <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
-          </div>
-        </div>
-        <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
 
         <details class="preview-advanced">
-          <summary>辅助线与诊断显示（高级）</summary>
+          <summary>画布与诊断</summary>
           <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
