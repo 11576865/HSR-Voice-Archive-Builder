@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- v0.9-N redesigns the Subtitle Style Workbench as an adaptive split-pane editor: a large 16:9 1920×1080 preview remains the primary surface, while a compact right-side Style Inspector groups text/font, position, presets, readability, motion, word synchronization, Archive HUD, and canvas diagnostics without changing existing control IDs or export behavior.
+- The style inspector keeps preview/render/save actions near the top, moves advanced Karaoke/HUD/diagnostic controls behind collapsible sections, and uses desktop/tablet/mobile breakpoints so large screens prioritize the preview instead of stretching a single long parameter column.
+- Renamed the visible workspace from “字幕排版工作台” to “字幕样式工作台” to match its current scope beyond geometry alone.
+
 - Expanded the ASS workbench with configurable outline/shadow/blur, translucent-card opacity, independent fade timing, restrained `\t()` soft entry, `\k`/`\kf`/dynamic-clip Karaoke modes, and an optional Archive HUD. Browser preview now loads resolved host fonts instead of relying only on local browser font availability.
 - Added a non-destructive `word_alignments.json` sidecar with strict source-text/duration fingerprinting, monotonic/coverage validation, project and per-entry diagnostics, JSON import, and real word-timing injection into ASS export. The libass preview can render aligned project samples at a selected percentage of subtitle duration.
 - Updated subtitle geometry defaults to 3% horizontal safe margins and a 60/40 primary-to-Chinese vertical region split around the protected central gap; the geometry preview and ASS solver use the same boundary calculation.
