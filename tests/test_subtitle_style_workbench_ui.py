@@ -24,6 +24,24 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("aspect-ratio:16 / 9!important", html)
         self.assertIn("max-height:calc(100dvh - var(--topbar-height) - 58px)!important", html)
 
+    def test_redesign_resets_legacy_grid_placement_and_padding(self) -> None:
+        html = self.html
+        self.assertNotIn(
+            "padding-right:var(--layout-inspector-width)!important",
+            html,
+        )
+        self.assertNotIn(
+            "width:var(--layout-inspector-width)!important",
+            html,
+        )
+        self.assertGreaterEqual(html.count("grid-area:auto!important"), 2)
+        self.assertIn(
+            'body[data-workspace="layout"] .preview-workbench{\n'
+            '    width:100%!important;\n'
+            '    padding-right:0!important;',
+            html,
+        )
+
     def test_primary_actions_stay_above_long_parameter_stack(self) -> None:
         html = self.html
         action_pos = html.index('class="preview-actions"')

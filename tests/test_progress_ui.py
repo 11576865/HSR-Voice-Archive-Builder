@@ -453,7 +453,7 @@ class QuickBuildUiTests(unittest.TestCase):
             html,
         )
         self.assertIn(
-            '.preview-inspector{\n  position:sticky!important;',
+            '.preview-inspector{\n  grid-area:auto!important;\n  position:sticky!important;',
             html,
         )
         self.assertIn('overflow-y:auto!important;', html)
@@ -590,7 +590,14 @@ class QuickBuildUiTests(unittest.TestCase):
             html,
         )
         self.assertIn(
-            '--layout-inspector-width:clamp(340px,20vw,430px)',
+            'body[data-workspace="layout"] .preview-workbench{\n'
+            '    width:100%!important;\n'
+            '    padding-right:0!important;',
+            html,
+        )
+        self.assertIn(
+            'body[data-workspace="layout"] .preview-inspector{\n'
+            '    width:auto!important;',
             html,
         )
         self.assertIn(
