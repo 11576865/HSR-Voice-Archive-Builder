@@ -1,0 +1,179 @@
+{
+  "schema_version": 1,
+  "project": "HSR-Voice-Archive-Builder",
+  "repository": "11576865/HSR-Voice-Archive-Builder",
+  "platform": "web",
+  "captures": [
+    {
+      "id": "HSR.PROJECT.WORKSPACE.DESKTOP_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.PROJECT"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "main",
+      "capture_region": "viewport",
+      "viewport": {
+        "width": 1365,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "main",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "project"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.PROJECT.WORKSPACE.DESKTOP_DARK.png",
+      "limitations": [
+        "No user game assets are loaded."
+      ]
+    },
+    {
+      "id": "HSR.REVIEW.WORKBENCH.DESKTOP_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.REVIEW",
+        "HSR.REVIEW.PROOFREADING_WORKSPACE",
+        "HSR.REVIEW.SUBTITLE_SIDEBAR",
+        "HSR.REVIEW.SUBTITLE_EDITOR"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#subtitleReviewCard",
+      "capture_region": "element",
+      "viewport": {
+        "width": 1365,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#subtitleReviewCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "review"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.REVIEW.WORKBENCH.DESKTOP_DARK.png",
+      "limitations": [
+        "Deterministic no-active-project review state."
+      ]
+    },
+    {
+      "id": "HSR.LAYOUT.WORKBENCH.DESKTOP_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.LAYOUT",
+        "HSR.LAYOUT.PREVIEW_WORKBENCH",
+        "HSR.LAYOUT.PREVIEW_INSPECTOR",
+        "HSR.LAYOUT.INSPECTOR_SECTIONS"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#subtitleLayoutPreviewCard",
+      "capture_region": "element",
+      "viewport": {
+        "width": 1365,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#subtitleLayoutPreviewCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "layout"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.LAYOUT.WORKBENCH.DESKTOP_DARK.png",
+      "limitations": [
+        "Production layout UI; not classified as runtime-backed libass evidence."
+      ]
+    },
+    {
+      "id": "HSR.EXPORT.WORKSPACE.DESKTOP_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.EXPORT"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#gptSovitsCard",
+      "capture_region": "element",
+      "viewport": {
+        "width": 1365,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#gptSovitsCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "export"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.EXPORT.WORKSPACE.DESKTOP_DARK.png",
+      "limitations": [
+        "No populated project."
+      ]
+    },
+    {
+      "id": "HSR.UPDATE.WORKSPACE.DESKTOP_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.UPDATE"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#updateCard",
+      "capture_region": "element",
+      "viewport": {
+        "width": 1365,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#updateCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "update"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.UPDATE.WORKSPACE.DESKTOP_DARK.png",
+      "limitations": [
+        "No remote project data."
+      ]
+    }
+  ]
+}
