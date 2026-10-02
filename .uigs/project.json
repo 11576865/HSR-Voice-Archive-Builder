@@ -11,7 +11,8 @@
   "auto_capture": {
     "ci_failures": true,
     "manual_dispatch": true,
-    "canonical_promotion": false
+    "canonical_promotion": false,
+    "failed_job_steps": true
   },
   "tracked_workflows": [
     "tests"
@@ -20,5 +21,6 @@
     "reliability",
     "operations",
     "interface-grammar"
-  ]
+  ],
+  "adapter_version": 2
 }
