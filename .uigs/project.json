@@ -22,5 +22,10 @@
     "operations",
     "interface-grammar"
   ],
-  "adapter_version": 2
+  "adapter_version": 2,
+  "ui_inventory": {
+    "schema_version": 1,
+    "path": ".uigs/ui-surfaces.json",
+    "authority": "this repository"
+  }
 }

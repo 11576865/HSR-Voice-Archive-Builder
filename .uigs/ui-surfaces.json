@@ -1,0 +1,218 @@
+{
+  "schema_version": 1,
+  "project": "HSR-Voice-Archive-Builder",
+  "repository": "11576865/HSR-Voice-Archive-Builder",
+  "platform": "web",
+  "authority": "this repository",
+  "surface_count": 11,
+  "surfaces": [
+    {
+      "id": "HSR.WORKSPACE.PROJECT",
+      "kind": "workspace",
+      "name": "工程工作区",
+      "group": "PROJECT",
+      "status": "implemented",
+      "intent": "管理项目、源、构建与项目状态。",
+      "implementation_effect": "作为项目级任务入口；与字幕校对、样式、导出和更新工作区分离。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": "body[data-workspace=\"project\"]"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.WORKSPACE.REVIEW",
+      "kind": "workspace",
+      "name": "字幕校对工作区",
+      "group": "REVIEW",
+      "status": "implemented",
+      "intent": "在列表与当前字幕编辑区之间完成搜索、检查与修改。",
+      "implementation_effect": "左侧字幕列表 + 右侧当前字幕/参考内容；窄屏转为单列。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": "body[data-workspace=\"review\"] / .proofreading-workspace"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.WORKSPACE.LAYOUT",
+      "kind": "workspace",
+      "name": "字幕样式工作台",
+      "group": "LAYOUT",
+      "status": "implemented",
+      "intent": "持续预览字幕视觉结果并调整排版/可读性/运动等参数。",
+      "implementation_effect": "大 16:9 Preview 保持主视觉；右侧 Inspector 在宽屏受限宽并可滚动，窄屏回到静态单列。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": "body[data-workspace=\"layout\"] / #subtitleLayoutPreviewCard"
+        }
+      ],
+      "patterns": [
+        "UIGS.COMPOSITION.PREVIEW_INSPECTOR_SPLIT",
+        "UIGS.INSPECTOR.PROGRESSIVE_CONTROL_DISCLOSURE"
+      ],
+      "tests": [
+        "tests/test_progress_ui.py"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.WORKSPACE.EXPORT",
+      "kind": "workspace",
+      "name": "导出工作区",
+      "group": "EXPORT",
+      "status": "implemented",
+      "intent": "组织最终输出和导出相关操作。",
+      "implementation_effect": "与构建和样式工作区分开，避免输出控制与编辑参数同层堆叠。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": "body[data-workspace=\"export\"]"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.WORKSPACE.UPDATE",
+      "kind": "workspace",
+      "name": "增量更新工作区",
+      "group": "UPDATE",
+      "status": "implemented",
+      "intent": "处理已有项目的增量发现、更新与统计。",
+      "implementation_effect": "将更新任务和常规项目构建区分，保留独立统计与动作区。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": "body[data-workspace=\"update\"]"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.LAYOUT.PREVIEW_WORKBENCH",
+      "kind": "composition",
+      "name": "预览—检查器工作台",
+      "group": "LAYOUT",
+      "status": "implemented",
+      "intent": "让视觉预览与参数编辑同时可见。",
+      "implementation_effect": "宽屏使用 minmax(0,1fr) + clamp(390px,26vw,460px)；Preview 与 Inspector 可 sticky。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": ".preview-workbench"
+        }
+      ],
+      "patterns": [
+        "UIGS.COMPOSITION.PREVIEW_INSPECTOR_SPLIT"
+      ],
+      "tests": [
+        "tests/test_progress_ui.py"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.LAYOUT.PREVIEW_INSPECTOR",
+      "kind": "inspector",
+      "name": "字幕样式检查器",
+      "group": "LAYOUT",
+      "status": "implemented",
+      "intent": "承载高频样式参数、动作与状态。",
+      "implementation_effect": "宽屏限定高度并内部滚动；header/actions 可保持可达；窄屏 static/full-width。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": ".preview-inspector"
+        }
+      ],
+      "patterns": [
+        "UIGS.COMPOSITION.PREVIEW_INSPECTOR_SPLIT"
+      ],
+      "tests": [
+        "tests/test_progress_ui.py"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.LAYOUT.INSPECTOR_SECTIONS",
+      "kind": "control-group",
+      "name": "样式检查器语义分组",
+      "group": "LAYOUT",
+      "status": "implemented",
+      "intent": "按语义拆分基础与高级控制。",
+      "implementation_effect": "details/summary 展开时才占用内容高度；高级 section 明确标注“高级”。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": ".layout-inspector-section / .layout-section-advanced"
+        }
+      ],
+      "patterns": [
+        "UIGS.INSPECTOR.PROGRESSIVE_CONTROL_DISCLOSURE"
+      ],
+      "tests": [
+        "tests/test_progress_ui.py"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.REVIEW.PROOFREADING_WORKSPACE",
+      "kind": "composition",
+      "name": "字幕校对双区工作台",
+      "group": "REVIEW",
+      "status": "implemented",
+      "intent": "列表导航与当前条目编辑并行。",
+      "implementation_effect": "桌面为 280px 导航 + 弹性编辑区；移动端恢复单列。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": ".proofreading-workspace"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.REVIEW.SUBTITLE_SIDEBAR",
+      "kind": "navigation",
+      "name": "字幕条目侧栏",
+      "group": "REVIEW",
+      "status": "implemented",
+      "intent": "搜索和切换字幕条目。",
+      "implementation_effect": "可滚动列表保持条目身份、摘要和标签；高度与主编辑区分离。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": ".sub-sidebar / .sub-list"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.REVIEW.SUBTITLE_EDITOR",
+      "kind": "editor",
+      "name": "最终中文字幕编辑区",
+      "group": "REVIEW",
+      "status": "implemented",
+      "intent": "编辑当前字幕并与参考文本并置。",
+      "implementation_effect": "当前文本使用独立 textarea；参考来源与导航保持可达。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": ".sub-main / .sub-textarea"
+        }
+      ],
+      "patterns": [],
+      "visual_evidence": []
+    }
+  ]
+}
