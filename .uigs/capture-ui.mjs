@@ -36,10 +36,16 @@ try {
   const targetUrl = new URL(capture.route ?? "/", baseUrl).toString();
   await page.goto(targetUrl, { waitUntil: "domcontentloaded", timeout: 60000 });
   await page.waitForFunction(() => typeof window.showWorkspace === "function", null, { timeout: 30000 });
-  await page.evaluate(({ workspace, theme }) => {
+  await page.evaluate(({ workspace, theme, selector }) => {
     if (typeof window.applyTheme === "function") window.applyTheme(theme, { persist: false });
     window.showWorkspace(workspace, { scroll: false });
-  }, { workspace: capture.fixture?.workspace ?? "project", theme: capture.color_scheme ?? "dark" });
+    const target = selector ? document.querySelector(selector) : null;
+    if (target) {
+      target.classList.remove("hidden", "ui-collapsed");
+      target.removeAttribute("hidden");
+      target.setAttribute("data-uigs-capture-visible", "true");
+    }
+  }, { workspace: capture.fixture?.workspace ?? "project", theme: capture.color_scheme ?? "dark", selector: capture.selector ?? null });
   const ready = capture.ready ?? {};
   if (ready.selector) await page.locator(ready.selector).first().waitFor({ state: ready.state ?? "visible", timeout: 30000 });
   if (ready.settle_ms) await page.waitForTimeout(ready.settle_ms);

@@ -70,7 +70,8 @@
       ],
       "output_name": "HSR.REVIEW.WORKBENCH.DESKTOP_DARK.png",
       "limitations": [
-        "Deterministic no-active-project review state."
+        "Deterministic no-active-project review state.",
+        "The capture harness reveals the real production panel when it is normally gated by active-project state; it does not fabricate project data."
       ]
     },
     {
@@ -106,7 +107,8 @@
       ],
       "output_name": "HSR.LAYOUT.WORKBENCH.DESKTOP_DARK.png",
       "limitations": [
-        "Production layout UI; not classified as runtime-backed libass evidence."
+        "Production layout UI; not classified as runtime-backed libass evidence.",
+        "The capture harness reveals the real production panel when it is normally gated by active-project state; it does not fabricate project data."
       ]
     },
     {
@@ -139,7 +141,8 @@
       ],
       "output_name": "HSR.EXPORT.WORKSPACE.DESKTOP_DARK.png",
       "limitations": [
-        "No populated project."
+        "No populated project.",
+        "The capture harness reveals the real production panel when it is normally gated by active-project state; it does not fabricate project data."
       ]
     },
     {
@@ -172,7 +175,8 @@
       ],
       "output_name": "HSR.UPDATE.WORKSPACE.DESKTOP_DARK.png",
       "limitations": [
-        "No remote project data."
+        "No remote project data.",
+        "The capture harness reveals the real production panel when it is normally gated by active-project state; it does not fabricate project data."
       ]
     }
   ]
