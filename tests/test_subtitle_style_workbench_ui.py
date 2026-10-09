@@ -97,5 +97,67 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("grid-template-columns:1fr!important", html)
 
 
+    def test_v15_redraw_keeps_preview_provenance_visible(self) -> None:
+        html = self.html
+        self.assertIn("Subtitle Style Workbench v15", html)
+        self.assertIn('class="layout-workflow-strip"', html)
+        self.assertIn('class="layout-preview-region"', html)
+        self.assertIn('class="layout-preview-evidence"', html)
+        for element_id in (
+            "previewModeLabel",
+            "previewEvidenceTitle",
+            "previewEvidenceDetail",
+            "previewEvidenceMeta",
+        ):
+            self.assertEqual(html.count(f'id="{element_id}"'), 1)
+        self.assertIn('data-preview-evidence="geometry"', html)
+        self.assertIn('aria-live="polite"', html)
+        self.assertIn('aspect-ratio:16 / 9!important', html)
+
+    def test_real_render_and_geometry_actions_report_distinct_evidence(self) -> None:
+        html = self.html
+        self.assertIn('id="previewGeometryBtn" aria-pressed="true"', html)
+        self.assertIn('id="previewLibassBtn" aria-pressed="false"', html)
+        for state in ("geometry", "rendering", "libass", "stale", "failed"):
+            self.assertIn(f"{state}:[", html)
+        self.assertIn("setPreviewEvidence('libass')", html)
+        self.assertIn("setPreviewEvidence('rendering')", html)
+        self.assertIn("setPreviewEvidence('failed'", html)
+        self.assertIn("setPreviewEvidence(hadResult?'stale':'geometry')", html)
+        self.assertIn("真实渲染不会保存试调值", html)
+
+    def test_out_of_order_preview_results_cannot_replace_current_state(self) -> None:
+        html = self.html
+        self.assertIn("let libassPreviewGeneration = 0;", html)
+        self.assertIn("let geometryPreviewGeneration = 0;", html)
+        self.assertIn("const generation=++libassPreviewGeneration;", html)
+        self.assertIn(
+            "generation===libassPreviewGeneration&&identity===currentLibassPreviewIdentity()",
+            html,
+        )
+        self.assertGreaterEqual(html.count("if(!stillCurrent())return;"), 3)
+        self.assertIn("geometryPreviewGeneration++; // A queued edit", html)
+        self.assertGreaterEqual(
+            html.count("if(generation!==geometryPreviewGeneration)return;"), 3
+        )
+        self.assertIn("libassPreviewGeneration++; // Explicit user choice", html)
+
+    def test_persisted_snapshot_is_the_submitted_snapshot(self) -> None:
+        html = self.html
+        self.assertIn("const submittedSettings=subtitleSettingsPayload();", html)
+        self.assertIn("body:JSON.stringify(submittedSettings)", html)
+        self.assertIn("savedSubtitleSettings=JSON.stringify(submittedSettings)", html)
+        self.assertIn("markSubtitleSettingsDirty();", html)
+
+    def test_v15_mobile_surface_is_in_flow(self) -> None:
+        html = self.html
+        self.assertIn(
+            ".preview-workbench .layout-preview-region{position:relative;top:auto",
+            html,
+        )
+        self.assertIn(".layout-preview-evidence{flex-direction:column}", html)
+        self.assertIn(".preview-inspector .preview-actions button{min-height:42px!important}", html)
+
+
 if __name__ == "__main__":
     unittest.main()
