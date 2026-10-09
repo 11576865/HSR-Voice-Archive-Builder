@@ -2573,6 +2573,130 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard{
   }
 }
 
+
+/* Subtitle Style Workbench v15: one primary preview, explicit evidence,
+   responsive editorial inspector. This layer builds on v14 without changing IDs. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+  --layout-evidence-accent:#85b8e7;
+  --layout-evidence-good:#79c9a2;
+  --layout-evidence-warning:#e6ae67;
+  background:var(--layout-shell)!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{
+  border-bottom:0!important;
+  background:var(--layout-shell)!important;
+  padding:18px 22px 8px!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline h2{font-size:24px!important;font-weight:760}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
+  padding:0 22px 12px!important;
+  border-bottom:0!important;
+  max-width:90ch;
+}
+.layout-workflow-strip{
+  display:flex;
+  gap:0;
+  padding:11px 22px;
+  border-block:1px solid var(--layout-border);
+  background:var(--layout-inspector);
+  color:var(--layout-text-soft);
+  font-size:11px;
+  font-weight:600;
+}
+.layout-workflow-strip span{display:inline-flex;align-items:center;gap:8px;flex:1;min-width:0}
+.layout-workflow-strip span+span{border-left:1px solid var(--layout-border);padding-left:16px}
+.layout-workflow-strip b{
+  display:inline-grid;place-items:center;
+  width:22px;height:22px;flex:0 0 22px;
+  border:1px solid var(--layout-border);
+  border-radius:6px;color:var(--layout-evidence-accent);
+  font:700 10px/1 ui-monospace,Consolas,monospace;
+}
+.preview-workbench .layout-preview-region{
+  position:sticky;top:calc(var(--topbar-height) + 46px);
+  align-self:start;min-width:0;
+  border-right:1px solid var(--layout-border);
+  background:#080d13;
+}
+.preview-workbench .layout-preview-region .preview-stage{
+  position:relative!important;top:auto!important;
+  border:0!important;box-shadow:none!important;
+  aspect-ratio:16 / 9!important;
+}
+.layout-canvas-mode-label{
+  padding:4px 9px;border-radius:4px;
+  background:#080e19d9;color:#f3f7fb;
+  border:1px solid #ffffff30;
+  font:650 11px/1.4 system-ui,sans-serif;
+}
+.layout-preview-evidence{
+  display:flex;align-items:center;justify-content:space-between;gap:18px;
+  min-height:78px;padding:13px 18px;
+  background:#101924;border-top:1px solid #283648;
+  color:#eef3fa;
+}
+.layout-preview-evidence-main{display:flex;align-items:center;gap:12px;min-width:0}
+.layout-evidence-dot{
+  width:9px;height:9px;flex:0 0 9px;border-radius:50%;
+  background:var(--layout-evidence-accent);
+  box-shadow:0 0 0 4px #85b8e71c;
+}
+.layout-preview-evidence strong{font-size:13px;font-weight:700}
+.layout-preview-evidence p{font-size:11px;line-height:1.5;color:#b9c5d2;margin:3px 0 0}
+.layout-evidence-meta{
+  flex:0 0 auto;font-size:10px;font-weight:700;
+  padding:6px 8px;border-radius:5px;
+  border:1px solid #43556a;color:#cfdeef;
+}
+.layout-preview-evidence[data-preview-evidence="libass"] .layout-evidence-dot{background:var(--layout-evidence-good);box-shadow:0 0 0 4px #79c9a21c}
+.layout-preview-evidence[data-preview-evidence="stale"] .layout-evidence-dot,
+.layout-preview-evidence[data-preview-evidence="failed"] .layout-evidence-dot{background:var(--layout-evidence-warning);box-shadow:0 0 0 4px #e6ae671c}
+.preview-inspector{border-left:0!important}
+.preview-inspector .layout-inspector-head{min-height:52px;top:0}
+.preview-inspector .preview-copy-fields{padding:14px 16px 12px!important;gap:9px!important}
+.preview-inspector .preview-copy-fields input{min-height:40px!important;height:40px!important;font-size:13px!important}
+.preview-inspector .preview-actions{top:52px!important;padding:11px 14px!important}
+.preview-inspector .preview-actions>.actions{grid-template-columns:1fr 1fr!important;gap:8px!important}
+.preview-inspector .preview-actions button{min-height:40px!important;font-size:12px!important}
+.preview-inspector .preview-actions button[aria-pressed="true"]{
+  border-color:var(--layout-evidence-accent)!important;
+  background:color-mix(in srgb,var(--layout-evidence-accent) 18%,var(--layout-inspector))!important;
+  color:var(--layout-text)!important;
+}
+.layout-action-note{margin:8px 2px 0;font-size:10px;line-height:1.5;color:var(--layout-muted)}
+.preview-inspector #libassPreviewStatus{padding:10px 16px!important;font-size:11px!important}
+.preview-inspector .layout-inspector-section>summary{min-height:46px;padding:10px 16px!important}
+.preview-inspector .layout-inspector-section-body{padding:2px 16px 15px!important}
+.preview-inspector .layout-inspector-section label{font-size:12px!important}
+.preview-inspector .layout-inspector-section input[type="range"]{min-height:28px!important;accent-color:var(--layout-evidence-accent)}
+@media (min-width:760px) and (max-width:1200px){
+  .preview-workbench .layout-preview-region{position:relative;top:auto;border-right:0;border-bottom:1px solid var(--layout-border)}
+  .preview-inspector .preview-actions{top:calc(var(--topbar-height) + 40px)!important}
+}
+@media (max-width:759px){
+  .preview-workbench .layout-preview-region{position:relative;top:auto;border-right:0;border-bottom:1px solid var(--layout-border)}
+  .layout-workflow-strip{padding:10px 12px;gap:8px}
+  .layout-workflow-strip span{flex:1;font-size:10px;line-height:1.2;gap:5px}
+  .layout-workflow-strip span+span{padding-left:9px}
+  .layout-workflow-strip b{width:20px;height:20px;flex-basis:20px}
+  .layout-preview-evidence{padding:12px;align-items:flex-start;gap:9px;min-height:0}
+  .layout-evidence-meta{font-size:9px;white-space:normal;max-width:95px;text-align:center}
+  .preview-inspector .preview-actions{top:calc(var(--topbar-height) + 40px)!important}
+  .preview-inspector .preview-actions>.actions{gap:7px!important}
+  .preview-inspector .preview-actions button{min-height:42px!important}
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{padding:13px 14px 9px!important}
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{padding:0 14px 12px!important}
+}
+@media (max-width:380px){
+  .layout-workflow-strip{flex-wrap:wrap}
+  .layout-workflow-strip span+span{padding-left:5px}
+  .layout-preview-evidence{flex-direction:column}
+  .layout-evidence-meta{max-width:none}
+}
+@media (prefers-reduced-motion:reduce){
+  .layout-evidence-dot{transition:none}
+}
+
 </style>
 </head>
 <body>
@@ -2957,27 +3081,38 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard{
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
       </div>
-      <p class="small muted">左侧保持 1920×1080 的 16:9 画布；右侧只放当前需要调整的样式参数。浏览器几何预览用于快速调节，实际 ASS 渲染用于最终确认。</p>
-
+      <p class="small muted">字幕工作流：快速计算版面 → 用 FFmpeg/libass 核对最终字形 → 保存样式或生成 ASS。几何求解状态不等于渲染验收。</p>
+      <div class="layout-workflow-strip" aria-label="字幕制作工作流">
+        <span><b>01</b> 调整样式与几何</span><span><b>02</b> 实际渲染检视</span><span><b>03</b> 保存与生成</span>
+      </div>
       <div class="preview-workbench">
-  <div class="preview-stage" id="previewCanvasContainer">
+        <div class="layout-preview-region" aria-label="字幕画布与预览依据">
+          <div class="preview-stage" id="previewCanvasContainer">
           <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
           <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
           <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
           <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
           <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
           <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
-            <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">浏览器几何预览</span>
+            <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
             <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
           </div>
           <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
             <span>布局失败：</span>
             <span id="previewCollisionReason">CENTRAL_COLLISION</span>
           </div>
+          </div>
+          <div class="layout-preview-evidence" role="status" aria-live="polite" aria-atomic="true" data-preview-evidence="geometry">
+            <div class="layout-preview-evidence-main">
+              <span class="layout-evidence-dot" aria-hidden="true"></span>
+              <div><strong id="previewEvidenceTitle">浏览器几何预览</strong><p id="previewEvidenceDetail">版面与安全区由求解器计算；请用实际 ASS 渲染确认字形和最终画面。</p></div>
+            </div>
+            <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
+          </div>
         </div>
 
         <aside class="preview-inspector" aria-label="字幕样式参数与操作">
-          <div class="layout-inspector-head"><div><span>STYLE INSPECTOR</span><strong>字幕样式</strong></div><span class="layout-inspector-resolution">1920×1080</span></div>
+          <div class="layout-inspector-head"><div><span>STYLE INSPECTOR</span><strong>字幕样式</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span></div>
   <div class="row preview-copy-fields">
           <div>
             <label for="prevChsText">中文字幕</label>
@@ -2992,11 +3127,12 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard{
 
         <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn">几何预览</button>
-                    <button type="button" class="secondary" id="previewLibassBtn">实际 ASS 渲染</button>
+                    <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
+                    <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
                     <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
                   </div>
+                  <p class="layout-action-note">真实渲染不会保存试调值。导出只使用明确保存的样式设置。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
 
@@ -5737,58 +5873,103 @@ let previewDebounceTimer = null;
 let previewPreset = 'custom';
 let savedSubtitleSettings = null;
 let libassPreviewObjectUrl = null;
+let libassPreviewGeneration = 0;
+let geometryPreviewGeneration = 0;
+
+function setPreviewEvidence(mode, detail = '') {
+  const root=document.querySelector('.layout-preview-evidence');
+  const title=document.getElementById('previewEvidenceTitle');
+  const description=document.getElementById('previewEvidenceDetail');
+  const meta=document.getElementById('previewEvidenceMeta');
+  const modeLabel=document.getElementById('previewModeLabel');
+  const states={
+    geometry:['浏览器几何预览','显示排版求解器的布局与安全区；不是实际 ASS 字形渲染。','尚未进行真实渲染','几何求解 · 非真实渲染'],
+    rendering:['实际 ASS 渲染中','正在请求 FFmpeg/libass；画布暂时显示浏览器几何结果。','正在验证','几何求解 · 渲染进行中'],
+    libass:['FFmpeg/libass 实际渲染','当前可见帧由真实渲染路径根据本次试调值生成；尚不代表已保存或完成导出。','真实渲染帧','实际 ASS 渲染'],
+    stale:['真实渲染结果已过期','参数、字幕样本或时间点变化；当前已退回浏览器几何预览。','请重新渲染','几何求解 · 结果已过期'],
+    failed:['真实渲染失败','真实渲染未完成；画布只显示浏览器几何结果。','渲染未验证','几何求解 · 渲染失败']
+  };
+  const current=states[mode]||states.geometry;
+  if(root)root.dataset.previewEvidence=mode;
+  if(title)title.textContent=current[0];
+  if(description)description.textContent=detail||current[1];
+  if(meta)meta.textContent=current[2];
+  if(modeLabel)modeLabel.textContent=current[3];
+  document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',mode==='libass'?'false':'true');
+  document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
+}
 
 function invalidateLibassPreview(){
+  libassPreviewGeneration++;
   const img=document.getElementById('libassPreviewImage');
   if(img)img.classList.add('hidden');
+  const hadResult=!!libassPreviewObjectUrl;
   if(libassPreviewObjectUrl){
     URL.revokeObjectURL(libassPreviewObjectUrl);
     libassPreviewObjectUrl=null;
   }
+  setPreviewEvidence(hadResult?'stale':'geometry');
   const status=document.getElementById('libassPreviewStatus');
   if(status){status.textContent='参数或测试文本已变化；实际 ASS 预览需要重新生成。';status.className='small muted';}
 }
 
 function showGeometryPreview(){
+  libassPreviewGeneration++; // Explicit user choice wins over any in-flight render.
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
+  setPreviewEvidence('geometry');
+}
+
+function libassPreviewPayload(){
+  const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
+  const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
+  return {
+    ...subtitleSettingsPayload(),
+    english_text:document.getElementById('prevPriText')?.value||'',
+    chinese_text:document.getElementById('prevChsText')?.value||'',
+    source_language:currentProject?.config?.source_text_language||'en',
+    target_language:currentProject?.config?.target_language||'zh-CN',
+    word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
+    preview_duration_seconds:previewDuration,
+    preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
+  };
+}
+
+function currentLibassPreviewIdentity(){
+  return JSON.stringify([currentProject?.name||null,libassPreviewPayload()]);
 }
 
 async function renderLibassPreview(){
   const button=document.getElementById('previewLibassBtn');
   const status=document.getElementById('libassPreviewStatus');
+  const generation=++libassPreviewGeneration;
+  const payload=libassPreviewPayload();
+  const identity=currentLibassPreviewIdentity();
+  const stillCurrent=()=>generation===libassPreviewGeneration&&identity===currentLibassPreviewIdentity();
   try{
     if(button)button.disabled=true;
+    document.getElementById('libassPreviewImage')?.classList.add('hidden');
+    setPreviewEvidence('rendering');
     if(status){status.textContent='正在调用 FFmpeg/libass 渲染当前试调值…';status.className='small muted';}
-    const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
-    const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
-    const payload={
-      ...subtitleSettingsPayload(),
-      english_text:document.getElementById('prevPriText')?.value||'',
-      chinese_text:document.getElementById('prevChsText')?.value||'',
-      source_language:currentProject?.config?.source_text_language||'en',
-      target_language:currentProject?.config?.target_language||'zh-CN',
-      word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
-      preview_duration_seconds:previewDuration,
-      preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
-    };
     const response=await fetch('/api/subtitle-layout/render-preview',{
       method:'POST',
       headers:{...headers(),'Content-Type':'application/json'},
       body:JSON.stringify(payload),
       cache:'no-store'
     });
+    if(!stillCurrent())return;
     if(!response.ok){
       let detail='HTTP '+response.status;
       try{const body=await response.json();detail=body.error||detail}catch(e){try{detail=await response.text()}catch(_){}}
       throw new Error(detail);
     }
     const blob=await response.blob();
+    if(!stillCurrent())return;
     if(!blob.size)throw new Error('实际 ASS 预览返回空图像');
     if(libassPreviewObjectUrl)URL.revokeObjectURL(libassPreviewObjectUrl);
     libassPreviewObjectUrl=URL.createObjectURL(blob);
     const img=document.getElementById('libassPreviewImage');
-    img.src=libassPreviewObjectUrl;
-    img.classList.remove('hidden');
+    if(img){img.src=libassPreviewObjectUrl;img.classList.remove('hidden');}
+    setPreviewEvidence('libass');
     if(status){
       const timingNote=Array.isArray(layoutStressSample?.word_alignments)&&layoutStressSample.word_alignments.length
         ? '，使用项目词级时间'
@@ -5797,6 +5978,8 @@ async function renderLibassPreview(){
       status.className='small status-ok';
     }
   }catch(err){
+    if(!stillCurrent())return;
+    setPreviewEvidence('failed','真实渲染失败：'+shortError(err)+'。画布仅保留几何求解结果。');
     if(status){status.textContent='实际 ASS 预览失败：'+shortError(err);status.className='small status-bad';}
     setLog(String(err));
   }finally{
@@ -6016,14 +6199,15 @@ async function saveSubtitleLayoutSettings(){
   }
   try{
     if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
+    const submittedSettings=subtitleSettingsPayload();
     const j=await api('/api/subtitle-layout/settings',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(subtitleSettingsPayload())
+      body:JSON.stringify(submittedSettings)
     });
     fillProject(j.project);
-    savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
-    if(status){status.textContent='字幕设置已保存；后续 ASS 导出将读取这份设置。';status.className='small status-ok';}
+    savedSubtitleSettings=JSON.stringify(submittedSettings);
+    markSubtitleSettingsDirty();
     return true;
   }catch(err){
     if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
@@ -6117,6 +6301,7 @@ async function loadLayoutStressSample(){
 }
 
 async function updateLayoutPreview() {
+  const generation=++geometryPreviewGeneration;
   const chsText = document.getElementById('prevChsText')?.value || '';
   const priText = document.getElementById('prevPriText')?.value || '';
   const chsFont = document.getElementById('prevChsFont')?.value?.trim() || '汉仪旗黑';
@@ -6164,6 +6349,7 @@ async function updateLayoutPreview() {
       ensureHostFontLoaded(chsFont,{quiet:true}),
       ensureHostFontLoaded(priFont,{quiet:true})
     ]);
+    if(generation!==geometryPreviewGeneration)return;
     const res = await api('/api/subtitle-layout/preview', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -6182,6 +6368,7 @@ async function updateLayoutPreview() {
       })
     });
 
+    if(generation!==geometryPreviewGeneration)return;
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
     const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
     if(corpusStatus&&layoutStressSample){
@@ -6198,11 +6385,15 @@ async function updateLayoutPreview() {
       }
     }
   } catch (err) {
+    if(generation!==geometryPreviewGeneration)return;
     console.error('Preview request error:', err);
+    const badge=document.getElementById('previewStatusBadge');
+    if(badge){badge.textContent='几何预览失败';badge.style.color='var(--bad)';}
   }
 }
 
 function scheduleLayoutPreviewUpdate() {
+  geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
   invalidateLibassPreview();
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
