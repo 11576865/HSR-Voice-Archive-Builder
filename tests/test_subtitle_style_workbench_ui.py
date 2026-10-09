@@ -146,7 +146,10 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         html = self.html
         self.assertIn("const submittedSettings=subtitleSettingsPayload();", html)
         self.assertIn("body:JSON.stringify(submittedSettings)", html)
-        self.assertIn("savedSubtitleSettings=JSON.stringify(submittedSettings)", html)
+        self.assertIn("savedSubtitleSettings=submittedIdentity", html)
+        self.assertIn("const newerDraft=JSON.stringify(subtitleSettingsPayload())!==submittedIdentity;", html)
+        self.assertIn("if(newerDraft){", html)
+        self.assertIn("return false; // Do not export the older settings", html)
         self.assertIn("markSubtitleSettingsDirty();", html)
 
     def test_v15_mobile_surface_is_in_flow(self) -> None:
