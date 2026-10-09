@@ -69,7 +69,8 @@ const sandbox = {
   setTimeout,
   clearTimeout
 };
-vm.runInNewContext(source, sandbox);
+vm.createContext(sandbox);
+vm.runInContext(source, sandbox);
 async function settle() { await Promise.resolve(); await Promise.resolve(); }
 function complete() {
   const resolve = pending.shift();
@@ -78,10 +79,10 @@ function complete() {
 }
 (async () => {
   // Request 1: edit occurs before its response, so it cannot publish an old frame.
-  const old = vm.runInNewContext('renderLibassPreview()', sandbox);
+  const old = vm.runInContext('renderLibassPreview()', sandbox);
   assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
   node('prevChsText').value = 'changed';
-  vm.runInNewContext('invalidateLibassPreview()', sandbox);
+  vm.runInContext('invalidateLibassPreview()', sandbox);
   complete();
   await old;
   assert.equal(madeUrls.length, 0, 'obsolete response must not allocate a new image URL');
@@ -89,7 +90,7 @@ function complete() {
   assert.equal(node('evidence-root').dataset.previewEvidence, 'geometry');
 
   // Request 2: a current, successful backend result is marked as actual libass.
-  const current = vm.runInNewContext('renderLibassPreview()', sandbox);
+  const current = vm.runInContext('renderLibassPreview()', sandbox);
   complete();
   await current;
   assert.equal(node('evidence-root').dataset.previewEvidence, 'libass');
@@ -97,8 +98,8 @@ function complete() {
   assert.equal(node('previewLibassBtn').attributes['aria-pressed'], 'true');
 
   // Request 3: choosing Geometry while rendering wins over late success.
-  const racing = vm.runInNewContext('renderLibassPreview()', sandbox);
-  vm.runInNewContext('showGeometryPreview()', sandbox);
+  const racing = vm.runInContext('renderLibassPreview()', sandbox);
+  vm.runInContext('showGeometryPreview()', sandbox);
   complete();
   await racing;
   assert.equal(node('evidence-root').dataset.previewEvidence, 'geometry');
