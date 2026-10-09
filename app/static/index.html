@@ -6199,15 +6199,31 @@ async function saveSubtitleLayoutSettings(){
   }
   try{
     if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
+    const submittedProject=currentProject.root||currentProject.name;
     const submittedSettings=subtitleSettingsPayload();
+    const submittedIdentity=JSON.stringify(submittedSettings);
     const j=await api('/api/subtitle-layout/settings',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify(submittedSettings)
     });
-    fillProject(j.project);
-    savedSubtitleSettings=JSON.stringify(submittedSettings);
+    if(!currentProject||(currentProject.root||currentProject.name)!==submittedProject){
+      // This response belongs to the previous workspace; it cannot publish into a new project.
+      return false;
+    }
+    const newerDraft=JSON.stringify(subtitleSettingsPayload())!==submittedIdentity;
+    if(newerDraft){
+      // fillProject() reloads saved controls. Preserve the live draft instead.
+      currentProject=j.project;
+    }else{
+      fillProject(j.project);
+    }
+    savedSubtitleSettings=submittedIdentity;
     markSubtitleSettingsDirty();
+    if(newerDraft){
+      if(status){status.textContent='保存期间又调整了样式：之前提交的设置已保存，新试调值仍未保存。请再次保存后再生成 ASS。';status.className='small status-warn';}
+      return false; // Do not export the older settings as though they were this draft.
+    }
     return true;
   }catch(err){
     if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
