@@ -2623,6 +2623,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
   border:0!important;box-shadow:none!important;
   aspect-ratio:16 / 9!important;
 }
+#previewModeOverlay{z-index:7}
 .layout-canvas-mode-label{
   padding:4px 9px;border-radius:4px;
   background:#080e19d9;color:#f3f7fb;
@@ -3093,7 +3094,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
           <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
           <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
           <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
-          <div style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
+          <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
             <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
             <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
           </div>
