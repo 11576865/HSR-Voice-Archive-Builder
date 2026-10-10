@@ -6688,6 +6688,8 @@ function updateLayoutSampleOrigin(){
    alignment remain owned by the archive build pipeline. */
 let layoutCueProjectKey=null;
 let layoutCueDrafts=new Map();
+let layoutCueTimingDrafts=new Map();
+let layoutCueTimingSaveInFlight=false;
 let layoutCueActiveId=null;
 let layoutCueSaveInFlight=false;
 let layoutCueAudioAbort=null;
@@ -6774,6 +6776,7 @@ function layoutCueResetProject(projectKey){
   if(projectKey===layoutCueProjectKey)return;
   layoutCueProjectKey=projectKey;
   layoutCueDrafts=new Map();
+  layoutCueTimingDrafts=new Map();
   layoutCueActiveId=null;
   layoutCueClearAudio();
   renderLayoutCueEditor();
@@ -6786,6 +6789,175 @@ function layoutCueState(sub){
   if(!layoutCueDrafts.has(id))layoutCueDrafts.set(id,{saved,draft:saved,revision:0,saving:false});
   return layoutCueDrafts.get(id);
 }
+
+function layoutTimingState(sub){
+  if(!sub)return null;
+  const key=String(sub.id);
+  const savedStart=Number(sub.start||0),savedEnd=Number(sub.end||0);
+  if(!layoutCueTimingDrafts.has(key)){
+    layoutCueTimingDrafts.set(key,{
+      start:savedStart,end:savedEnd,savedStart,savedEnd,
+      sourceStart:Number(sub.source_start??savedStart),
+      sourceEnd:Number(sub.source_end??savedEnd),
+      revision:0,saving:false
+    });
+  }
+  return layoutCueTimingDrafts.get(key);
+}
+function layoutTimingCheck(state){
+  if(!state)return '请选择项目字幕。';
+  const start=Number(state.start),end=Number(state.end);
+  if(String(state.start).trim()===''||String(state.end).trim()===''||!Number.isFinite(start)||!Number.isFinite(end))
+    return '请填写有效的显示起止秒数。';
+  if(start<0||end-start<0.1-0.000001)
+    return '显示结束必须晚于开始至少 0.10 秒，起点不能为负数。';
+  if(Math.abs(start-state.sourceStart)>5.000001||Math.abs(end-state.sourceEnd)>5.000001)
+    return '字幕显示时间的每个边界最多偏离原始音频时间 5 秒。';
+  return '';
+}
+function renderLayoutCueTiming(){
+  const sub=layoutCueRow(layoutCueActiveId),state=layoutTimingState(sub);
+  const valid=!!sub&&layoutCorpusPersistable;
+  const dirty=!!state&&(Number(state.start)!==state.savedStart||Number(state.end)!==state.savedEnd);
+  const problem=layoutTimingCheck(state);
+  const changed=!!state&&(state.savedStart!==state.sourceStart||state.savedEnd!==state.sourceEnd);
+  const badge=document.getElementById('layoutCueTimingBadge');
+  if(badge)badge.textContent=!sub?'无字幕':!valid?'仅示例 · 不可保存':state.saving?'时间保存中':dirty?'时间草稿未保存':changed?'显示时间已覆写':'原始时间 · 未调整';
+  for(const [id,value] of [['layoutCueTimingStart',state?.start],['layoutCueTimingEnd',state?.end]]){
+    const input=document.getElementById(id);
+    if(!input)continue;
+    input.disabled=!valid;
+    if(document.activeElement!==input)input.value=state?String(value):'';
+  }
+  for(const btn of document.querySelectorAll('[data-timing-nudge]'))btn.disabled=!valid||!!state?.saving;
+  const save=document.getElementById('layoutCueTimingSaveBtn');
+  const revert=document.getElementById('layoutCueTimingRevertBtn');
+  const reset=document.getElementById('layoutCueTimingResetBtn');
+  if(save)save.disabled=!valid||!dirty||!!problem||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
+  if(revert)revert.disabled=!valid||!dirty||!!state?.saving;
+  if(reset)reset.disabled=!valid||(!changed&&!dirty)||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
+  const status=document.getElementById('layoutCueTimingStatus');
+  if(status&&(!status.dataset?.committed||dirty||!valid)){
+    status.textContent=!sub?'选取项目字幕后，可以调整 SRT/ASS 显示边界。':
+      !valid?'项目尚未构建：这是演示字幕，无法保存时间。':
+      problem?'不可保存：'+problem:
+      dirty?'显示时间尚未保存；声轨和原始时间轴不变。':
+      changed?'显示时间已覆写；如需复原，请使用「恢复原始时间」。':
+      '原始显示时间生效；只修改字幕边界，不移动任何音频。';
+  }
+}
+function layoutCueUpdateTiming(field,rawValue){
+  const sub=layoutCueRow(layoutCueActiveId),state=layoutTimingState(sub);
+  if(!state||!layoutCorpusPersistable)return;
+  if(field!=='start'&&field!=='end')return;
+  const next=String(rawValue);
+  if(String(state[field])===next)return;
+  state[field]=next;
+  state.revision++;
+  const status=document.getElementById('layoutCueTimingStatus');
+  if(status)status.dataset.committed='';
+  // Invalidate the old FFmpeg preview and word timing when display boundaries move.
+  layoutTrialTextRevision++;
+  if(layoutStressSample&&String(layoutStressSample.id)===String(sub.id))
+    layoutStressSample.word_alignments=null;
+  invalidateLibassPreview();
+  renderLayoutCueTiming();
+  layoutCueTimePreview();
+  renderLayoutCorpusRail();
+}
+function layoutCueNudgeTiming(field,delta){
+  const state=layoutTimingState(layoutCueRow(layoutCueActiveId));
+  if(!state||!layoutCorpusPersistable)return;
+  const current=Number(state[field]);
+  if(!Number.isFinite(current))return;
+  const adjusted=Math.round((current+delta)*1000)/1000;
+  const input=document.getElementById(field==='start'?'layoutCueTimingStart':'layoutCueTimingEnd');
+  if(input)input.value=String(adjusted);
+  layoutCueUpdateTiming(field,String(adjusted));
+}
+function layoutCueRevertTimingDraft(){
+  const state=layoutTimingState(layoutCueRow(layoutCueActiveId));
+  if(!state||state.saving)return;
+  state.start=state.savedStart;
+  state.end=state.savedEnd;
+  const editorStart=document.getElementById('layoutCueTimingStart'),editorEnd=document.getElementById('layoutCueTimingEnd');
+  if(editorStart)editorStart.value=String(state.start);
+  if(editorEnd)editorEnd.value=String(state.end);
+  invalidateLibassPreview();
+  renderLayoutCueTiming();
+  layoutCueTimePreview();
+  renderLayoutCorpusRail();
+}
+async function saveLayoutCueTiming({reset=false}={}){
+  const projectKey=layoutActiveProjectKey();
+  const sub=layoutCueRow(layoutCueActiveId),state=layoutTimingState(sub);
+  if(!projectKey||!sub||!state||!layoutCorpusPersistable||layoutCueTimingSaveInFlight||layoutCueSaveInFlight)return false;
+  const desiredStart=reset?state.sourceStart:Number(state.start);
+  const desiredEnd=reset?state.sourceEnd:Number(state.end);
+  const check=layoutTimingCheck({...state,start:desiredStart,end:desiredEnd});
+  if(check)return false;
+  if(desiredStart===state.savedStart&&desiredEnd===state.savedEnd){
+    layoutCueRevertTimingDraft();
+    return true;
+  }
+  layoutCueTimingSaveInFlight=true;state.saving=true;
+  const id=sub.id;
+  const status=document.getElementById('layoutCueTimingStatus');
+  if(status){status.dataset.committed='';status.textContent='正在保存字幕显示时间与重新生成 SRT/ASS…';}
+  renderLayoutCueTiming();
+  try{
+    const response=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/'+encodeURIComponent(id)+'/timing',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        expected_project_root:currentProject.root||null,
+        expected_start:state.savedStart,expected_end:state.savedEnd,
+        start:desiredStart,end:desiredEnd,reset
+      })
+    });
+    if(!currentProject||layoutActiveProjectKey()!==projectKey)return false;
+    const result=response.timing;
+    if(!result||String(result.id)!==String(id))throw new Error('服务器未确认对应字幕的显示时间');
+    const row=layoutCueRow(id);
+    if(row){
+      row.start=Number(result.start);row.end=Number(result.end);
+      row.timing_modified=!!result.timing_modified;
+      row.word_alignment_ready=false;
+      row.word_alignment_reason='display-timing-adjusted';
+    }
+    state.savedStart=Number(result.start);
+    state.savedEnd=Number(result.end);
+    if(reset&&String(state.start)===String(desiredStart)&&String(state.end)===String(desiredEnd)){
+      // Nothing to do; draft already matches reset values.
+    }
+    const remainsDirty=Number(state.start)!==state.savedStart||Number(state.end)!==state.savedEnd;
+    if(layoutStressSample&&String(layoutStressSample.id)===String(id)){
+      layoutStressSample.duration_seconds=Math.max(0.1,state.savedEnd-state.savedStart);
+      layoutStressSample.word_alignments=null;
+    }
+    const exportError=String(response.refreshed?.ass_error||'');
+    if(status){
+      status.textContent=exportError
+        ? '显示时间已保存，SRT 已更新，但 ASS 生成失败：'+exportError
+        : '显示时间已保存至独立覆写层，SRT 和已有 ASS（如有）已刷新。'+(remainsDirty?' 后续草稿仍未保存。':'');
+      status.dataset.committed='true';
+    }
+    invalidateLibassPreview();
+    renderLayoutCueEditor();
+    renderLayoutCorpusRail();
+    return !remainsDirty;
+  }catch(error){
+    if(layoutActiveProjectKey()===projectKey&&status){
+      status.textContent='显示时间保存失败：'+shortError(error)+'；当前草稿未被丢弃。';
+      status.dataset.committed='true';
+    }
+    return false;
+  }finally{
+    state.saving=false;
+    layoutCueTimingSaveInFlight=false;
+    if(layoutActiveProjectKey()===projectKey)renderLayoutCueEditor();
+  }
+}
+
 function layoutCueTimePreview(){
   const sub=layoutCueRow(layoutCueActiveId);
   const slider=document.getElementById('layoutCueScrubber');
@@ -6794,8 +6966,9 @@ function layoutCueTimePreview(){
   if(!sub){slider.disabled=true;output.textContent='—';return;}
   slider.disabled=false;
   const percent=Math.max(5,Math.min(95,Number(slider.value||50)));
-  const start=Number(sub.start||0);
-  const span=Math.max(0,Number(sub.end||0)-start);
+  const state=layoutTimingState(sub);
+  const start=Number(state?.start??sub.start??0);
+  const span=Math.max(0,Number(state?.end??sub.end??0)-start);
   output.textContent=formatClockTime(start+span*percent/100)+' · '+percent+'%';
 }
 function renderLayoutCueEditor(){
@@ -6823,10 +6996,11 @@ function renderLayoutCueEditor(){
     badge.textContent=!selected?'请选择字幕':!layoutCorpusPersistable?'仅示例 · 不可保存':state.saving?'保存中':dirty?'未保存的正文':'正文已保存';
   }
   const save=document.getElementById('layoutCueSaveBtn'),revert=document.getElementById('layoutCueRevertBtn');
-  if(save)save.disabled=!dirty||layoutCueSaveInFlight||!layoutCorpusPersistable;
+  if(save)save.disabled=!dirty||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||!layoutCorpusPersistable;
   if(revert)revert.disabled=!dirty||state?.saving;
   const audio=document.getElementById('layoutCueAudioLoadBtn');
   if(audio)audio.disabled=!selected;
+  renderLayoutCueTiming();
   layoutCueTimePreview();
 }
 function layoutCueSelect(sub){
@@ -6834,6 +7008,10 @@ function layoutCueSelect(sub){
   if(String(layoutCueActiveId)!==String(sub.id))layoutCueClearAudio();
   layoutCueActiveId=sub.id;
   const state=layoutCueState(sub);
+  const timing=layoutTimingState(sub);
+  const startInput=document.getElementById('layoutCueTimingStart'),endInput=document.getElementById('layoutCueTimingEnd');
+  if(startInput)startInput.value=String(timing.start);
+  if(endInput)endInput.value=String(timing.end);
   const editor=document.getElementById('layoutCueFinalText');
   if(editor)editor.value=state.draft; // Cue change must update focused editor too.
   renderLayoutCueEditor();
@@ -6878,7 +7056,7 @@ function layoutCueRevertDraft(){
 async function saveLayoutCueText(){
   const key=layoutActiveProjectKey();
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
-  if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||state.draft===state.saved)return false;
+  if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||state.draft===state.saved)return false;
   layoutCueSaveInFlight=true;
   state.saving=true;
   const id=sub.id,submitted=state.draft;
@@ -7601,6 +7779,29 @@ document.getElementById('layoutCueFinalText')?.addEventListener('keydown',event=
   }
 });
 document.getElementById('layoutCueSaveBtn')?.addEventListener('click',()=>saveLayoutCueText());
+
+for(const field of ['start','end']){
+  const input=document.getElementById(field==='start'?'layoutCueTimingStart':'layoutCueTimingEnd');
+  input?.addEventListener('input',event=>layoutCueUpdateTiming(field,event.target.value));
+}
+document.querySelectorAll('[data-timing-nudge]').forEach(button=>button.addEventListener('click',()=>{
+  const [field,delta]=String(button.dataset.timingNudge||'').split(':');
+  layoutCueNudgeTiming(field,Number(delta));
+}));
+document.getElementById('layoutCueTimingSaveBtn')?.addEventListener('click',()=>saveLayoutCueTiming());
+document.getElementById('layoutCueTimingRevertBtn')?.addEventListener('click',layoutCueRevertTimingDraft);
+document.getElementById('layoutCueTimingResetBtn')?.addEventListener('click',()=>{
+  const state=layoutTimingState(layoutCueRow(layoutCueActiveId));
+  if(!state)return;
+  if(!window.confirm('恢复原始字幕显示时间？此操作会保存并覆盖当前条目的独立时间覆写。'))return;
+  // Make reset a deliberate persisted operation rather than a merely visual change.
+  state.start=state.sourceStart;state.end=state.sourceEnd;
+  const start=document.getElementById('layoutCueTimingStart'),end=document.getElementById('layoutCueTimingEnd');
+  if(start)start.value=String(state.start);
+  if(end)end.value=String(state.end);
+  saveLayoutCueTiming({reset:true});
+});
+
 document.getElementById('layoutCueRevertBtn')?.addEventListener('click',layoutCueRevertDraft);
 document.getElementById('layoutCueAudioLoadBtn')?.addEventListener('click',layoutCueLoadAudio);
 document.getElementById('layoutCueAudio')?.addEventListener('timeupdate',drawLayoutCueWaveform);
