@@ -200,13 +200,19 @@ def desktop_check(browser, base_url, output, report):
     page.evaluate("() => layoutTimelineSelect(11)")
     page.wait_for_function("String(layoutCueActiveId)==='11' && document.querySelector('[data-timeline-edge=\"end\"]')!==null")
     handle = page.locator('[data-timeline-edge="end"]')
+    handle.scroll_into_view_if_needed()
     hbox = handle.bounding_box()
+    ensure(hbox["y"] >= 0 and hbox["y"] + hbox["height"] <= 900,
+           f"Drag handle outside browser viewport after scroll: {hbox}")
     vp = rect(page, "#layoutTimelineViewport")
     start, duration = page.evaluate("[layoutTimelineWindowStart,layoutTimelineWindowSeconds]")
     target_x = vp["x"] + (7.39 - start) / duration * vp["width"]
     target_y = hbox["y"] + hbox["height"]/2
     page.mouse.move(hbox["x"] + hbox["width"]/2, target_y)
     page.mouse.down()
+    armed = page.evaluate("layoutTimelineDrag")
+    ensure(armed is not None and str(armed.get("id")) == "11",
+           f"Real pointerdown did not arm the selected cue edge: {armed}")
     page.mouse.move(target_x, target_y, steps=8)
     page.mouse.up()
     actual = page.evaluate("""() => ({
