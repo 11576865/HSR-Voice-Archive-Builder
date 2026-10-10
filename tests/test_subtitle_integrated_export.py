@@ -130,6 +130,26 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
         self.assertIn("00:00:01,400 --> 00:00:03,400", self.read_srt())
         self.assertIn("0:00:03.40", self.read_ass())
 
+    def test_failed_text_export_is_reported_as_saved_and_can_be_regenerated(self):
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            with patch("app.subtitles.write_srt", side_effect=OSError("text export failed")):
+                result = update_project_subtitles(
+                    self.config, self.output, [{"id": 7, "final_chs": "已保存但尚未导出"}]
+                )
+        self.assertTrue(result["saved"])
+        self.assertFalse(result["artifacts_current"])
+        self.assertIn("text export failed", result["artifact_error"])
+        text_overrides = json.loads(
+            (self.output / "subtitles_overrides.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(text_overrides["7"]["final_chs"], "已保存但尚未导出")
+        repaired = refresh_derived_subtitle_exports(
+            self.config, self.output, force_ass=True
+        )
+        self.assertFalse(repaired["ass_error"])
+        self.assertIn("已保存但尚未导出", self.read_srt())
+        self.assertIn("已保存但尚未导出", self.read_ass())
+
     def test_stale_overlay_cannot_touch_manifest_or_export_before_validation(self):
         update_subtitle_display_timing(
             self.output, item_id=7, expected_start=1.2, expected_end=3,
