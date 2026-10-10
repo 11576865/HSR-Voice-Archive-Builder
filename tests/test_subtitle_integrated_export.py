@@ -165,6 +165,83 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
         self.assertFalse((self.output / "manifest.csv").exists())
         self.assertFalse((self.output / "HSR_Voice_Archive.srt").exists())
 
+    def test_second_editor_with_stale_text_is_rejected_before_output_files_change(self):
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            first = update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7,
+                    "final_chs": "窗口甲的定稿",
+                    "expected_final_chs": "旅途开始。",
+                    "expected_source_member_id": "clip/dialogue-7.wav",
+                }]
+            )
+        self.assertTrue(first["saved"])
+        srt_before = self.read_srt()
+        ass_before = self.read_ass()
+        overrides_before = (self.output / "subtitles_overrides.json").read_bytes()
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            with self.assertRaisesRegex(ValueError, "text changed since"):
+                update_project_subtitles(
+                    self.config, self.output, [{
+                        "id": 7,
+                        "final_chs": "窗口乙的过期定稿",
+                        "expected_final_chs": "旅途开始。",
+                        "expected_source_member_id": "clip/dialogue-7.wav",
+                    }]
+                )
+        self.assertEqual((self.output / "subtitles_overrides.json").read_bytes(), overrides_before)
+        self.assertEqual(self.read_srt(), srt_before)
+        self.assertEqual(self.read_ass(), ass_before)
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            accepted = update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7,
+                    "final_chs": "窗口乙已重新加载的定稿",
+                    "expected_final_chs": "窗口甲的定稿",
+                    "expected_source_member_id": "clip/dialogue-7.wav",
+                }]
+            )
+        self.assertTrue(accepted["saved"])
+        self.assertIn("窗口乙已重新加载的定稿", self.read_srt())
+
+    def test_original_source_member_change_rejects_equal_text_without_mutation(self):
+        self.assertFalse((self.output / "subtitles_overrides.json").exists())
+        with self.assertRaisesRegex(ValueError, "source clip changed"):
+            update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7, "final_chs": "新文本",
+                    "expected_final_chs": "旅途开始。",
+                    "expected_source_member_id": "old-archive/dialogue-7.wav",
+                }]
+            )
+        self.assertFalse((self.output / "subtitles_overrides.json").exists())
+        self.assertFalse((self.output / "subtitle_review_state.json").exists())
+
+    def test_legacy_alias_resolution_matches_editor_baseline_and_export(self):
+        # Rebuilds can reorder item IDs while stable WAV member IDs continue.
+        (self.output / "subtitles_overrides.json").write_text(json.dumps({
+            "old-id": {
+                "final_chs": "源片段关联的旧校对",
+                "source_member_id": "clip/dialogue-7.wav",
+                "filename": "dialogue-7.wav",
+                "modified": True,
+            }
+        }, ensure_ascii=False), encoding="utf-8")
+        from app.subtitles import get_project_subtitles
+        cfg = SimpleNamespace(source_text_language="en", reference_language="auto")
+        rows = get_project_subtitles(cfg, self.output)
+        self.assertEqual(rows[0]["final_chs"], "源片段关联的旧校对")
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            changed = update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7, "final_chs": "重建后的新校对",
+                    "expected_final_chs": "源片段关联的旧校对",
+                    "expected_source_member_id": "clip/dialogue-7.wav",
+                }]
+            )
+        self.assertTrue(changed["saved"])
+        self.assertIn("重建后的新校对", self.read_srt())
+
     def test_nonexistent_cue_text_update_cannot_create_override_files(self):
         with self.assertRaisesRegex(ValueError, "No matching subtitle entries"):
             update_project_subtitles(
