@@ -7228,11 +7228,13 @@ async function saveLayoutCueText(){
       if(preview&&currentText===submitted)preview.value=submitted;
     }
     if(status) {
-      const error=String(data.result?.ass_error||'');
-      status.textContent=error
-        ? '字幕正文已保存并更新 SRT；ASS 排版生成失败，必须查看溢出报告，不可视为已导出。'
+      const error=String(data.result?.artifact_error||data.result?.ass_error||'');
+      layoutCueExportNeedsRetry=!!error||data.result?.artifacts_current===false;
+      layoutCueExportForceAss=!!data.result?.ass_error;
+      status.textContent=layoutCueExportNeedsRetry
+        ? '条目 #'+id+' 正文已保存，但 ASS/SRT 导出未完成：'+(error||'导出状态异常')+'。请使用「重试生成 ASS/SRT」，不要重复提交正文。'
         : '条目 #'+id+' 正文已保存；SRT 和已有 ASS（如有）由后端同步刷新。'+(currentText!==submitted?' 期间的新改动仍未保存。':'');
-      status.className='layout-cue-save-note '+(error||currentText!==submitted?'status-warn':'status-ok');
+      status.className='layout-cue-save-note '+(layoutCueExportNeedsRetry||currentText!==submitted?'status-warn':'status-ok');
     }
     renderLayoutCueEditor();
     renderLayoutCorpusRail();
