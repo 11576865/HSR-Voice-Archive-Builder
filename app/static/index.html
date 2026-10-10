@@ -6853,6 +6853,8 @@ function layoutCueClearAudio(){
 function layoutCueResetProject(projectKey){
   if(projectKey===layoutCueProjectKey)return;
   layoutCueProjectKey=projectKey;
+  const note=document.getElementById('layoutCueTimingStatus');
+  if(note)note.dataset.committed='';
   layoutCueDrafts=new Map();
   layoutCueTimingDrafts=new Map();
   layoutCueExportNeedsRetry=false;
@@ -7148,8 +7150,12 @@ function renderLayoutCueEditor(){
 }
 function layoutCueSelect(sub){
   if(!sub){layoutCueActiveId=null;layoutCueClearAudio();renderLayoutCueEditor();return;}
-  if(String(layoutCueActiveId)!==String(sub.id))layoutCueClearAudio();
-  if(String(layoutCueActiveId)!==String(sub.id))layoutTimelineFollowSelected=true;
+  if(String(layoutCueActiveId)!==String(sub.id)){
+    layoutCueClearAudio();
+    const note=document.getElementById('layoutCueTimingStatus');
+    if(note)note.dataset.committed='';
+    layoutTimelineFollowSelected=true;
+  }
   layoutCueActiveId=sub.id;
   const state=layoutCueState(sub);
   const timing=layoutTimingState(sub);
