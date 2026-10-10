@@ -17,6 +17,10 @@ MIN_DURATION_SECONDS = 0.10
 MAX_BOUNDARY_ADJUST_SECONDS = 5.0
 
 
+class StaleSubtitleTimingError(ValueError):
+    """Saved display timing refers to a different source clip/time window."""
+
+
 def _entry_id(entry: dict[str, Any]) -> str:
     value = entry.get("index")
     if value is None:
@@ -90,7 +94,7 @@ def _effective_window(entry: dict[str, Any], overrides: dict[str, dict[str, floa
             or abs(override["source_end"] - source_end) > 0.005
             or str(override.get("source_member_id") or "") != str(entry.get("source_member_id") or "")
         ):
-            raise ValueError("Subtitle timing override targets an outdated audio timeline; review it before exporting")
+            raise StaleSubtitleTimingError("Subtitle timing override targets an outdated audio timeline; review it before exporting")
     _validate_window(override["start"], override["end"], source_start, source_end)
     return override["start"], override["end"]
 
@@ -130,7 +134,14 @@ def update_subtitle_display_timing(
     entry = matches[0]
     raw_start, raw_end = source_subtitle_window(entry)
     overrides = read_timing_overrides(output_dir)
-    previous_start, previous_end = _effective_window(entry, overrides)
+    try:
+        previous_start, previous_end = _effective_window(entry, overrides)
+    except StaleSubtitleTimingError:
+        if not reset:
+            raise
+        # A stale derived overlay must be recoverable without editing raw audio.
+        # The operator must explicitly reset, acknowledging the current source.
+        previous_start, previous_end = raw_start, raw_end
     if expected_start is None or expected_end is None:
         raise ValueError("Expected current subtitle display start/end are required")
     expected_pair = (_finite_seconds(expected_start, "expected_start"), _finite_seconds(expected_end, "expected_end"))
