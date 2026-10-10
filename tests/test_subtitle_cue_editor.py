@@ -48,6 +48,7 @@ let invalidations=0;
 const context={
   document:{getElementById:node,querySelectorAll:()=>[],activeElement:null},
   currentProject:{root:'/project-alpha',name:'alpha',config:{}},
+  window:{confirm:()=>true},
   escapeHtml:x=>String(x),formatClockTime:n=>'T'+Number(n||0).toFixed(1),
   api:(path,opts)=>{
     if(path.endsWith('/subtitles?selector=all'))return Promise.resolve({subtitles,persistable:true});
@@ -116,9 +117,33 @@ const run=x=>vm.runInContext(x,context);
   assert.match(node('layoutCueSaveStatus').textContent,/刷新/);
   assert.equal(subtitles[0].final_chs,'保存期间继续编辑','conflict must not alter local saved baseline');
 
+  // Explicit corpus refresh retrieves the other tab's new server baseline.
+  // Keep the local draft, but disable Save until the user resolves the conflict.
+  subtitles[0].final_chs='另一个窗口已保存';
+  await run('loadLayoutStressSample({force:true,refresh:true,selectId:11})');
+  assert.equal(node('layoutCueFinalText').value,'过期窗口修改');
+  assert.equal(node('layoutCueTextConflict').hidden,false);
+  assert.equal(node('layoutCueSaveBtn').disabled,true);
+  assert.equal(await run('saveLayoutCueText()'),false,'cannot overwrite new server baseline silently');
+  run('layoutCueKeepLocalDraft()');
+  assert.equal(node('layoutCueTextConflict').hidden,true);
+  assert.equal(node('layoutCueSaveBtn').disabled,false);
+  const reconciled=run('saveLayoutCueText()');
+  assert.equal(saves.length,1);
+  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].expected_final_chs,'另一个窗口已保存');
+  saves.shift().resolve({ok:true,result:{updated_count:1,ass_error:''}});
+  assert.equal(await reconciled,true);
+  assert.equal(subtitles[0].final_chs,'过期窗口修改');
+
+  // A second remote update with no foreground draft should refresh normally.
+  subtitles[0].final_chs='服务器新正文';
+  await run('loadLayoutStressSample({force:true,refresh:true,selectId:11})');
+  assert.equal(node('layoutCueTextConflict').hidden,true);
+  assert.equal(node('layoutCueFinalText').value,'服务器新正文');
+
   run("layoutCueUpdateDraft('试验修改')");
   run('layoutCueRevertDraft()');
-  assert.equal(node('layoutCueFinalText').value,'保存期间继续编辑');
+  assert.equal(node('layoutCueFinalText').value,'服务器新正文');
   assert.equal(node('layoutCueSaveBtn').disabled,true);
 
   node('layoutCueScrubber').value='75';
