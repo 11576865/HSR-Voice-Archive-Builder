@@ -2802,6 +2802,29 @@ body[data-workspace="layout"] .preview-workbench{
 .layout-corpus-pages button{min-height:30px!important;padding:4px 5px!important;font-size:11px!important}
 .layout-corpus-pages span{text-align:center;white-space:nowrap;font:650 10px/1 ui-monospace,Consolas,monospace;color:var(--layout-muted)}
 
+
+.layout-rail-head-actions{display:flex;align-items:center;gap:8px}
+#layoutCorpusMobileToggleBtn{display:none}
+@media(max-width:759px){
+  body[data-workspace="layout"] .preview-workbench{
+    display:flex!important;flex-direction:column!important;align-items:stretch!important;
+  }
+  .preview-workbench .layout-preview-region{order:1!important;width:100%}
+  .preview-workbench .layout-corpus-rail{
+    order:2!important;width:100%;max-height:none!important;height:auto!important;
+    position:relative!important;top:auto!important;display:flex;
+  }
+  .preview-workbench .preview-inspector{order:3!important;width:100%}
+  #layoutCorpusMobileToggleBtn{
+    display:block;min-height:34px!important;padding:5px 10px!important;font-size:11px!important
+  }
+  .layout-corpus-rail:not(.is-open) .layout-rail-search,
+  .layout-corpus-rail:not(.is-open) .layout-rail-filters,
+  .layout-corpus-rail:not(.is-open) .layout-corpus-list,
+  .layout-corpus-rail:not(.is-open) .layout-rail-footer{display:none!important}
+  .layout-corpus-rail:not(.is-open) .layout-rail-title{padding:12px 14px!important}
+}
+
 </style>
 </head>
 <body>
@@ -3195,7 +3218,10 @@ body[data-workspace="layout"] .preview-workbench{
         <aside class="layout-corpus-rail" aria-label="项目字幕导航">
           <div class="layout-rail-title">
             <div><span class="layout-eyebrow">SUBTITLE EXPLORER</span><h3>字幕条目</h3></div>
-            <span id="layoutCorpusCount" class="layout-rail-count">0 / 0</span>
+            <div class="layout-rail-head-actions">
+              <span id="layoutCorpusCount" class="layout-rail-count">0 / 0</span>
+              <button type="button" id="layoutCorpusMobileToggleBtn" aria-expanded="false" aria-controls="layoutCorpusList">浏览 ▾</button>
+            </div>
           </div>
           <div class="layout-rail-search">
             <label for="layoutCorpusSearch">查找台词、编号、章节</label>
@@ -7125,6 +7151,14 @@ applyPreviewBackground();
 });
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
+document.getElementById('layoutCorpusMobileToggleBtn')?.addEventListener('click',()=>{
+  const rail=document.querySelector('.layout-corpus-rail');
+  const toggle=document.getElementById('layoutCorpusMobileToggleBtn');
+  if(!rail||!toggle)return;
+  const opened=rail.classList.toggle('is-open');
+  toggle.setAttribute('aria-expanded',opened?'true':'false');
+  toggle.textContent=opened?'收起 ▴':'浏览 ▾';
+});
 document.getElementById('layoutCorpusSearch')?.addEventListener('input',()=>{
   layoutCorpusPage=0;
   renderLayoutCorpusRail();
