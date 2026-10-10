@@ -2941,6 +2941,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   }
 }
 
+.layout-export-health{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;padding:12px 17px;border-bottom:1px solid var(--layout-border);background:var(--layout-section);color:var(--layout-text)}
+.layout-export-health[hidden]{display:none!important}
+.layout-export-health strong{font-size:12px}
+.layout-export-health p{font-size:11px;color:var(--layout-muted);line-height:1.45;margin:3px 0 0;overflow-wrap:anywhere}
+.layout-export-health button{min-height:36px!important;padding:7px 11px!important;font-size:11px!important;flex-shrink:0}
+@media(max-width:759px){.layout-export-health{padding:11px}}
+
 </style>
 </head>
 <body>
@@ -3389,6 +3396,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <div><strong id="previewEvidenceTitle">浏览器几何预览</strong><p id="previewEvidenceDetail">版面与安全区由求解器计算；请用实际 ASS 渲染确认字形和最终画面。</p></div>
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
+          </div>
+          <div id="layoutExportHealthNotice" class="layout-export-health" role="status" aria-live="polite" hidden>
+            <div>
+              <strong id="layoutExportHealthTitle">字幕导出状态</strong>
+              <p id="layoutExportHealthDetail">尚未载入项目。</p>
+            </div>
+            <button id="layoutExportHealthRetryBtn" type="button" hidden>重新生成 ASS/SRT</button>
           </div>
           <section class="layout-timeline" aria-label="连续字幕显示时间轴" id="layoutTimelinePanel">
             <div class="layout-timeline-top">
@@ -6768,6 +6782,8 @@ let layoutCueTimingSaveInFlight=false;
 let layoutCueExportNeedsRetry=false;
 let layoutCueExportForceAss=false;
 let layoutCueExportRetryInFlight=false;
+let layoutCueExportHealthState="unknown";
+let layoutCueExportHealthError="";
 let layoutCueActiveId=null;
 let layoutCueSaveInFlight=false;
 let layoutCueAudioAbort=null;
@@ -6850,6 +6866,34 @@ function layoutCueClearAudio(){
   const label=document.getElementById('layoutCueAudioStatus');
   if(label)label.textContent='按需加载当前条目的原始 WAV';
 }
+function layoutCueApplyExportHealth(health){
+  if(!health||typeof health!=='object')return;
+  layoutCueExportHealthState=String(health.state||'unverified');
+  layoutCueExportHealthError=String(health.artifact_error||'');
+  layoutCueExportNeedsRetry=!['current','not-built'].includes(layoutCueExportHealthState);
+  layoutCueExportForceAss=!!health.ass_required;
+  renderLayoutExportHealthNotice();
+}
+function renderLayoutExportHealthNotice(){
+  const outer=document.getElementById('layoutExportHealthNotice');
+  if(!outer)return;
+  const active=!!layoutActiveProjectKey()&&layoutCueExportHealthState!=='unknown'&&layoutCueExportHealthState!=='not-built';
+  outer.hidden=!active;
+  if(!active)return;
+  const label=document.getElementById('layoutExportHealthTitle');
+  const detail=document.getElementById('layoutExportHealthDetail');
+  const retry=document.getElementById('layoutExportHealthRetryBtn');
+  const ok=layoutCueExportHealthState==='current';
+  if(label)label.textContent=ok?'字幕导出已校验':'字幕导出尚未完成 · '+layoutCueExportHealthState;
+  if(detail)detail.textContent=ok
+    ?'已核对本次字幕正文/时间输入及生成文件摘要；这不是实际视频帧验收。'
+    :'当前 ASS/SRT 不应视为已完成导出：'+(layoutCueExportHealthError||'导出状态缺乏有效证明')+'。可在此重新生成。';
+  if(retry){
+    retry.hidden=ok;
+    retry.disabled=layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight||layoutCueSaveInFlight||!layoutCorpusPersistable;
+    retry.textContent=layoutCueExportRetryInFlight?'正在重新生成…':'重新生成 ASS/SRT';
+  }
+}
 function layoutCueResetProject(projectKey){
   if(projectKey===layoutCueProjectKey)return;
   layoutCueProjectKey=projectKey;
@@ -6860,7 +6904,10 @@ function layoutCueResetProject(projectKey){
   layoutCueExportNeedsRetry=false;
   layoutCueExportForceAss=false;
   layoutCueExportRetryInFlight=false;
+  layoutCueExportHealthState="unknown";
+  layoutCueExportHealthError="";
   layoutCueActiveId=null;
+  renderLayoutExportHealthNotice();
   layoutCueClearAudio();
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
@@ -7044,8 +7091,11 @@ async function saveLayoutCueTiming({reset=false}={}){
       layoutStressSample.word_alignments=null;
     }
     const exportError=String(response.artifact_error||response.refreshed?.ass_error||'');
-    layoutCueExportNeedsRetry=!!exportError||response.artifacts_current===false;
-    layoutCueExportForceAss=!!response.refreshed?.ass_error;
+    layoutCueApplyExportHealth(response.export_status||{
+      state:(exportError||response.artifacts_current===false)?'failed':'current',
+      artifact_error:exportError,
+      ass_required:!!response.refreshed?.ass_error||layoutCueExportForceAss,
+    });
     if(status){
       status.textContent=layoutCueExportNeedsRetry
         ? '显示时间已保存到项目，但字幕导出未完成：'+(exportError||'导出状态异常')+'。请点击「重试生成 ASS/SRT」，不要重复提交时间。'
@@ -7084,8 +7134,10 @@ async function layoutCueRetryArtifactExport(){
     });
     if(layoutActiveProjectKey()!==key)return false;
     const error=String(response.artifact_error||response.refreshed?.ass_error||'');
-    layoutCueExportNeedsRetry=!!error||response.artifacts_current===false;
-    if(!layoutCueExportNeedsRetry)layoutCueExportForceAss=false;
+    layoutCueApplyExportHealth(response.export_status||{
+      state:(error||response.artifacts_current===false)?'failed':'current',
+      artifact_error:error,ass_required:layoutCueExportForceAss,
+    });
     if(status){status.textContent=layoutCueExportNeedsRetry
       ? '字幕时间已保存，但导出重试仍失败：'+(error||'未返回可用导出状态')
       : '字幕时间原先已保存，本次 ASS/SRT 重新生成成功。';status.dataset.committed='true';}
@@ -7093,12 +7145,17 @@ async function layoutCueRetryArtifactExport(){
   }catch(error){
     if(layoutActiveProjectKey()===key&&status){
       status.textContent='字幕时间已经保存，但导出重试失败：'+shortError(error);
+      layoutCueExportHealthError=shortError(error);
+      layoutCueExportHealthState='failed';
       status.dataset.committed='true';
     }
     return false;
   }finally{
     layoutCueExportRetryInFlight=false;
-    if(layoutActiveProjectKey()===key)renderLayoutCueTiming();
+    if(layoutActiveProjectKey()===key){
+      renderLayoutCueTiming();
+      renderLayoutExportHealthNotice();
+    }
   }
 }
 
@@ -7238,8 +7295,10 @@ async function saveLayoutCueText(){
     }
     if(status) {
       const error=String(data.result?.artifact_error||data.result?.ass_error||'');
-      layoutCueExportNeedsRetry=!!error||data.result?.artifacts_current===false;
-      layoutCueExportForceAss=!!data.result?.ass_error;
+      layoutCueApplyExportHealth(data.result?.export_status||{
+        state:(error||data.result?.artifacts_current===false)?'failed':'current',
+        artifact_error:error,ass_required:!!data.result?.ass_error||layoutCueExportForceAss,
+      });
       status.textContent=layoutCueExportNeedsRetry
         ? '条目 #'+id+' 正文已保存，但 ASS/SRT 导出未完成：'+(error||'导出状态异常')+'。请使用「重试生成 ASS/SRT」，不要重复提交正文。'
         : '条目 #'+id+' 正文已保存；SRT 和已有 ASS（如有）由后端同步刷新。'+(currentText!==submitted?' 期间的新改动仍未保存。':'');
@@ -7767,6 +7826,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
       layoutCorpusItems=subtitles;
       layoutCorpusPersistable=data.persistable===true;
       layoutCorpusProjectKey=projectKey;
+      layoutCueApplyExportHealth(data.export_status);
       layoutAuditResults.clear();
       layoutAuditGeneration++;
     }
@@ -8159,6 +8219,7 @@ document.querySelectorAll('[data-timing-nudge]').forEach(button=>button.addEvent
 }));
 document.getElementById('layoutCueTimingSaveBtn')?.addEventListener('click',()=>saveLayoutCueTiming());
 document.getElementById('layoutCueTimingRetryExportBtn')?.addEventListener('click',layoutCueRetryArtifactExport);
+document.getElementById('layoutExportHealthRetryBtn')?.addEventListener('click',layoutCueRetryArtifactExport);
 document.getElementById('layoutCueTimingRevertBtn')?.addEventListener('click',layoutCueRevertTimingDraft);
 document.getElementById('layoutCueTimingResetBtn')?.addEventListener('click',()=>{
   const state=layoutTimingState(layoutCueRow(layoutCueActiveId));
