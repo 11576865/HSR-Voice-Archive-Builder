@@ -39,7 +39,7 @@ function node(id){
 }
 node('layoutCueAudio').duration=4;
 node('layoutCueAudio').currentTime=0;
-const signatures=[...'RIFF',0,0,0,0,...'WAVE'];
+const signatures=[82,73,70,70,0,0,0,0,87,65,86,69];
 const wav={
   size:32000,
   slice:()=>({arrayBuffer:async()=>new Uint8Array(signatures).buffer}),
