@@ -5994,8 +5994,26 @@ async function renderLibassPreview(){
     const img=document.getElementById('libassPreviewImage');
     if(!img)throw new Error('实际 ASS 预览图像控件不存在');
     img.src=libassPreviewObjectUrl;
-    // An HTTP success does not prove a browser-displayable image; wait for decode.
-    if(typeof img.decode==='function')await img.decode();
+    // HTTP success is not displayed-pixel evidence. Modern browsers support decode().
+    if(typeof img.decode==='function'){
+      await img.decode();
+    }else{
+      await new Promise((resolve,reject)=>{
+        if(img.complete){
+          if(img.naturalWidth>0)resolve();
+          else reject(new Error('实际 ASS 预览图像解码失败'));
+          return;
+        }
+        const cleanup=()=>{
+          img.removeEventListener('load',onLoad);
+          img.removeEventListener('error',onError);
+        };
+        const onLoad=()=>{cleanup();resolve();};
+        const onError=()=>{cleanup();reject(new Error('实际 ASS 预览图像解码失败'));};
+        img.addEventListener('load',onLoad,{once:true});
+        img.addEventListener('error',onError,{once:true});
+      });
+    }
     if(!stillCurrent())return;
     img.classList.remove('hidden');
     setPreviewEvidence('libass');
