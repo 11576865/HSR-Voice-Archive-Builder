@@ -479,7 +479,8 @@ class Handler(BaseHTTPRequestHandler):
                 selector=selector,
             )
             subtitles = decorate_subtitles(config, output, subtitles)
-            self._json({"ok": True, "subtitles": subtitles})
+            persistable = bool(output and (output / "manifest.json").is_file())
+            self._json({"ok": True, "subtitles": subtitles, "persistable": persistable})
             return
         if path == "/api/review/file":
             config = _active_config()
