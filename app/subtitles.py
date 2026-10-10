@@ -9,6 +9,7 @@ from typing import Any
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
+from .subtitle_export_status import record_subtitle_export, read_subtitle_export_health
 from .subtitle_timing import (
     read_timing_overrides,
     effective_subtitle_window,
@@ -344,6 +345,11 @@ def refresh_subtitle_artifacts_from_settings(
     for entry in entries:
         effective_subtitle_window(entry, timing_overrides)
 
+    # Mark the preceding export as non-current before mutating manifest/CSV or
+    # touching output files. A process crash leaves a visible pending/stale
+    # receipt instead of falsely certifying old ASS/SRT after restart.
+    record_subtitle_export(output_dir, state="pending", ass_required=generate_ass)
+
     atomic_write_text(
         manifest_file,
         json.dumps(manifest_data, ensure_ascii=False, indent=2),
@@ -365,12 +371,19 @@ def refresh_subtitle_artifacts_from_settings(
 
     # SRT is independent from ASS layout validation and must always reflect the
     # saved human text, even when the richer ASS representation is rejected.
-    write_srt(
-        adapters,
-        srt_file,
-        source_language=source_language,
-        target_language=target_language,
-    )
+    try:
+        write_srt(
+            adapters,
+            srt_file,
+            source_language=source_language,
+            target_language=target_language,
+        )
+    except Exception as exc:
+        record_subtitle_export(
+            output_dir, state="failed", ass_required=generate_ass,
+            artifact_error=f"{type(exc).__name__}: {exc}",
+        )
+        raise
 
     ass_error = ""
     if generate_ass:
@@ -391,6 +404,10 @@ def refresh_subtitle_artifacts_from_settings(
         ass_file.unlink(missing_ok=True)
         overflow_file.unlink(missing_ok=True)
 
+    record_subtitle_export(
+        output_dir, state="failed" if ass_error else "current",
+        ass_required=generate_ass, artifact_error=ass_error,
+    )
     return {
         "ass_file": str(ass_file) if generate_ass and not ass_error else "",
         "ass_error": ass_error,
