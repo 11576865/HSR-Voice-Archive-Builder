@@ -15,6 +15,7 @@ from .subtitle_timing import (
     source_subtitle_window,
     StaleSubtitleTimingError,
     subtitle_edit_lock,
+    update_subtitle_display_timing,
 )
 from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
@@ -465,6 +466,73 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
     return s_time, e_time
 
 
+
+def _refresh_derived_subtitle_exports(
+    config: ProjectConfig, output_dir: Path, *, force_ass: bool = False
+) -> dict[str, Any]:
+    return refresh_subtitle_artifacts_from_settings(
+        output_dir,
+        source_language=config.source_text_language or "en",
+        target_language=config.target_language or "zh-CN",
+        generate_ass=(
+            force_ass
+            or (output_dir / "HSR_Voice_Archive.ass").is_file()
+            or bool(getattr(config, "generate_ass", False))
+        ),
+        render_config=subtitle_render_config(config),
+        strict_ass=False,
+    )
+
+
+def refresh_derived_subtitle_exports(
+    config: ProjectConfig,
+    output_dir: Path,
+    *,
+    force_ass: bool = False,
+) -> dict[str, Any]:
+    """Retry ASS/SRT regeneration without altering saved cue text/timing edits."""
+    with subtitle_edit_lock(output_dir):
+        if not (output_dir / "manifest.json").is_file():
+            raise FileNotFoundError("Manifest file not found in project output directory")
+        return _refresh_derived_subtitle_exports(config, output_dir, force_ass=force_ass)
+
+
+def save_subtitle_timing_and_refresh(
+    config: ProjectConfig,
+    output_dir: Path,
+    *,
+    item_id: str | int,
+    start: Any = None,
+    end: Any = None,
+    reset: bool = False,
+    expected_start: Any = None,
+    expected_end: Any = None,
+) -> dict[str, Any]:
+    """Report durable timing commit separately from derived artifact status.
+
+    Timing commits BEFORE regenerating ASS/SRT. A failed writer used to cause
+    HTTP 400 despite a successful durable edit. Report both facts separately.
+    """
+    with subtitle_edit_lock(output_dir):
+        result = update_subtitle_display_timing(
+            output_dir, item_id=item_id, start=start, end=end, reset=reset,
+            expected_start=expected_start, expected_end=expected_end,
+        )
+        try:
+            refreshed = _refresh_derived_subtitle_exports(config, output_dir)
+            refresh_error = str(refreshed.get("ass_error") or "")
+        except Exception as exc:
+            refreshed = {}
+            refresh_error = f"{type(exc).__name__}: {exc}"
+        return {
+            "saved": True,
+            "timing": result,
+            "refreshed": refreshed,
+            "artifacts_current": not bool(refresh_error),
+            "artifact_error": refresh_error,
+        }
+
+
 def get_project_subtitles(
     config: ProjectConfig,
     output_dir: Path | None,
@@ -687,6 +755,16 @@ def get_project_subtitles(
 
 
 def update_project_subtitles(
+    config: ProjectConfig,
+    output_dir: Path,
+    updates: list[dict[str, Any]],
+) -> dict[str, Any]:
+    """Serialize edits that share manifest, text overrides and final outputs."""
+    with subtitle_edit_lock(output_dir):
+        return _update_project_subtitles_locked(config, output_dir, updates)
+
+
+def _update_project_subtitles_locked(
     config: ProjectConfig,
     output_dir: Path,
     updates: list[dict[str, Any]],
