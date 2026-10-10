@@ -517,6 +517,7 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
             "ok": True, "refreshed": refreshed,
             "artifacts_current": not bool(artifact_error),
             "artifact_error": artifact_error,
+            "export_status": read_subtitle_export_health(output_dir),
         }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
