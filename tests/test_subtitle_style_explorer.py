@@ -29,7 +29,7 @@ function node(id){
   if(!nodes.has(id)){
     const classes=new Set(['hidden']);
     nodes.set(id,{
-      value:'',textContent:'',innerHTML:'',className:'',disabled:false,
+      value:'',textContent:'',innerHTML:'',className:'',disabled:false,dataset:{},
       classList:{
         add:x=>classes.add(x),remove:x=>classes.delete(x),contains:x=>classes.has(x)
       },
