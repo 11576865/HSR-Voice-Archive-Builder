@@ -266,6 +266,11 @@ def mobile_check(browser, base_url, output, report, width, height, label):
                f"{label}: tablet corpus/stage overlap")
         ensure(inspector["y"] >= min(rail["y"] + rail["height"], cue["y"] + cue["height"]) - 8,
                f"{label}: tablet inspector overlays timeline/corpus")
+        ensure(inspector["x"] <= rail["x"] + 5
+               and inspector["x"] + inspector["width"] >= canvas["x"] + canvas["width"] - 5,
+               f"{label}: inspector failed to span both tablet workspace columns: {inspector}")
+        ensure(inspector["width"] >= width * 0.85,
+               f"{label}: inspector collapsed into left navigation column")
     ensure(vp["width"] > width*(0.6 if width < 760 else 0.38), f"{label}: timeline too narrow")
     ensure(page.locator("#layoutCueTimingStart").is_enabled(), f"{label}: timing editor inaccessible")
     # Control headings/content must stay within the horizontal viewport, not
