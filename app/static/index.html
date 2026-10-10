@@ -3454,6 +3454,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 <button type="button" id="layoutCueTimingSaveBtn" disabled>保存字幕时间</button>
                 <button type="button" id="layoutCueTimingRevertBtn" disabled>撤销时间草稿</button>
                 <button type="button" id="layoutCueTimingResetBtn" disabled>恢复原始时间</button>
+                <button type="button" id="layoutCueTimingRetryExportBtn" hidden disabled>重试生成 ASS/SRT</button>
               </div>
               <p id="layoutCueTimingStatus" role="status" aria-live="polite">调整仅影响导出的字幕显示时间，不移动 WAV 或更改原始音频时间轴。单侧最多偏离 5 秒。</p>
             </section>
@@ -6764,6 +6765,9 @@ let layoutCueProjectKey=null;
 let layoutCueDrafts=new Map();
 let layoutCueTimingDrafts=new Map();
 let layoutCueTimingSaveInFlight=false;
+let layoutCueExportNeedsRetry=false;
+let layoutCueExportForceAss=false;
+let layoutCueExportRetryInFlight=false;
 let layoutCueActiveId=null;
 let layoutCueSaveInFlight=false;
 let layoutCueAudioAbort=null;
@@ -6851,6 +6855,9 @@ function layoutCueResetProject(projectKey){
   layoutCueProjectKey=projectKey;
   layoutCueDrafts=new Map();
   layoutCueTimingDrafts=new Map();
+  layoutCueExportNeedsRetry=false;
+  layoutCueExportForceAss=false;
+  layoutCueExportRetryInFlight=false;
   layoutCueActiveId=null;
   layoutCueClearAudio();
   renderLayoutCueEditor();
@@ -6924,6 +6931,11 @@ function renderLayoutCueTiming(){
   const save=document.getElementById('layoutCueTimingSaveBtn');
   const revert=document.getElementById('layoutCueTimingRevertBtn');
   const reset=document.getElementById('layoutCueTimingResetBtn');
+  const retry=document.getElementById('layoutCueTimingRetryExportBtn');
+  if(retry){
+    retry.hidden=!layoutCueExportNeedsRetry;
+    retry.disabled=!valid||!layoutCueExportNeedsRetry||layoutCueTimingSaveInFlight||layoutCueSaveInFlight||layoutCueExportRetryInFlight;
+  }
   if(save)save.disabled=!valid||!dirty||!!problem||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
   if(revert)revert.disabled=!valid||!dirty||!!state?.saving;
   if(reset)reset.disabled=!valid||(!state?.conflict&&!changed&&!dirty)||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
@@ -7029,10 +7041,12 @@ async function saveLayoutCueTiming({reset=false}={}){
       layoutStressSample.duration_seconds=Math.max(0.1,state.savedEnd-state.savedStart);
       layoutStressSample.word_alignments=null;
     }
-    const exportError=String(response.refreshed?.ass_error||'');
+    const exportError=String(response.artifact_error||response.refreshed?.ass_error||'');
+    layoutCueExportNeedsRetry=!!exportError||response.artifacts_current===false;
+    layoutCueExportForceAss=!!response.refreshed?.ass_error;
     if(status){
-      status.textContent=exportError
-        ? '显示时间已保存，SRT 已更新，但 ASS 生成失败：'+exportError
+      status.textContent=layoutCueExportNeedsRetry
+        ? '显示时间已保存到项目，但字幕导出未完成：'+(exportError||'导出状态异常')+'。请点击「重试生成 ASS/SRT」，不要重复提交时间。'
         : '显示时间已保存至独立覆写层，SRT 和已有 ASS（如有）已刷新。'+(remainsDirty?' 后续草稿仍未保存。':'');
       status.dataset.committed='true';
     }
@@ -7052,6 +7066,40 @@ async function saveLayoutCueTiming({reset=false}={}){
     if(layoutActiveProjectKey()===projectKey)renderLayoutCueEditor();
   }
 }
+
+async function layoutCueRetryArtifactExport(){
+  const key=layoutActiveProjectKey();
+  if(!key||!layoutCorpusPersistable||!layoutCueExportNeedsRetry||
+     layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight||layoutCueSaveInFlight)return false;
+  layoutCueExportRetryInFlight=true;
+  const status=document.getElementById('layoutCueTimingStatus');
+  if(status){status.dataset.committed='true';status.textContent='字幕时间已经保存，正在独立重试导出 ASS/SRT…';}
+  renderLayoutCueTiming();
+  try{
+    const response=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/artifacts/refresh',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({expected_project_root:currentProject.root||null,force_ass:layoutCueExportForceAss})
+    });
+    if(layoutActiveProjectKey()!==key)return false;
+    const error=String(response.artifact_error||response.refreshed?.ass_error||'');
+    layoutCueExportNeedsRetry=!!error||response.artifacts_current===false;
+    if(!layoutCueExportNeedsRetry)layoutCueExportForceAss=false;
+    if(status){status.textContent=layoutCueExportNeedsRetry
+      ? '字幕时间已保存，但导出重试仍失败：'+(error||'未返回可用导出状态')
+      : '字幕时间原先已保存，本次 ASS/SRT 重新生成成功。';status.dataset.committed='true';}
+    return !layoutCueExportNeedsRetry;
+  }catch(error){
+    if(layoutActiveProjectKey()===key&&status){
+      status.textContent='字幕时间已经保存，但导出重试失败：'+shortError(error);
+      status.dataset.committed='true';
+    }
+    return false;
+  }finally{
+    layoutCueExportRetryInFlight=false;
+    if(layoutActiveProjectKey()===key)renderLayoutCueTiming();
+  }
+}
+
 
 function layoutCueTimePreview(){
   const sub=layoutCueRow(layoutCueActiveId);
@@ -8095,6 +8143,7 @@ document.querySelectorAll('[data-timing-nudge]').forEach(button=>button.addEvent
   layoutCueNudgeTiming(field,Number(delta));
 }));
 document.getElementById('layoutCueTimingSaveBtn')?.addEventListener('click',()=>saveLayoutCueTiming());
+document.getElementById('layoutCueTimingRetryExportBtn')?.addEventListener('click',layoutCueRetryArtifactExport);
 document.getElementById('layoutCueTimingRevertBtn')?.addEventListener('click',layoutCueRevertTimingDraft);
 document.getElementById('layoutCueTimingResetBtn')?.addEventListener('click',()=>{
   const state=layoutTimingState(layoutCueRow(layoutCueActiveId));
