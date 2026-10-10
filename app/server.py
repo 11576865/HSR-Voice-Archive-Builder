@@ -288,7 +288,8 @@ def api_get_project_subtitles(
             selector=selector,
         )
         subtitles = decorate_subtitles(config, output_dir, subtitles)
-        return {"ok": True, "subtitles": subtitles}
+        persistable = bool(output_dir and (output_dir / "manifest.json").is_file())
+        return {"ok": True, "subtitles": subtitles, "persistable": persistable}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
