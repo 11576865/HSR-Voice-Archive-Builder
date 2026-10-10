@@ -22,6 +22,7 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
+from .subtitle_timing import update_subtitle_display_timing
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
@@ -458,6 +459,44 @@ async def api_post_project_subtitles(
 
         result = update_project_subtitles(config, output_dir, updates)
         return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/{project_id}/subtitles/{item_id}/timing")
+async def api_post_project_subtitle_timing(project_id: str, item_id: str, request: Request):
+    """Edit ASS/SRT display time only; never retime archive audio or manifest."""
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Subtitle timing update must be a JSON object")
+        expected_root = str(body.get("expected_project_root") or "").strip()
+        if expected_root and expected_root != str(config.root):
+            raise ValueError("Subtitle timing project context changed; reopen project")
+        result = update_subtitle_display_timing(
+            output_dir, item_id=item_id,
+            start=body.get("start"), end=body.get("end"),
+            reset=body.get("reset") is True,
+            expected_start=body.get("expected_start"), expected_end=body.get("expected_end"),
+        )
+        refreshed = refresh_subtitle_artifacts_from_settings(
+            output_dir,
+            source_language=config.source_text_language or "en",
+            target_language=config.target_language or "zh-CN",
+            generate_ass=(
+                (output_dir / "HSR_Voice_Archive.ass").is_file()
+                or bool(getattr(config, "generate_ass", False))
+            ),
+            render_config=subtitle_render_config(config),
+            strict_ass=False,
+        )
+        return {"ok": True, "timing": result, "refreshed": refreshed}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
