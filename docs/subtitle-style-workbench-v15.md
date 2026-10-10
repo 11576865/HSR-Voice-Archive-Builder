@@ -229,3 +229,71 @@ synthetic black video and deterministic manifest. It is **not** an external
 live project's continuous mixed-audio video, real character voice waveform,
 live FFmpeg output comparison, or physical Android acceptance. Do not
 reinterpret this proof as end-to-end archive-media visual QA.
+
+
+## Cross-tab cue concurrency and persistent export-health receipts (2026-10-10)
+
+### Stale cue text is no longer an implicit overwrite
+
+The per-cue text editor now posts **expected_final_chs** and
+**expected_source_member_id** together with its proposed `final_chs`.
+The backend checks both against the currently effective (source/member-aware)
+subtitle text before any override/review/export file is modified. Existing
+bulk callers that omit these new optional preconditions retain compatibility.
+An ambiguous/missing cue ID cannot satisfy a first-class optimistic edit.
+
+The GET subtitle explorer and ASS/SRT generator now use the same
+`_apply_derived_subtitle_fields` resolver, including legacy human overrides
+that follow a stable source member after cue-index reordering.
+
+When an explicit refresh encounters a newer server text while a local draft
+is still unsaved, the editor updates its server baseline but preserves the
+local draft. It disables Save and offers **采用服务器正文** (discard draft) and
+**确认保留本地草稿** (explicit user confirmation before allowing a later
+save against the newly loaded baseline). A conflict from the save endpoint
+leaves the editor's foreground draft intact and instructs the user to refresh.
+No automatic merge or unapproved text replacement is claimed.
+
+### Export status survives browser reload
+
+`app/subtitle_export_status.py` creates
+`output/subtitle_export_receipt.json` with the input fingerprints of
+Manifest, human text overrides and subtitle display-time overrides, plus
+checksums of completed SRT/ASS files when produced. The source clock and
+human-edit files remain authoritative; this is a derived-output receipt,
+not a replacement for the archive manifest.
+
+Before a subtitle regeneration writes Manifest/CSV or export files, it
+marks the receipt **pending**. When finished it records **current** or
+**failed** with the actual artifact error. The project subtitle GET endpoint
+now surfaces `export_status`; the UI presents an export-health strip and
+the independent ASS/SRT rebuild action after reload when state is
+`pending`, `failed`, `stale` or `unverified`.
+
+In particular, a missing or corrupt receipt is **unverified**, not proof of
+a successful export; a changed source/override checksum, deleted or mutated
+SRT/ASS produces **stale**, not a false current badge. New projects with no
+Manifest show `not-built`. The receipt asserts only input/output artifact
+currency, **not** video playback quality, ASS/libass visual correctness,
+global style-settings parity, or a cross-process atomic transaction.
+
+### Evidence
+
+- `tests/test_subtitle_integrated_export.py`: two windows with differing text
+  baselines and a changed source member are rejected before file writes.
+  Legacy source-member alias resolution is tested against real output writers.
+- `tests/test_subtitle_cue_editor.py`: actual production JavaScript preserves
+  in-flight drafts, reports stale backend responses, re-bases a refreshed
+  server version without discarding a local draft, and requires explicit
+  resolution before a later save.
+- `tests/test_subtitle_export_status.py`: checksummed current, stale,
+  pending, failed, unverified and not-built states are validated across file
+  mutations and simulated process reload.
+- `tests/test_subtitle_export_recovery_ui.py`: production UI script loads a
+  failed receipt and retries export without submitting a new cue text/time edit.
+- Existing Chromium responsive evidence and real FFmpeg/libass timing renders
+  remain separate acceptance layers.
+
+**Still outside scope:** true multi-process writes to the same output directory,
+edit history/three-way automatic text merging, full program video and soundtrack
+synchronization, and physical device QA.
