@@ -49,6 +49,7 @@ function node(id) {
 }
 const pending = [];
 const madeUrls = [];
+const decodes = [];
 const sandbox = {
   document: {
     getElementById: node,
@@ -71,11 +72,12 @@ const sandbox = {
 };
 vm.createContext(sandbox);
 vm.runInContext(source, sandbox);
-async function settle() { await Promise.resolve(); await Promise.resolve(); }
+node('libassPreviewImage').decode = () => new Promise((resolve,reject)=>decodes.push({resolve,reject}));
+async function settle() { await new Promise(resolve=>setImmediate(resolve)); }
 function complete() {
   const resolve = pending.shift();
   assert.ok(resolve, 'expected a pending backend request');
-  resolve({ok:true,blob:async()=>({size:100})});
+  resolve({ok:true,blob:async()=>({size:100,type:'image/png'})});
 }
 (async () => {
   // Request 1: edit occurs before its response, so it cannot publish an old frame.
@@ -89,9 +91,14 @@ function complete() {
   assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
   assert.equal(node('evidence-root').dataset.previewEvidence, 'geometry');
 
-  // Request 2: a current, successful backend result is marked as actual libass.
+  // Request 2: transport success is not yet decoded-image success.
   const current = vm.runInContext('renderLibassPreview()', sandbox);
   complete();
+  await settle();
+  assert.equal(decodes.length, 1);
+  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
+  assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
+  decodes.shift().resolve();
   await current;
   assert.equal(node('evidence-root').dataset.previewEvidence, 'libass');
   assert.equal(node('libassPreviewImage').classList.contains('hidden'), false);
@@ -105,7 +112,18 @@ function complete() {
   assert.equal(node('evidence-root').dataset.previewEvidence, 'geometry');
   assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
   assert.equal(madeUrls.length, 1, 'manual geometry choice must suppress stale frame publishing');
-  process.stdout.write('Subtitle preview identity regression: OK\n');
+
+  // Request 4: a non-decodable image must never claim renderer evidence.
+  const invalid = vm.runInContext('renderLibassPreview()', sandbox);
+  complete();
+  await settle();
+  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
+  decodes.shift().reject(new Error('Invalid PNG bytes'));
+  await invalid;
+  assert.equal(node('evidence-root').dataset.previewEvidence, 'failed');
+  assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
+  assert.equal(node('previewLibassBtn').disabled, false);
+  process.stdout.write('Subtitle preview identity and image decode regression: OK\n');
 })().catch(e => { console.error(e); process.exitCode = 1; });
 """
         script = "const source = " + json.dumps(production_js, ensure_ascii=False) + ";\n" + harness
