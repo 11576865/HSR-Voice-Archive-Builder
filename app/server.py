@@ -518,6 +518,9 @@ async def api_subtitle_layout_settings(request: Request):
             data = dict(form)
         if not isinstance(data, dict):
             raise ValueError("Subtitle settings payload must be an object")
+        expected_root = str(data.get("expected_project_root") or "").strip()
+        if expected_root and expected_root != str(config.root):
+            raise ValueError("Subtitle settings project context changed; reopen the target project and retry")
 
         def as_bool(name: str, default: bool) -> bool:
             value = data.get(name, default)
