@@ -6924,8 +6924,10 @@ async function saveLayoutCueTiming({reset=false}={}){
       row.start=Number(result.start);row.end=Number(result.end);
       row.timing_modified=!!result.timing_modified;
       row.timing_conflict=false;
-      row.word_alignment_ready=false;
-      row.word_alignment_reason='display-timing-adjusted';
+      row.word_alignment_ready=(!result.timing_modified)&&!!row.word_alignment?.valid;
+      row.word_alignment_reason=result.timing_modified
+        ? 'display-timing-adjusted'
+        : String(row.word_alignment?.reason||'missing');
     }
     state.savedStart=Number(result.start);
     state.savedEnd=Number(result.end);
