@@ -217,5 +217,37 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
 
 
 
+    def test_cue_editor_has_persisted_text_and_source_audio_controls(self) -> None:
+        html = self.html
+        for element_id in (
+            "layoutCueEditorPanel",
+            "layoutCueHeading",
+            "layoutCueFinalText",
+            "layoutCueSaveBtn",
+            "layoutCueRevertBtn",
+            "layoutCueSourceText",
+            "layoutCueStart",
+            "layoutCueEnd",
+            "layoutCueDuration",
+            "layoutCueScrubber",
+            "layoutCueScrubberTime",
+            "layoutCueAudio",
+            "layoutCueAudioLoadBtn",
+            "layoutCueSaveStatus",
+        ):
+            self.assertEqual(html.count(f'id="{element_id}"'), 1)
+        self.assertIn("function layoutCueUpdateDraft(next)", html)
+        self.assertIn("async function saveLayoutCueText()", html)
+        self.assertIn("expected_project_root:currentProject.root||null", html)
+        self.assertIn("if(Number(data.result?.updated_count||0)!==1)", html)
+        self.assertIn("layoutCueDrafts=new Map()", html)
+        self.assertIn("layoutCueSelect(null); // Scratch trial text", html)
+        self.assertIn("layoutStressSample.word_alignments=null", html)
+        self.assertIn("正在获取原始语音并校验 WAV", html)
+        self.assertIn("响应不是合法的 WAV 文件", html)
+        self.assertIn("beforeunload", html)
+
+
+
 if __name__ == "__main__":
     unittest.main()
