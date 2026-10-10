@@ -2878,6 +2878,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   overflow:visible!important;
 }
 
+
+#layoutCorpusRefreshBtn{min-height:32px!important;padding:5px 8px!important;font-size:10px!important}
+@media(max-width:759px){#layoutCorpusRefreshBtn{min-height:34px!important}}
+
 </style>
 </head>
 <body>
@@ -3273,6 +3277,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <div><span class="layout-eyebrow">SUBTITLE EXPLORER</span><h3>字幕条目</h3></div>
             <div class="layout-rail-head-actions">
               <span id="layoutCorpusCount" class="layout-rail-count">0 / 0</span>
+              <button type="button" id="layoutCorpusRefreshBtn" title="重新读取项目字幕；保留本次会话未保存的正文草稿">刷新</button>
               <button type="button" id="layoutCorpusMobileToggleBtn" aria-expanded="false" aria-controls="layoutCorpusList">浏览 ▾</button>
             </div>
           </div>
@@ -6787,6 +6792,8 @@ function layoutCueSelect(sub){
   if(String(layoutCueActiveId)!==String(sub.id))layoutCueClearAudio();
   layoutCueActiveId=sub.id;
   const state=layoutCueState(sub);
+  const editor=document.getElementById('layoutCueFinalText');
+  if(editor)editor.value=state.draft; // Cue change must update focused editor too.
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){
@@ -6820,6 +6827,8 @@ function layoutCueUpdateDraft(next){
 function layoutCueRevertDraft(){
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
   if(!state||state.saving)return;
+  const editor=document.getElementById('layoutCueFinalText');
+  if(editor)editor.value=state.saved;
   layoutCueUpdateDraft(state.saved);
 }
 async function saveLayoutCueText(){
@@ -7147,7 +7156,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
     return updateLayoutPreview();
   }
   const manual=!force&&layoutSampleSource==='manual'&&layoutSampleProjectIdentity===projectKey;
-  if(manual){
+  if(manual&&!refresh){
     if(status){status.textContent='已保留自定义试调文本。需要项目字幕时，请明确选取左侧条目或重新载入压力样本。';status.className='small muted layout-corpus-status';}
     updateLayoutSampleOrigin();
     renderLayoutCorpusRail();
@@ -7535,6 +7544,15 @@ applyPreviewBackground();
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
 document.getElementById('layoutCueFinalText')?.addEventListener('input',event=>layoutCueUpdateDraft(event.target.value));
+document.getElementById('layoutCueFinalText')?.addEventListener('keydown',event=>{
+  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){
+    event.preventDefault();
+    saveLayoutCueText();
+  }else if(event.altKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')){
+    event.preventDefault();
+    moveLayoutCorpusSelection(event.key==='ArrowUp'?-1:1);
+  }
+});
 document.getElementById('layoutCueSaveBtn')?.addEventListener('click',()=>saveLayoutCueText());
 document.getElementById('layoutCueRevertBtn')?.addEventListener('click',layoutCueRevertDraft);
 document.getElementById('layoutCueAudioLoadBtn')?.addEventListener('click',layoutCueLoadAudio);
@@ -7568,6 +7586,7 @@ window.addEventListener('beforeunload',event=>{
 });
 
 
+document.getElementById('layoutCorpusRefreshBtn')?.addEventListener('click',()=>loadLayoutStressSample({refresh:true}).catch(e=>setLog(String(e))));
 document.getElementById('layoutCorpusMobileToggleBtn')?.addEventListener('click',()=>{
   const rail=document.querySelector('.layout-corpus-rail');
   const toggle=document.getElementById('layoutCorpusMobileToggleBtn');
