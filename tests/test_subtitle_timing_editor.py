@@ -45,7 +45,8 @@ const sandbox={
   formatClockTime:n=>String(n),
   api:(path,opt)=>{
     if(path.endsWith('/subtitles?selector=all'))return Promise.resolve({subtitles,persistable:true});
-    if(path.endsWith('/timing'))return new Promise(resolve=>requests.push({path,payload:JSON.parse(opt.body),resolve}));
+    if(path.endsWith('/timing')||path.endsWith('/subtitles/artifacts/refresh'))
+      return new Promise(resolve=>requests.push({path,payload:JSON.parse(opt.body),resolve}));
     throw Error('Unexpected request '+path);
   },
   subtitleSettingsPayload:()=>({base_chs_size:48}),
@@ -113,6 +114,31 @@ const act=x=>vm.runInContext(x,sandbox);
   requests.shift().resolve({timing:{id:'12',start:5,end:7,timing_modified:false},refreshed:{ass_error:''}});
   assert.equal(await recovery,true);
   assert.equal(subtitles[1].timing_conflict,false);
+
+  act("layoutCueUpdateTiming('end','7.2')");
+  const partial=act('saveLayoutCueTiming()');
+  assert.equal(requests.length,1);
+  requests.shift().resolve({
+    saved:true,artifacts_current:false,artifact_error:'synthetic ASS export failure',
+    timing:{id:'12',start:5,end:7.2,timing_modified:true},
+    refreshed:{ass_error:'synthetic ASS export failure'}
+  });
+  assert.equal(await partial,true,'time edit really committed although export failed');
+  assert.equal(subtitles[1].end,7.2);
+  assert.equal(node('layoutCueTimingSaveBtn').disabled,true,'do not ask to re-save the committed timing');
+  assert.equal(node('layoutCueTimingRetryExportBtn').hidden,false);
+  assert.match(node('layoutCueTimingStatus').textContent,/已保存/);
+  const retry=act('layoutCueRetryArtifactExport()');
+  assert.equal(requests.length,1,'retry must be a separate endpoint');
+  assert.match(requests[0].path,/subtitles\/artifacts\/refresh$/);
+  assert.equal(requests[0].payload.expected_project_root,'/project-a');
+  assert.equal(requests[0].payload.force_ass,true);
+  requests.shift().resolve({
+    artifacts_current:true,artifact_error:'',refreshed:{ass_error:''}
+  });
+  assert.equal(await retry,true);
+  assert.equal(node('layoutCueTimingRetryExportBtn').hidden,true);
+  assert.equal(subtitles[1].end,7.2,'retry cannot change committed cue boundary');
 
   assert.ok(invalidations>=3);
   process.stdout.write('timing editor production JS contract: OK\n');
