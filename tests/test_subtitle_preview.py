@@ -295,6 +295,45 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertTrue(response.json()["subtitles"])
         self.assertIs(response.json()["persistable"], False)
 
+    def test_timing_edit_rejects_wrong_project_before_writing(self):
+        response = self.client.post(
+            "/api/project/active/subtitles/11/timing",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(self.root / "wrong-root"),
+                "expected_start": 1.0,
+                "expected_end": 2.0,
+                "start": 1.1,
+                "end": 2.2,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Subtitle timing project context changed", response.json()["error"])
+
+    @patch("app.server.refresh_subtitle_artifacts_from_settings", return_value={"ass_error": ""})
+    @patch("app.server.update_subtitle_display_timing", return_value={
+        "id": "11", "start": 1.1, "end": 2.2, "timing_modified": True
+    })
+    def test_timing_edit_uses_existing_regeneration_pipeline(self, timing_mock, refresh_mock):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/project/active/subtitles/11/timing",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(current.root),
+                "expected_start": 1.0,
+                "expected_end": 2.0,
+                "start": 1.1,
+                "end": 2.2,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["timing"]["timing_modified"])
+        self.assertEqual(timing_mock.call_args.kwargs["item_id"], "11")
+        self.assertEqual(timing_mock.call_args.kwargs["expected_start"], 1.0)
+        self.assertEqual(timing_mock.call_args.kwargs["expected_end"], 2.0)
+        self.assertEqual(refresh_mock.call_count, 1)
+
     def test_cue_edit_rejects_cross_project_write_before_touching_manifest(self):
         response = self.client.post(
             "/api/project/active/subtitles",
