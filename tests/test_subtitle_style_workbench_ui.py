@@ -233,6 +233,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
             "layoutCueScrubberTime",
             "layoutCueAudio",
             "layoutCueAudioLoadBtn",
+            "layoutCueWaveform",
+            "layoutCueWaveformHelp",
             "layoutCueSaveStatus",
         ):
             self.assertEqual(html.count(f'id="{element_id}"'), 1)
@@ -248,6 +250,11 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("正在获取原始语音并校验 WAV", html)
         self.assertIn("响应不是合法的 WAV 文件", html)
         self.assertIn("beforeunload", html)
+        self.assertIn("function layoutCuePrepareWaveform(blob,identity)", html)
+        self.assertIn("function layoutCueSeekAudio(fraction)", html)
+        self.assertIn("event.key==='ArrowDown'", html)
+        self.assertIn("layoutCorpusPersistable=data.persistable===true;", html)
+        self.assertIn("layoutCorpusRefreshBtn", html)
 
 
 
