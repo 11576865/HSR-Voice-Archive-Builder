@@ -13,6 +13,7 @@ from .subtitle_timing import (
     read_timing_overrides,
     effective_subtitle_window,
     source_subtitle_window,
+    StaleSubtitleTimingError,
 )
 from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
@@ -486,6 +487,7 @@ def get_project_subtitles(
                 "source_start": 5.0,
                 "source_end": 7.5,
                 "timing_modified": False,
+                "timing_conflict": False,
                 "modified": False,
                 "confirmed": False,
             },
@@ -502,6 +504,7 @@ def get_project_subtitles(
                 "source_start": 8.0,
                 "source_end": 11.2,
                 "timing_modified": False,
+                "timing_conflict": False,
                 "modified": False,
                 "confirmed": False,
             },
@@ -591,8 +594,15 @@ def get_project_subtitles(
                 modified = bool(ov.get("modified", True))
 
         source_start, source_end = source_subtitle_window(entry)
-        start, end = effective_subtitle_window(entry, timing_overrides)
         timing_modified = str_id in timing_overrides
+        timing_conflict = False
+        try:
+            start, end = effective_subtitle_window(entry, timing_overrides)
+        except StaleSubtitleTimingError:
+            # A moved source clock may invalidate old derived timing, but the
+            # UI must remain accessible so an explicit reset can repair it.
+            start, end = source_start, source_end
+            timing_conflict = True
 
         overflow_info = overflow_map.get(str_id)
         item = {
@@ -605,6 +615,7 @@ def get_project_subtitles(
             "source_start": source_start,
             "source_end": source_end,
             "timing_modified": timing_modified,
+            "timing_conflict": timing_conflict,
             "source_language": source_lang,
             "source_text": str(entry.get("source_text") or entry.get("english", "")),
             "official_chs": official_chs,
