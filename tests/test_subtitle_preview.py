@@ -286,6 +286,15 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(load_project(self.root).subtitle_chs_size, 51)
 
+    def test_unbuilt_project_cue_list_disables_persisting_demo_rows(self):
+        response = self.client.get(
+            "/api/project/active/subtitles?selector=all",
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["subtitles"])
+        self.assertIs(response.json()["persistable"], False)
+
     def test_cue_edit_rejects_cross_project_write_before_touching_manifest(self):
         response = self.client.post(
             "/api/project/active/subtitles",
