@@ -2701,6 +2701,92 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
   .layout-evidence-dot{transition:none}
 }
 
+
+/* Subtitle authoring studio: corpus navigation + stage + Inspector.
+   This is a structural workspace redesign, not another coat of card decoration. */
+body[data-workspace="layout"] main{max-width:1940px!important}
+body[data-workspace="layout"] .grid{width:100%!important;max-width:1900px!important}
+body[data-workspace="layout"] .preview-workbench{
+  display:grid!important;
+  grid-template-columns:clamp(230px,17vw,280px) minmax(0,1fr) clamp(355px,25vw,430px)!important;
+  align-items:start!important;
+  overflow:visible!important;
+}
+.layout-corpus-rail{
+  min-width:0;
+  display:flex;flex-direction:column;
+  position:sticky;top:calc(var(--topbar-height) + 46px);
+  height:min(calc(100dvh - var(--topbar-height) - 58px),950px);
+  background:var(--layout-inspector);
+  border-right:1px solid var(--layout-border);
+  color:var(--layout-text);
+}
+.layout-rail-title{display:flex;align-items:center;justify-content:space-between;gap:8px;padding:18px 16px 12px}
+.layout-eyebrow{font:700 10px/1.3 ui-monospace,Consolas,monospace;letter-spacing:.09em;color:var(--layout-muted)}
+.layout-rail-title h3{font-size:17px;margin:5px 0 0;font-weight:720;letter-spacing:-.02em}
+.layout-rail-count{color:var(--layout-muted);font:600 11px/1.4 ui-monospace,Consolas,monospace}
+.layout-rail-search{padding:4px 12px 12px}
+.layout-rail-search label{font-size:11px;color:var(--layout-muted);margin:0 0 6px;font-weight:600}
+.layout-rail-search input{min-height:39px!important;padding:8px 11px!important;font-size:13px!important;border-radius:8px!important}
+.layout-rail-filters{display:flex;gap:2px;padding:0 12px 10px;border-bottom:1px solid var(--layout-border)}
+.layout-rail-filters button{
+  min-height:35px!important;flex:1;min-width:0;
+  padding:7px 4px!important;font-size:11px!important;font-weight:650!important;
+  border:0!important;border-radius:6px!important;background:transparent!important;
+  color:var(--layout-muted)!important;
+}
+.layout-rail-filters button[aria-pressed="true"]{
+  background:color-mix(in srgb,var(--layout-evidence-accent) 15%,var(--layout-inspector))!important;
+  color:var(--layout-text)!important;
+}
+.layout-corpus-list{flex:1;min-height:100px;overflow-y:auto;overscroll-behavior:contain;padding:6px}
+.layout-corpus-item{
+  width:100%;min-width:0;display:flex;flex-direction:column;gap:5px;
+  border:1px solid transparent!important;border-left:3px solid transparent!important;
+  border-radius:7px!important;background:transparent!important;
+  color:var(--layout-text)!important;padding:11px 12px!important;
+  text-align:left!important;font-weight:400!important;
+  margin-bottom:3px;line-height:1.4;min-height:74px;
+}
+.layout-corpus-item:hover{background:var(--layout-section)!important}
+.layout-corpus-item[aria-current="true"]{background:var(--layout-section)!important;border-left-color:var(--layout-evidence-accent)!important}
+.layout-corpus-item-top{display:flex;align-items:center;justify-content:space-between;gap:8px;color:var(--layout-muted);font:600 11px/1.3 ui-monospace,Consolas,monospace}
+.layout-corpus-item-text{display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden;font-size:13px;line-height:1.4;color:var(--layout-text)}
+.layout-corpus-item-meta{display:flex;align-items:center;gap:6px;flex-wrap:wrap;font-size:10px;color:var(--layout-muted)}
+.layout-corpus-item-meta em{font-style:normal;color:var(--layout-evidence-warning);font-weight:700}
+.layout-corpus-item-meta .layout-audit-failed{color:#f49d91}
+.layout-corpus-item-meta .layout-audit-scaled{color:#f2c17f}
+.layout-empty{font-size:12px;color:var(--layout-muted);padding:22px 13px;line-height:1.6;margin:0}
+.layout-rail-footer{flex-shrink:0;border-top:1px solid var(--layout-border);padding:12px}
+.layout-rail-nav{display:grid;grid-template-columns:1fr 1fr;gap:7px}
+.layout-rail-nav button{font-size:11px!important;min-height:36px!important;padding:6px!important}
+.layout-audit-action{width:100%;min-height:40px!important;margin-top:9px;background:var(--layout-evidence-accent)!important;color:#0a1825!important;border-color:transparent!important;font-size:12px!important}
+.layout-audit-cancel{width:100%;min-height:33px!important;margin-top:6px;font-size:11px!important}
+.layout-rail-audit-status{font-size:11px;line-height:1.5;color:var(--layout-muted);margin-top:9px}
+.preview-workbench .layout-preview-region{border-right:1px solid var(--layout-border)}
+@media(max-width:1360px) and (min-width:760px){
+  body[data-workspace="layout"] .preview-workbench{
+    grid-template-columns:240px minmax(0,1fr)!important;
+  }
+  .preview-workbench .layout-corpus-rail{grid-row:1;grid-column:1;height:min(75dvh,720px)}
+  .preview-workbench .layout-preview-region{grid-row:1;grid-column:2;position:sticky;top:calc(var(--topbar-height) + 46px)}
+  .preview-workbench .preview-inspector{grid-column:1/-1;grid-row:2;max-height:none!important;overflow:visible!important;position:relative!important;top:auto!important}
+  .preview-inspector .preview-controls{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+}
+@media(max-width:759px){
+  body[data-workspace="layout"] .preview-workbench{grid-template-columns:minmax(0,1fr)!important}
+  .preview-workbench .layout-corpus-rail{position:relative;top:auto;height:auto;max-height:410px;border-right:0;border-bottom:1px solid var(--layout-border)}
+  .layout-corpus-list{min-height:100px;max-height:180px}
+  .layout-rail-title{padding:12px 14px 8px}
+  .layout-rail-footer{display:grid;grid-template-columns:1fr auto;gap:6px 12px;align-items:center;padding:10px 12px}
+  .layout-rail-nav{grid-column:1/-1}
+  .layout-audit-action{margin:0}
+  .layout-audit-cancel{margin:0}
+  .layout-rail-audit-status{grid-column:1/-1;margin-top:2px}
+  .preview-workbench .layout-preview-region{grid-row:auto;grid-column:1;position:relative!important;top:auto!important}
+  .preview-workbench .preview-inspector{grid-row:auto;grid-column:1;position:relative!important;top:auto!important;max-height:none!important;overflow:visible!important}
+}
+
 </style>
 </head>
 <body>
@@ -3090,6 +3176,34 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
         <span><b>01</b> 调整样式与几何</span><span><b>02</b> 实际渲染检视</span><span><b>03</b> 保存与生成</span>
       </div>
       <div class="preview-workbench">
+
+        <aside class="layout-corpus-rail" aria-label="项目字幕导航">
+          <div class="layout-rail-title">
+            <div><span class="layout-eyebrow">SUBTITLE EXPLORER</span><h3>字幕条目</h3></div>
+            <span id="layoutCorpusCount" class="layout-rail-count">0 / 0</span>
+          </div>
+          <div class="layout-rail-search">
+            <label for="layoutCorpusSearch">查找台词、编号、章节</label>
+            <input id="layoutCorpusSearch" type="search" autocomplete="off" placeholder="搜索字幕…" />
+          </div>
+          <div class="layout-rail-filters" aria-label="条目筛选">
+            <button type="button" data-layout-filter="all" aria-pressed="true">全部</button>
+            <button type="button" data-layout-filter="pressure" aria-pressed="false" title="根据字数估计的排版压力，不代表经过求解器审核">高压力</button>
+            <button type="button" data-layout-filter="issues" aria-pressed="false" title="仅显示本轮批量几何检查中发现的缩放、溢出或错误">需处理</button>
+          </div>
+          <div id="layoutCorpusList" class="layout-corpus-list" role="list" aria-label="项目字幕记录">
+            <p class="layout-empty">打开项目后浏览字幕条目。可直接选取并在主画布检查。</p>
+          </div>
+          <div class="layout-rail-footer">
+            <div class="layout-rail-nav">
+              <button type="button" id="layoutPreviousSampleBtn" aria-label="上一个字幕条目">← 上一条</button>
+              <button type="button" id="layoutNextSampleBtn" aria-label="下一个字幕条目">下一条 →</button>
+            </div>
+            <button type="button" id="layoutAuditBtn" class="layout-audit-action" title="使用当前未保存的版面参数，对筛选结果中至多 60 个条目运行真实排版求解器">检查筛选条目的排版</button>
+            <button type="button" id="layoutAuditCancelBtn" class="layout-audit-cancel hidden">停止本次检查</button>
+            <div id="layoutAuditStatus" role="status" aria-live="polite" class="layout-rail-audit-status">按需运行版面检查；高压力筛选仅是字数估计。</div>
+          </div>
+        </aside>
         <div class="layout-preview-region" aria-label="字幕画布与预览依据">
           <div class="preview-stage" id="previewCanvasContainer">
           <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
