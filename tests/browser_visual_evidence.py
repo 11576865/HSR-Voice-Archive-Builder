@@ -111,7 +111,22 @@ def make_router(rows: list[dict], writes: list[dict]):
         elif path.endswith("/api/quick/candidates"):
             payload = {"ok": True, "candidates": []}
         elif "/subtitles?" in url or path.endswith("/subtitles"):
-            payload = {"ok": True, "subtitles": rows, "persistable": True}
+            payload = {
+                "ok": True, "subtitles": rows, "persistable": True,
+                "export_status": {
+                    "state": "current", "artifacts_current": True,
+                    "ass_required": True, "artifact_error": "",
+                },
+            }
+        elif path.endswith("/subtitles/artifacts/refresh"):
+            payload = {
+                "ok": True, "artifacts_current": True, "artifact_error": "",
+                "refreshed": {"ass_error": ""},
+                "export_status": {
+                    "state": "current", "artifacts_current": True,
+                    "ass_required": True, "artifact_error": "",
+                },
+            }
         elif path.endswith("/api/subtitle-layout/preview"):
             payload = geometry(body or {})
         elif path.endswith("/timing"):
@@ -235,6 +250,23 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#layoutTimelineZoom").select_option("60")
     ensure(page.locator("#layoutTimelineRuler .layout-timeline-tick").count() >= 2, "Zoom ruler empty")
     screenshot(page, output, "desktop_studio_saved_zoom")
+    # Fixture-injected failed receipt in the *real* Chromium-rendered app.
+    # Exercise the existing independent retry control without resubmitting
+    # either text or timing edits.
+    page.evaluate("""() => layoutCueApplyExportHealth({
+      state:'failed',artifacts_current:false,ass_required:true,
+      artifact_error:'Fixture: an earlier ASS generation was interrupted'
+    })""")
+    ensure(page.locator("#layoutExportHealthNotice").is_visible(),
+           "Export-failure strip must be visible after a persisted failure")
+    ensure(page.locator("#layoutExportHealthRetryBtn").is_enabled(),
+           "Independent export retry must be offered")
+    screenshot(page, output, "desktop_studio_failed_export_notice")
+    page.locator("#layoutExportHealthRetryBtn").click()
+    page.wait_for_function("layoutCueExportHealthState === 'current'")
+    ensure(len(writes) == 1, "Export retry erroneously repeated the cue-timing write")
+    ensure(page.locator("#layoutExportHealthRetryBtn").is_hidden(),
+           "Successful retry must clear old failure affordance")
     report["desktop"] = {
         "resolution": "1600x900", "panel_rectangles": {"rail": rail, "stage": stage, "inspector": inspector},
         "timeline_width": timeline["width"], "stage_aspect_ratio": round(canvas["width"] / canvas["height"], 3),
