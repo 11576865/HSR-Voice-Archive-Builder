@@ -2930,6 +2930,17 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #layoutTimelineEditHint{flex-basis:100%;color:var(--layout-muted)}
 @media(max-width:759px){.layout-timeline{padding:12px 11px}.layout-timeline-tracks{height:120px}.layout-timeline-tools label{font-size:10px}.layout-timeline-event{font-size:10px!important}}
 
+
+/* Chromium-verified tablet correction: legacy grid-area:auto!important
+   overrides grid-column unless the entire grid-area is set explicitly. */
+@media (min-width:760px) and (max-width:1360px){
+  body[data-workspace="layout"] .preview-workbench > .preview-inspector{
+    grid-area:2 / 1 / 3 / -1 !important;
+    width:100%!important;
+    justify-self:stretch!important;
+  }
+}
+
 </style>
 </head>
 <body>
