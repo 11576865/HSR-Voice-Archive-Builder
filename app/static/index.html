@@ -2825,6 +2825,45 @@ body[data-workspace="layout"] .preview-workbench{
   .layout-corpus-rail:not(.is-open) .layout-rail-title{padding:12px 14px!important}
 }
 
+
+/* Cue editor: first-class event task under the stage; global style stays in inspector. */
+.layout-cue-editor{min-width:0;border-top:1px solid var(--layout-border);background:var(--layout-inspector);padding:17px 20px 20px;color:var(--layout-text)}
+.layout-cue-heading{display:flex;justify-content:space-between;align-items:center;gap:12px}
+.layout-cue-heading h3{font-size:17px;font-weight:720;letter-spacing:-.02em;margin:4px 0 0}
+.layout-cue-state{font-size:11px;font-weight:650;border-radius:6px;padding:5px 9px;background:var(--layout-section);color:var(--layout-muted);white-space:nowrap}
+.layout-cue-state[data-state="dirty"]{color:var(--layout-evidence-warning)}
+.layout-cue-state[data-state="saved"]{color:var(--layout-evidence-accent)}
+.layout-cue-state[data-state="saving"]{color:var(--layout-text)}
+.layout-cue-clock{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0 12px}
+.layout-cue-clock span{padding:9px 10px;border-radius:7px;background:var(--layout-section);font-size:11px;color:var(--layout-muted)}
+.layout-cue-clock strong{display:block;font:700 14px/1.5 ui-monospace,Consolas,monospace;color:var(--layout-text);margin-top:2px}
+.layout-cue-scrub label{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:650;color:var(--layout-muted)}
+.layout-cue-scrub input{width:100%;margin:7px 0!important}
+.layout-cue-scrub p{font-size:10px;color:var(--layout-muted);margin:2px 0 14px;line-height:1.5}
+.layout-cue-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:12px;align-items:stretch}
+.layout-cue-source,.layout-cue-translation{min-width:0}
+.layout-cue-field-label{display:block;font-size:11px;font-weight:700;color:var(--layout-muted);margin:0 0 7px}
+.layout-cue-source p{font-size:13px;line-height:1.65;margin:0;padding:10px 12px;background:var(--layout-section);border:1px solid var(--layout-border);border-radius:7px;min-height:92px;white-space:pre-wrap;overflow-wrap:anywhere}
+.layout-cue-translation textarea{font-size:13px;line-height:1.65;resize:vertical;min-height:92px!important;width:100%;border-radius:7px!important}
+.layout-cue-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.layout-cue-actions button{min-height:37px!important;padding:7px 12px!important;font-size:12px!important}
+.layout-cue-actions button:disabled{opacity:.5!important}
+#layoutCueSaveBtn{background:var(--layout-evidence-accent)!important;color:#0b1924!important;border-color:transparent!important}
+#layoutCueCharCount{margin-left:auto;font-size:11px;color:var(--layout-muted)}
+.layout-cue-audio{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 12px;align-items:center;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--layout-border)}
+.layout-cue-audio-meta{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:11px}
+.layout-cue-audio-meta strong{font-size:12px}
+.layout-cue-audio-meta span{color:var(--layout-muted);overflow-wrap:anywhere}
+#layoutCueAudioLoadBtn{min-height:34px!important;padding:6px 12px!important;font-size:11px!important}
+#layoutCueAudio{grid-column:1/-1;width:100%;height:36px}
+.layout-cue-save-note{font-size:11px;line-height:1.5;color:var(--layout-muted);margin:11px 0 0}
+@media(max-width:1050px){.layout-cue-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:759px){
+  .layout-cue-editor{padding:13px 14px 16px}
+  .layout-cue-clock span{padding:7px}
+  .layout-cue-clock strong{font-size:12px}
+}
+
 </style>
 </head>
 <body>
@@ -3273,6 +3312,40 @@ body[data-workspace="layout"] .preview-workbench{
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
           </div>
+          <section id="layoutCueEditorPanel" class="layout-cue-editor" aria-label="当前字幕条目编辑">
+            <div class="layout-cue-heading">
+              <div><span class="layout-eyebrow">CUE EDITOR</span><h3 id="layoutCueHeading">请选择字幕条目</h3></div>
+              <span id="layoutCueDraftBadge" class="layout-cue-state">仅预览</span>
+            </div>
+            <div class="layout-cue-clock">
+              <span>起点 <strong id="layoutCueStart">--:--.-</strong></span>
+              <span>终点 <strong id="layoutCueEnd">--:--.-</strong></span>
+              <span>时长 <strong id="layoutCueDuration">--</strong></span>
+            </div>
+            <div class="layout-cue-scrub">
+              <label for="layoutCueScrubber">片段内预览位置 <output id="layoutCueScrubberTime">—</output></label>
+              <input type="range" id="layoutCueScrubber" min="5" max="95" step="5" value="50" disabled aria-describedby="layoutCueTimeNote" />
+              <p id="layoutCueTimeNote">时间轴为当前字幕片段的只读参考，滑块控制 ASS 效果预览时间，不修改音频/时间戳。</p>
+            </div>
+            <div class="layout-cue-grid">
+              <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
+              <div class="layout-cue-translation">
+                <label class="layout-cue-field-label" for="layoutCueFinalText">中文字幕 · 可编辑并保存到项目</label>
+                <textarea id="layoutCueFinalText" rows="3" disabled placeholder="选择真实项目字幕后编辑中文字幕；不会自动保存。"></textarea>
+              </div>
+            </div>
+            <div class="layout-cue-actions">
+              <button id="layoutCueSaveBtn" type="button" disabled>保存当前字幕</button>
+              <button id="layoutCueRevertBtn" type="button" disabled>放弃未保存修改</button>
+              <span id="layoutCueCharCount">0 字</span>
+            </div>
+            <div class="layout-cue-audio">
+              <div class="layout-cue-audio-meta"><strong>原始台词试听</strong><span id="layoutCueAudioStatus">选取条目后按需加载原始 WAV</span></div>
+              <button id="layoutCueAudioLoadBtn" type="button" disabled>加载音频</button>
+              <audio id="layoutCueAudio" controls preload="none" aria-label="当前字幕对应原始音频"></audio>
+            </div>
+            <p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">这是字幕正文编辑器；全局字体和排版参数在右侧单独保存。</p>
+          </section>
         </div>
 
         <aside class="preview-inspector" aria-label="字幕样式参数与操作">
