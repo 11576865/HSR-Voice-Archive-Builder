@@ -6446,7 +6446,175 @@ function subtitleLayoutStressScore(sub){
   return Math.max(chsWidth,primaryWidth)+(chsWidth+primaryWidth)*0.28;
 }
 
-async function loadLayoutStressSample({force=false}={}){
+
+let layoutCorpusItems=[];
+let layoutCorpusProjectKey=null;
+let layoutCorpusSelectedId=null;
+let layoutCorpusFilter='all';
+let layoutAuditGeneration=0;
+let layoutAuditResults=new Map();
+let layoutAuditInProgress=false;
+
+function layoutCorpusVisibleRows(){
+  const query=(document.getElementById('layoutCorpusSearch')?.value||'').trim().toLowerCase();
+  const matched=layoutCorpusItems.filter(sub=>{
+    if(!query)return true;
+    return [sub.id,sub.source_text,sub.final_chs,sub.official_chs,sub.api_chs,sub.original_chs,sub.group,sub.filename]
+      .some(v=>String(v||'').toLowerCase().includes(query));
+  });
+  if(layoutCorpusFilter==='issues'){
+    return matched.filter(sub=>['failed','scaled','error'].includes(layoutAuditResults.get(String(sub.id))?.kind));
+  }
+  if(layoutCorpusFilter==='pressure'){
+    // Explicitly a text-width heuristic, not actual layout failure evidence.
+    const count=Math.max(1,Math.ceil(matched.length*0.2));
+    return [...matched].sort((a,b)=>subtitleLayoutStressScore(b)-subtitleLayoutStressScore(a)).slice(0,count);
+  }
+  return matched;
+}
+function renderLayoutCorpusRail(){
+  const list=document.getElementById('layoutCorpusList');
+  if(!list)return;
+  const visible=layoutCorpusVisibleRows();
+  const count=document.getElementById('layoutCorpusCount');
+  if(count)count.textContent=visible.length+' / '+layoutCorpusItems.length;
+  for(const btn of document.querySelectorAll('.layout-rail-filters button[data-layout-filter]')){
+    btn.setAttribute('aria-pressed',btn.dataset.layoutFilter===layoutCorpusFilter?'true':'false');
+  }
+  if(!layoutCorpusItems.length){
+    list.innerHTML='<p class="layout-empty">暂无项目字幕。打开已生成字幕的项目后，可从此处选取实际台词并检查排版。</p>';
+  }else if(!visible.length){
+    list.innerHTML='<p class="layout-empty">当前搜索或筛选没有匹配的字幕。需处理筛选仅依据最近一次真实排版检查结果。</p>';
+  }else{
+    list.innerHTML=visible.map(sub=>{
+      const index=layoutCorpusItems.indexOf(sub);
+      const active=String(sub.id)===String(layoutCorpusSelectedId);
+      const audit=layoutAuditResults.get(String(sub.id));
+      const source=String(sub.final_chs||sub.official_chs||sub.api_chs||sub.original_chs||sub.source_text||'—');
+      const start=Number(sub.start||0),end=Number(sub.end||0);
+      const time=formatClockTime(start)+' – '+formatClockTime(end);
+      const tag=audit?.kind==='failed'?' <em class="layout-audit-failed">溢出</em>':
+        audit?.kind==='scaled'?' <em class="layout-audit-scaled">缩小到 '+audit.scale+'%</em>':
+        audit?.kind==='error'?' <em class="layout-audit-failed">检查错误</em>':'';
+      return '<button type="button" role="listitem" class="layout-corpus-item" data-layout-index="'+index+'"'+
+        (active?' aria-current="true"':'')+' title="选取这条项目字幕进行预览">'+
+        '<span class="layout-corpus-item-top"><span>#'+escapeHtml(String(sub.id))+'</span><span>'+escapeHtml(time)+'</span></span>'+
+        '<span class="layout-corpus-item-text">'+escapeHtml(source)+'</span>'+
+        '<span class="layout-corpus-item-meta">'+(sub.modified?'已修订 · ':'')+
+        (sub.word_alignment_ready?'词级时间 · ':'')+
+        escapeHtml(String(sub.group||'项目字幕'))+tag+'</span></button>';
+    }).join('');
+  }
+  const index=visible.findIndex(sub=>String(sub.id)===String(layoutCorpusSelectedId));
+  const prev=document.getElementById('layoutPreviousSampleBtn');
+  const next=document.getElementById('layoutNextSampleBtn');
+  if(prev)prev.disabled=!visible.length||index<=0;
+  if(next)next.disabled=!visible.length||index<0||index>=visible.length-1;
+}
+function selectLayoutCorpusByIndex(index){
+  const sub=layoutCorpusItems[index];
+  if(!sub)return;
+  loadLayoutStressSample({force:true,selectId:sub.id}).catch(e=>setLog(String(e)));
+}
+function moveLayoutCorpusSelection(offset){
+  const rows=layoutCorpusVisibleRows();
+  const at=rows.findIndex(sub=>String(sub.id)===String(layoutCorpusSelectedId));
+  const next=at<0?(offset>0?0:rows.length-1):at+offset;
+  if(next>=0&&next<rows.length)loadLayoutStressSample({force:true,selectId:rows[next].id}).catch(e=>setLog(String(e)));
+}
+function invalidateLayoutBatchAudit(){
+  layoutAuditGeneration++;
+  layoutAuditResults.clear();
+  layoutAuditInProgress=false;
+  const status=document.getElementById('layoutAuditStatus');
+  if(status)status.textContent='参数已变化；上次批量检查结果已过期。';
+  const run=document.getElementById('layoutAuditBtn');
+  if(run)run.disabled=false;
+  document.getElementById('layoutAuditCancelBtn')?.classList.add('hidden');
+  renderLayoutCorpusRail();
+}
+async function runLayoutBatchAudit(){
+  if(layoutAuditInProgress||!layoutCorpusItems.length)return;
+  const selected=layoutCorpusVisibleRows();
+  if(!selected.length){
+    const status=document.getElementById('layoutAuditStatus');
+    if(status)status.textContent='筛选结果为空。切换到全部或高压力后重试。';
+    return;
+  }
+  const total=selected.length;
+  const rows=selected.slice(0,60);
+  const key=layoutActiveProjectKey();
+  const params=subtitleSettingsPayload();
+  const fingerprint=JSON.stringify(params);
+  const run=++layoutAuditGeneration;
+  const current=()=>run===layoutAuditGeneration&&key===layoutActiveProjectKey()&&fingerprint===JSON.stringify(subtitleSettingsPayload());
+  layoutAuditInProgress=true;
+  layoutAuditResults.clear();
+  const startButton=document.getElementById('layoutAuditBtn');
+  if(startButton)startButton.disabled=true;
+  document.getElementById('layoutAuditCancelBtn')?.classList.remove('hidden');
+  const status=document.getElementById('layoutAuditStatus');
+  let cursor=0,checked=0,failed=0,scaled=0,errors=0;
+  const report=()=>{
+    if(!current())return;
+    if(status)status.textContent='真实几何检查 '+checked+' / '+rows.length+' · 溢出 '+failed+' · 需缩小 '+scaled+' · 检查错误 '+errors+
+      (total>rows.length?' · 当前只检查前 '+rows.length+' / '+total+' 条':'');
+    renderLayoutCorpusRail();
+  };
+  report();
+  const worker=async()=>{
+    while(cursor<rows.length&&current()){
+      const sub=rows[cursor++];
+      try{
+        const result=await api('/api/subtitle-layout/preview',{
+          method:'POST',
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({
+            english_text:String(sub.source_text||''),
+            chinese_text:String(sub.final_chs||sub.official_chs||sub.api_chs||sub.original_chs||''),
+            source_language:currentProject?.config?.source_text_language||'en',
+            target_language:currentProject?.config?.target_language||'zh-CN',
+            base_chs_size:params.base_chs_size,
+            base_primary_size:params.base_primary_size,
+            margin_left_percent:params.margin_horizontal_percent,
+            margin_top_percent:params.margin_vertical_percent,
+            min_central_gap:params.min_central_gap,
+            chs_font:params.chs_font,
+            primary_font:params.primary_font
+          })
+        });
+        if(!current())return;
+        const layout=result.layout||{};
+        const kind=layout.failed?'failed':Number(layout.scale_percent||100)<100?'scaled':'ok';
+        layoutAuditResults.set(String(sub.id),{kind,scale:Number(layout.scale_percent||100),reason:layout.failed_condition||''});
+        if(kind==='failed')failed++;
+        if(kind==='scaled')scaled++;
+      }catch(err){
+        if(!current())return;
+        errors++;
+        layoutAuditResults.set(String(sub.id),{kind:'error',reason:shortError(err)});
+      }
+      checked++;
+      if(checked===rows.length||checked%4===0)report();
+    }
+  };
+  try{
+    await Promise.all(Array.from({length:Math.min(3,rows.length)},()=>worker()));
+    if(current())report();
+  }finally{
+    if(current()){
+      layoutAuditInProgress=false;
+      if(startButton)startButton.disabled=false;
+      document.getElementById('layoutAuditCancelBtn')?.classList.add('hidden');
+      if(status)status.textContent='检查完成：'+checked+' / '+total+' 条 · 溢出 '+failed+' · 缩小 '+scaled+' · 请求错误 '+errors+
+        (total>rows.length?'。其余 '+(total-rows.length)+' 条未检查；筛选后可继续检查。':'。')+
+        '。几何结果不代表 libass 实际渲染已验收。';
+      renderLayoutCorpusRail();
+    }
+  }
+}
+
+async function loadLayoutStressSample({force=false,selectId=null,refresh=false}={}){
   const request=++layoutSampleRequestGeneration;
   const projectKey=layoutActiveProjectKey();
   const textRevision=layoutTrialTextRevision;
@@ -6457,20 +6625,43 @@ async function loadLayoutStressSample({force=false}={}){
     layoutStressSample=null;
     layoutSampleSource='example';
     layoutSampleProjectIdentity=null;
+    layoutCorpusItems=[];
+    layoutCorpusSelectedId=null;
+    layoutCorpusProjectKey=null;
+    layoutAuditGeneration++;
+    layoutAuditResults.clear();
+    renderLayoutCorpusRail();
     updateLayoutSampleOrigin();
     if(status){status.textContent='打开项目后才能选择真实字幕样本；当前文字仅用于试调。';status.className='small muted layout-corpus-status';}
     return updateLayoutPreview();
   }
-  if(!force&&layoutSampleSource==='manual'&&layoutSampleProjectIdentity===projectKey){
-    if(status){status.textContent='已保留自定义试调文本；需要重新使用项目中的实际字幕时，请选择「重新载入项目样本」。';status.className='small muted layout-corpus-status';}
+  const manual=!force&&layoutSampleSource==='manual'&&layoutSampleProjectIdentity===projectKey;
+  if(manual&&layoutCorpusProjectKey===projectKey&&layoutCorpusItems.length){
+    if(status){status.textContent='已保留自定义试调文本。左侧可选择任意项目字幕，或明确重新载入自动压力样本。';status.className='small muted layout-corpus-status';}
     updateLayoutSampleOrigin();
+    renderLayoutCorpusRail();
     return updateLayoutPreview();
   }
-  if(status){status.textContent='正在从项目字幕中选择版面压力较高的条目…';status.className='small muted layout-corpus-status';}
+  if(status){status.textContent='正在载入项目字幕导航与版面压力样本…';status.className='small muted layout-corpus-status';}
   try{
-    const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?selector=all');
+    let subtitles;
+    if(!refresh&&layoutCorpusProjectKey===projectKey&&layoutCorpusItems.length){
+      subtitles=layoutCorpusItems;
+    }else{
+      const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?selector=all');
+      if(!current())return;
+      subtitles=data.subtitles||[];
+      layoutCorpusItems=subtitles;
+      layoutCorpusProjectKey=projectKey;
+      layoutAuditResults.clear();
+      layoutAuditGeneration++;
+    }
     if(!current())return;
-    const subtitles=data.subtitles||[];
+    if(manual){
+      if(status){status.textContent='自定义文本已保留；字幕导航可用，单击条目才会替换试调文本。';status.className='small muted layout-corpus-status';}
+      renderLayoutCorpusRail();
+      return updateLayoutPreview();
+    }
     if(!subtitles.length){
       layoutStressSample=null;
       layoutSampleSource='example';
@@ -6488,6 +6679,13 @@ async function loadLayoutStressSample({force=false}={}){
     for(const sub of samplePool){
       const score=subtitleLayoutStressScore(sub);
       if(score>bestScore){bestScore=score;selected=sub;}
+    }
+    if(selectId!==null){
+      const picked=subtitles.find(sub=>String(sub.id)===String(selectId));
+      if(picked){selected=picked;bestScore=subtitleLayoutStressScore(picked);}
+    }else if(!force&&layoutSampleSource==='sample'&&layoutSampleProjectIdentity===projectKey&&layoutCorpusSelectedId!==null){
+      const previous=subtitles.find(sub=>String(sub.id)===String(layoutCorpusSelectedId));
+      if(previous){selected=previous;bestScore=subtitleLayoutStressScore(previous);}
     }
     const chs=String(selected.final_chs||selected.official_chs||selected.api_chs||selected.original_chs||'');
     const primary=String(selected.source_text||'');
@@ -6507,6 +6705,8 @@ async function loadLayoutStressSample({force=false}={}){
     };
     layoutSampleSource='sample';
     layoutSampleProjectIdentity=projectKey;
+    layoutCorpusSelectedId=selected.id;
+    renderLayoutCorpusRail();
     const chsInput=document.getElementById('prevChsText'),priInput=document.getElementById('prevPriText');
     if(chsInput)chsInput.value=chs;
     if(priInput)priInput.value=primary;
@@ -6818,10 +7018,34 @@ applyPreviewBackground();
 });
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
+document.getElementById('layoutCorpusSearch')?.addEventListener('input',renderLayoutCorpusRail);
+document.querySelectorAll('[data-layout-filter]').forEach(button=>button.addEventListener('click',()=>{
+  layoutCorpusFilter=button.dataset.layoutFilter||'all';
+  renderLayoutCorpusRail();
+}));
+document.getElementById('layoutCorpusList')?.addEventListener('click',event=>{
+  const btn=event.target.closest('[data-layout-index]');
+  if(btn)selectLayoutCorpusByIndex(Number(btn.dataset.layoutIndex));
+});
+document.getElementById('layoutPreviousSampleBtn')?.addEventListener('click',()=>moveLayoutCorpusSelection(-1));
+document.getElementById('layoutNextSampleBtn')?.addEventListener('click',()=>moveLayoutCorpusSelection(1));
+document.getElementById('layoutAuditBtn')?.addEventListener('click',()=>runLayoutBatchAudit().catch(e=>setLog(String(e))));
+document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
+  layoutAuditGeneration++;
+  layoutAuditInProgress=false;
+  const run=document.getElementById('layoutAuditBtn');
+  if(run)run.disabled=false;
+  document.getElementById('layoutAuditCancelBtn')?.classList.add('hidden');
+  const status=document.getElementById('layoutAuditStatus');
+  if(status)status.textContent='已停止本轮检查；已完成条目的结果仍可查看，其余条目未检查。';
+});
+
+
 ['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
+    invalidateLayoutBatchAudit();
     scheduleLayoutPreviewUpdate();
   });
 });
@@ -6830,6 +7054,7 @@ document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>l
   document.getElementById(id)?.addEventListener('change',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
+    invalidateLayoutBatchAudit();
     invalidateLibassPreview();
     updateLayoutPreview();
     if(id==='prevEnableKaraoke'){
@@ -6842,6 +7067,7 @@ document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>l
 document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
   previewPreset='custom';
   markSubtitleSettingsDirty();
+  invalidateLayoutBatchAudit();
   invalidateLibassPreview();
   updateLayoutPreview();
   loadWordAlignmentDiagnostics();
@@ -6897,6 +7123,7 @@ function applySubtitlePreset(name){
     document.getElementById('prevKaraokeMode').value='kf';
   }
   markSubtitleSettingsDirty();
+  invalidateLayoutBatchAudit();
   invalidateLibassPreview();
   updateLayoutPreview();
 }
