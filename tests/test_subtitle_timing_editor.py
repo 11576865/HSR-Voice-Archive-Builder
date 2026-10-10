@@ -99,6 +99,21 @@ const act=x=>vm.runInContext(x,sandbox);
   assert.equal(subtitles[0].start,2);
   assert.equal(node('layoutCueTimingResetBtn').disabled,false,'reset needs to show uncommitted draft if it differs');
 
+  // An archived source member can change on rebuild: an old display override
+  // must be explicitly cleared instead of applied to the new audio clock.
+  subtitles[1].timing_conflict=true;
+  subtitles[1].timing_modified=true;
+  await act('loadLayoutStressSample({force:true,selectId:12})');
+  assert.match(node('layoutCueTimingBadge').textContent,/冲突/);
+  assert.equal(node('layoutCueTimingResetBtn').disabled,false);
+  assert.equal(await act('saveLayoutCueTiming()'),false,'non-reset conflict write must fail');
+  const recovery=act('saveLayoutCueTiming({reset:true})');
+  assert.equal(requests.length,1,'stale source reset must make a real backend request');
+  assert.equal(requests[0].payload.reset,true);
+  requests.shift().resolve({timing:{id:'12',start:5,end:7,timing_modified:false},refreshed:{ass_error:''}});
+  assert.equal(await recovery,true);
+  assert.equal(subtitles[1].timing_conflict,false);
+
   assert.ok(invalidations>=3);
   process.stdout.write('timing editor production JS contract: OK\n');
 })().catch(e=>{console.error(e);process.exitCode=1});
