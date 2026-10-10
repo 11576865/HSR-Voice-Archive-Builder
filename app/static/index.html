@@ -3078,7 +3078,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
       <div class="topline">
         <div>
           <div class="layout-workbench-kicker">SUBTITLE STYLE WORKBENCH</div><h2 style="margin-bottom:4px">字幕样式工作台</h2>
-          <div id="previewSaveStatus" class="small muted">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
+          <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
           <span id="previewScaleBadge" class="badge">100%</span>
@@ -5880,6 +5880,7 @@ function loadPreviewBackgroundFile(file){
 let previewDebounceTimer = null;
 let previewPreset = 'custom';
 let savedSubtitleSettings = null;
+let subtitleSettingsSavePending = false;
 let libassPreviewObjectUrl = null;
 let libassPreviewGeneration = 0;
 let geometryPreviewGeneration = 0;
@@ -5933,6 +5934,8 @@ function showGeometryPreview(){
   if(renderButton)renderButton.disabled=false;
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
   setPreviewEvidence('geometry');
+  const status=document.getElementById('libassPreviewStatus');
+  if(status){status.textContent='正在显示浏览器几何求解结果；实际渲染画面已收起。';status.className='small muted';}
 }
 
 function libassPreviewPayload(){
@@ -6223,10 +6226,19 @@ function markSubtitleSettingsDirty(){
 
 async function saveSubtitleLayoutSettings(){
   const status=document.getElementById('previewSaveStatus');
+  if(subtitleSettingsSavePending){
+    if(status){status.textContent='字幕设置正在保存，请等待当前提交完成。';status.className='small muted';}
+    return false;
+  }
   if(!currentProject){
     if(status){status.textContent='请先打开项目。';status.className='small status-bad';}
     return false;
   }
+  subtitleSettingsSavePending=true;
+  const saveButton=document.getElementById('saveSubtitleLayoutBtn');
+  const exportButton=document.getElementById('generateSubtitleAssBtn');
+  if(saveButton)saveButton.disabled=true;
+  if(exportButton)exportButton.disabled=true;
   try{
     if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
     const submittedProject=currentProject.root||currentProject.name;
@@ -6259,6 +6271,10 @@ async function saveSubtitleLayoutSettings(){
     if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
     setLog(String(err));
     return false;
+  }finally{
+    subtitleSettingsSavePending=false;
+    if(saveButton)saveButton.disabled=false;
+    if(exportButton)exportButton.disabled=false;
   }
 }
 
