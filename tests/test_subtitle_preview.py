@@ -352,7 +352,7 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         response = self.client.post(
             "/api/project/active/subtitles/artifacts/refresh",
             headers=self.headers,
-            json={"expected_project_root": str(current.root / "stale")},
+            json={"expected_project_root": str(Path(current.root) / "stale")},
         )
         self.assertEqual(response.status_code, 400)
         self.assertEqual(retry_mock.call_count, 1)
