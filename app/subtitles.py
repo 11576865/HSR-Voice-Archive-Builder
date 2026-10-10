@@ -9,6 +9,11 @@ from typing import Any
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
+from .subtitle_timing import (
+    read_timing_overrides,
+    effective_subtitle_window,
+    source_subtitle_window,
+)
 from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
@@ -216,9 +221,16 @@ def _sync_corrected_csv(
     write_csv_rows(corrected, rows, fields)
 
 
-def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapter]:
+def _subtitle_adapters(
+    entries: list[dict[str, Any]],
+    timing_overrides: dict[str, dict[str, float]] | None = None,
+) -> list[SubtitleEntryAdapter]:
+    """Apply display-only timing to subtitle writers, never to source manifest."""
+    timing_overrides = timing_overrides or {}
     adapters: list[SubtitleEntryAdapter] = []
     for entry in entries:
+        entry_id = str(_entry_id(entry) or "")
+        start, end = effective_subtitle_window(entry, timing_overrides)
         adapters.append(
             SubtitleEntryAdapter(
                 item_id=_entry_id(entry) or "",
@@ -228,17 +240,11 @@ def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapt
                     or entry.get("target_text")
                     or entry.get("chinese", "")
                 ),
-                start_seconds=float(entry.get("start_seconds", 0.0)),
-                display_end_seconds=float(
-                    entry.get(
-                        "display_end_seconds",
-                        entry.get("audio_end_seconds", 0.0),
-                    )
-                ),
+                start_seconds=start,
+                display_end_seconds=end,
                 word_alignments=(
-                    entry.get("word_alignments")
-                    or entry.get("words")
-                    or None
+                    None if entry_id in timing_overrides
+                    else (entry.get("word_alignments") or entry.get("words") or None)
                 ),
                 group=str(entry.get("group", "") or ""),
                 filename=str(entry.get("filename", "") or ""),
@@ -342,7 +348,7 @@ def refresh_subtitle_artifacts_from_settings(
     # memory after manifest/csv persistence so an external alignment cache never
     # becomes source provenance or mutates the canonical archive manifest.
     apply_cached_word_alignments(entries, output_dir)
-    adapters = _subtitle_adapters(entries)
+    adapters = _subtitle_adapters(entries, read_timing_overrides(output_dir))
     source_language = source_language or "en"
     target_language = target_language or "zh-CN"
     ass_file = output_dir / "HSR_Voice_Archive.ass"
@@ -520,6 +526,7 @@ def get_project_subtitles(
             output_dir,
         )
     overrides_file = output_dir / "subtitles_overrides.json"
+    timing_overrides = read_timing_overrides(output_dir)
     overrides: dict[str, dict[str, Any]] = {}
     review_state = load_subtitle_review_state(output_dir)
     if overrides_file.is_file():
@@ -576,8 +583,9 @@ def get_project_subtitles(
                 final_chs = str(ov.get("final_chs", final_chs))
                 modified = bool(ov.get("modified", True))
 
-        start = float(entry.get("start_seconds", 0.0))
-        end = float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0)))
+        source_start, source_end = source_subtitle_window(entry)
+        start, end = effective_subtitle_window(entry, timing_overrides)
+        timing_modified = str_id in timing_overrides
 
         overflow_info = overflow_map.get(str_id)
         item = {
@@ -587,6 +595,9 @@ def get_project_subtitles(
             "logical_id": str(entry.get("logical_id", "") or ""),
             "start": start,
             "end": end,
+            "source_start": source_start,
+            "source_end": source_end,
+            "timing_modified": timing_modified,
             "source_language": source_lang,
             "source_text": str(entry.get("source_text") or entry.get("english", "")),
             "official_chs": official_chs,
