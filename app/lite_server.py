@@ -24,6 +24,7 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
+from .subtitle_timing import update_subtitle_display_timing
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
@@ -706,6 +707,38 @@ class Handler(BaseHTTPRequestHandler):
             speaker = (query.get("speaker") or [""])[-1]
             report = export_reference_pack(config, output, speaker=speaker)
             self._json({"ok": True, "report": report})
+            return
+
+        if path.startswith("/api/project/") and "/subtitles/" in path and path.endswith("/timing"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle timing project context changed; reopen project")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            item_id = path.split("/subtitles/", 1)[1][:-len("/timing")].strip("/")
+            if not item_id:
+                raise ValueError("Subtitle id is required")
+            result = update_subtitle_display_timing(
+                output, item_id=item_id,
+                start=data.get("start"), end=data.get("end"),
+                reset=str(data.get("reset", "")).lower() in {"true", "1"},
+                expected_start=data.get("expected_start"), expected_end=data.get("expected_end"),
+            )
+            refreshed = refresh_subtitle_artifacts_from_settings(
+                output,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                generate_ass=(
+                    (output / "HSR_Voice_Archive.ass").is_file()
+                    or bool(getattr(config, "generate_ass", False))
+                ),
+                render_config=subtitle_render_config(config),
+                strict_ass=False,
+            )
+            self._json({"ok": True, "timing": result, "refreshed": refreshed})
             return
 
         if "/subtitles" in path and path.startswith("/api/project/"):
