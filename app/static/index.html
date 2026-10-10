@@ -6265,7 +6265,7 @@ async function saveSubtitleLayoutSettings(){
     const j=await api('/api/subtitle-layout/settings',{
       method:'POST',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(submittedSettings)
+      body:JSON.stringify({...submittedSettings,expected_project_root:currentProject.root||null})
     });
     if(!currentProject||(currentProject.root||currentProject.name)!==submittedProject){
       // This response belongs to the previous workspace; it cannot publish into a new project.
