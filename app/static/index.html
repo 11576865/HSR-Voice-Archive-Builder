@@ -2795,6 +2795,13 @@ body[data-workspace="layout"] .preview-workbench{
 }
 .preview-inspector .layout-style-history-actions button:disabled{opacity:.4!important}
 
+
+.layout-corpus-pages{
+  display:grid;grid-template-columns:1fr auto 1fr;align-items:center;gap:8px;margin-bottom:10px;
+}
+.layout-corpus-pages button{min-height:30px!important;padding:4px 5px!important;font-size:11px!important}
+.layout-corpus-pages span{text-align:center;white-space:nowrap;font:650 10px/1 ui-monospace,Consolas,monospace;color:var(--layout-muted)}
+
 </style>
 </head>
 <body>
@@ -3199,10 +3206,15 @@ body[data-workspace="layout"] .preview-workbench{
             <button type="button" data-layout-filter="pressure" aria-pressed="false" title="根据字数估计的排版压力，不代表经过求解器审核">高压力</button>
             <button type="button" data-layout-filter="issues" aria-pressed="false" title="仅显示本轮批量几何检查中发现的缩放、溢出或错误">需处理</button>
           </div>
-          <div id="layoutCorpusList" class="layout-corpus-list" role="list" aria-label="项目字幕记录">
+          <div id="layoutCorpusList" class="layout-corpus-list" role="group" aria-label="项目字幕记录">
             <p class="layout-empty">打开项目后浏览字幕条目。可直接选取并在主画布检查。</p>
           </div>
           <div class="layout-rail-footer">
+            <div class="layout-corpus-pages" role="group" aria-label="字幕条目分页">
+              <button type="button" id="layoutCorpusPrevPageBtn">上一页</button>
+              <span id="layoutCorpusPageStatus">—</span>
+              <button type="button" id="layoutCorpusNextPageBtn">下一页</button>
+            </div>
             <div class="layout-rail-nav">
               <button type="button" id="layoutPreviousSampleBtn" aria-label="上一个字幕条目">← 上一条</button>
               <button type="button" id="layoutNextSampleBtn" aria-label="下一个字幕条目">下一条 →</button>
@@ -6530,6 +6542,8 @@ let layoutCorpusItems=[];
 let layoutCorpusProjectKey=null;
 let layoutCorpusSelectedId=null;
 let layoutCorpusFilter='all';
+let layoutCorpusPage=0;
+const layoutCorpusPageSize=80;
 let layoutAuditGeneration=0;
 let layoutAuditResults=new Map();
 let layoutAuditInProgress=false;
@@ -6555,6 +6569,15 @@ function renderLayoutCorpusRail(){
   const list=document.getElementById('layoutCorpusList');
   if(!list)return;
   const visible=layoutCorpusVisibleRows();
+  const pages=Math.max(1,Math.ceil(visible.length/layoutCorpusPageSize));
+  layoutCorpusPage=Math.max(0,Math.min(layoutCorpusPage,pages-1));
+  const shown=visible.slice(layoutCorpusPage*layoutCorpusPageSize,(layoutCorpusPage+1)*layoutCorpusPageSize);
+  const pageStatus=document.getElementById('layoutCorpusPageStatus');
+  if(pageStatus)pageStatus.textContent=visible.length?(layoutCorpusPage+1)+' / '+pages:'—';
+  const back=document.getElementById('layoutCorpusPrevPageBtn');
+  const forward=document.getElementById('layoutCorpusNextPageBtn');
+  if(back)back.disabled=layoutCorpusPage===0;
+  if(forward)forward.disabled=layoutCorpusPage>=pages-1;
   const count=document.getElementById('layoutCorpusCount');
   if(count)count.textContent=visible.length+' / '+layoutCorpusItems.length;
   for(const btn of document.querySelectorAll('.layout-rail-filters button[data-layout-filter]')){
@@ -6565,7 +6588,7 @@ function renderLayoutCorpusRail(){
   }else if(!visible.length){
     list.innerHTML='<p class="layout-empty">当前搜索或筛选没有匹配的字幕。需处理筛选仅依据最近一次真实排版检查结果。</p>';
   }else{
-    list.innerHTML=visible.map(sub=>{
+    list.innerHTML=shown.map(sub=>{
       const index=layoutCorpusItems.indexOf(sub);
       const active=String(sub.id)===String(layoutCorpusSelectedId);
       const audit=layoutAuditResults.get(String(sub.id));
@@ -6593,13 +6616,18 @@ function renderLayoutCorpusRail(){
 function selectLayoutCorpusByIndex(index){
   const sub=layoutCorpusItems[index];
   if(!sub)return;
+  const position=layoutCorpusVisibleRows().findIndex(row=>String(row.id)===String(sub.id));
+  if(position>=0)layoutCorpusPage=Math.floor(position/layoutCorpusPageSize);
   loadLayoutStressSample({force:true,selectId:sub.id}).catch(e=>setLog(String(e)));
 }
 function moveLayoutCorpusSelection(offset){
   const rows=layoutCorpusVisibleRows();
   const at=rows.findIndex(sub=>String(sub.id)===String(layoutCorpusSelectedId));
   const next=at<0?(offset>0?0:rows.length-1):at+offset;
-  if(next>=0&&next<rows.length)loadLayoutStressSample({force:true,selectId:rows[next].id}).catch(e=>setLog(String(e)));
+  if(next>=0&&next<rows.length){
+    layoutCorpusPage=Math.floor(next/layoutCorpusPageSize);
+    loadLayoutStressSample({force:true,selectId:rows[next].id}).catch(e=>setLog(String(e)));
+  }
 }
 function invalidateLayoutBatchAudit(){
   layoutAuditGeneration++;
@@ -7097,9 +7125,15 @@ applyPreviewBackground();
 });
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
-document.getElementById('layoutCorpusSearch')?.addEventListener('input',renderLayoutCorpusRail);
+document.getElementById('layoutCorpusSearch')?.addEventListener('input',()=>{
+  layoutCorpusPage=0;
+  renderLayoutCorpusRail();
+});
+document.getElementById('layoutCorpusPrevPageBtn')?.addEventListener('click',()=>{layoutCorpusPage--;renderLayoutCorpusRail();});
+document.getElementById('layoutCorpusNextPageBtn')?.addEventListener('click',()=>{layoutCorpusPage++;renderLayoutCorpusRail();});
 document.querySelectorAll('[data-layout-filter]').forEach(button=>button.addEventListener('click',()=>{
   layoutCorpusFilter=button.dataset.layoutFilter||'all';
+  layoutCorpusPage=0;
   renderLayoutCorpusRail();
 }));
 document.getElementById('layoutCorpusList')?.addEventListener('click',event=>{
