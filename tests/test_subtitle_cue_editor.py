@@ -39,7 +39,7 @@ function node(id){
   return elements.get(id);
 }
 const subtitles=[
-  {id:11,source_text:'First source',final_chs:'第一条',start:5,end:9,group:'Scene A'},
+  {id:11,source_text:'First source',final_chs:'第一条',source_member_id:'voice/scene-A/11.wav',start:5,end:9,group:'Scene A'},
   {id:12,source_text:'Second source',final_chs:'第二条',start:10,end:12,group:'Scene B'}
 ];
 const saves=[];
@@ -84,7 +84,11 @@ const run=x=>vm.runInContext(x,context);
   assert.equal(saves.length,1);
   const sent=JSON.parse(saves[0].opts.body);
   assert.equal(sent.expected_project_root,'/project-alpha');
-  assert.deepEqual(sent.subtitles,[{id:11,final_chs:'第一条未保存'}]);
+  assert.deepEqual(sent.subtitles,[{
+    id:11,final_chs:'第一条未保存',
+    expected_final_chs:'第一条',
+    expected_source_member_id:'voice/scene-A/11.wav'
+  }]);
   assert.equal(await run('saveLayoutCueText()'),false,'save single flight');
   run("layoutCueUpdateDraft('保存期间继续编辑')");
   saves.shift().resolve({ok:true,result:{updated_count:1,ass_error:''}});
@@ -96,6 +100,7 @@ const run=x=>vm.runInContext(x,context);
   const next=run('saveLayoutCueText()');
   assert.equal(saves.length,1);
   assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].final_chs,'保存期间继续编辑');
+  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].expected_final_chs,'第一条未保存');
   saves.shift().resolve({ok:true,result:{updated_count:1,ass_error:''}});
   assert.equal(await next,true);
   assert.equal(node('layoutCueSaveBtn').disabled,true);
