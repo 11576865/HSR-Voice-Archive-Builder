@@ -240,9 +240,8 @@ def _subtitle_adapters(
                 item_id=_entry_id(entry) or "",
                 english=str(entry.get("source_text") or entry.get("english", "")),
                 chinese=str(
-                    entry.get("final_chs")
-                    or entry.get("target_text")
-                    or entry.get("chinese", "")
+                    entry["final_chs"] if entry.get("final_chs") is not None
+                    else (entry.get("target_text") or entry.get("chinese", ""))
                 ),
                 start_seconds=start,
                 display_end_seconds=end,
@@ -854,6 +853,9 @@ def _update_project_subtitles_locked(
             review_state.pop(key, None)
         updated_count += 1
 
+    if updated_count < 1:
+        raise ValueError("No matching subtitle entries were updated")
+
     atomic_write_text(
         output_dir / "subtitles_overrides.json",
         json.dumps(overrides, ensure_ascii=False, indent=2),
@@ -861,16 +863,22 @@ def _update_project_subtitles_locked(
 
     _write_subtitle_review_state(output_dir, review_state)
 
+    artifact_error = ""
     if text_updated_count:
-        # A text edit changes manifest/subtitle artifacts, but it must not
-        # invalidate or rebuild the already verified continuous FLAC stage.
-        invalidate_subtitle_stages(config)
-        refreshed = refresh_subtitle_artifacts(
-            config,
-            output_dir,
-            data,
-            strict_ass=False,
-        )
+        # An override already committed must never be reported as a failed
+        # save merely because the derived subtitle export failed afterward.
+        try:
+            invalidate_subtitle_stages(config)
+            refreshed = refresh_subtitle_artifacts(
+                config,
+                output_dir,
+                data,
+                strict_ass=False,
+            )
+            artifact_error = str(refreshed.get("ass_error") or "")
+        except Exception as exc:
+            refreshed = {}
+            artifact_error = f"{type(exc).__name__}: {exc}"
     else:
         refreshed = {
             "ass_file": str(output_dir / "HSR_Voice_Archive.ass")
@@ -883,11 +891,11 @@ def _update_project_subtitles_locked(
             "override_count": len(overrides),
         }
 
-    if updated_count < 1:
-        raise ValueError("No matching subtitle entries were updated")
-
     return {
         "ok": True,
+        "saved": True,
+        "artifacts_current": not bool(artifact_error),
+        "artifact_error": artifact_error,
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
         "modified_ids": sorted(str(key) for key in overrides),
