@@ -51,7 +51,7 @@ const context={
   escapeHtml:x=>String(x),formatClockTime:n=>'T'+Number(n||0).toFixed(1),
   api:(path,opts)=>{
     if(path.endsWith('/subtitles?selector=all'))return Promise.resolve({subtitles,persistable:true});
-    if(path.endsWith('/subtitles'))return new Promise(resolve=>saves.push({opts,resolve}));
+    if(path.endsWith('/subtitles'))return new Promise((resolve,reject)=>saves.push({opts,resolve,reject}));
     throw Error('Unexpected request: '+path);
   },
   subtitleSettingsPayload:()=>({base_chs_size:48}),
@@ -105,6 +105,16 @@ const run=x=>vm.runInContext(x,context);
   assert.equal(await next,true);
   assert.equal(node('layoutCueSaveBtn').disabled,true);
   assert.equal(subtitles[0].final_chs,'保存期间继续编辑');
+
+  run("layoutCueUpdateDraft('过期窗口修改')");
+  const stale=run('saveLayoutCueText()');
+  assert.equal(saves.length,1);
+  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].expected_final_chs,'保存期间继续编辑');
+  saves.shift().reject(new Error('Subtitle text changed since it was loaded; refresh before editing'));
+  assert.equal(await stale,false);
+  assert.equal(node('layoutCueFinalText').value,'过期窗口修改','rejected edit must retain draft');
+  assert.match(node('layoutCueSaveStatus').textContent,/刷新/);
+  assert.equal(subtitles[0].final_chs,'保存期间继续编辑','conflict must not alter local saved baseline');
 
   run("layoutCueUpdateDraft('试验修改')");
   run('layoutCueRevertDraft()');
