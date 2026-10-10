@@ -769,6 +769,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 updates = []
 
+            assert_project_idle(config.root)
             result = update_project_subtitles(config, output, updates)
             self._json({"ok": True, "result": result})
             return
