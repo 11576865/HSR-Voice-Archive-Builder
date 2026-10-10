@@ -6777,11 +6777,11 @@ function renderLayoutCueEditor(){
   const dirty=selected&&state.draft!==state.saved;
   const badge=document.getElementById('layoutCueDraftBadge');
   if(badge){
-    badge.dataset.state=!selected?'idle':state.saving?'saving':dirty?'dirty':'saved';
-    badge.textContent=!selected?'请选择字幕':state.saving?'保存中':dirty?'未保存的正文':'正文已保存';
+    badge.dataset.state=!selected?'idle':!layoutCorpusPersistable?'idle':state.saving?'saving':dirty?'dirty':'saved';
+    badge.textContent=!selected?'请选择字幕':!layoutCorpusPersistable?'仅示例 · 不可保存':state.saving?'保存中':dirty?'未保存的正文':'正文已保存';
   }
   const save=document.getElementById('layoutCueSaveBtn'),revert=document.getElementById('layoutCueRevertBtn');
-  if(save)save.disabled=!dirty||layoutCueSaveInFlight;
+  if(save)save.disabled=!dirty||layoutCueSaveInFlight||!layoutCorpusPersistable;
   if(revert)revert.disabled=!dirty||state?.saving;
   const audio=document.getElementById('layoutCueAudioLoadBtn');
   if(audio)audio.disabled=!selected;
@@ -6797,7 +6797,9 @@ function layoutCueSelect(sub){
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){
-    status.textContent=state.draft!==state.saved
+    status.textContent=!layoutCorpusPersistable
+      ? '尚未构建真实字幕清单：当前是示例或未就绪字幕，只能预览，不能保存。请先完成项目构建。'
+      : state.draft!==state.saved
       ? '条目 #'+sub.id+' 有尚未保存的正文草稿；切换其他条目后仍会在本次会话保留。'
       : '条目 #'+sub.id+' 正文已载入；修改后点击「保存当前字幕」才会写入项目。';
     status.className='layout-cue-save-note '+(state.draft!==state.saved?'status-warn':'');
@@ -6834,7 +6836,7 @@ function layoutCueRevertDraft(){
 async function saveLayoutCueText(){
   const key=layoutActiveProjectKey();
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
-  if(!key||!sub||!state||layoutCueSaveInFlight||state.draft===state.saved)return false;
+  if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||state.draft===state.saved)return false;
   layoutCueSaveInFlight=true;
   state.saving=true;
   const id=sub.id,submitted=state.draft;
@@ -6948,6 +6950,7 @@ function subtitleLayoutStressScore(sub){
 
 let layoutCorpusItems=[];
 let layoutCorpusProjectKey=null;
+let layoutCorpusPersistable=false;
 let layoutCorpusSelectedId=null;
 let layoutCorpusFilter='all';
 let layoutCorpusPage=0;
@@ -7146,6 +7149,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
     layoutCorpusItems=[];
     layoutCorpusSelectedId=null;
     layoutCorpusProjectKey=null;
+    layoutCorpusPersistable=false;
     layoutCueResetProject(null);
     layoutCueSelect(null);
     layoutAuditGeneration++;
@@ -7172,6 +7176,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
       if(!current())return;
       subtitles=data.subtitles||[];
       layoutCorpusItems=subtitles;
+      layoutCorpusPersistable=data.persistable===true;
       layoutCorpusProjectKey=projectKey;
       layoutAuditResults.clear();
       layoutAuditGeneration++;
