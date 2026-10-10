@@ -241,6 +241,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("expected_project_root:currentProject.root||null", html)
         self.assertIn("if(Number(data.result?.updated_count||0)!==1)", html)
         self.assertIn("layoutCueDrafts=new Map()", html)
+        self.assertIn("layoutCorpusPersistable=data.persistable===true;", html)
+        self.assertIn("layoutCueSaveInFlight||!layoutCorpusPersistable", html)
         self.assertIn("layoutCueSelect(null); // Scratch trial text", html)
         self.assertIn("layoutStressSample.word_alignments=null", html)
         self.assertIn("正在获取原始语音并校验 WAV", html)
