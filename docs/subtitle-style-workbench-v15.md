@@ -70,3 +70,27 @@ The second work unit builds on the same UI and PR; it does not create another pr
 **Regression coverage added.** `tests/test_subtitle_style_sample_ownership.py` drives production JS with deferred sample/save responses; `tests/test_subtitle_style_preview_races.py` checks actual decoded-image readiness/failure; `tests/test_subtitle_preview.py` covers both the accepted and mismatched project-root fence; existing UI contract tests assert the added affordances.
 
 **Verification boundary.** JavaScript syntax compilation and focused source-level V8 simulations have passed in this development session. The updated PR's complete GitHub Actions result, actual tablet/phone screenshots and runtime-backed FFmpeg/libass/device acceptance are separate and not yet claimed for this commit. No new canonical UI requirements are inferred.
+
+
+## Subtitle studio expansion: corpus explorer, selective QA and history (2026-10-10)
+
+The earlier v15 split-pane arrangement was a *style form with a renderer*. The new structural iteration changes the interaction workflow and adds functionality rather than treating another CSS skin as a redesign.
+
+### New interactive tasks
+
+- A dedicated subtitle explorer remains visible next to the primary preview on wide desktops, with searchable real project subtitles, item times, group/context labels, source text and revision/word-time indicators. Selecting a row loads that exact text and its optional verified word-timing into the existing preview.
+- Previous/next navigation respects the active result set; larger corpora are paginated at 80 rendered rows per page so a project does not inject thousands of navigation buttons into the DOM.
+- **High-pressure** filtering ranks text using the existing width heuristic only, and is clearly labeled as an estimate. It never reports those entries as actual collisions.
+- **Geometry QA** runs the real, existing `/api/subtitle-layout/preview` solver against *the currently filtered project subtitle rows and current trial style parameters*. Three workers run concurrently and at most 60 items are checked per invocation. It distinguishes verified geometry overflow, solver-enforced downscaling, unaffected rows, and request errors. Results include exact coverage (`checked / filtered total`), an explicit stop control, and a "需处理" filter to navigate failures.
+- A bounded 40-state client-session history supports Undo/Redo of global style control changes. It does not claim to undo subtitle text edits, source provenance, saved server settings, or ASS export operations.
+- Mobile prioritizes the **preview stage**, then a collapsed-on-entry subtitle explorer, then the Inspector. Tablet/desktop retain multi-pane simultaneous context.
+
+### Evidence and remaining boundaries
+
+- CI for the previous iteration exposed a brittle signature-string assertion, rather than a renderer algorithm failure. The UI contract assertion has been updated to recognize the evolved loader function.
+- New: `tests/test_subtitle_style_explorer.py` executes the production corpus/navigation/QA JavaScript with deterministic solver responses.
+- This batch QA is **not yet a full-project one-click audit**: it caps each run at 60 filtered entries, and the operator can narrow the search or filter to inspect other groups. No uninspected entry is treated as verified.
+- The preview is still a style/layout workbench rather than a full timeline editor. This change does **not** implement frame-stepping, audio waveform/spectrogram editing, subtitle split/merge, per-event style overrides, or render-backed video playback; none should appear as shipped features.
+- Visual fixture captures are separately available for composition review but are **not** production screenshots or active application acceptance evidence. Production visual and runtime-backed checks remain pending at this branch checkpoint.
+
+The new workflow should be validated in an actual project with mixed short/long subtitles and a real libass render; source-level checks alone cannot establish legibility, keyboard usability or the practical speed of the authoring loop.
