@@ -2787,6 +2787,14 @@ body[data-workspace="layout"] .preview-workbench{
   .preview-workbench .preview-inspector{grid-row:auto;grid-column:1;position:relative!important;top:auto!important;max-height:none!important;overflow:visible!important}
 }
 
+
+.layout-style-history-actions{display:grid;grid-template-columns:1fr 1fr;gap:7px;margin-top:8px}
+.preview-inspector .layout-style-history-actions button{
+  min-height:36px!important;font-size:11px!important;border-color:var(--layout-border)!important;
+  background:transparent!important;
+}
+.preview-inspector .layout-style-history-actions button:disabled{opacity:.4!important}
+
 </style>
 </head>
 <body>
@@ -3254,7 +3262,11 @@ body[data-workspace="layout"] .preview-workbench{
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
                     <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
                   </div>
-                  <p class="layout-action-note">真实渲染不会保存试调值。导出只使用明确保存的样式设置。</p>
+                  <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
+                    <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
+                    <button type="button" id="layoutStyleRedoBtn" disabled title="恢复撤销的样式参数修改；仅当前工作台会话">↷ 重做样式</button>
+                  </div>
+                  <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
 
@@ -6267,6 +6279,71 @@ async function importWordAlignmentFile(file){
   }
 }
 
+
+const layoutStyleControlIds=[
+  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV',
+  'prevEnableKaraoke','prevKaraokeMode','prevEnableCard','prevEnableOutline',
+  'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
+  'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
+  'prevEnableSoftEntry','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs',
+  'prevEnableArchiveHud','prevArchiveHudSize','prevArchiveHudOpacity'
+];
+let layoutStyleHistory=[];
+let layoutStyleHistoryIndex=-1;
+let layoutStyleHistoryRestoring=false;
+function captureLayoutStyleHistoryState(){
+  const controls={};
+  for(const id of layoutStyleControlIds){
+    const input=document.getElementById(id);
+    if(!input)continue;
+    controls[id]=input.type==='checkbox'?!!input.checked:String(input.value);
+  }
+  return {preset:previewPreset,controls};
+}
+function updateLayoutStyleHistoryActions(){
+  const undo=document.getElementById('layoutStyleUndoBtn');
+  const redo=document.getElementById('layoutStyleRedoBtn');
+  if(undo)undo.disabled=layoutStyleHistoryIndex<=0;
+  if(redo)redo.disabled=layoutStyleHistoryIndex>=layoutStyleHistory.length-1;
+}
+function resetLayoutStyleHistory(){
+  layoutStyleHistory=[captureLayoutStyleHistoryState()];
+  layoutStyleHistoryIndex=0;
+  updateLayoutStyleHistoryActions();
+}
+function recordLayoutStyleHistory(){
+  if(layoutStyleHistoryRestoring)return;
+  const snapshot=captureLayoutStyleHistoryState();
+  if(layoutStyleHistoryIndex>=0&&JSON.stringify(snapshot)===JSON.stringify(layoutStyleHistory[layoutStyleHistoryIndex]))return;
+  layoutStyleHistory=layoutStyleHistory.slice(0,layoutStyleHistoryIndex+1);
+  layoutStyleHistory.push(snapshot);
+  if(layoutStyleHistory.length>40)layoutStyleHistory.shift();
+  layoutStyleHistoryIndex=layoutStyleHistory.length-1;
+  updateLayoutStyleHistoryActions();
+}
+function travelLayoutStyleHistory(delta){
+  const target=layoutStyleHistoryIndex+delta;
+  if(target<0||target>=layoutStyleHistory.length)return;
+  const state=layoutStyleHistory[target];
+  layoutStyleHistoryRestoring=true;
+  try{
+    for(const [id,value] of Object.entries(state.controls)){
+      const input=document.getElementById(id);
+      if(!input)continue;
+      if(input.type==='checkbox')input.checked=!!value;
+      else input.value=value;
+    }
+    previewPreset=state.preset;
+    layoutStyleHistoryIndex=target;
+  }finally{
+    layoutStyleHistoryRestoring=false;
+  }
+  updateLayoutStyleHistoryActions();
+  markSubtitleSettingsDirty();
+  invalidateLayoutBatchAudit();
+  scheduleLayoutPreviewUpdate();
+}
+
 function subtitleSettingsPayload(){
   return {
     preset: previewPreset,
@@ -6336,6 +6413,8 @@ function loadSubtitleLayoutSettings(config){
   set('prevArchiveHudSize',config.subtitle_archive_hud_font_size??22);
   set('prevArchiveHudOpacity',Number(config.subtitle_archive_hud_opacity??0.72)*100);
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
+  resetLayoutStyleHistory();
+  invalidateLayoutBatchAudit();
   invalidateLibassPreview();
   const status=document.getElementById('previewSaveStatus');
   if(status){status.textContent='当前显示项目已保存的 ASS 设置。';status.className='small status-ok';}
@@ -7124,6 +7203,7 @@ function applySubtitlePreset(name){
   }
   markSubtitleSettingsDirty();
   invalidateLayoutBatchAudit();
+  recordLayoutStyleHistory();
   invalidateLibassPreview();
   updateLayoutPreview();
 }
@@ -7145,6 +7225,13 @@ document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',asyn
 });
 
 updateLayoutPreview();
+
+for(const id of layoutStyleControlIds){
+  document.getElementById(id)?.addEventListener('change',recordLayoutStyleHistory);
+}
+document.getElementById('layoutStyleUndoBtn')?.addEventListener('click',()=>travelLayoutStyleHistory(-1));
+document.getElementById('layoutStyleRedoBtn')?.addEventListener('click',()=>travelLayoutStyleHistory(1));
+resetLayoutStyleHistory();
 
 document.getElementById('refreshBtn').onclick=refresh;
 refresh();loadQuickCandidates();
