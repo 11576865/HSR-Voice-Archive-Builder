@@ -173,3 +173,59 @@ The prior per-cue timing editor required exact numeric inputs to understand adja
 This is a **subtitle display event timeline**, not a non-linear editor for the final mixed audio/video. It does not implement source-audio retiming, waveforms synchronized across the program, synchronized video frame stepping, automatic subtitle split/merge or multi-track editing.
 
 The timeline markup and production JavaScript are covered by \`tests/test_subtitle_continuous_timeline.py\` (select, snap, zoom, pan, pointer drag, and explicit save) and expanded \`tests/test_subtitle_style_workbench_ui.py\` source contracts. The entire suite must be checked against the exact submitted PR head. Actual browser/device legibility and FFmpeg/libass rendering are still separate evidence obligations.
+
+
+## Subtitle edit/export integration and real renderer evidence (2026-10-10)
+
+### Defect: durable save disguised as a failed save
+
+The previous cue text and display timing endpoints wrote their JSON overrides before
+regenerating derived ASS/SRT files. If artifact regeneration raised an exception,
+the API could return a 400 despite an already committed override. Retrying as
+a second edit with the old optimistic time would fail; the UI might also
+misrepresent the saved state. This is a **partial commit**, not an unchanged project.
+
+The corrected contract distinguishes `saved: true` from
+`artifacts_current: false` and carries `artifact_error`.
+The successful write is reflected in the loaded cue. A
+**重试生成 ASS/SRT** action calls the separate
+`POST /api/project/{project_id}/subtitles/artifacts/refresh`
+endpoint, retaining the project-root fence; it does not repeat the text/timing
+mutation or re-submit an old optimistic timestamp.
+
+Text edits and timing edits that touch derived outputs now share a per-output
+**in-process RLock**. Build jobs also block new cue text edits, matching timing
+edits. This is an in-process scheduling fence, **not** a cross-process database
+transaction or atomic commit of all output files; an external second server
+process and unexpected machine failure remain outside its guarantees.
+
+Additional integration repairs:
+- Time overlays are checked against the current source time and member **before**
+  manifest/CSV writes; invalid old timing does not partially rewrite source artifacts.
+- An intentionally empty final Chinese subtitle string remains empty in ASS/SRT
+  instead of falling through to the original translation.
+- Unknown subtitle IDs are rejected **before** writing text override/review
+  files; no misleading successful no-op mutations.
+
+### Actual ASS/SRT and FFmpeg/libass evidence
+
+`tests/test_subtitle_integrated_export.py` creates a minimal deterministic
+manifest, persists output-only timing and actual subtitle text overrides, and
+uses the **real** `write_ass` and `write_srt` implementations to produce the
+exported files. It checks the resulting `Dialogue` timecodes and SRT timestamps,
+both positive and intentionally empty Chinese text edits, original WAV-source
+clock immutability, and write failure/retry semantics for **both** cue text and timing.
+
+When FFmpeg with the `ass` filter is available, the same test rasterizes actual
+generated ASS events into raw RGB via **FFmpeg/libass**, comparing an active cue
+frame at 2.0 s to two non-active frames at 0.6 s and 5.0 s.
+The `libass-artifact` job in
+`.github/workflows/subtitle-browser-evidence.yml` installs FFmpeg and
+DejaVu fonts, explicitly asserts the ASS filter is available, and uploads
+three PNG frames plus a scope statement.
+
+**Evidence tier:** actual subtitle writer + FFmpeg/libass pixels over a
+synthetic black video and deterministic manifest. It is **not** an external
+live project's continuous mixed-audio video, real character voice waveform,
+live FFmpeg output comparison, or physical Android acceptance. Do not
+reinterpret this proof as end-to-end archive-media visual QA.
