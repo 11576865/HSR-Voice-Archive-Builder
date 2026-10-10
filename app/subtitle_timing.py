@@ -7,10 +7,36 @@ from __future__ import annotations
 
 import json
 import math
+import threading
+from contextlib import contextmanager
+from functools import wraps
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable, Iterator
 
 from .builder import atomic_write_text
+
+# In-process serialization across cue text edits, timing edits and artifact
+# refresh. This does not claim to be a cross-process filesystem lock.
+_EDIT_REGISTRY_GUARD = threading.Lock()
+_EDIT_LOCKS: dict[str, threading.RLock] = {}
+
+
+@contextmanager
+def subtitle_edit_lock(output_dir: Path) -> Iterator[None]:
+    key = str(Path(output_dir).resolve())
+    with _EDIT_REGISTRY_GUARD:
+        lock = _EDIT_LOCKS.setdefault(key, threading.RLock())
+    with lock:
+        yield
+
+
+def serialized_subtitle_edit(fn: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(fn)
+    def invoke(output_dir: Path, *args: Any, **kwargs: Any) -> Any:
+        with subtitle_edit_lock(output_dir):
+            return fn(output_dir, *args, **kwargs)
+    return invoke
+
 
 TIMING_OVERRIDES_FILE = "subtitle_timing_overrides.json"
 MIN_DURATION_SECONDS = 0.10
@@ -105,6 +131,7 @@ def effective_subtitle_window(
     return _effective_window(entry, overrides)
 
 
+@serialized_subtitle_edit
 def update_subtitle_display_timing(
     output_dir: Path,
     *,
