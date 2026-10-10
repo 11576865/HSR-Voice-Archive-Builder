@@ -258,6 +258,34 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(saved.subtitle_archive_hud_font_size, 24)
         self.assertEqual(saved.subtitle_archive_hud_opacity, 0.66)
 
+    def test_settings_rejects_a_different_active_project_identity(self):
+        before = load_project(self.root)
+        response = self.client.post(
+            "/api/subtitle-layout/settings",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(self.root / "some-other-project"),
+                "base_chs_size": 73,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("project context changed", response.json()["error"])
+        after = load_project(self.root)
+        self.assertEqual(after.subtitle_chs_size, before.subtitle_chs_size)
+
+    def test_settings_accepts_matching_project_identity(self):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/subtitle-layout/settings",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(current.root),
+                "base_chs_size": 51,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(load_project(self.root).subtitle_chs_size, 51)
+
     def test_settings_endpoint_rejects_ass_delimiter_in_font_name(self):
         response = self.client.post(
             "/api/subtitle-layout/settings",
