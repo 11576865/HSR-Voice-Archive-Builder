@@ -286,6 +286,37 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual(load_project(self.root).subtitle_chs_size, 51)
 
+    def test_cue_edit_rejects_cross_project_write_before_touching_manifest(self):
+        response = self.client.post(
+            "/api/project/active/subtitles",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(self.root / "another-project"),
+                "subtitles": [{"id": 11, "final_chs": "Should not persist"}],
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Subtitle edit project context changed", response.json()["error"])
+
+    @patch("app.server.update_project_subtitles", return_value={"updated_count": 1})
+    def test_cue_edit_accepts_matching_project_identity(self, update_mock):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/project/active/subtitles",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(current.root),
+                "subtitles": [{"id": 11, "final_chs": "Current project translation"}],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["result"]["updated_count"], 1)
+        self.assertEqual(update_mock.call_count, 1)
+        self.assertEqual(
+            update_mock.call_args.args[2],
+            [{"id": 11, "final_chs": "Current project translation"}],
+        )
+
     def test_settings_endpoint_rejects_ass_delimiter_in_font_name(self):
         response = self.client.post(
             "/api/subtitle-layout/settings",
