@@ -257,6 +257,28 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("layoutCorpusRefreshBtn", html)
 
 
+    def test_cue_timing_editor_has_real_backend_contract(self) -> None:
+        html = self.html
+        for name in (
+            "layoutCueTimingStart",
+            "layoutCueTimingEnd",
+            "layoutCueTimingSaveBtn",
+            "layoutCueTimingRevertBtn",
+            "layoutCueTimingResetBtn",
+            "layoutCueTimingStatus",
+            "layoutCueTimingBadge",
+        ):
+            self.assertEqual(html.count(f'id="{name}"'), 1)
+        self.assertIn("async function saveLayoutCueTiming(", html)
+        self.assertIn("expected_start:state.savedStart", html)
+        self.assertIn("expected_end:state.savedEnd", html)
+        self.assertIn("layoutCueTimingSaveInFlight", html)
+        self.assertIn("layoutTimingCheck(state)", html)
+        self.assertIn("state.conflict", html)
+        self.assertIn("data-timing-nudge=", html)
+        self.assertIn("声轨和原始时间轴不变", html)
+
+
 
 if __name__ == "__main__":
     unittest.main()
