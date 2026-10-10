@@ -2864,6 +2864,12 @@ body[data-workspace="layout"] .preview-workbench{
   .layout-cue-clock strong{font-size:12px}
 }
 
+
+.layout-cue-waveform-wrap{grid-column:1/-1;min-width:0;border-radius:7px;border:1px solid var(--layout-border);background:var(--layout-section);padding:7px 9px 8px}
+#layoutCueWaveform{display:block;width:100%;height:90px;cursor:crosshair;touch-action:manipulation;outline-offset:4px}
+#layoutCueWaveform:focus-visible{outline:2px solid var(--layout-evidence-accent)}
+#layoutCueWaveformHelp{display:block;margin-top:3px;font-size:10px;line-height:1.5;color:var(--layout-muted)}
+
 </style>
 </head>
 <body>
@@ -3343,6 +3349,10 @@ body[data-workspace="layout"] .preview-workbench{
               <div class="layout-cue-audio-meta"><strong>原始台词试听</strong><span id="layoutCueAudioStatus">选取条目后按需加载原始 WAV</span></div>
               <button id="layoutCueAudioLoadBtn" type="button" disabled>加载音频</button>
               <audio id="layoutCueAudio" controls preload="none" aria-label="当前字幕对应原始音频"></audio>
+              <div class="layout-cue-waveform-wrap">
+                <canvas id="layoutCueWaveform" width="960" height="90" role="slider" tabindex="0" aria-label="原始 WAV 波形试听定位" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-describedby="layoutCueWaveformHelp"></canvas>
+                <span id="layoutCueWaveformHelp">加载音频后点击波形可跳转播放位置；左右方向键微调 0.5 秒。音频波形不是字幕项目时间轴。</span>
+              </div>
             </div>
             <p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">这是字幕正文编辑器；全局字体和排版参数在右侧单独保存。</p>
           </section>
