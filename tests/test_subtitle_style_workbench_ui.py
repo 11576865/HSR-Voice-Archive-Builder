@@ -145,7 +145,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
     def test_persisted_snapshot_is_the_submitted_snapshot(self) -> None:
         html = self.html
         self.assertIn("const submittedSettings=subtitleSettingsPayload();", html)
-        self.assertIn("body:JSON.stringify(submittedSettings)", html)
+        self.assertIn("body:JSON.stringify({...submittedSettings,expected_project_root:currentProject.root||null})", html)
         self.assertIn("savedSubtitleSettings=submittedIdentity", html)
         self.assertIn("const newerDraft=JSON.stringify(subtitleSettingsPayload())!==submittedIdentity;", html)
         self.assertIn("if(newerDraft){", html)
@@ -160,6 +160,22 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         )
         self.assertIn(".layout-preview-evidence{flex-direction:column}", html)
         self.assertIn(".preview-inspector .preview-actions button{min-height:42px!important}", html)
+
+    def test_v16_manual_sample_and_render_evidence_boundaries(self) -> None:
+        html = self.html
+        for control in ("layoutSampleOrigin", "layoutReloadSampleBtn"):
+            self.assertEqual(html.count(f'id="{control}"'), 1)
+        self.assertIn("layoutTrialTextRevision++;", html)
+        self.assertIn("layoutSampleSource='manual';", html)
+        self.assertIn("layoutStressSample=null; // Never reuse a sample's word timings", html)
+        self.assertIn("request===layoutSampleRequestGeneration", html)
+        self.assertIn("loadLayoutStressSample({force:true})", html)
+        self.assertIn("if(typeof img.decode==='function')", html)
+        self.assertIn("img.addEventListener('error',onError,{once:true})", html)
+        self.assertIn("signal:controller?.signal", html)
+        self.assertIn("subtitleSettingsSavePending=true;", html)
+        self.assertIn("if(subtitleSettingsSavePending)", html)
+
 
 
 if __name__ == "__main__":
