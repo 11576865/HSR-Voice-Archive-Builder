@@ -729,6 +729,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True, "refreshed": refreshed,
                 "artifacts_current": not bool(artifact_error),
                 "artifact_error": artifact_error,
+                "export_status": read_subtitle_export_health(output),
             })
             return
 
