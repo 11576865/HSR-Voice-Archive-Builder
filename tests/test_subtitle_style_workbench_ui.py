@@ -280,5 +280,34 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
 
 
 
+    def test_continuous_timeline_is_bounded_and_supports_semantic_dragging(self) -> None:
+        html = self.html
+        for element_id in (
+            "layoutTimelinePanel",
+            "layoutTimelineViewport",
+            "layoutTimelineRuler",
+            "layoutTimelineTracks",
+            "layoutTimelineZoom",
+            "layoutTimelinePan",
+            "layoutTimelineFollowBtn",
+            "layoutTimelineEarlierBtn",
+            "layoutTimelineLaterBtn",
+            "layoutTimelineSnap",
+            "layoutTimelinePlayhead",
+            "layoutTimelineScope",
+        ):
+            self.assertEqual(html.count(f'id="{element_id}"'), 1)
+        self.assertIn("layoutTimelineWindowSeconds=30;", html)
+        self.assertIn("function layoutTimelineRender()", html)
+        self.assertIn("function layoutTimelinePointerDown(event)", html)
+        self.assertIn("function layoutTimelinePointerMove(event)", html)
+        self.assertIn("function layoutTimelineSnapSeconds(value,field)", html)
+        self.assertIn("layoutTimelineFollowSelected=false; // Keep the viewport stationary", html)
+        self.assertIn("const rows=visible.slice(0,140)", html)
+        self.assertIn("layoutCueUpdateTiming(drag.field,String(seconds))", html)
+        self.assertIn("单击条目选择 · 拖动选中字幕两端手柄", html)
+
+
+
 if __name__ == "__main__":
     unittest.main()
