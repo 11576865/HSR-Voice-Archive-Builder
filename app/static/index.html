@@ -2898,6 +2898,38 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #layoutCueTimingStatus{font-size:11px;line-height:1.55;color:var(--layout-muted);margin:10px 0 0}
 @media(max-width:759px){.layout-timing-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.layout-timing-editor{padding:11px}}
 
+
+/* Timeline = persisted subtitle display event times, NOT mixed audio wave data. */
+.layout-timeline{background:var(--layout-inspector);border-top:1px solid var(--layout-border);padding:14px 18px 15px;min-width:0;color:var(--layout-text)}
+.layout-timeline-top{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-bottom:11px}
+.layout-timeline-top h3{font-size:16px;font-weight:700;margin:4px 0 0}
+.layout-timeline-tools{display:flex;align-items:center;gap:8px}
+.layout-timeline-tools button{min-height:32px!important;padding:5px 10px!important;font-size:11px!important}
+.layout-timeline-tools label{display:flex;gap:6px;align-items:center;font-size:11px;color:var(--layout-muted);font-weight:600}
+.layout-timeline-tools select{min-height:32px!important;min-width:72px;font:600 11px/1.3 ui-monospace,Consolas,monospace!important;padding:4px 6px!important}
+.layout-timeline-viewport{position:relative;min-width:0;background:#0b1520;border:1px solid var(--layout-border);border-radius:8px;overflow:hidden;user-select:none}
+.layout-timeline-ruler{position:relative;height:29px;border-bottom:1px solid #344455;background:repeating-linear-gradient(to right,transparent,transparent 63px,rgba(142,169,194,.04) 64px)}
+.layout-timeline-tick{position:absolute;top:0;height:29px;border-left:1px solid #516579;color:#8ba3b8;font:500 10px/1.3 ui-monospace,Consolas,monospace}
+.layout-timeline-tick span{position:absolute;top:6px;left:4px;white-space:nowrap}
+.layout-timeline-tracks{height:120px;position:relative;background:repeating-linear-gradient(to bottom,rgba(86,110,135,.045) 0px,rgba(86,110,135,.045) 39px,rgba(104,129,152,.18) 40px)}
+.layout-timeline-event{position:absolute;height:30px;top:4px;border:1px solid #668496!important;border-radius:5px!important;padding:3px 7px!important;background:#20364a!important;color:#d2e0eb!important;text-align:left!important;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-size:11px!important;font-weight:600!important;min-width:4px!important;z-index:1}
+.layout-timeline-event[data-active="true"]{z-index:2!important;border-color:#8cf2df!important;background:#265a62!important;color:#f1fffd!important;box-shadow:0 0 0 1px #8cf2df66}
+.layout-timeline-event[data-dirty="true"]{border-style:dashed!important}
+.layout-timeline-event[data-conflict="true"]{border-color:#e78c85!important;background:#532e38!important}
+.layout-timeline-edge{position:absolute;top:0;height:30px;width:18px;min-width:18px!important;padding:0!important;background:#b8ece0!important;color:#103338!important;border:1px solid #0b403c!important;border-radius:4px!important;cursor:ew-resize;z-index:4;touch-action:none;font:700 12px/30px ui-monospace,Consolas,monospace!important}
+.layout-timeline-edge:focus-visible,.layout-timeline-event:focus-visible{outline:2px solid #fff!important;outline-offset:1px;z-index:5}
+.layout-timeline-playhead{position:absolute;top:0;bottom:0;width:2px;background:#f4ca7b;pointer-events:none;z-index:5}
+.layout-timeline-playhead:before{content:"";position:absolute;top:0;left:-4px;border:5px solid transparent;border-top-color:#f4ca7b}
+.layout-timeline-empty{font-size:12px;color:#8ba3b8;padding:24px 14px;margin:0}
+.layout-timeline-navigation{display:grid;grid-template-columns:32px minmax(0,1fr) 32px;gap:8px;align-items:center;margin-top:10px}
+.layout-timeline-navigation button{min-height:30px!important;padding:4px!important;font-size:12px!important}
+.layout-timeline-navigation input{width:100%;accent-color:var(--layout-evidence-accent)}
+.layout-timeline-bottom{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px 12px;margin-top:6px;font-size:10px;color:var(--layout-muted);line-height:1.45}
+.layout-timeline-bottom label{display:flex;align-items:center;gap:5px;white-space:nowrap;color:var(--layout-text)}
+.layout-timeline-bottom input{accent-color:var(--layout-evidence-accent)}
+#layoutTimelineEditHint{flex-basis:100%;color:var(--layout-muted)}
+@media(max-width:759px){.layout-timeline{padding:12px 11px}.layout-timeline-tracks{height:120px}.layout-timeline-tools label{font-size:10px}.layout-timeline-event{font-size:10px!important}}
+
 </style>
 </head>
 <body>
@@ -3347,6 +3379,37 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
           </div>
+          <section class="layout-timeline" aria-label="连续字幕显示时间轴" id="layoutTimelinePanel">
+            <div class="layout-timeline-top">
+              <div><span class="layout-eyebrow">SUBTITLE TIMELINE</span><h3>字幕显示时间轴</h3></div>
+              <div class="layout-timeline-tools">
+                <button type="button" id="layoutTimelineFollowBtn" title="居中查看当前字幕">定位当前</button>
+                <label for="layoutTimelineZoom">视窗
+                  <select id="layoutTimelineZoom" aria-label="时间轴视窗跨度">
+                    <option value="12">12s</option><option value="30" selected>30s</option>
+                    <option value="60">60s</option><option value="120">120s</option><option value="300">300s</option>
+                  </select>
+                </label>
+              </div>
+            </div>
+            <div id="layoutTimelineViewport" class="layout-timeline-viewport" aria-label="字幕时间轴：选择字幕；拖动已选字幕的边界以修改显示时间">
+              <div id="layoutTimelineRuler" class="layout-timeline-ruler" aria-hidden="true"></div>
+              <div id="layoutTimelineTracks" class="layout-timeline-tracks" role="group" aria-label="当前视窗中的字幕条目">
+                <p class="layout-timeline-empty">打开项目后显示按实际时间排列的字幕片段。</p>
+              </div>
+              <div id="layoutTimelinePlayhead" class="layout-timeline-playhead hidden" aria-hidden="true"></div>
+            </div>
+            <div class="layout-timeline-navigation">
+              <button type="button" id="layoutTimelineEarlierBtn" aria-label="向前平移时间轴">←</button>
+              <input type="range" id="layoutTimelinePan" min="0" max="1000" value="0" step="1" aria-label="平移整个字幕显示时间轴" disabled/>
+              <button type="button" id="layoutTimelineLaterBtn" aria-label="向后平移时间轴">→</button>
+            </div>
+            <div class="layout-timeline-bottom">
+              <span id="layoutTimelineScope">尚无项目字幕</span>
+              <label><input id="layoutTimelineSnap" type="checkbox" checked/> 吸附相邻字幕边界</label>
+              <span id="layoutTimelineEditHint">单击条目选择 · 拖动选中字幕两端手柄 · 键盘左右键微调 0.1s · 保存时间另行执行</span>
+            </div>
+          </section>
           <section id="layoutCueEditorPanel" class="layout-cue-editor" aria-label="当前字幕条目编辑">
             <div class="layout-cue-heading">
               <div><span class="layout-eyebrow">CUE EDITOR</span><h3 id="layoutCueHeading">请选择字幕条目</h3></div>
