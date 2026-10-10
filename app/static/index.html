@@ -2870,6 +2870,14 @@ body[data-workspace="layout"] .preview-workbench{
 #layoutCueWaveform:focus-visible{outline:2px solid var(--layout-evidence-accent)}
 #layoutCueWaveformHelp{display:block;margin-top:3px;font-size:10px;line-height:1.5;color:var(--layout-muted)}
 
+
+/* The stage now includes an actual cue editor and waveform: its column must
+   participate in page scrolling instead of sticky-clipping those controls. */
+body[data-workspace="layout"] .preview-workbench .layout-preview-region{
+  position:relative!important;top:auto!important;align-self:start;
+  overflow:visible!important;
+}
+
 </style>
 </head>
 <body>
