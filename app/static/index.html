@@ -6635,7 +6635,11 @@ function layoutCueRow(id){
 function layoutCueClearAudio(){
   if(layoutCueAudioAbort){layoutCueAudioAbort.abort();layoutCueAudioAbort=null;}
   const player=document.getElementById('layoutCueAudio');
-  if(player){player.pause();player.removeAttribute('src');player.load();}
+  if(player){
+    if(typeof player.pause==='function')player.pause();
+    if(typeof player.removeAttribute==='function')player.removeAttribute('src');
+    if(typeof player.load==='function')player.load();
+  }
   if(layoutCueAudioObjectUrl){URL.revokeObjectURL(layoutCueAudioObjectUrl);layoutCueAudioObjectUrl=null;}
   layoutCueAudioIdentity=null;
   const label=document.getElementById('layoutCueAudioStatus');
@@ -7442,11 +7446,6 @@ document.getElementById('layoutCueScrubber')?.addEventListener('input',event=>{
   if(percentLabel)percentLabel.textContent=Math.round(Number(event.target.value||50))+'%';
   layoutCueTimePreview();
   invalidateLibassPreview();
-});
-window.addEventListener('beforeunload',()=>{
-  // Warn for uncommitted translation edits, but do not block when only style preview changes.
-  if([...layoutCueDrafts.values()].some(state=>state.draft!==state.saved))
-    return; // Deliberately no unload prompt here; browser-wide guard is installed below.
 });
 window.addEventListener('beforeunload',event=>{
   if([...layoutCueDrafts.values()].some(state=>state.draft!==state.saved)){
