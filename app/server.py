@@ -456,6 +456,7 @@ async def api_post_project_subtitles(
         else:
             raise ValueError("Invalid payload format")
 
+        assert_project_idle(config.root)
         result = update_project_subtitles(config, output_dir, updates)
         return {"ok": True, "result": result}
     except Exception as exc:
