@@ -50,7 +50,7 @@ const context={
   currentProject:{root:'/project-alpha',name:'alpha',config:{}},
   escapeHtml:x=>String(x),formatClockTime:n=>'T'+Number(n||0).toFixed(1),
   api:(path,opts)=>{
-    if(path.endsWith('/subtitles?selector=all'))return Promise.resolve({subtitles});
+    if(path.endsWith('/subtitles?selector=all'))return Promise.resolve({subtitles,persistable:true});
     if(path.endsWith('/subtitles'))return new Promise(resolve=>saves.push({opts,resolve}));
     throw Error('Unexpected request: '+path);
   },
