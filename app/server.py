@@ -22,6 +22,7 @@ from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
+from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
@@ -289,7 +290,10 @@ def api_get_project_subtitles(
         )
         subtitles = decorate_subtitles(config, output_dir, subtitles)
         persistable = bool(output_dir and (output_dir / "manifest.json").is_file())
-        return {"ok": True, "subtitles": subtitles, "persistable": persistable}
+        return {
+            "ok": True, "subtitles": subtitles, "persistable": persistable,
+            "export_status": read_subtitle_export_health(output_dir),
+        }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
