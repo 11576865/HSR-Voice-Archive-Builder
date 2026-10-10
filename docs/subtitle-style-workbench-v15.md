@@ -55,3 +55,18 @@ Visual capture with the production UI is `production-rendered`; it cannot prove 
 ## Explicit non-goals / remaining evidence
 
 No subtitle layout algorithm, ASS export schema, source text provenance, word-alignment rule, renderer implementation or archive pipeline is modified here. This PR does not claim CI has completed, screenshots have been registered, or physical-device acceptance has occurred. These require separate evidence after submission.
+
+
+## Follow-up: sample ownership, decoded image evidence and project-safe saves (2026-10-10)
+
+The second work unit builds on the same UI and PR; it does not create another presentation mode.
+
+**Sample ownership.** The editable Chinese and source-text fields have an explicit *example / project sample / manual trial* provenance. Manual input invalidates borrowed project word-timing references. Project entry and asynchronously completed sample searches do not replace manual trial text. A deliberate “重新载入项目样本” action replaces it with a selected corpus stress sample. Sample selection is bound to request generation, project root and manual-text revision.
+
+**Rendered-image evidence.** A successful HTTP/PNG response is not yet a displayed image. The actual-render mode is published only after the image has decoded (using `img.decode()`, with load/error fallback). Failure keeps the real-render image hidden and returns an explicit error rather than claiming FFmpeg/libass pixels. Stale requests are guarded by project-root/payload identity and client-side `AbortController`. Aborting the client request does *not* prove the server job has been cancelled.
+
+**Save transaction.** Multiple save clicks are serialized at the UI boundary; the Save and Save & Generate actions are disabled while the prior settings POST is pending. The exact submitted payload remains the saved identity. The server and the lightweight Termux backend also accept an optional `expected_project_root` and reject an attempted save if the active project identity has changed. Older API callers not providing the field continue to work.
+
+**Regression coverage added.** `tests/test_subtitle_style_sample_ownership.py` drives production JS with deferred sample/save responses; `tests/test_subtitle_style_preview_races.py` checks actual decoded-image readiness/failure; `tests/test_subtitle_preview.py` covers both the accepted and mismatched project-root fence; existing UI contract tests assert the added affordances.
+
+**Verification boundary.** JavaScript syntax compilation and focused source-level V8 simulations have passed in this development session. The updated PR's complete GitHub Actions result, actual tablet/phone screenshots and runtime-backed FFmpeg/libass/device acceptance are separate and not yet claimed for this commit. No new canonical UI requirements are inferred.
