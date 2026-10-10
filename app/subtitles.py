@@ -14,6 +14,7 @@ from .subtitle_timing import (
     effective_subtitle_window,
     source_subtitle_window,
     StaleSubtitleTimingError,
+    subtitle_edit_lock,
 )
 from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
@@ -337,6 +338,11 @@ def refresh_subtitle_artifacts_from_settings(
 
     overrides = load_subtitle_overrides(output_dir)
     _apply_derived_subtitle_fields(entries, overrides)
+    # Validate the entire derived time layer before mutating manifest/CSV or
+    # writing new exports. A stale source clock is a hard failure, not a partial refresh.
+    timing_overrides = read_timing_overrides(output_dir)
+    for entry in entries:
+        effective_subtitle_window(entry, timing_overrides)
 
     atomic_write_text(
         manifest_file,
@@ -350,7 +356,7 @@ def refresh_subtitle_artifacts_from_settings(
     # memory after manifest/csv persistence so an external alignment cache never
     # becomes source provenance or mutates the canonical archive manifest.
     apply_cached_word_alignments(entries, output_dir)
-    adapters = _subtitle_adapters(entries, read_timing_overrides(output_dir))
+    adapters = _subtitle_adapters(entries, timing_overrides)
     source_language = source_language or "en"
     target_language = target_language or "zh-CN"
     ass_file = output_dir / "HSR_Voice_Archive.ass"
