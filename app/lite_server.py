@@ -709,6 +709,9 @@ class Handler(BaseHTTPRequestHandler):
 
         if "/subtitles" in path and path.startswith("/api/project/"):
             config = _active_config()
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle edit project context changed; reopen the target project and retry")
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Project output directory is not configured")
