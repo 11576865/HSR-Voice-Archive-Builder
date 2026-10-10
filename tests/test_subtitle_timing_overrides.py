@@ -127,6 +127,25 @@ class SubtitleTimingOverlayTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "outdated audio timeline"):
             refresh_subtitle_artifacts_from_settings(self.output, generate_ass=False)
 
+    def test_stale_source_override_is_visible_and_recoverable_by_explicit_reset(self):
+        self.update(start=1.2, end=3.2)
+        data=json.loads(self.manifest.read_text(encoding="utf-8"))
+        data["entries"][0]["start_seconds"]=1.85
+        self.manifest.write_text(json.dumps(data), encoding="utf-8")
+        config=SimpleNamespace(source_text_language="en", reference_language="auto")
+        rows=get_project_subtitles(config, self.output)
+        self.assertTrue(rows[0]["timing_conflict"])
+        self.assertEqual(rows[0]["start"], 1.85)
+        self.assertEqual(rows[0]["source_start"], 1.85)
+        with self.assertRaisesRegex(ValueError, "outdated audio timeline"):
+            self.update(start=1.3, end=3.3)
+        cleared=self.update(
+            reset=True, expected_start=1.85, expected_end=3.25
+        )
+        self.assertFalse(cleared["timing_modified"])
+        self.assertEqual(read_timing_overrides(self.output), {})
+        self.assertFalse(get_project_subtitles(config, self.output)[0]["timing_conflict"])
+
     def test_unknown_or_ambiguous_cue_id_fails_closed(self):
         with self.assertRaisesRegex(ValueError, "missing or ambiguous"):
             self.update(item_id=99, start=1.1, end=3.1)
