@@ -152,3 +152,24 @@ This iteration extends the cue editor with **non-destructive subtitle DISPLAY ti
 - No claims of actual libass/FFmpeg visual correctness, live user-experience acceptance or physical-device validation follow from these tests alone. The final PR head requires its own CI result.
 
 **Important remaining limits:** There is no frame-accurate synchronized video transport, multi-track event split/merge, drag-to-retime on a full-program waveform, or arbitrary overlap/collision orchestration. Retiming is subtitle-only, per-event, millisecond precision, and bounded to ±5 seconds from the original source boundaries.
+
+
+## Continuous subtitle event timeline (2026-10-10)
+
+The prior per-cue timing editor required exact numeric inputs to understand adjacent subtitle placement. The new **SUBTITLE TIMELINE** below the preview is an independent, spatial overview of the project's output-only ASS/SRT cue display boundaries. It is not a waveform of the final audio mix.
+
+### Implemented interactions
+
+- Real project subtitle intervals are rendered on an absolute horizontal time scale; a ruler, viewport clock bounds and zoom levels (12 / 30 / 60 / 120 / 300 seconds) give surrounding temporal context.
+- The user can pan by half-viewport buttons or a corpus-range slider, jump back to the selected cue, and select a visible subtitle directly on the timeline.
+- The selected cue exposes two drag handles for START and END; pointer movement changes the same unsaved per-cue timing draft used by the numeric editor. Keyboard users can focus either handle and use arrow-left/right to nudge by 100 ms.
+- Optional snapping uses a limited pixel-distance threshold to align a moved edge with the neighboring cues' effective start/end. It does not automatically change the neighbor cue, forbid deliberate overlaps, or silently persist.
+- The current cue's ASS-preview percentage time is shown as a visual playhead. It is **not video playback** and does not imply original WAV/FLAC transport or final mixed-media synchronization.
+- The canvas is bounded even for long archives: timeline domain is computed iteratively without argument spreading; only events in the current viewport are considered and at most 140 bars are rendered per paint. When more events are present, the UI reports that the viewport is truncated and invites narrowing the time window. Overlapping cues are arranged across three visual lanes with an overlap-density indication rather than hidden claims of collision-free placement.
+- The timeline honors project/source identity, unsaved retiming drafts, and conflict flags. Dragging a handle sets a draft only; the separate **保存字幕时间** operation still owns optimistic-concurrency validation and regeneration of SRT/ASS.
+
+### Boundaries and remaining acceptance work
+
+This is a **subtitle display event timeline**, not a non-linear editor for the final mixed audio/video. It does not implement source-audio retiming, waveforms synchronized across the program, synchronized video frame stepping, automatic subtitle split/merge or multi-track editing.
+
+The timeline markup and production JavaScript are covered by \`tests/test_subtitle_continuous_timeline.py\` (select, snap, zoom, pan, pointer drag, and explicit save) and expanded \`tests/test_subtitle_style_workbench_ui.py\` source contracts. The entire suite must be checked against the exact submitted PR head. Actual browser/device legibility and FFmpeg/libass rendering are still separate evidence obligations.
