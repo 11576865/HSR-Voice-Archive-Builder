@@ -6799,6 +6799,7 @@ function layoutTimingState(sub){
       start:savedStart,end:savedEnd,savedStart,savedEnd,
       sourceStart:Number(sub.source_start??savedStart),
       sourceEnd:Number(sub.source_end??savedEnd),
+      conflict:!!sub.timing_conflict,
       revision:0,saving:false
     });
   }
@@ -6806,6 +6807,7 @@ function layoutTimingState(sub){
 }
 function layoutTimingCheck(state){
   if(!state)return '请选择项目字幕。';
+  if(state.conflict)return '原始音频时间已变化，当前覆写属于旧档案；请先使用「恢复原始时间」清理旧覆写。';
   const start=Number(state.start),end=Number(state.end);
   if(String(state.start).trim()===''||String(state.end).trim()===''||!Number.isFinite(start)||!Number.isFinite(end))
     return '请填写有效的显示起止秒数。';
@@ -6822,7 +6824,7 @@ function renderLayoutCueTiming(){
   const problem=layoutTimingCheck(state);
   const changed=!!state&&(state.savedStart!==state.sourceStart||state.savedEnd!==state.sourceEnd);
   const badge=document.getElementById('layoutCueTimingBadge');
-  if(badge)badge.textContent=!sub?'无字幕':!valid?'仅示例 · 不可保存':state.saving?'时间保存中':dirty?'时间草稿未保存':changed?'显示时间已覆写':'原始时间 · 未调整';
+  if(badge)badge.textContent=!sub?'无字幕':!valid?'仅示例 · 不可保存':state.conflict?'旧时间轴冲突 · 需重置':state.saving?'时间保存中':dirty?'时间草稿未保存':changed?'显示时间已覆写':'原始时间 · 未调整';
   for(const [id,value] of [['layoutCueTimingStart',state?.start],['layoutCueTimingEnd',state?.end]]){
     const input=document.getElementById(id);
     if(!input)continue;
@@ -6835,7 +6837,7 @@ function renderLayoutCueTiming(){
   const reset=document.getElementById('layoutCueTimingResetBtn');
   if(save)save.disabled=!valid||!dirty||!!problem||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
   if(revert)revert.disabled=!valid||!dirty||!!state?.saving;
-  if(reset)reset.disabled=!valid||(!changed&&!dirty)||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
+  if(reset)reset.disabled=!valid||(!state?.conflict&&!changed&&!dirty)||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
   const status=document.getElementById('layoutCueTimingStatus');
   if(status&&(!status.dataset?.committed||dirty||!valid)){
     status.textContent=!sub?'选取项目字幕后，可以调整 SRT/ASS 显示边界。':
@@ -6894,9 +6896,9 @@ async function saveLayoutCueTiming({reset=false}={}){
   if(!projectKey||!sub||!state||!layoutCorpusPersistable||layoutCueTimingSaveInFlight||layoutCueSaveInFlight)return false;
   const desiredStart=reset?state.sourceStart:Number(state.start);
   const desiredEnd=reset?state.sourceEnd:Number(state.end);
-  const check=layoutTimingCheck({...state,start:desiredStart,end:desiredEnd});
+  const check=layoutTimingCheck({...state,start:desiredStart,end:desiredEnd,conflict:reset?false:state.conflict});
   if(check)return false;
-  if(desiredStart===state.savedStart&&desiredEnd===state.savedEnd){
+  if(desiredStart===state.savedStart&&desiredEnd===state.savedEnd&&!(reset&&state.conflict)){
     layoutCueRevertTimingDraft();
     return true;
   }
@@ -6921,11 +6923,13 @@ async function saveLayoutCueTiming({reset=false}={}){
     if(row){
       row.start=Number(result.start);row.end=Number(result.end);
       row.timing_modified=!!result.timing_modified;
+      row.timing_conflict=false;
       row.word_alignment_ready=false;
       row.word_alignment_reason='display-timing-adjusted';
     }
     state.savedStart=Number(result.start);
     state.savedEnd=Number(result.end);
+    state.conflict=false;
     if(reset&&String(state.start)===String(desiredStart)&&String(state.end)===String(desiredEnd)){
       // Nothing to do; draft already matches reset values.
     }
@@ -7231,13 +7235,16 @@ function renderLayoutCorpusRail(){
         audit?.kind==='error'?' <em class="layout-audit-failed">检查错误</em>':'';
       const cueDraft=layoutCueDrafts.get(String(sub.id));
       const unsaved=cueDraft&&cueDraft.draft!==cueDraft.saved?' <em>未保存正文</em>':'';
+      const timingBadge=sub.timing_conflict?' <em class="layout-audit-failed">时间轴冲突</em>':sub.timing_modified?' <em>时间已调整</em>':'';
+      const timingDraft=layoutCueTimingDrafts.get(String(sub.id));
+      const timeDirty=timingDraft&&(Number(timingDraft.start)!==timingDraft.savedStart||Number(timingDraft.end)!==timingDraft.savedEnd)?' <em>时间草稿</em>':'';
       return '<button type="button" role="listitem" class="layout-corpus-item" data-layout-index="'+index+'"'+
         (active?' aria-current="true"':'')+' title="选取这条项目字幕进行预览">'+
         '<span class="layout-corpus-item-top"><span>#'+escapeHtml(String(sub.id))+'</span><span>'+escapeHtml(time)+'</span></span>'+
         '<span class="layout-corpus-item-text">'+escapeHtml(source)+'</span>'+
         '<span class="layout-corpus-item-meta">'+(sub.modified?'已修订 · ':'')+
         (sub.word_alignment_ready?'词级时间 · ':'')+
-        escapeHtml(String(sub.group||'项目字幕'))+unsaved+tag+'</span></button>';
+        escapeHtml(String(sub.group||'项目字幕'))+unsaved+timingBadge+timeDirty+tag+'</span></button>';
     }).join('');
   }
   const index=visible.findIndex(sub=>String(sub.id)===String(layoutCorpusSelectedId));
