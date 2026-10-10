@@ -6617,6 +6617,206 @@ function updateLayoutSampleOrigin(){
   else el.textContent='测试文本 · 示例';
 }
 
+
+/* Cue editing is a separate transaction from global ASS style settings.
+   It persists ONLY the target subtitle final_chs override; source timing and
+   alignment remain owned by the archive build pipeline. */
+let layoutCueProjectKey=null;
+let layoutCueDrafts=new Map();
+let layoutCueActiveId=null;
+let layoutCueSaveInFlight=false;
+let layoutCueAudioAbort=null;
+let layoutCueAudioObjectUrl=null;
+let layoutCueAudioIdentity=null;
+
+function layoutCueRow(id){
+  return layoutCorpusItems.find(item=>String(item.id)===String(id))||null;
+}
+function layoutCueClearAudio(){
+  if(layoutCueAudioAbort){layoutCueAudioAbort.abort();layoutCueAudioAbort=null;}
+  const player=document.getElementById('layoutCueAudio');
+  if(player){player.pause();player.removeAttribute('src');player.load();}
+  if(layoutCueAudioObjectUrl){URL.revokeObjectURL(layoutCueAudioObjectUrl);layoutCueAudioObjectUrl=null;}
+  layoutCueAudioIdentity=null;
+  const label=document.getElementById('layoutCueAudioStatus');
+  if(label)label.textContent='按需加载当前条目的原始 WAV';
+}
+function layoutCueResetProject(projectKey){
+  if(projectKey===layoutCueProjectKey)return;
+  layoutCueProjectKey=projectKey;
+  layoutCueDrafts=new Map();
+  layoutCueActiveId=null;
+  layoutCueClearAudio();
+  renderLayoutCueEditor();
+}
+function layoutCueState(sub){
+  if(!sub)return null;
+  const id=String(sub.id),saved=String(sub.final_chs??'');
+  if(!layoutCueDrafts.has(id))layoutCueDrafts.set(id,{saved,draft:saved,revision:0,saving:false});
+  return layoutCueDrafts.get(id);
+}
+function layoutCueTimePreview(){
+  const sub=layoutCueRow(layoutCueActiveId);
+  const slider=document.getElementById('layoutCueScrubber');
+  const output=document.getElementById('layoutCueScrubberTime');
+  if(!slider||!output)return;
+  if(!sub){slider.disabled=true;output.textContent='—';return;}
+  slider.disabled=false;
+  const percent=Math.max(5,Math.min(95,Number(slider.value||50)));
+  const start=Number(sub.start||0);
+  const span=Math.max(0,Number(sub.end||0)-start);
+  output.textContent=formatClockTime(start+span*percent/100)+' · '+percent+'%';
+}
+function renderLayoutCueEditor(){
+  const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
+  const selected=!!sub;
+  const title=document.getElementById('layoutCueHeading');
+  if(title)title.textContent=selected?'字幕 #'+sub.id+' · 逐条编辑':'请选择字幕条目';
+  const source=document.getElementById('layoutCueSourceText');
+  if(source)source.textContent=selected?String(sub.source_text||'（缺少源台词）'):'从左侧选取条目后显示原文。';
+  const start=document.getElementById('layoutCueStart'),end=document.getElementById('layoutCueEnd'),duration=document.getElementById('layoutCueDuration');
+  if(start)start.textContent=selected?formatClockTime(sub.start):'--:--.-';
+  if(end)end.textContent=selected?formatClockTime(sub.end):'--:--.-';
+  if(duration)duration.textContent=selected?Math.max(0,Number(sub.end||0)-Number(sub.start||0)).toFixed(2)+' s':'--';
+  const editor=document.getElementById('layoutCueFinalText');
+  if(editor){
+    editor.disabled=!selected;
+    if(!selected||document.activeElement!==editor)editor.value=selected?state.draft:'';
+  }
+  const chars=document.getElementById('layoutCueCharCount');
+  if(chars)chars.textContent=(state?.draft.length||0)+' 字';
+  const dirty=selected&&state.draft!==state.saved;
+  const badge=document.getElementById('layoutCueDraftBadge');
+  if(badge){
+    badge.dataset.state=!selected?'idle':state.saving?'saving':dirty?'dirty':'saved';
+    badge.textContent=!selected?'请选择字幕':state.saving?'保存中':dirty?'未保存的正文':'正文已保存';
+  }
+  const save=document.getElementById('layoutCueSaveBtn'),revert=document.getElementById('layoutCueRevertBtn');
+  if(save)save.disabled=!dirty||layoutCueSaveInFlight;
+  if(revert)revert.disabled=!dirty||state?.saving;
+  const audio=document.getElementById('layoutCueAudioLoadBtn');
+  if(audio)audio.disabled=!selected;
+  layoutCueTimePreview();
+}
+function layoutCueSelect(sub){
+  if(!sub){layoutCueActiveId=null;layoutCueClearAudio();renderLayoutCueEditor();return;}
+  if(String(layoutCueActiveId)!==String(sub.id))layoutCueClearAudio();
+  layoutCueActiveId=sub.id;
+  const state=layoutCueState(sub);
+  renderLayoutCueEditor();
+  return state;
+}
+function layoutCueUpdateDraft(next){
+  const sub=layoutCueRow(layoutCueActiveId);
+  if(!sub)return;
+  const state=layoutCueState(sub);
+  if(state.draft===next)return;
+  state.draft=next;
+  state.revision++;
+  // An edited translation must not silently inherit word alignments for old text.
+  if(layoutStressSample&&String(layoutStressSample.id)===String(sub.id))layoutStressSample.word_alignments=null;
+  const preview=document.getElementById('prevChsText');
+  if(preview)preview.value=next;
+  layoutTrialTextRevision++; // Reject late sample requests after typing.
+  invalidateLibassPreview();
+  scheduleLayoutPreviewUpdate();
+  renderLayoutCueEditor();
+  renderLayoutCorpusRail();
+  updateLayoutSampleOrigin();
+  const status=document.getElementById('layoutCueSaveStatus');
+  if(status){status.textContent='正文已修改但尚未保存；切换条目会保留当前会话草稿，刷新页面后未保存部分会丢失。';status.className='layout-cue-save-note status-warn';}
+}
+function layoutCueRevertDraft(){
+  const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
+  if(!state||state.saving)return;
+  layoutCueUpdateDraft(state.saved);
+}
+async function saveLayoutCueText(){
+  const key=layoutActiveProjectKey();
+  const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
+  if(!key||!sub||!state||layoutCueSaveInFlight||state.draft===state.saved)return false;
+  layoutCueSaveInFlight=true;
+  state.saving=true;
+  const id=sub.id,submitted=state.draft;
+  const status=document.getElementById('layoutCueSaveStatus');
+  if(status){status.textContent='正在保存条目 #'+id+' 的中文字幕并刷新 SRT/ASS…';status.className='layout-cue-save-note';}
+  renderLayoutCueEditor();
+  try{
+    const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{id,final_chs:submitted}]})
+    });
+    if(!currentProject||layoutActiveProjectKey()!==key)return false;
+    if(Number(data.result?.updated_count||0)!==1)throw new Error('后端未确认保存该字幕');
+    const row=layoutCueRow(id);
+    if(row)row.final_chs=submitted;
+    state.saved=submitted;
+    const currentText=state.draft;
+    if(String(layoutCueActiveId)===String(id)){
+      const preview=document.getElementById('prevChsText');
+      if(preview&&currentText===submitted)preview.value=submitted;
+    }
+    if(status) {
+      const error=String(data.result?.ass_error||'');
+      status.textContent=error
+        ? '字幕正文已保存并更新 SRT；ASS 排版生成失败，必须查看溢出报告，不可视为已导出。'
+        : '条目 #'+id+' 正文已保存；SRT 和已有 ASS（如有）由后端同步刷新。'+(currentText!==submitted?' 期间的新改动仍未保存。':'');
+      status.className='layout-cue-save-note '+(error||currentText!==submitted?'status-warn':'status-ok');
+    }
+    renderLayoutCueEditor();
+    renderLayoutCorpusRail();
+    return currentText===submitted;
+  }catch(err){
+    if(layoutActiveProjectKey()===key&&status){
+      status.textContent='保存字幕失败：'+shortError(err)+'；草稿仍保留在本页面。';
+      status.className='layout-cue-save-note status-bad';
+    }
+    return false;
+  }finally{
+    state.saving=false;
+    layoutCueSaveInFlight=false;
+    if(layoutActiveProjectKey()===key)renderLayoutCueEditor();
+  }
+}
+async function layoutCueLoadAudio(){
+  const sub=layoutCueRow(layoutCueActiveId),key=layoutActiveProjectKey();
+  if(!sub||!key)return;
+  layoutCueClearAudio();
+  const identity=key+'|'+String(sub.id);
+  layoutCueAudioIdentity=identity;
+  const controller=new AbortController();
+  layoutCueAudioAbort=controller;
+  const status=document.getElementById('layoutCueAudioStatus');
+  if(status)status.textContent='正在获取原始语音并校验 WAV…';
+  try{
+    const url='/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/'+encodeURIComponent(sub.id)+'/audio';
+    const response=await fetch(url,{headers:headers(),cache:'no-store',signal:controller.signal});
+    if(!response.ok){
+      let error='HTTP '+response.status;
+      try{const payload=await response.json();error=payload.error||error}catch(_){}
+      throw new Error(error);
+    }
+    const wav=await response.blob();
+    if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
+    if(wav.size<12)throw new Error('原始音频文件为空或损坏');
+    const header=new Uint8Array(await wav.slice(0,12).arrayBuffer());
+    const signature=String.fromCharCode(...header);
+    if(!((signature.startsWith('RIFF')||signature.startsWith('RF64'))&&signature.slice(8,12)==='WAVE')){
+      throw new Error('响应不是合法的 WAV 文件');
+    }
+    if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
+    layoutCueAudioObjectUrl=URL.createObjectURL(wav);
+    const audio=document.getElementById('layoutCueAudio');
+    if(audio){audio.src=layoutCueAudioObjectUrl;audio.load();}
+    if(status)status.textContent='原始 WAV 已载入，可试听本条台词。';
+  }catch(err){
+    if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
+    if(status)status.textContent='音频不可用：'+shortError(err);
+  }finally{
+    if(layoutCueAudioAbort===controller)layoutCueAudioAbort=null;
+  }
+}
+
 function subtitleVisualLength(text){
   let width=0;
   for(const ch of String(text||'')){
@@ -6697,13 +6897,15 @@ function renderLayoutCorpusRail(){
       const tag=audit?.kind==='failed'?' <em class="layout-audit-failed">溢出</em>':
         audit?.kind==='scaled'?' <em class="layout-audit-scaled">缩小到 '+audit.scale+'%</em>':
         audit?.kind==='error'?' <em class="layout-audit-failed">检查错误</em>':'';
+      const cueDraft=layoutCueDrafts.get(String(sub.id));
+      const unsaved=cueDraft&&cueDraft.draft!==cueDraft.saved?' <em>未保存正文</em>':'';
       return '<button type="button" role="listitem" class="layout-corpus-item" data-layout-index="'+index+'"'+
         (active?' aria-current="true"':'')+' title="选取这条项目字幕进行预览">'+
         '<span class="layout-corpus-item-top"><span>#'+escapeHtml(String(sub.id))+'</span><span>'+escapeHtml(time)+'</span></span>'+
         '<span class="layout-corpus-item-text">'+escapeHtml(source)+'</span>'+
         '<span class="layout-corpus-item-meta">'+(sub.modified?'已修订 · ':'')+
         (sub.word_alignment_ready?'词级时间 · ':'')+
-        escapeHtml(String(sub.group||'项目字幕'))+tag+'</span></button>';
+        escapeHtml(String(sub.group||'项目字幕'))+unsaved+tag+'</span></button>';
     }).join('');
   }
   const index=visible.findIndex(sub=>String(sub.id)===String(layoutCorpusSelectedId));
@@ -6823,6 +7025,7 @@ async function runLayoutBatchAudit(){
 async function loadLayoutStressSample({force=false,selectId=null,refresh=false}={}){
   const request=++layoutSampleRequestGeneration;
   const projectKey=layoutActiveProjectKey();
+  layoutCueResetProject(projectKey);
   const textRevision=layoutTrialTextRevision;
   const status=document.getElementById('layoutCorpusCheckStatus');
   const current=()=>request===layoutSampleRequestGeneration&&
@@ -6834,6 +7037,8 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
     layoutCorpusItems=[];
     layoutCorpusSelectedId=null;
     layoutCorpusProjectKey=null;
+    layoutCueResetProject(null);
+    layoutCueSelect(null);
     layoutAuditGeneration++;
     layoutAuditResults.clear();
     renderLayoutCorpusRail();
@@ -6893,7 +7098,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
       const previous=subtitles.find(sub=>String(sub.id)===String(layoutCorpusSelectedId));
       if(previous){selected=previous;bestScore=subtitleLayoutStressScore(previous);}
     }
-    const chs=String(selected.final_chs||selected.official_chs||selected.api_chs||selected.original_chs||'');
+    const chs=String(selected.final_chs??selected.official_chs??selected.api_chs??selected.original_chs??'');
     const primary=String(selected.source_text||'');
     let alignment=null;
     if(selected.word_alignment_ready){
@@ -6912,9 +7117,11 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
     layoutSampleSource='sample';
     layoutSampleProjectIdentity=projectKey;
     layoutCorpusSelectedId=selected.id;
+    const cueState=layoutCueSelect(selected);
+    if(cueState?.draft!==cueState?.saved)layoutStressSample.word_alignments=null;
     renderLayoutCorpusRail();
     const chsInput=document.getElementById('prevChsText'),priInput=document.getElementById('prevPriText');
-    if(chsInput)chsInput.value=chs;
+    if(chsInput)chsInput.value=cueState?.draft??chs;
     if(priInput)priInput.value=primary;
     updateLayoutSampleOrigin();
     if(status){
@@ -7224,6 +7431,31 @@ applyPreviewBackground();
 });
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
+document.getElementById('layoutCueFinalText')?.addEventListener('input',event=>layoutCueUpdateDraft(event.target.value));
+document.getElementById('layoutCueSaveBtn')?.addEventListener('click',()=>saveLayoutCueText());
+document.getElementById('layoutCueRevertBtn')?.addEventListener('click',layoutCueRevertDraft);
+document.getElementById('layoutCueAudioLoadBtn')?.addEventListener('click',layoutCueLoadAudio);
+document.getElementById('layoutCueScrubber')?.addEventListener('input',event=>{
+  const other=document.getElementById('prevKaraokePreviewTime');
+  if(other)other.value=event.target.value;
+  const percentLabel=document.getElementById('prevKaraokePreviewTimeVal');
+  if(percentLabel)percentLabel.textContent=Math.round(Number(event.target.value||50))+'%';
+  layoutCueTimePreview();
+  invalidateLibassPreview();
+});
+window.addEventListener('beforeunload',()=>{
+  // Warn for uncommitted translation edits, but do not block when only style preview changes.
+  if([...layoutCueDrafts.values()].some(state=>state.draft!==state.saved))
+    return; // Deliberately no unload prompt here; browser-wide guard is installed below.
+});
+window.addEventListener('beforeunload',event=>{
+  if([...layoutCueDrafts.values()].some(state=>state.draft!==state.saved)){
+    event.preventDefault();
+    event.returnValue='';
+  }
+});
+
+
 document.getElementById('layoutCorpusMobileToggleBtn')?.addEventListener('click',()=>{
   const rail=document.querySelector('.layout-corpus-rail');
   const toggle=document.getElementById('layoutCorpusMobileToggleBtn');
@@ -7300,6 +7532,9 @@ document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>
   const label=document.getElementById('prevKaraokePreviewTimeVal');
   const input=document.getElementById('prevKaraokePreviewTime');
   if(label&&input)label.textContent=Math.round(parseFloat(input.value||'50'))+'%';
+  const cueSlider=document.getElementById('layoutCueScrubber');
+  if(cueSlider)cueSlider.value=input?.value||'50';
+  layoutCueTimePreview();
   invalidateLibassPreview();
 });
 
