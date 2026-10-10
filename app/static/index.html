@@ -2882,6 +2882,22 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #layoutCorpusRefreshBtn{min-height:32px!important;padding:5px 8px!important;font-size:10px!important}
 @media(max-width:759px){#layoutCorpusRefreshBtn{min-height:34px!important}}
 
+
+.layout-timing-editor{margin:13px 0;padding:13px;border:1px solid var(--layout-border);border-radius:9px;background:var(--layout-section)}
+.layout-timing-head{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:9px}
+.layout-timing-head strong{font-size:12px}
+.layout-timing-head span{font-size:11px;color:var(--layout-muted);text-align:right}
+.layout-timing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px}
+.layout-timing-fields label{font-size:11px;color:var(--layout-muted);font-weight:620}
+.layout-timing-fields input{display:block;margin-top:5px;width:100%;min-height:38px!important;font-family:ui-monospace,Consolas,monospace;font-size:13px!important}
+.layout-timing-actions{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px;margin-top:10px}
+.layout-timing-actions button{min-width:0;min-height:34px!important;font-size:10px!important;padding:4px!important}
+.layout-timing-commit{display:flex;gap:6px;flex-wrap:wrap;margin-top:11px}
+.layout-timing-commit button{min-height:36px!important;font-size:11px!important;padding:7px 10px!important}
+#layoutCueTimingSaveBtn{background:var(--layout-evidence-accent)!important;color:#0a1925!important}
+#layoutCueTimingStatus{font-size:11px;line-height:1.55;color:var(--layout-muted);margin:10px 0 0}
+@media(max-width:759px){.layout-timing-actions{grid-template-columns:repeat(2,minmax(0,1fr))}.layout-timing-editor{padding:11px}}
+
 </style>
 </head>
 <body>
@@ -3341,10 +3357,36 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <span>终点 <strong id="layoutCueEnd">--:--.-</strong></span>
               <span>时长 <strong id="layoutCueDuration">--</strong></span>
             </div>
+            <section class="layout-timing-editor" aria-label="非破坏性字幕显示时间编辑">
+              <div class="layout-timing-head">
+                <strong>字幕显示时间</strong>
+                <span id="layoutCueTimingBadge">原始时间 · 未调整</span>
+              </div>
+              <div class="layout-timing-fields">
+                <label for="layoutCueTimingStart">显示开始（秒）
+                  <input id="layoutCueTimingStart" type="number" inputmode="decimal" step="0.01" min="0" disabled />
+                </label>
+                <label for="layoutCueTimingEnd">显示结束（秒）
+                  <input id="layoutCueTimingEnd" type="number" inputmode="decimal" step="0.01" min="0" disabled />
+                </label>
+              </div>
+              <div class="layout-timing-actions">
+                <button type="button" id="layoutCueTimingStartEarlier" data-timing-nudge="start:-0.1" disabled>开始 −0.1s</button>
+                <button type="button" id="layoutCueTimingStartLater" data-timing-nudge="start:0.1" disabled>开始 +0.1s</button>
+                <button type="button" id="layoutCueTimingEndEarlier" data-timing-nudge="end:-0.1" disabled>结束 −0.1s</button>
+                <button type="button" id="layoutCueTimingEndLater" data-timing-nudge="end:0.1" disabled>结束 +0.1s</button>
+              </div>
+              <div class="layout-timing-commit">
+                <button type="button" id="layoutCueTimingSaveBtn" disabled>保存字幕时间</button>
+                <button type="button" id="layoutCueTimingRevertBtn" disabled>撤销时间草稿</button>
+                <button type="button" id="layoutCueTimingResetBtn" disabled>恢复原始时间</button>
+              </div>
+              <p id="layoutCueTimingStatus" role="status" aria-live="polite">调整仅影响导出的字幕显示时间，不移动 WAV 或更改原始音频时间轴。单侧最多偏离 5 秒。</p>
+            </section>
             <div class="layout-cue-scrub">
               <label for="layoutCueScrubber">片段内预览位置 <output id="layoutCueScrubberTime">—</output></label>
               <input type="range" id="layoutCueScrubber" min="5" max="95" step="5" value="50" disabled aria-describedby="layoutCueTimeNote" />
-              <p id="layoutCueTimeNote">时间轴为当前字幕片段的只读参考，滑块控制 ASS 效果预览时间，不修改音频/时间戳。</p>
+              <p id="layoutCueTimeNote">滑块控制当前片段的 ASS 效果预览时间，不保存时间修改；上方时间输入另行保存至字幕显示时间覆写层。</p>
             </div>
             <div class="layout-cue-grid">
               <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
