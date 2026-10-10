@@ -6,6 +6,7 @@ renders a black frame at active and inactive cue times.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
@@ -185,6 +186,27 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
         before, active, after = frame(0.6), frame(2.0), frame(5.0)
         self.assertEqual(before, after)
         self.assertNotEqual(active, before, "libass did not rasterize cue at saved display time")
+        evidence_dir = os.getenv("HSR_LIBASS_EVIDENCE_DIR")
+        if evidence_dir:
+            output = Path(evidence_dir)
+            output.mkdir(parents=True, exist_ok=True)
+            for label, moment in [("before", 0.6), ("active", 2.0), ("after", 5.0)]:
+                screenshot = output / f"libass_{label}_{moment:.1f}s.png"
+                command = [
+                    ffmpeg, "-y", "-v", "error", "-nostdin", "-f", "lavfi",
+                    "-i", "color=c=black:s=640x360:r=1",
+                    "-vf", f"setpts=PTS+{moment}/TB,ass={str(ass_path)}",
+                    "-frames:v", "1", "-update", "1", str(screenshot),
+                ]
+                done = subprocess.run(command, capture_output=True, timeout=20, check=False)
+                self.assertEqual(done.returncode, 0, done.stderr[:1000])
+                self.assertTrue(screenshot.is_file())
+            (output / "libass_evidence_scope.txt").write_text(
+                "Actual FFmpeg/libass rasterization of generated ASS events on black synthetic video. "
+                "Manifest is a deterministic synthetic subtitle fixture; not live archive media. "
+                "The raw pixel test verifies active at 2.0s and absent at 0.6s/5.0s.\n",
+                encoding="utf-8",
+            )
 
 
 if __name__ == "__main__":
