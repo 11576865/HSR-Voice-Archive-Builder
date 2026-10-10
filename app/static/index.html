@@ -7310,7 +7310,7 @@ function layoutTimelineRender(){
     const pan=document.getElementById('layoutTimelinePan');
     if(pan)pan.disabled=true;
     const head=document.getElementById('layoutTimelinePlayhead');
-    head?.classList.add('hidden');
+    head?.classList?.add('hidden');
     const ruler=document.getElementById('layoutTimelineRuler');
     if(ruler)ruler.innerHTML='';
     return;
@@ -7380,7 +7380,7 @@ function layoutTimelineRender(){
     (layoutCorpusPersistable?' · 可编辑显示时间':' · 仅演示');
   const head=document.getElementById('layoutTimelinePlayhead');
   const selected=layoutCueRow(layoutCueActiveId);
-  if(head&&selected){
+  if(head?.style&&head?.classList&&selected){
     const bounds=layoutTimelineBounds(selected);
     const seek=Number(document.getElementById('layoutCueScrubber')?.value||50)/100;
     const time=bounds.start+(bounds.end-bounds.start)*seek;
@@ -7388,7 +7388,7 @@ function layoutTimelineRender(){
       head.style.left=percent(time).toFixed(4)+'%';
       head.classList.remove('hidden');
     }else head.classList.add('hidden');
-  }else head?.classList.add('hidden');
+  }else head?.classList?.add('hidden');
 }
 function layoutTimelinePanBy(deltaSeconds){
   layoutTimelineFollowSelected=false;
@@ -8118,6 +8118,7 @@ document.getElementById('layoutCueScrubber')?.addEventListener('input',event=>{
   const percentLabel=document.getElementById('prevKaraokePreviewTimeVal');
   if(percentLabel)percentLabel.textContent=Math.round(Number(event.target.value||50))+'%';
   layoutCueTimePreview();
+  layoutTimelineRender();
   invalidateLibassPreview();
 });
 window.addEventListener('beforeunload',event=>{
@@ -8247,6 +8248,7 @@ document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>
   const cueSlider=document.getElementById('layoutCueScrubber');
   if(cueSlider)cueSlider.value=input?.value||'50';
   layoutCueTimePreview();
+  layoutTimelineRender();
   invalidateLibassPreview();
 });
 
