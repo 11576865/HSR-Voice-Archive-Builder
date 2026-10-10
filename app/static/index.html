@@ -7261,11 +7261,17 @@ let layoutTimelineWindowStart=0;
 let layoutTimelineFollowSelected=true;
 let layoutTimelineDrag=null;
 function layoutTimelineWindow(){
-  const rows=layoutCorpusItems.filter(sub=>Number.isFinite(Number(sub.start))&&Number.isFinite(Number(sub.end)));
-  if(!rows.length)return {min:0,max:30,empty:true};
-  const min=Math.max(0,Math.min(...rows.map(sub=>Number(sub.source_start??sub.start))));
-  const max=Math.max(min+1,...rows.map(sub=>Number(sub.source_end??sub.end)));
-  return {min:Math.max(0,Math.floor(min)-2),max:Math.ceil(max)+2,empty:false};
+  let first=Infinity,last=-Infinity;
+  // A large archive must not spread N rows into Math.min/Math.max arguments.
+  for(const sub of layoutCorpusItems){
+    const start=Number(sub.source_start??sub.start),end=Number(sub.source_end??sub.end);
+    if(!Number.isFinite(start)||!Number.isFinite(end))continue;
+    first=Math.min(first,start);
+    last=Math.max(last,end);
+  }
+  if(!Number.isFinite(first)||!Number.isFinite(last))return {min:0,max:30,empty:true};
+  const min=Math.max(0,Math.floor(first)-2);
+  return {min,max:Math.max(min+1,Math.ceil(last)+2),empty:false};
 }
 function layoutTimelineBounds(sub){
   const state=layoutCueTimingDrafts.get(String(sub.id));
@@ -7418,6 +7424,7 @@ function layoutTimelinePointerDown(event){
   if(!handle||!sub||!layoutCorpusPersistable||sub.timing_conflict||!viewport)return;
   const rect=viewport.getBoundingClientRect();
   if(!rect.width)return;
+  layoutTimelineFollowSelected=false; // Keep the viewport stationary while a handle is being dragged.
   layoutTimelineDrag={
     project:layoutActiveProjectKey(),id:String(sub.id),field:handle.dataset.timelineEdge,
     pointerId:event.pointerId,rect,windowStart:layoutTimelineWindowStart,
