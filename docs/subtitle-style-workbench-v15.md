@@ -94,3 +94,35 @@ The earlier v15 split-pane arrangement was a *style form with a renderer*. The n
 - Visual fixture captures are separately available for composition review but are **not** production screenshots or active application acceptance evidence. Production visual and runtime-backed checks remain pending at this branch checkpoint.
 
 The new workflow should be validated in an actual project with mixed short/long subtitles and a real libass render; source-level checks alone cannot establish legibility, keyboard usability or the practical speed of the authoring loop.
+
+
+## Cue editor and original WAV waveform (continuation: 2026-10-10)
+
+This increment creates a genuinely **persisting per-item subtitle text editor** in the stage column; it does not misrepresent project timing or fake a complete video NLE.
+
+### User tasks now implemented
+
+1. Select a real project subtitle in the corpus explorer. The cue editor presents its source text, current effective Chinese translation, immutable source start/end/duration metadata, and a **segment-relative 5–95% preview seek control** linked to the existing ASS-render timestamp.
+2. Edit the final Chinese text independently of the global style form. Edits update the geometry-preview draft without automatically writing project files. Drafts are kept per cue during navigation and surfaced as *未保存正文* in the explorer. Switching back restores that specific draft. Typing in the old quick-preview fields explicitly detaches the project cue, so scratch trial text cannot accidentally become a persisted edit.
+3. Click **保存当前字幕** or press Ctrl/Command+Enter while in the cue editor. The existing `POST /api/project/{project_id}/subtitles` persists a single `final_chs` override and refreshes SRT/existing ASS through the existing subtitle regeneration pipeline. Successful responses are checked for `updated_count == 1`; an in-flight save captures its exact submitted snapshot and never erases newer typing. Failure leaves the unsaved draft intact. Style-settings persistence is a separate transaction.
+4. Click **加载音频** to fetch the actual selected subtitle's original WAV using the existing authenticated audio endpoint. Playback is native HTML audio. A browser-decoded waveform is rendered on a canvas and allows click-to-seek and 0.5 s keyboard seeking. If waveform decode is not supported (or the WAV exceeds the 12 MiB visualization limit), native playback remains usable; decoded peaks are never synthesized from dummy data.
+5. Refresh project subtitles explicitly from the corpus rail. Unsaved session drafts remain owned by their respective cue; manual quick-preview text is not overwritten.
+6. On unload, the browser is asked to warn if unsaved cue text exists. This browser-standard warning is advisory and not a durable autosave.
+
+### Safety and explicit boundaries
+
+- **No fake timing writes:** source start/end values are **read-only**. The preview-position scrubber and audio seek are audition controls; neither changes original audio, source clip boundaries, archive manifest timecodes or ASS cue timing. Independent per-cue retiming, split/merge, video frame transport and full audio/video timeline editing remain unimplemented.
+- **No fake project save:** unbuilt projects may return preview/sample subtitles from the existing endpoint. Both FastAPI and Termux-lite now return `persistable` alongside the subtitle list. The cue Save action is disabled unless the backend confirms that an actual output `manifest.json` exists.
+- **Project identity:** each cue save includes optional `expected_project_root`. FastAPI and Termux-lite reject mismatching active-project contexts before touching subtitle files. Older callers without this field remain supported.
+- **Word alignment:** editing Chinese text removes the old selected sample's word-alignment reference from current renderer payload. No automatic claim of realigned karaoke is made. A subsequent alignment refresh may be required.
+- **Session history:** global style Undo/Redo does not also undo persisted cue translations. Cue-text drafts remain session-local and are not a durable local cache; hard reload loses uncommitted changes.
+- **WAV vs media:** the native player/waveform displays the **original isolated WAV**, not the final continuous program mix or video asset. No final-media synchronization or frame-level waveform editing is claimed.
+- **CI/evidence:** the per-cue JS/endpoint tests run under the GitHub Actions pipeline; complete CI must be checked for the final exact head. No production browser screenshots or human usability/device acceptance are claimed by the change itself.
+
+### Coverage
+
+- `tests/test_subtitle_cue_editor.py`: production JavaScript with deferred cue save, cross-item drafts, request single-flight, save-during-edit correctness and read-only scrub position.
+- `tests/test_subtitle_preview.py`: reject cross-project text-write requests, accept matching project root and identify unbuilt preview-only corpus results.
+- `tests/test_subtitle_style_workbench_ui.py`: key UI controls and separation of scratch versus persistable cue editing.
+
+The cue editor is intentionally integrated **under the real preview stage**, not added as a separate unrelated page or as decoration on the global Inspector.
