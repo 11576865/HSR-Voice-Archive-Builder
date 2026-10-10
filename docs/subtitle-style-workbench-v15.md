@@ -126,3 +126,29 @@ This increment creates a genuinely **persisting per-item subtitle text editor** 
 - `tests/test_subtitle_style_workbench_ui.py`: key UI controls and separation of scratch versus persistable cue editing.
 
 The cue editor is intentionally integrated **under the real preview stage**, not added as a separate unrelated page or as decoration on the global Inspector.
+
+
+## Output-only retiming: first real persistent time-edit operation (2026-10-10)
+
+This iteration extends the cue editor with **non-destructive subtitle DISPLAY timing**. Unlike the earlier version's audition-only percentage scrubber, the new numerical start/end editor and ±0.1-second nudge buttons persist real changes used by the SRT and ASS writers.
+
+### Data ownership and contract
+
+- **Source truth:** `manifest.json` owns continuous audio positions (`start_seconds`, `audio_end_seconds`, `display_end_seconds` from the archive build). The retiming UI does **not** move original WAV samples or rewrite those source timecodes.
+- **Derived subtitle layer:** `output/subtitle_timing_overrides.json` (schema v1) stores per-event display boundaries plus the source-time/member identity they were authored against. No timing override is written into original archive metadata.
+- **Input validation:** each boundary must be a finite number, start must be nonnegative, end must be at least 100 ms later than start, and each boundary can differ from its source time by at most 5 seconds. The limits avoid accidentally placing subtitles far outside the owning audio event; they are not a complete NLE.
+- **Optimistic concurrency:** POST requires the expected currently effective display start and end, as well as optional `expected_project_root`. Stale edit requests fail instead of silently overwriting newer edits. Both FastAPI and Termux-lite provide the same endpoint at `POST /api/project/{project_id}/subtitles/{item_id}/timing`.
+- **Conflict recovery:** if a rebuild changes the original source member/time window, the old derived timing cannot be applied to export. Corpus GET returns the source times plus a `timing_conflict` flag instead of hiding the entire explorer. An explicit **恢复原始时间** action can remove this stale override, using the updated source clock as its optimistic concurrency reference.
+- **Render/export:** `refresh_subtitle_artifacts_from_settings` applies the timing override only when constructing subtitle adapters, after source manifest/csv persistence and before SRT and optional ASS rendering. The normal archive pipeline invokes this refresh after building and resuming, so output-only retiming is reapplied to future subtitle export. It does not alter FLAC samples.
+- **Karaoke safety:** modifying a cue's display boundaries disables any prior word-level timing evidence for that particular subtitle event; it cannot be represented as having valid old word timestamps. Full realignment is a separate operation.
+- **Frontend:** start/end seconds, 100 ms nudges, separate Save/Discard Draft/Restore Source actions, per-item draft storage, invalid-range explanations, in-flight single-flight fences with text saving, and error/unsaved state. The existing audition scrubber remains separate and does not itself persist time changes.
+
+### Tests and status boundaries
+
+- `tests/test_subtitle_timing_overrides.py`: actual filesystem overlay, manifest immutability, real SRT timecodes and mocked ASS writer adapter times, invalid/nonfinite intervals, optimistic concurrency rejection, old-audio-source conflict and explicit recovery.
+- `tests/test_subtitle_timing_editor.py`: isolated Node VM executes production browser JS for cue switching/draft state, conflict-checked save, post-submit edits and reset.
+- `tests/test_subtitle_preview.py`: FastAPI expected-project-root guard and retiming-to-regeneration dispatch.
+- `tests/test_subtitle_style_workbench_ui.py`: new edit control IDs and state contract.
+- No claims of actual libass/FFmpeg visual correctness, live user-experience acceptance or physical-device validation follow from these tests alone. The final PR head requires its own CI result.
+
+**Important remaining limits:** There is no frame-accurate synchronized video transport, multi-track event split/merge, drag-to-retime on a full-program waveform, or arbitrary overlap/collision orchestration. Retiming is subtitle-only, per-event, millisecond precision, and bounded to ±5 seconds from the original source boundaries.
