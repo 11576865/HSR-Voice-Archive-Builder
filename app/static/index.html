@@ -7090,6 +7090,7 @@ function renderLayoutCueEditor(){
 function layoutCueSelect(sub){
   if(!sub){layoutCueActiveId=null;layoutCueClearAudio();renderLayoutCueEditor();return;}
   if(String(layoutCueActiveId)!==String(sub.id))layoutCueClearAudio();
+  if(String(layoutCueActiveId)!==String(sub.id))layoutTimelineFollowSelected=true;
   layoutCueActiveId=sub.id;
   const state=layoutCueState(sub);
   const timing=layoutTimingState(sub);
@@ -7252,6 +7253,204 @@ function subtitleLayoutStressScore(sub){
 }
 
 
+
+/* Project-wide, bounded DOM subtitle timeline. These are derived ASS/SRT
+   DISPLAY events, not samples from the archive's continuous audio stream. */
+let layoutTimelineWindowSeconds=30;
+let layoutTimelineWindowStart=0;
+let layoutTimelineFollowSelected=true;
+let layoutTimelineDrag=null;
+function layoutTimelineWindow(){
+  const rows=layoutCorpusItems.filter(sub=>Number.isFinite(Number(sub.start))&&Number.isFinite(Number(sub.end)));
+  if(!rows.length)return {min:0,max:30,empty:true};
+  const min=Math.max(0,Math.min(...rows.map(sub=>Number(sub.source_start??sub.start))));
+  const max=Math.max(min+1,...rows.map(sub=>Number(sub.source_end??sub.end)));
+  return {min:Math.max(0,Math.floor(min)-2),max:Math.ceil(max)+2,empty:false};
+}
+function layoutTimelineBounds(sub){
+  const state=layoutCueTimingDrafts.get(String(sub.id));
+  const start=state?Number(state.start):Number(sub.start);
+  const end=state?Number(state.end):Number(sub.end);
+  // Never publish a malformed partial numeric input as a timeline position.
+  return {
+    start:Number.isFinite(start)&&String(state?.start??sub.start).trim()!==''?start:Number(sub.start||0),
+    end:Number.isFinite(end)&&String(state?.end??sub.end).trim()!==''?end:Number(sub.end||0)
+  };
+}
+function layoutTimelineClampStart(value){
+  const range=layoutTimelineWindow();
+  return Math.max(range.min,Math.min(range.max-layoutTimelineWindowSeconds,Math.max(range.min,value)));
+}
+function layoutTimelineFocusCurrent(force=false){
+  const sub=layoutCueRow(layoutCueActiveId);
+  if(!sub)return;
+  const bounds=layoutTimelineBounds(sub);
+  const midpoint=(bounds.start+bounds.end)/2;
+  if(force||layoutTimelineFollowSelected&&(
+    bounds.end>layoutTimelineWindowStart+layoutTimelineWindowSeconds-1||
+    bounds.start<layoutTimelineWindowStart+1
+  )){
+    layoutTimelineWindowStart=layoutTimelineClampStart(midpoint-layoutTimelineWindowSeconds/2);
+  }
+}
+function layoutTimelineRender(){
+  const track=document.getElementById('layoutTimelineTracks');
+  if(!track)return;
+  const domain=layoutTimelineWindow();
+  if(domain.empty){
+    track.innerHTML='<p class="layout-timeline-empty">打开项目后显示真实字幕时间轴；示例字幕不能保存。</p>';
+    const status=document.getElementById('layoutTimelineScope');
+    if(status)status.textContent='尚无项目字幕';
+    const pan=document.getElementById('layoutTimelinePan');
+    if(pan)pan.disabled=true;
+    const head=document.getElementById('layoutTimelinePlayhead');
+    head?.classList.add('hidden');
+    const ruler=document.getElementById('layoutTimelineRuler');
+    if(ruler)ruler.innerHTML='';
+    return;
+  }
+  layoutTimelineFocusCurrent();
+  layoutTimelineWindowStart=layoutTimelineClampStart(layoutTimelineWindowStart);
+  const start=layoutTimelineWindowStart,span=layoutTimelineWindowSeconds,end=start+span;
+  const percent=seconds=>100*(seconds-start)/span;
+  const ruler=document.getElementById('layoutTimelineRuler');
+  if(ruler){
+    const step=span<=12?2:span<=30?5:span<=60?10:span<=120?20:60;
+    let html='';
+    const first=Math.ceil(start/step)*step;
+    for(let t=first;t<=end&&t<first+step*15;t+=step){
+      html+='<span class="layout-timeline-tick" style="left:'+percent(t).toFixed(4)+'%"><span>'+
+        escapeHtml(formatClockTime(t))+'</span></span>';
+    }
+    ruler.innerHTML=html;
+  }
+  const visible=layoutCorpusItems.map(sub=>({...layoutTimelineBounds(sub),sub}))
+    .filter(x=>x.end>=start&&x.start<=end)
+    .sort((a,b)=>a.start-b.start||a.end-b.end);
+  const rows=visible.slice(0,140); // bounded work per paint: still navigate by zoom and pan
+  const laneEnds=[-Infinity,-Infinity,-Infinity],parts=[];
+  let collisionCount=0;
+  for(const item of rows){
+    let lane=laneEnds.findIndex(laneEnd=>laneEnd<=item.start);
+    if(lane<0){lane=laneEnds.indexOf(Math.min(...laneEnds));collisionCount++;}
+    laneEnds[lane]=Math.max(laneEnds[lane],item.end);
+    const left=Math.max(0,percent(item.start));
+    const right=Math.min(100,percent(item.end));
+    const width=Math.max(0.7,right-left);
+    const sub=item.sub,active=String(sub.id)===String(layoutCueActiveId);
+    const state=layoutCueTimingDrafts.get(String(sub.id));
+    const dirty=!!state&&(Number(state.start)!==state.savedStart||Number(state.end)!==state.savedEnd);
+    const text=String(sub.final_chs??sub.official_chs??sub.source_text??'');
+    const label='#'+sub.id+' '+formatClockTime(item.start)+' – '+formatClockTime(item.end)+' '+text;
+    parts.push('<button type="button" class="layout-timeline-event" data-timeline-cue="'+escapeHtml(String(sub.id))+
+      '" data-active="'+active+'" data-dirty="'+dirty+'" data-conflict="'+!!sub.timing_conflict+
+      '" style="left:'+left.toFixed(4)+'%;width:'+width.toFixed(4)+'%;top:'+(lane*40+5)+'px" title="'+
+      escapeHtml(label)+'" aria-label="'+escapeHtml(label)+'">'+
+      escapeHtml('#'+String(sub.id)+' '+text.slice(0,34))+'</button>');
+    if(active&&layoutCorpusPersistable&&!sub.timing_conflict){
+      for(const edge of ['start','end']){
+        const t=item[edge];
+        if(t<start||t>end)continue;
+        const x=percent(t);
+        parts.push('<button type="button" class="layout-timeline-edge" data-timeline-edge="'+edge+
+          '" style="left:calc('+x.toFixed(4)+'% - 9px);top:'+(lane*40+5)+'px"'+
+          ' title="拖动调整'+(edge==='start'?'开始':'结束')+'时间 · 左右键每次 0.1 秒"'+
+          ' aria-label="调整字幕 #'+escapeHtml(String(sub.id))+(edge==='start'?'开始':'结束')+'时间"'+
+          ' aria-keyshortcuts="ArrowLeft ArrowRight">Ⅱ</button>');
+      }
+    }
+  }
+  track.innerHTML=parts.join('')||'<p class="layout-timeline-empty">这个时间窗口内没有字幕。请平移时间轴或扩大视窗。</p>';
+  const pan=document.getElementById('layoutTimelinePan');
+  if(pan){
+    const travel=Math.max(0,domain.max-domain.min-span);
+    pan.disabled=travel<=0;
+    pan.value=travel>0?String(Math.round(1000*(start-domain.min)/travel)):'0';
+  }
+  const status=document.getElementById('layoutTimelineScope');
+  if(status)status.textContent=formatClockTime(start)+' — '+formatClockTime(end)+' · 可见 '+visible.length+' 条'+
+    (visible.length>rows.length?'（仅显示前 '+rows.length+' 条，请缩小视窗）':'')+
+    (collisionCount?' · 重叠密集 '+collisionCount+' 条':'')+
+    (layoutCorpusPersistable?' · 可编辑显示时间':' · 仅演示');
+  const head=document.getElementById('layoutTimelinePlayhead');
+  const selected=layoutCueRow(layoutCueActiveId);
+  if(head&&selected){
+    const bounds=layoutTimelineBounds(selected);
+    const seek=Number(document.getElementById('layoutCueScrubber')?.value||50)/100;
+    const time=bounds.start+(bounds.end-bounds.start)*seek;
+    if(time>=start&&time<=end){
+      head.style.left=percent(time).toFixed(4)+'%';
+      head.classList.remove('hidden');
+    }else head.classList.add('hidden');
+  }else head?.classList.add('hidden');
+}
+function layoutTimelinePanBy(deltaSeconds){
+  layoutTimelineFollowSelected=false;
+  layoutTimelineWindowStart=layoutTimelineClampStart(layoutTimelineWindowStart+deltaSeconds);
+  layoutTimelineRender();
+}
+function layoutTimelineSelect(id){
+  const target=layoutCorpusItems.find(sub=>String(sub.id)===String(id));
+  if(!target)return;
+  layoutTimelineFollowSelected=true;
+  loadLayoutStressSample({force:true,selectId:target.id}).catch(e=>setLog(String(e)));
+}
+function layoutTimelineSnapSeconds(value,field){
+  if(!document.getElementById('layoutTimelineSnap')?.checked)return value;
+  const viewport=document.getElementById('layoutTimelineViewport');
+  const rect=viewport?.getBoundingClientRect?.();
+  const threshold=Math.min(0.35,rect?.width?layoutTimelineWindowSeconds*12/rect.width:0.15);
+  let best=value,distance=threshold;
+  for(const sub of layoutCorpusItems){
+    if(String(sub.id)===String(layoutCueActiveId))continue;
+    const bounds=layoutTimelineBounds(sub);
+    for(const candidate of [bounds.start,bounds.end]){
+      const d=Math.abs(candidate-value);
+      if(d<distance){distance=d;best=candidate;}
+    }
+  }
+  return best;
+}
+function layoutTimelinePointerDown(event){
+  const handle=event.target.closest?.('[data-timeline-edge]');
+  const sub=layoutCueRow(layoutCueActiveId);
+  const viewport=document.getElementById('layoutTimelineViewport');
+  if(!handle||!sub||!layoutCorpusPersistable||sub.timing_conflict||!viewport)return;
+  const rect=viewport.getBoundingClientRect();
+  if(!rect.width)return;
+  layoutTimelineDrag={
+    project:layoutActiveProjectKey(),id:String(sub.id),field:handle.dataset.timelineEdge,
+    pointerId:event.pointerId,rect,windowStart:layoutTimelineWindowStart,
+    windowSeconds:layoutTimelineWindowSeconds
+  };
+  event.preventDefault();
+}
+function layoutTimelinePointerMove(event){
+  const drag=layoutTimelineDrag;
+  if(!drag||drag.pointerId!==event.pointerId)return;
+  if(drag.project!==layoutActiveProjectKey()||String(layoutCueActiveId)!==drag.id){
+    layoutTimelineDrag=null;return;
+  }
+  const state=layoutTimingState(layoutCueRow(layoutCueActiveId));
+  if(!state||!drag.rect.width)return;
+  event.preventDefault();
+  const ratio=Math.min(1,Math.max(0,(event.clientX-drag.rect.left)/drag.rect.width));
+  let seconds=Math.round((drag.windowStart+drag.windowSeconds*ratio)*10)/10;
+  seconds=layoutTimelineSnapSeconds(seconds,drag.field);
+  const lower=Math.max(0,state[drag.field==='start'?'sourceStart':'sourceEnd']-5);
+  const upper=state[drag.field==='start'?'sourceStart':'sourceEnd']+5;
+  seconds=Math.min(upper,Math.max(lower,seconds));
+  if(drag.field==='start')seconds=Math.min(seconds,Number(state.end)-0.1);
+  else seconds=Math.max(seconds,Number(state.start)+0.1);
+  seconds=Math.round(seconds*1000)/1000;
+  if(Number.isFinite(seconds))layoutCueUpdateTiming(drag.field,String(seconds));
+}
+function layoutTimelinePointerUp(event){
+  if(layoutTimelineDrag&&(event.pointerId===undefined||layoutTimelineDrag.pointerId===event.pointerId)){
+    layoutTimelineDrag=null;
+  }
+}
+
 let layoutCorpusItems=[];
 let layoutCorpusProjectKey=null;
 let layoutCorpusPersistable=false;
@@ -7332,6 +7531,7 @@ function renderLayoutCorpusRail(){
   const next=document.getElementById('layoutNextSampleBtn');
   if(prev)prev.disabled=!visible.length||index<=0;
   if(next)next.disabled=!visible.length||index<0||index>=visible.length-1;
+  layoutTimelineRender();
 }
 function selectLayoutCorpusByIndex(index){
   const sub=layoutCorpusItems[index];
@@ -7930,6 +8130,45 @@ document.getElementById('layoutCorpusMobileToggleBtn')?.addEventListener('click'
   toggle.setAttribute('aria-expanded',opened?'true':'false');
   toggle.textContent=opened?'收起 ▴':'浏览 ▾';
 });
+
+document.getElementById('layoutTimelineTracks')?.addEventListener('click',event=>{
+  if(event.target.closest?.('[data-timeline-edge]'))return;
+  const item=event.target.closest?.('[data-timeline-cue]');
+  if(item)layoutTimelineSelect(item.dataset.timelineCue);
+});
+document.getElementById('layoutTimelineTracks')?.addEventListener('pointerdown',layoutTimelinePointerDown);
+window.addEventListener('pointermove',layoutTimelinePointerMove,{passive:false});
+window.addEventListener('pointerup',layoutTimelinePointerUp);
+window.addEventListener('pointercancel',layoutTimelinePointerUp);
+document.getElementById('layoutTimelineTracks')?.addEventListener('keydown',event=>{
+  const edge=event.target.closest?.('[data-timeline-edge]');
+  if(!edge||!['ArrowLeft','ArrowRight'].includes(event.key))return;
+  event.preventDefault();
+  layoutCueNudgeTiming(edge.dataset.timelineEdge,event.key==='ArrowLeft'?-0.1:0.1);
+});
+document.getElementById('layoutTimelineZoom')?.addEventListener('change',event=>{
+  const span=Number(event.target.value);
+  if(![12,30,60,120,300].includes(span))return;
+  const center=layoutTimelineWindowStart+layoutTimelineWindowSeconds/2;
+  layoutTimelineWindowSeconds=span;
+  layoutTimelineFollowSelected=false;
+  layoutTimelineWindowStart=layoutTimelineClampStart(center-span/2);
+  layoutTimelineRender();
+});
+document.getElementById('layoutTimelineFollowBtn')?.addEventListener('click',()=>{
+  layoutTimelineFollowSelected=true;
+  layoutTimelineFocusCurrent(true);
+  layoutTimelineRender();
+});
+document.getElementById('layoutTimelineEarlierBtn')?.addEventListener('click',()=>layoutTimelinePanBy(-layoutTimelineWindowSeconds/2));
+document.getElementById('layoutTimelineLaterBtn')?.addEventListener('click',()=>layoutTimelinePanBy(layoutTimelineWindowSeconds/2));
+document.getElementById('layoutTimelinePan')?.addEventListener('input',event=>{
+  const range=layoutTimelineWindow(),travel=Math.max(0,range.max-range.min-layoutTimelineWindowSeconds);
+  layoutTimelineFollowSelected=false;
+  layoutTimelineWindowStart=range.min+travel*Number(event.target.value||0)/1000;
+  layoutTimelineRender();
+});
+
 document.getElementById('layoutCorpusSearch')?.addEventListener('input',()=>{
   layoutCorpusPage=0;
   renderLayoutCorpusRail();
