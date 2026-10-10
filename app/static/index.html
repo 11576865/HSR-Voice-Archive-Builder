@@ -6636,8 +6636,8 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false}=
     return updateLayoutPreview();
   }
   const manual=!force&&layoutSampleSource==='manual'&&layoutSampleProjectIdentity===projectKey;
-  if(manual&&layoutCorpusProjectKey===projectKey&&layoutCorpusItems.length){
-    if(status){status.textContent='已保留自定义试调文本。左侧可选择任意项目字幕，或明确重新载入自动压力样本。';status.className='small muted layout-corpus-status';}
+  if(manual){
+    if(status){status.textContent='已保留自定义试调文本。需要项目字幕时，请明确选取左侧条目或重新载入压力样本。';status.className='small muted layout-corpus-status';}
     updateLayoutSampleOrigin();
     renderLayoutCorpusRail();
     return updateLayoutPreview();
