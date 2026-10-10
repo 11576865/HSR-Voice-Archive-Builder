@@ -6803,7 +6803,22 @@ function layoutTimingState(sub){
       revision:0,saving:false
     });
   }
-  return layoutCueTimingDrafts.get(key);
+  const state=layoutCueTimingDrafts.get(key);
+  if(!state.saving){
+    const dirty=Number(state.start)!==state.savedStart||Number(state.end)!==state.savedEnd;
+    const originStart=Number(sub.source_start??savedStart),originEnd=Number(sub.source_end??savedEnd);
+    const changed=state.savedStart!==savedStart||state.savedEnd!==savedEnd||
+      state.sourceStart!==originStart||state.sourceEnd!==originEnd;
+    // A refreshed corpus may reveal a newer source clock. Respect unsaved
+    // foreground input while updating its baseline and conflict evidence.
+    if(changed){
+      if(!dirty){state.start=savedStart;state.end=savedEnd;}
+      state.savedStart=savedStart;state.savedEnd=savedEnd;
+      state.sourceStart=originStart;state.sourceEnd=originEnd;
+    }
+    state.conflict=!!sub.timing_conflict;
+  }
+  return state;
 }
 function layoutTimingCheck(state){
   if(!state)return '请选择项目字幕。';
