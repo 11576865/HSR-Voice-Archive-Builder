@@ -198,7 +198,7 @@ def desktop_check(browser, base_url, output, report):
 
     # Use real browser pointer events to move selected cue END near next cue start.
     page.evaluate("() => layoutTimelineSelect(11)")
-    page.wait_for_function("document.querySelector('[data-timeline-edge=\"end\"]') !== null")
+    page.wait_for_function("String(layoutCueActiveId)==='11' && document.querySelector('[data-timeline-edge=\"end\"]')!==null")
     handle = page.locator('[data-timeline-edge="end"]')
     hbox = handle.bounding_box()
     vp = rect(page, "#layoutTimelineViewport")
@@ -209,7 +209,14 @@ def desktop_check(browser, base_url, output, report):
     page.mouse.down()
     page.mouse.move(target_x, target_y, steps=8)
     page.mouse.up()
-    page.wait_for_function("Number(document.getElementById('layoutCueTimingEnd').value) > 7.1")
+    actual = page.evaluate("""() => ({
+      selected: layoutCueActiveId, value: document.getElementById('layoutCueTimingEnd').value,
+      state: layoutTimingState(layoutCueRow(layoutCueActiveId)),
+      drag: layoutTimelineDrag, left: layoutTimelineWindowStart,
+      zoom: layoutTimelineWindowSeconds
+    })""")
+    print("CHROMIUM DRAG DIAGNOSTIC", json.dumps(actual, ensure_ascii=False), flush=True)
+    page.wait_for_function("Number(document.getElementById('layoutCueTimingEnd').value) > 7.1", timeout=3000)
     end_draft = float(page.locator("#layoutCueTimingEnd").input_value())
     ensure(abs(end_draft - 7.4) < 0.051, f"Pointer snapping failed: {end_draft}")
     ensure(not writes, "Pointer drag persisted timing without explicit save")
