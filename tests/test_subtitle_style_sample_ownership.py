@@ -40,7 +40,7 @@ const vm = require('node:vm');
 const assert = require('node:assert/strict');
 const nodes = new Map();
 const node = id => {
-  if (!nodes.has(id)) nodes.set(id, {value:'',textContent:'',className:''});
+  if (!nodes.has(id)) nodes.set(id, {value:'',textContent:'',className:'',dataset:{}});
   return nodes.get(id);
 };
 const pending = [];
