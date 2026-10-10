@@ -563,6 +563,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/subtitle-layout/settings":
             config = _active_config()
             assert_project_idle(config.root)
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle settings project context changed; reopen the target project and retry")
             preset = (data.get("preset", config.subtitle_preset) or "standard").strip().lower()
             if preset not in {"standard", "plain", "karaoke", "custom"}:
                 preset = "custom"
