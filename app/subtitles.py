@@ -608,15 +608,12 @@ def get_project_subtitles(
             [entry for entry in entries if isinstance(entry, dict)],
             output_dir,
         )
-    overrides_file = output_dir / "subtitles_overrides.json"
     timing_overrides = read_timing_overrides(output_dir)
-    overrides: dict[str, dict[str, Any]] = {}
+    overrides = load_subtitle_overrides(output_dir)
+    if isinstance(entries, list):
+        # Keep displayed baseline identical to ASS/SRT export resolution.
+        _apply_derived_subtitle_fields(entries, overrides)
     review_state = load_subtitle_review_state(output_dir)
-    if overrides_file.is_file():
-        try:
-            overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
-        except Exception:
-            overrides = {}
 
     overflow_file = output_dir / "ass_layout_overflow_report.json"
     overflow_map: dict[str, dict[str, Any]] = {}
@@ -656,15 +653,11 @@ def get_project_subtitles(
         else:
             official_chs = target_text
 
+        # _apply_derived_subtitle_fields already resolves ID and original
+        # source-member ownership; do not override it with a weaker ID lookup.
         final_chs = str(entry.get("final_chs", target_text))
         modified = bool(entry.get("modified", False))
-
         str_id = str(item_id)
-        if str_id in overrides:
-            ov = overrides[str_id]
-            if isinstance(ov, dict):
-                final_chs = str(ov.get("final_chs", final_chs))
-                modified = bool(ov.get("modified", True))
 
         source_start, source_end = source_subtitle_window(entry)
         timing_modified = str_id in timing_overrides
@@ -793,6 +786,38 @@ def _update_project_subtitles_locked(
         for item in updates
         if item.get("id") is not None and "confirmed" in item
     }
+
+    # First-class cue editors send the server state on which their draft was
+    # based. Reject stale edits before touching override/review/export files.
+    # Older bulk callers that omit the preconditions retain their existing API.
+    expected_text = {
+        str(item["id"]): str(item["expected_final_chs"])
+        for item in updates
+        if item.get("id") is not None and "expected_final_chs" in item
+    }
+    expected_members = {
+        str(item["id"]): str(item["expected_source_member_id"])
+        for item in updates
+        if item.get("id") is not None and "expected_source_member_id" in item
+    }
+    if expected_text or expected_members:
+        # The same resolver is used by actual derived exports, including
+        # filename/member migration of older human overrides. Comparing raw
+        # manifest.final_chs or an exact-ID-only entry is insufficient.
+        effective = [dict(entry) for entry in entries if isinstance(entry, dict)]
+        _apply_derived_subtitle_fields(effective, overrides)
+        by_id: dict[str, list[dict[str, Any]]] = {}
+        for entry in effective:
+            by_id.setdefault(str(_entry_id(entry)), []).append(entry)
+        for key in expected_text.keys() | expected_members.keys():
+            matches = by_id.get(key, [])
+            if len(matches) != 1:
+                raise ValueError("Subtitle cue identity is missing or ambiguous; refresh before editing")
+            entry = matches[0]
+            if key in expected_members and expected_members[key] != str(entry.get("source_member_id") or ""):
+                raise ValueError("Subtitle source clip changed since it was loaded; refresh before editing")
+            if key in expected_text and expected_text[key] != str(entry.get("final_chs", "")):
+                raise ValueError("Subtitle text changed since it was loaded; refresh before editing")
 
     updated_count = 0
     text_updated_count = 0
