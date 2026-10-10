@@ -2665,6 +2665,9 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
   color:var(--layout-text)!important;
 }
 .layout-action-note{margin:8px 2px 0;font-size:10px;line-height:1.5;color:var(--layout-muted)}
+.layout-sample-toolbar{display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:7px;margin-top:8px}
+.layout-sample-toolbar #layoutSampleOrigin{font-size:11px;line-height:1.45}
+.layout-sample-toolbar #layoutReloadSampleBtn{min-height:36px!important;padding:6px 9px!important;font-size:11px!important}
 .preview-inspector #libassPreviewStatus{padding:10px 16px!important;font-size:11px!important}
 .preview-inspector .layout-inspector-section>summary{min-height:46px;padding:10px 16px!important}
 .preview-inspector .layout-inspector-section-body{padding:2px 16px 15px!important}
@@ -3124,6 +3127,10 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
             <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
           </div>
           <div id="layoutCorpusCheckStatus" class="small muted layout-corpus-status">打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。</div>
+          <div class="layout-sample-toolbar" aria-label="测试字幕来源与切换">
+            <span id="layoutSampleOrigin" class="small muted">测试文本 · 示例</span>
+            <button type="button" id="layoutReloadSampleBtn" class="secondary" title="明确舍弃当前试调文本，重新从项目选择版面压力样本">重新载入项目样本</button>
+          </div>
         </div>
 
         <div class="preview-actions">
@@ -5876,6 +5883,8 @@ let savedSubtitleSettings = null;
 let libassPreviewObjectUrl = null;
 let libassPreviewGeneration = 0;
 let geometryPreviewGeneration = 0;
+let libassPreviewController = null;
+let geometryPreviewController = null;
 
 function setPreviewEvidence(mode, detail = '') {
   const root=document.querySelector('.layout-preview-evidence');
@@ -5902,6 +5911,9 @@ function setPreviewEvidence(mode, detail = '') {
 
 function invalidateLibassPreview(){
   libassPreviewGeneration++;
+  if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
+  const renderButton=document.getElementById('previewLibassBtn');
+  if(renderButton)renderButton.disabled=false;
   const img=document.getElementById('libassPreviewImage');
   if(img)img.classList.add('hidden');
   const hadResult=!!libassPreviewObjectUrl;
@@ -5916,6 +5928,9 @@ function invalidateLibassPreview(){
 
 function showGeometryPreview(){
   libassPreviewGeneration++; // Explicit user choice wins over any in-flight render.
+  if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
+  const renderButton=document.getElementById('previewLibassBtn');
+  if(renderButton)renderButton.disabled=false;
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
   setPreviewEvidence('geometry');
 }
@@ -5946,6 +5961,9 @@ async function renderLibassPreview(){
   const payload=libassPreviewPayload();
   const identity=currentLibassPreviewIdentity();
   const stillCurrent=()=>generation===libassPreviewGeneration&&identity===currentLibassPreviewIdentity();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  if(libassPreviewController)libassPreviewController.abort();
+  libassPreviewController=controller;
   try{
     if(button)button.disabled=true;
     document.getElementById('libassPreviewImage')?.classList.add('hidden');
@@ -5955,7 +5973,8 @@ async function renderLibassPreview(){
       method:'POST',
       headers:{...headers(),'Content-Type':'application/json'},
       body:JSON.stringify(payload),
-      cache:'no-store'
+      cache:'no-store',
+      signal:controller?.signal
     });
     if(!stillCurrent())return;
     if(!response.ok){
@@ -5966,10 +5985,16 @@ async function renderLibassPreview(){
     const blob=await response.blob();
     if(!stillCurrent())return;
     if(!blob.size)throw new Error('实际 ASS 预览返回空图像');
+    if(blob.type&&blob.type!=='image/png')throw new Error('实际 ASS 预览返回的不是 PNG 图像');
     if(libassPreviewObjectUrl)URL.revokeObjectURL(libassPreviewObjectUrl);
     libassPreviewObjectUrl=URL.createObjectURL(blob);
     const img=document.getElementById('libassPreviewImage');
-    if(img){img.src=libassPreviewObjectUrl;img.classList.remove('hidden');}
+    if(!img)throw new Error('实际 ASS 预览图像控件不存在');
+    img.src=libassPreviewObjectUrl;
+    // An HTTP success does not prove a browser-displayable image; wait for decode.
+    if(typeof img.decode==='function')await img.decode();
+    if(!stillCurrent())return;
+    img.classList.remove('hidden');
     setPreviewEvidence('libass');
     if(status){
       const timingNote=Array.isArray(layoutStressSample?.word_alignments)&&layoutStressSample.word_alignments.length
@@ -5980,11 +6005,15 @@ async function renderLibassPreview(){
     }
   }catch(err){
     if(!stillCurrent())return;
+    const img=document.getElementById('libassPreviewImage');
+    if(img)img.classList.add('hidden');
+    if(libassPreviewObjectUrl){URL.revokeObjectURL(libassPreviewObjectUrl);libassPreviewObjectUrl=null;}
     setPreviewEvidence('failed','真实渲染失败：'+shortError(err)+'。画布仅保留几何求解结果。');
     if(status){status.textContent='实际 ASS 预览失败：'+shortError(err);status.className='small status-bad';}
     setLog(String(err));
   }finally{
-    if(button)button.disabled=false;
+    if(libassPreviewController===controller)libassPreviewController=null;
+    if(button&&generation===libassPreviewGeneration)button.disabled=false;
   }
 }
 
@@ -6234,6 +6263,21 @@ async function saveSubtitleLayoutSettings(){
 }
 
 let layoutStressSample=null;
+let layoutSampleRequestGeneration=0;
+let layoutTrialTextRevision=0;
+let layoutSampleSource='example';
+let layoutSampleProjectIdentity=null;
+
+function layoutActiveProjectKey(){
+  return currentProject?.root||currentProject?.name||null;
+}
+function updateLayoutSampleOrigin(){
+  const el=document.getElementById('layoutSampleOrigin');
+  if(!el)return;
+  if(layoutSampleSource==='manual')el.textContent='测试文本 · 自定义（不会被自动样本覆盖）';
+  else if(layoutSampleSource==='sample'&&layoutStressSample)el.textContent='测试文本 · 项目字幕 #'+layoutStressSample.id;
+  else el.textContent='测试文本 · 示例';
+}
 
 function subtitleVisualLength(text){
   let width=0;
@@ -6254,19 +6298,36 @@ function subtitleLayoutStressScore(sub){
   return Math.max(chsWidth,primaryWidth)+(chsWidth+primaryWidth)*0.28;
 }
 
-async function loadLayoutStressSample(){
+async function loadLayoutStressSample({force=false}={}){
+  const request=++layoutSampleRequestGeneration;
+  const projectKey=layoutActiveProjectKey();
+  const textRevision=layoutTrialTextRevision;
   const status=document.getElementById('layoutCorpusCheckStatus');
+  const current=()=>request===layoutSampleRequestGeneration&&
+    layoutActiveProjectKey()===projectKey&&layoutTrialTextRevision===textRevision;
   if(!currentProject){
     layoutStressSample=null;
-    if(status){status.textContent='打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。';status.className='small muted layout-corpus-status';}
+    layoutSampleSource='example';
+    layoutSampleProjectIdentity=null;
+    updateLayoutSampleOrigin();
+    if(status){status.textContent='打开项目后才能选择真实字幕样本；当前文字仅用于试调。';status.className='small muted layout-corpus-status';}
+    return updateLayoutPreview();
+  }
+  if(!force&&layoutSampleSource==='manual'&&layoutSampleProjectIdentity===projectKey){
+    if(status){status.textContent='已保留自定义试调文本；需要重新使用项目中的实际字幕时，请选择「重新载入项目样本」。';status.className='small muted layout-corpus-status';}
+    updateLayoutSampleOrigin();
     return updateLayoutPreview();
   }
   if(status){status.textContent='正在从项目字幕中选择版面压力较高的条目…';status.className='small muted layout-corpus-status';}
   try{
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles?selector=all');
+    if(!current())return;
     const subtitles=data.subtitles||[];
     if(!subtitles.length){
       layoutStressSample=null;
+      layoutSampleSource='example';
+      layoutSampleProjectIdentity=projectKey;
+      updateLayoutSampleOrigin();
       if(status){status.textContent='当前项目没有可用于排版检测的字幕。';status.className='small muted layout-corpus-status';}
       return updateLayoutPreview();
     }
@@ -6289,15 +6350,19 @@ async function loadLayoutStressSample(){
         alignment=timing.alignment||null;
       }catch(_){alignment=null}
     }
+    if(!current())return;
     layoutStressSample={
       id:selected.id,
       score:bestScore,
       duration_seconds:Number(alignment?.duration_seconds||Math.max(0.25,Number(selected.end||0)-Number(selected.start||0))||3),
       word_alignments:alignment?.valid&&Array.isArray(alignment.words)?alignment.words:null
     };
+    layoutSampleSource='sample';
+    layoutSampleProjectIdentity=projectKey;
     const chsInput=document.getElementById('prevChsText'),priInput=document.getElementById('prevPriText');
     if(chsInput)chsInput.value=chs;
     if(priInput)priInput.value=primary;
+    updateLayoutSampleOrigin();
     if(status){
       if(karaokeEnabled&&alignment?.valid){
         status.textContent='已载入带词级时间的项目字幕 #'+selected.id+'；实际 ASS 预览可检查 Karaoke 时间效果。';
@@ -6311,6 +6376,7 @@ async function loadLayoutStressSample(){
     invalidateLibassPreview();
     return updateLayoutPreview();
   }catch(err){
+    if(!current())return;
     layoutStressSample=null;
     if(status){status.textContent='自动载入项目字幕失败：'+shortError(err);status.className='small status-bad layout-corpus-status';}
     return updateLayoutPreview();
@@ -6319,6 +6385,9 @@ async function loadLayoutStressSample(){
 
 async function updateLayoutPreview() {
   const generation=++geometryPreviewGeneration;
+  if(geometryPreviewController)geometryPreviewController.abort();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  geometryPreviewController=controller;
   const chsText = document.getElementById('prevChsText')?.value || '';
   const priText = document.getElementById('prevPriText')?.value || '';
   const chsFont = document.getElementById('prevChsFont')?.value?.trim() || '汉仪旗黑';
@@ -6382,7 +6451,8 @@ async function updateLayoutPreview() {
         primary_font: priFont,
         source_language: currentProject?.config?.source_text_language || 'en',
         target_language: currentProject?.config?.target_language || 'zh-CN',
-      })
+      }),
+      signal:controller?.signal
     });
 
     if(generation!==geometryPreviewGeneration)return;
@@ -6406,11 +6476,14 @@ async function updateLayoutPreview() {
     console.error('Preview request error:', err);
     const badge=document.getElementById('previewStatusBadge');
     if(badge){badge.textContent='几何预览失败';badge.style.color='var(--bad)';}
+  }finally{
+    if(geometryPreviewController===controller)geometryPreviewController=null;
   }
 }
 
 function scheduleLayoutPreviewUpdate() {
   geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
+  if(geometryPreviewController){geometryPreviewController.abort();geometryPreviewController=null;}
   invalidateLibassPreview();
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
@@ -6584,8 +6657,18 @@ window.addEventListener('beforeunload',()=>{if(previewBackgroundObjectUrl)URL.re
 applyPreviewBackground();
 
 ['prevChsText','prevPriText'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('input',scheduleLayoutPreviewUpdate);
+  document.getElementById(id)?.addEventListener('input',()=>{
+    layoutTrialTextRevision++;
+    layoutSampleSource='manual';
+    layoutSampleProjectIdentity=layoutActiveProjectKey();
+    layoutStressSample=null; // Never reuse a sample's word timings for arbitrary edited text.
+    updateLayoutSampleOrigin();
+    const status=document.getElementById('layoutCorpusCheckStatus');
+    if(status){status.textContent='正在使用自定义测试文本；项目样本和原有词级时间不会自动套用。';status.className='small muted layout-corpus-status';}
+    scheduleLayoutPreviewUpdate();
+  });
 });
+document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
 ['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
