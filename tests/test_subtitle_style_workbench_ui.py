@@ -177,6 +177,45 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("if(subtitleSettingsSavePending)", html)
 
 
+    def test_v17_subtitle_studio_has_real_corpus_workflow(self) -> None:
+        html = self.html
+        for element_id in (
+            "layoutCorpusList",
+            "layoutCorpusSearch",
+            "layoutAuditBtn",
+            "layoutAuditCancelBtn",
+            "layoutAuditStatus",
+            "layoutPreviousSampleBtn",
+            "layoutNextSampleBtn",
+            "layoutCorpusPrevPageBtn",
+            "layoutCorpusNextPageBtn",
+            "layoutCorpusPageStatus",
+            "layoutCorpusMobileToggleBtn",
+            "layoutStyleUndoBtn",
+            "layoutStyleRedoBtn",
+        ):
+            self.assertEqual(html.count(f'id="{element_id}"'), 1)
+        self.assertIn('class="layout-corpus-rail"', html)
+        self.assertIn("layoutCorpusItems=[];", html)
+        self.assertIn("layoutCorpusPageSize=80;", html)
+        self.assertIn("async function runLayoutBatchAudit()", html)
+        self.assertIn("layoutAuditResults.set(String(sub.id)", html)
+        self.assertIn("rows=selected.slice(0,60)", html)
+        self.assertIn("function moveLayoutCorpusSelection(offset)", html)
+        self.assertIn("function travelLayoutStyleHistory(delta)", html)
+        self.assertIn("function recordLayoutStyleHistory()", html)
+        self.assertIn("resetLayoutStyleHistory();", html)
+
+    def test_mobile_editor_keeps_stage_first_and_navigation_collapsed(self) -> None:
+        html = self.html
+        self.assertIn(".preview-workbench .layout-preview-region{order:1!important", html)
+        self.assertIn(".preview-workbench .layout-corpus-rail{", html)
+        self.assertIn("order:2!important;width:100%", html)
+        self.assertIn(".preview-workbench .preview-inspector{order:3!important", html)
+        self.assertIn('aria-expanded="false" aria-controls="layoutCorpusList"', html)
+        self.assertIn("rail.classList.toggle('is-open')", html)
+
+
 
 if __name__ == "__main__":
     unittest.main()
