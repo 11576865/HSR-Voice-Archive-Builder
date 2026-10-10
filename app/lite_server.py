@@ -23,7 +23,8 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
+from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
@@ -479,7 +480,11 @@ class Handler(BaseHTTPRequestHandler):
                 selector=selector,
             )
             subtitles = decorate_subtitles(config, output, subtitles)
-            self._json({"ok": True, "subtitles": subtitles})
+            persistable = bool(output and (output / "manifest.json").is_file())
+            self._json({
+                "ok": True, "subtitles": subtitles, "persistable": persistable,
+                "export_status": read_subtitle_export_health(output),
+            })
             return
         if path == "/api/review/file":
             config = _active_config()
@@ -563,6 +568,9 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/subtitle-layout/settings":
             config = _active_config()
             assert_project_idle(config.root)
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle settings project context changed; reopen the target project and retry")
             preset = (data.get("preset", config.subtitle_preset) or "standard").strip().lower()
             if preset not in {"standard", "plain", "karaoke", "custom"}:
                 preset = "custom"
@@ -704,8 +712,53 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "report": report})
             return
 
+        if path.startswith("/api/project/") and path.endswith("/subtitles/artifacts/refresh"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle artifact retry project context changed")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            refreshed = refresh_derived_subtitle_exports(
+                config, output, force_ass=str(data.get("force_ass", "")).lower() in {"true", "1"}
+            )
+            artifact_error = str(refreshed.get("ass_error") or "")
+            self._json({
+                "ok": True, "refreshed": refreshed,
+                "artifacts_current": not bool(artifact_error),
+                "artifact_error": artifact_error,
+                "export_status": read_subtitle_export_health(output),
+            })
+            return
+
+        if path.startswith("/api/project/") and "/subtitles/" in path and path.endswith("/timing"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle timing project context changed; reopen project")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            item_id = path.split("/subtitles/", 1)[1][:-len("/timing")].strip("/")
+            if not item_id:
+                raise ValueError("Subtitle id is required")
+            result = save_subtitle_timing_and_refresh(
+                config, output, item_id=item_id,
+                start=data.get("start"), end=data.get("end"),
+                reset=str(data.get("reset", "")).lower() in {"true", "1"},
+                expected_start=data.get("expected_start"), expected_end=data.get("expected_end"),
+            )
+            self._json({"ok": True, **result})
+            return
+
         if "/subtitles" in path and path.startswith("/api/project/"):
             config = _active_config()
+            expected_root = str(data.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle edit project context changed; reopen the target project and retry")
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Project output directory is not configured")
@@ -721,6 +774,7 @@ class Handler(BaseHTTPRequestHandler):
             else:
                 updates = []
 
+            assert_project_idle(config.root)
             result = update_project_subtitles(config, output, updates)
             self._json({"ok": True, "result": result})
             return

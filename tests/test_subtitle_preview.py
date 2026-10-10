@@ -258,6 +258,136 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(saved.subtitle_archive_hud_font_size, 24)
         self.assertEqual(saved.subtitle_archive_hud_opacity, 0.66)
 
+    def test_settings_rejects_a_different_active_project_identity(self):
+        before = load_project(self.root)
+        response = self.client.post(
+            "/api/subtitle-layout/settings",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(self.root / "some-other-project"),
+                "base_chs_size": 73,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("project context changed", response.json()["error"])
+        after = load_project(self.root)
+        self.assertEqual(after.subtitle_chs_size, before.subtitle_chs_size)
+
+    def test_settings_accepts_matching_project_identity(self):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/subtitle-layout/settings",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(current.root),
+                "base_chs_size": 51,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(load_project(self.root).subtitle_chs_size, 51)
+
+    def test_unbuilt_project_cue_list_disables_persisting_demo_rows(self):
+        response = self.client.get(
+            "/api/project/active/subtitles?selector=all",
+            headers=self.headers,
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["subtitles"])
+        self.assertIs(response.json()["persistable"], False)
+
+    def test_timing_edit_rejects_wrong_project_before_writing(self):
+        response = self.client.post(
+            "/api/project/active/subtitles/11/timing",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(self.root / "wrong-root"),
+                "expected_start": 1.0,
+                "expected_end": 2.0,
+                "start": 1.1,
+                "end": 2.2,
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Subtitle timing project context changed", response.json()["error"])
+
+    @patch("app.server.save_subtitle_timing_and_refresh", return_value={
+        "saved": True, "artifacts_current": True,
+        "timing": {"id": "11", "start": 1.1, "end": 2.2, "timing_modified": True},
+        "refreshed": {"ass_error": ""}, "artifact_error": "",
+    })
+    def test_timing_edit_uses_existing_regeneration_pipeline(self, timing_mock):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/project/active/subtitles/11/timing",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(current.root),
+                "expected_start": 1.0,
+                "expected_end": 2.0,
+                "start": 1.1,
+                "end": 2.2,
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["timing"]["timing_modified"])
+        self.assertEqual(timing_mock.call_args.kwargs["item_id"], "11")
+        self.assertEqual(timing_mock.call_args.kwargs["expected_start"], 1.0)
+        self.assertEqual(timing_mock.call_args.kwargs["expected_end"], 2.0)
+        self.assertTrue(response.json()["saved"])
+        self.assertTrue(response.json()["artifacts_current"])
+
+    @patch("app.server.refresh_derived_subtitle_exports", return_value={
+        "ass_error": "", "srt_file": "test.srt"
+    })
+    def test_retry_artifacts_without_resubmitting_timing(self, retry_mock):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/project/active/subtitles/artifacts/refresh",
+            headers=self.headers,
+            json={"expected_project_root": str(current.root), "force_ass": True},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["artifacts_current"])
+        self.assertTrue(retry_mock.call_args.kwargs["force_ass"])
+        response = self.client.post(
+            "/api/project/active/subtitles/artifacts/refresh",
+            headers=self.headers,
+            json={"expected_project_root": str(Path(current.root) / "stale")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(retry_mock.call_count, 1)
+
+    def test_cue_edit_rejects_cross_project_write_before_touching_manifest(self):
+        response = self.client.post(
+            "/api/project/active/subtitles",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(self.root / "another-project"),
+                "subtitles": [{"id": 11, "final_chs": "Should not persist"}],
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Subtitle edit project context changed", response.json()["error"])
+
+    @patch("app.server.update_project_subtitles", return_value={"updated_count": 1})
+    def test_cue_edit_accepts_matching_project_identity(self, update_mock):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/project/active/subtitles",
+            headers=self.headers,
+            json={
+                "expected_project_root": str(current.root),
+                "subtitles": [{"id": 11, "final_chs": "Current project translation"}],
+            },
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["result"]["updated_count"], 1)
+        self.assertEqual(update_mock.call_count, 1)
+        self.assertEqual(
+            update_mock.call_args.args[2],
+            [{"id": 11, "final_chs": "Current project translation"}],
+        )
+
     def test_settings_endpoint_rejects_ass_delimiter_in_font_name(self):
         response = self.client.post(
             "/api/subtitle-layout/settings",

@@ -9,6 +9,15 @@ from typing import Any
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
+from .subtitle_export_status import record_subtitle_export, read_subtitle_export_health
+from .subtitle_timing import (
+    read_timing_overrides,
+    effective_subtitle_window,
+    source_subtitle_window,
+    StaleSubtitleTimingError,
+    subtitle_edit_lock,
+    update_subtitle_display_timing,
+)
 from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
@@ -216,29 +225,30 @@ def _sync_corrected_csv(
     write_csv_rows(corrected, rows, fields)
 
 
-def _subtitle_adapters(entries: list[dict[str, Any]]) -> list[SubtitleEntryAdapter]:
+def _subtitle_adapters(
+    entries: list[dict[str, Any]],
+    timing_overrides: dict[str, dict[str, float]] | None = None,
+) -> list[SubtitleEntryAdapter]:
+    """Apply display-only timing to subtitle writers, never to source manifest."""
+    timing_overrides = timing_overrides or {}
     adapters: list[SubtitleEntryAdapter] = []
     for entry in entries:
+        raw_id = _entry_id(entry)
+        entry_id = "" if raw_id is None else str(raw_id)
+        start, end = effective_subtitle_window(entry, timing_overrides)
         adapters.append(
             SubtitleEntryAdapter(
                 item_id=_entry_id(entry) or "",
                 english=str(entry.get("source_text") or entry.get("english", "")),
                 chinese=str(
-                    entry.get("final_chs")
-                    or entry.get("target_text")
-                    or entry.get("chinese", "")
+                    entry["final_chs"] if entry.get("final_chs") is not None
+                    else (entry.get("target_text") or entry.get("chinese", ""))
                 ),
-                start_seconds=float(entry.get("start_seconds", 0.0)),
-                display_end_seconds=float(
-                    entry.get(
-                        "display_end_seconds",
-                        entry.get("audio_end_seconds", 0.0),
-                    )
-                ),
+                start_seconds=start,
+                display_end_seconds=end,
                 word_alignments=(
-                    entry.get("word_alignments")
-                    or entry.get("words")
-                    or None
+                    None if entry_id in timing_overrides
+                    else (entry.get("word_alignments") or entry.get("words") or None)
                 ),
                 group=str(entry.get("group", "") or ""),
                 filename=str(entry.get("filename", "") or ""),
@@ -329,6 +339,16 @@ def refresh_subtitle_artifacts_from_settings(
 
     overrides = load_subtitle_overrides(output_dir)
     _apply_derived_subtitle_fields(entries, overrides)
+    # Validate the entire derived time layer before mutating manifest/CSV or
+    # writing new exports. A stale source clock is a hard failure, not a partial refresh.
+    timing_overrides = read_timing_overrides(output_dir)
+    for entry in entries:
+        effective_subtitle_window(entry, timing_overrides)
+
+    # Mark the preceding export as non-current before mutating manifest/CSV or
+    # touching output files. A process crash leaves a visible pending/stale
+    # receipt instead of falsely certifying old ASS/SRT after restart.
+    record_subtitle_export(output_dir, state="pending", ass_required=generate_ass)
 
     atomic_write_text(
         manifest_file,
@@ -342,7 +362,7 @@ def refresh_subtitle_artifacts_from_settings(
     # memory after manifest/csv persistence so an external alignment cache never
     # becomes source provenance or mutates the canonical archive manifest.
     apply_cached_word_alignments(entries, output_dir)
-    adapters = _subtitle_adapters(entries)
+    adapters = _subtitle_adapters(entries, timing_overrides)
     source_language = source_language or "en"
     target_language = target_language or "zh-CN"
     ass_file = output_dir / "HSR_Voice_Archive.ass"
@@ -351,12 +371,19 @@ def refresh_subtitle_artifacts_from_settings(
 
     # SRT is independent from ASS layout validation and must always reflect the
     # saved human text, even when the richer ASS representation is rejected.
-    write_srt(
-        adapters,
-        srt_file,
-        source_language=source_language,
-        target_language=target_language,
-    )
+    try:
+        write_srt(
+            adapters,
+            srt_file,
+            source_language=source_language,
+            target_language=target_language,
+        )
+    except Exception as exc:
+        record_subtitle_export(
+            output_dir, state="failed", ass_required=generate_ass,
+            artifact_error=f"{type(exc).__name__}: {exc}",
+        )
+        raise
 
     ass_error = ""
     if generate_ass:
@@ -377,6 +404,10 @@ def refresh_subtitle_artifacts_from_settings(
         ass_file.unlink(missing_ok=True)
         overflow_file.unlink(missing_ok=True)
 
+    record_subtitle_export(
+        output_dir, state="failed" if ass_error else "current",
+        ass_required=generate_ass, artifact_error=ass_error,
+    )
     return {
         "ass_file": str(ass_file) if generate_ass and not ass_error else "",
         "ass_error": ass_error,
@@ -451,6 +482,74 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
     return s_time, e_time
 
 
+
+def _refresh_derived_subtitle_exports(
+    config: ProjectConfig, output_dir: Path, *, force_ass: bool = False
+) -> dict[str, Any]:
+    return refresh_subtitle_artifacts_from_settings(
+        output_dir,
+        source_language=config.source_text_language or "en",
+        target_language=config.target_language or "zh-CN",
+        generate_ass=(
+            force_ass
+            or (output_dir / "HSR_Voice_Archive.ass").is_file()
+            or bool(getattr(config, "generate_ass", False))
+        ),
+        render_config=subtitle_render_config(config),
+        strict_ass=False,
+    )
+
+
+def refresh_derived_subtitle_exports(
+    config: ProjectConfig,
+    output_dir: Path,
+    *,
+    force_ass: bool = False,
+) -> dict[str, Any]:
+    """Retry ASS/SRT regeneration without altering saved cue text/timing edits."""
+    with subtitle_edit_lock(output_dir):
+        if not (output_dir / "manifest.json").is_file():
+            raise FileNotFoundError("Manifest file not found in project output directory")
+        return _refresh_derived_subtitle_exports(config, output_dir, force_ass=force_ass)
+
+
+def save_subtitle_timing_and_refresh(
+    config: ProjectConfig,
+    output_dir: Path,
+    *,
+    item_id: str | int,
+    start: Any = None,
+    end: Any = None,
+    reset: bool = False,
+    expected_start: Any = None,
+    expected_end: Any = None,
+) -> dict[str, Any]:
+    """Report durable timing commit separately from derived artifact status.
+
+    Timing commits BEFORE regenerating ASS/SRT. A failed writer used to cause
+    HTTP 400 despite a successful durable edit. Report both facts separately.
+    """
+    with subtitle_edit_lock(output_dir):
+        result = update_subtitle_display_timing(
+            output_dir, item_id=item_id, start=start, end=end, reset=reset,
+            expected_start=expected_start, expected_end=expected_end,
+        )
+        try:
+            refreshed = _refresh_derived_subtitle_exports(config, output_dir)
+            refresh_error = str(refreshed.get("ass_error") or "")
+        except Exception as exc:
+            refreshed = {}
+            refresh_error = f"{type(exc).__name__}: {exc}"
+        return {
+            "saved": True,
+            "timing": result,
+            "refreshed": refreshed,
+            "artifacts_current": not bool(refresh_error),
+            "artifact_error": refresh_error,
+            "export_status": read_subtitle_export_health(output_dir),
+        }
+
+
 def get_project_subtitles(
     config: ProjectConfig,
     output_dir: Path | None,
@@ -476,6 +575,10 @@ def get_project_subtitles(
                 "api_chs": "愿这场旅程带我们走向群星。",
                 "original_chs": "愿此行，终抵群星。",
                 "final_chs": "愿此行，终抵群星。",
+                "source_start": 5.0,
+                "source_end": 7.5,
+                "timing_modified": False,
+                "timing_conflict": False,
                 "modified": False,
                 "confirmed": False,
             },
@@ -489,6 +592,10 @@ def get_project_subtitles(
                 "api_chs": "规矩就是用来打破的！",
                 "original_chs": "规则，就是用来打破的！",
                 "final_chs": "规则，就是用来打破的！",
+                "source_start": 8.0,
+                "source_end": 11.2,
+                "timing_modified": False,
+                "timing_conflict": False,
                 "modified": False,
                 "confirmed": False,
             },
@@ -519,14 +626,12 @@ def get_project_subtitles(
             [entry for entry in entries if isinstance(entry, dict)],
             output_dir,
         )
-    overrides_file = output_dir / "subtitles_overrides.json"
-    overrides: dict[str, dict[str, Any]] = {}
+    timing_overrides = read_timing_overrides(output_dir)
+    overrides = load_subtitle_overrides(output_dir)
+    if isinstance(entries, list):
+        # Keep displayed baseline identical to ASS/SRT export resolution.
+        _apply_derived_subtitle_fields(entries, overrides)
     review_state = load_subtitle_review_state(output_dir)
-    if overrides_file.is_file():
-        try:
-            overrides = json.loads(overrides_file.read_text(encoding="utf-8"))
-        except Exception:
-            overrides = {}
 
     overflow_file = output_dir / "ass_layout_overflow_report.json"
     overflow_map: dict[str, dict[str, Any]] = {}
@@ -566,18 +671,22 @@ def get_project_subtitles(
         else:
             official_chs = target_text
 
+        # _apply_derived_subtitle_fields already resolves ID and original
+        # source-member ownership; do not override it with a weaker ID lookup.
         final_chs = str(entry.get("final_chs", target_text))
         modified = bool(entry.get("modified", False))
-
         str_id = str(item_id)
-        if str_id in overrides:
-            ov = overrides[str_id]
-            if isinstance(ov, dict):
-                final_chs = str(ov.get("final_chs", final_chs))
-                modified = bool(ov.get("modified", True))
 
-        start = float(entry.get("start_seconds", 0.0))
-        end = float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0)))
+        source_start, source_end = source_subtitle_window(entry)
+        timing_modified = str_id in timing_overrides
+        timing_conflict = False
+        try:
+            start, end = effective_subtitle_window(entry, timing_overrides)
+        except StaleSubtitleTimingError:
+            # A moved source clock may invalidate old derived timing, but the
+            # UI must remain accessible so an explicit reset can repair it.
+            start, end = source_start, source_end
+            timing_conflict = True
 
         overflow_info = overflow_map.get(str_id)
         item = {
@@ -587,6 +696,10 @@ def get_project_subtitles(
             "logical_id": str(entry.get("logical_id", "") or ""),
             "start": start,
             "end": end,
+            "source_start": source_start,
+            "source_end": source_end,
+            "timing_modified": timing_modified,
+            "timing_conflict": timing_conflict,
             "source_language": source_lang,
             "source_text": str(entry.get("source_text") or entry.get("english", "")),
             "official_chs": official_chs,
@@ -598,11 +711,13 @@ def get_project_subtitles(
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
             "word_alignment": dict(entry.get("_word_alignment") or {}),
-            "word_alignment_ready": bool(
-                (entry.get("_word_alignment") or {}).get("valid")
+            "word_alignment_ready": (
+                not timing_modified and bool((entry.get("_word_alignment") or {}).get("valid"))
             ),
-            "word_alignment_reason": str(
-                (entry.get("_word_alignment") or {}).get("reason") or "missing"
+            "word_alignment_reason": (
+                "display-timing-adjusted"
+                if timing_modified
+                else str((entry.get("_word_alignment") or {}).get("reason") or "missing")
             ),
         }
         subtitles.append(item)
@@ -654,6 +769,16 @@ def update_project_subtitles(
     output_dir: Path,
     updates: list[dict[str, Any]],
 ) -> dict[str, Any]:
+    """Serialize edits that share manifest, text overrides and final outputs."""
+    with subtitle_edit_lock(output_dir):
+        return _update_project_subtitles_locked(config, output_dir, updates)
+
+
+def _update_project_subtitles_locked(
+    config: ProjectConfig,
+    output_dir: Path,
+    updates: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Persist final_chs as a non-destructive override and refresh subtitle artifacts."""
 
     manifest_file = output_dir / "manifest.json"
@@ -679,6 +804,38 @@ def update_project_subtitles(
         for item in updates
         if item.get("id") is not None and "confirmed" in item
     }
+
+    # First-class cue editors send the server state on which their draft was
+    # based. Reject stale edits before touching override/review/export files.
+    # Older bulk callers that omit the preconditions retain their existing API.
+    expected_text = {
+        str(item["id"]): str(item["expected_final_chs"])
+        for item in updates
+        if item.get("id") is not None and "expected_final_chs" in item
+    }
+    expected_members = {
+        str(item["id"]): str(item["expected_source_member_id"])
+        for item in updates
+        if item.get("id") is not None and "expected_source_member_id" in item
+    }
+    if expected_text or expected_members:
+        # The same resolver is used by actual derived exports, including
+        # filename/member migration of older human overrides. Comparing raw
+        # manifest.final_chs or an exact-ID-only entry is insufficient.
+        effective = [dict(entry) for entry in entries if isinstance(entry, dict)]
+        _apply_derived_subtitle_fields(effective, overrides)
+        by_id: dict[str, list[dict[str, Any]]] = {}
+        for entry in effective:
+            by_id.setdefault(str(_entry_id(entry)), []).append(entry)
+        for key in expected_text.keys() | expected_members.keys():
+            matches = by_id.get(key, [])
+            if len(matches) != 1:
+                raise ValueError("Subtitle cue identity is missing or ambiguous; refresh before editing")
+            entry = matches[0]
+            if key in expected_members and expected_members[key] != str(entry.get("source_member_id") or ""):
+                raise ValueError("Subtitle source clip changed since it was loaded; refresh before editing")
+            if key in expected_text and expected_text[key] != str(entry.get("final_chs", "")):
+                raise ValueError("Subtitle text changed since it was loaded; refresh before editing")
 
     updated_count = 0
     text_updated_count = 0
@@ -739,6 +896,9 @@ def update_project_subtitles(
             review_state.pop(key, None)
         updated_count += 1
 
+    if updated_count < 1:
+        raise ValueError("No matching subtitle entries were updated")
+
     atomic_write_text(
         output_dir / "subtitles_overrides.json",
         json.dumps(overrides, ensure_ascii=False, indent=2),
@@ -746,16 +906,22 @@ def update_project_subtitles(
 
     _write_subtitle_review_state(output_dir, review_state)
 
+    artifact_error = ""
     if text_updated_count:
-        # A text edit changes manifest/subtitle artifacts, but it must not
-        # invalidate or rebuild the already verified continuous FLAC stage.
-        invalidate_subtitle_stages(config)
-        refreshed = refresh_subtitle_artifacts(
-            config,
-            output_dir,
-            data,
-            strict_ass=False,
-        )
+        # An override already committed must never be reported as a failed
+        # save merely because the derived subtitle export failed afterward.
+        try:
+            invalidate_subtitle_stages(config)
+            refreshed = refresh_subtitle_artifacts(
+                config,
+                output_dir,
+                data,
+                strict_ass=False,
+            )
+            artifact_error = str(refreshed.get("ass_error") or "")
+        except Exception as exc:
+            refreshed = {}
+            artifact_error = f"{type(exc).__name__}: {exc}"
     else:
         refreshed = {
             "ass_file": str(output_dir / "HSR_Voice_Archive.ass")
@@ -768,11 +934,12 @@ def update_project_subtitles(
             "override_count": len(overrides),
         }
 
-    if updated_count < 1:
-        raise ValueError("No matching subtitle entries were updated")
-
     return {
         "ok": True,
+        "saved": True,
+        "artifacts_current": not bool(artifact_error),
+        "artifact_error": artifact_error,
+        "export_status": read_subtitle_export_health(output_dir),
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
         "modified_ids": sorted(str(key) for key in overrides),

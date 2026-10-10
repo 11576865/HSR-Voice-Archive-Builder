@@ -1,0 +1,310 @@
+"""Integration of real ASS/SRT writers, saved cue text and timing, and retries.
+
+Uses real generated ASS and SRT files; optional FFmpeg/libass pixel verification
+renders a black frame at active and inactive cue times.
+"""
+from __future__ import annotations
+
+import json
+import os
+import shutil
+import subprocess
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
+
+from subtitle_layout import SubtitleRenderConfig
+from app.subtitle_timing import read_timing_overrides, update_subtitle_display_timing
+from app.subtitles import (
+    refresh_derived_subtitle_exports,
+    refresh_subtitle_artifacts_from_settings,
+    save_subtitle_timing_and_refresh,
+    update_project_subtitles,
+)
+
+
+class IntegratedSubtitleExportTests(unittest.TestCase):
+    def setUp(self):
+        temp = tempfile.TemporaryDirectory()
+        self.addCleanup(temp.cleanup)
+        self.output = Path(temp.name)
+        self.manifest = self.output / "manifest.json"
+        self.manifest.write_text(json.dumps({
+            "entries": [
+                {
+                    "index": 7, "source_member_id": "clip/dialogue-7.wav",
+                    "filename": "dialogue-7.wav",
+                    "source_text": "A journey begins.",
+                    "target_text": "旅途开始。",
+                    "start_seconds": 1.2,
+                    "audio_end_seconds": 3.0,
+                    "display_end_seconds": 3.0,
+                },
+                {
+                    "index": 8, "source_member_id": "clip/dialogue-8.wav",
+                    "filename": "dialogue-8.wav",
+                    "source_text": "Next scene.",
+                    "target_text": "下一幕。",
+                    "start_seconds": 8.0,
+                    "audio_end_seconds": 10.0,
+                    "display_end_seconds": 10.0,
+                },
+            ]
+        }, ensure_ascii=False), encoding="utf-8")
+        self.config = SimpleNamespace(
+            source_text_language="en", target_language="zh-CN", generate_ass=True
+        )
+        self.render_cfg = SubtitleRenderConfig(
+            chs_font="DejaVu Sans", primary_font="DejaVu Sans",
+            enable_kinetic=False, enable_karaoke=False,
+        )
+        self.config_patch = patch(
+            "app.subtitles.subtitle_render_config", return_value=self.render_cfg
+        )
+        self.config_patch.start()
+        self.addCleanup(self.config_patch.stop)
+
+    def read_ass(self):
+        return (self.output / "HSR_Voice_Archive.ass").read_text(encoding="utf-8-sig")
+
+    def read_srt(self):
+        return (self.output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
+
+    def test_real_ass_srt_and_source_clock_survive_timing_and_text_round_trip(self):
+        saved = save_subtitle_timing_and_refresh(
+            self.config, self.output, item_id=7,
+            expected_start=1.2, expected_end=3.0, start=1.3, end=3.6,
+        )
+        self.assertTrue(saved["saved"])
+        self.assertTrue(saved["artifacts_current"], saved["artifact_error"])
+        self.assertIn("00:00:01,300 --> 00:00:03,600", self.read_srt())
+        real_ass = self.read_ass()
+        self.assertIn("[Events]", real_ass)
+        self.assertIn("Dialogue:", real_ass)
+        self.assertIn("0:00:01.30", real_ass)
+        self.assertIn("0:00:03.60", real_ass)
+        self.assertIn("A journey begins.", real_ass)
+
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            text_save = update_project_subtitles(
+                self.config, self.output, [{"id": 7, "final_chs": "定稿正文"}]
+            )
+        self.assertTrue(text_save["saved"])
+        self.assertTrue(text_save["artifacts_current"], text_save["artifact_error"])
+        self.assertIn("定稿正文", self.read_srt())
+        self.assertIn("定稿正文", self.read_ass())
+        self.assertIn("00:00:01,300 --> 00:00:03,600", self.read_srt())
+
+        # Intentional blank Chinese text is a valid edit, not a request to
+        # silently reinsert the original target translation.
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            blank_save = update_project_subtitles(
+                self.config, self.output, [{"id": 7, "final_chs": ""}]
+            )
+        self.assertTrue(blank_save["saved"])
+        self.assertTrue(blank_save["artifacts_current"], blank_save["artifact_error"])
+        self.assertNotIn("旅途开始。", self.read_srt())
+        self.assertNotIn("旅途开始。", self.read_ass())
+        self.assertIn("A journey begins.", self.read_srt())
+        source = json.loads(self.manifest.read_text(encoding="utf-8"))["entries"][0]
+        self.assertEqual(source["start_seconds"], 1.2)
+        self.assertEqual(source["audio_end_seconds"], 3.0)
+        self.assertEqual(source["display_end_seconds"], 3.0)
+
+    def test_failed_srt_export_keeps_commit_and_independent_retry_recovers(self):
+        with patch("app.subtitles.write_srt", side_effect=OSError("synthetic disk export failure")):
+            result = save_subtitle_timing_and_refresh(
+                self.config, self.output, item_id=7, expected_start=1.2,
+                expected_end=3.0, start=1.4, end=3.4,
+            )
+        self.assertTrue(result["saved"])
+        self.assertFalse(result["artifacts_current"])
+        self.assertIn("synthetic disk export failure", result["artifact_error"])
+        self.assertEqual(read_timing_overrides(self.output)["7"]["end"], 3.4)
+        recovered = refresh_derived_subtitle_exports(
+            self.config, self.output, force_ass=True
+        )
+        self.assertFalse(recovered["ass_error"])
+        self.assertIn("00:00:01,400 --> 00:00:03,400", self.read_srt())
+        self.assertIn("0:00:03.40", self.read_ass())
+
+    def test_failed_text_export_is_reported_as_saved_and_can_be_regenerated(self):
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            with patch("app.subtitles.write_srt", side_effect=OSError("text export failed")):
+                result = update_project_subtitles(
+                    self.config, self.output, [{"id": 7, "final_chs": "已保存但尚未导出"}]
+                )
+        self.assertTrue(result["saved"])
+        self.assertFalse(result["artifacts_current"])
+        self.assertIn("text export failed", result["artifact_error"])
+        text_overrides = json.loads(
+            (self.output / "subtitles_overrides.json").read_text(encoding="utf-8")
+        )
+        self.assertEqual(text_overrides["7"]["final_chs"], "已保存但尚未导出")
+        repaired = refresh_derived_subtitle_exports(
+            self.config, self.output, force_ass=True
+        )
+        self.assertFalse(repaired["ass_error"])
+        self.assertIn("已保存但尚未导出", self.read_srt())
+        self.assertIn("已保存但尚未导出", self.read_ass())
+
+    def test_stale_overlay_cannot_touch_manifest_or_export_before_validation(self):
+        update_subtitle_display_timing(
+            self.output, item_id=7, expected_start=1.2, expected_end=3,
+            start=1.3, end=3.2,
+        )
+        data = json.loads(self.manifest.read_text(encoding="utf-8"))
+        data["entries"][0]["start_seconds"] = 2.0
+        self.manifest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
+        old_bytes = self.manifest.read_bytes()
+        with self.assertRaisesRegex(ValueError, "outdated audio timeline"):
+            refresh_subtitle_artifacts_from_settings(self.output, generate_ass=False)
+        self.assertEqual(self.manifest.read_bytes(), old_bytes)
+        self.assertFalse((self.output / "manifest.csv").exists())
+        self.assertFalse((self.output / "HSR_Voice_Archive.srt").exists())
+
+    def test_second_editor_with_stale_text_is_rejected_before_output_files_change(self):
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            first = update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7,
+                    "final_chs": "窗口甲的定稿",
+                    "expected_final_chs": "旅途开始。",
+                    "expected_source_member_id": "clip/dialogue-7.wav",
+                }]
+            )
+        self.assertTrue(first["saved"])
+        srt_before = self.read_srt()
+        ass_before = self.read_ass()
+        overrides_before = (self.output / "subtitles_overrides.json").read_bytes()
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            with self.assertRaisesRegex(ValueError, "text changed since"):
+                update_project_subtitles(
+                    self.config, self.output, [{
+                        "id": 7,
+                        "final_chs": "窗口乙的过期定稿",
+                        "expected_final_chs": "旅途开始。",
+                        "expected_source_member_id": "clip/dialogue-7.wav",
+                    }]
+                )
+        self.assertEqual((self.output / "subtitles_overrides.json").read_bytes(), overrides_before)
+        self.assertEqual(self.read_srt(), srt_before)
+        self.assertEqual(self.read_ass(), ass_before)
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            accepted = update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7,
+                    "final_chs": "窗口乙已重新加载的定稿",
+                    "expected_final_chs": "窗口甲的定稿",
+                    "expected_source_member_id": "clip/dialogue-7.wav",
+                }]
+            )
+        self.assertTrue(accepted["saved"])
+        self.assertIn("窗口乙已重新加载的定稿", self.read_srt())
+
+    def test_original_source_member_change_rejects_equal_text_without_mutation(self):
+        self.assertFalse((self.output / "subtitles_overrides.json").exists())
+        with self.assertRaisesRegex(ValueError, "source clip changed"):
+            update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7, "final_chs": "新文本",
+                    "expected_final_chs": "旅途开始。",
+                    "expected_source_member_id": "old-archive/dialogue-7.wav",
+                }]
+            )
+        self.assertFalse((self.output / "subtitles_overrides.json").exists())
+        self.assertFalse((self.output / "subtitle_review_state.json").exists())
+
+    def test_legacy_alias_resolution_matches_editor_baseline_and_export(self):
+        # Rebuilds can reorder item IDs while stable WAV member IDs continue.
+        (self.output / "subtitles_overrides.json").write_text(json.dumps({
+            "old-id": {
+                "final_chs": "源片段关联的旧校对",
+                "source_member_id": "clip/dialogue-7.wav",
+                "filename": "dialogue-7.wav",
+                "modified": True,
+            }
+        }, ensure_ascii=False), encoding="utf-8")
+        from app.subtitles import get_project_subtitles
+        cfg = SimpleNamespace(source_text_language="en", reference_language="auto")
+        rows = get_project_subtitles(cfg, self.output)
+        self.assertEqual(rows[0]["final_chs"], "源片段关联的旧校对")
+        with patch("app.subtitles.invalidate_subtitle_stages"):
+            changed = update_project_subtitles(
+                self.config, self.output, [{
+                    "id": 7, "final_chs": "重建后的新校对",
+                    "expected_final_chs": "源片段关联的旧校对",
+                    "expected_source_member_id": "clip/dialogue-7.wav",
+                }]
+            )
+        self.assertTrue(changed["saved"])
+        self.assertIn("重建后的新校对", self.read_srt())
+
+    def test_nonexistent_cue_text_update_cannot_create_override_files(self):
+        with self.assertRaisesRegex(ValueError, "No matching subtitle entries"):
+            update_project_subtitles(
+                self.config, self.output, [{"id": 99999, "final_chs": "orphan"}]
+            )
+        self.assertFalse((self.output / "subtitles_overrides.json").exists())
+        self.assertFalse((self.output / "subtitle_review_state.json").exists())
+
+    def test_real_libass_renders_only_during_updated_display_window(self):
+        ffmpeg = shutil.which("ffmpeg")
+        if not ffmpeg:
+            self.skipTest("FFmpeg is unavailable; ASS file round-trip still tested")
+        check = subprocess.run(
+            [ffmpeg, "-hide_banner", "-filters"],
+            capture_output=True, text=True, timeout=15, check=False,
+        )
+        if " ass " not in check.stdout:
+            self.skipTest("FFmpeg build has no libass filter")
+        saved = save_subtitle_timing_and_refresh(
+            self.config, self.output, item_id=7, expected_start=1.2,
+            expected_end=3.0, start=1.3, end=3.6,
+        )
+        self.assertTrue(saved["artifacts_current"], saved["artifact_error"])
+        ass_path = self.output / "HSR_Voice_Archive.ass"
+        def frame(at: float) -> bytes:
+            # The generated ASS file, not a synthetic overlay, is rasterized
+            # by FFmpeg/libass against a black source frame.
+            vf = f"setpts=PTS+{at}/TB,ass={str(ass_path)}"
+            done = subprocess.run(
+                [ffmpeg, "-v", "error", "-nostdin", "-f", "lavfi", "-i",
+                 "color=c=black:s=640x360:r=1", "-vf", vf,
+                 "-frames:v", "1", "-pix_fmt", "rgb24",
+                 "-f", "rawvideo", "-"],
+                capture_output=True, timeout=20, check=False,
+            )
+            self.assertEqual(done.returncode, 0, done.stderr[:1000])
+            self.assertEqual(len(done.stdout), 640 * 360 * 3)
+            return done.stdout
+        before, active, after = frame(0.6), frame(2.0), frame(5.0)
+        self.assertEqual(before, after)
+        self.assertNotEqual(active, before, "libass did not rasterize cue at saved display time")
+        evidence_dir = os.getenv("HSR_LIBASS_EVIDENCE_DIR")
+        if evidence_dir:
+            output = Path(evidence_dir)
+            output.mkdir(parents=True, exist_ok=True)
+            for label, moment in [("before", 0.6), ("active", 2.0), ("after", 5.0)]:
+                screenshot = output / f"libass_{label}_{moment:.1f}s.png"
+                command = [
+                    ffmpeg, "-y", "-v", "error", "-nostdin", "-f", "lavfi",
+                    "-i", "color=c=black:s=640x360:r=1",
+                    "-vf", f"setpts=PTS+{moment}/TB,ass={str(ass_path)}",
+                    "-frames:v", "1", "-update", "1", str(screenshot),
+                ]
+                done = subprocess.run(command, capture_output=True, timeout=20, check=False)
+                self.assertEqual(done.returncode, 0, done.stderr[:1000])
+                self.assertTrue(screenshot.is_file())
+            (output / "libass_evidence_scope.txt").write_text(
+                "Actual FFmpeg/libass rasterization of generated ASS events on black synthetic video. "
+                "Manifest is a deterministic synthetic subtitle fixture; not live archive media. "
+                "The raw pixel test verifies active at 2.0s and absent at 0.6s/5.0s.\n",
+                encoding="utf-8",
+            )
+
+
+if __name__ == "__main__":
+    unittest.main()

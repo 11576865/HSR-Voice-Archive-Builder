@@ -21,7 +21,8 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
+from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
@@ -288,7 +289,11 @@ def api_get_project_subtitles(
             selector=selector,
         )
         subtitles = decorate_subtitles(config, output_dir, subtitles)
-        return {"ok": True, "subtitles": subtitles}
+        persistable = bool(output_dir and (output_dir / "manifest.json").is_file())
+        return {
+            "ok": True, "subtitles": subtitles, "persistable": persistable,
+            "export_status": read_subtitle_export_health(output_dir),
+        }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -448,12 +453,72 @@ async def api_post_project_subtitles(
         if isinstance(body, list):
             updates = body
         elif isinstance(body, dict):
+            expected_root = str(body.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle edit project context changed; reopen the target project and retry")
             updates = body.get("subtitles") or body.get("updates") or [body]
         else:
             raise ValueError("Invalid payload format")
 
+        assert_project_idle(config.root)
         result = update_project_subtitles(config, output_dir, updates)
         return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/{project_id}/subtitles/{item_id}/timing")
+async def api_post_project_subtitle_timing(project_id: str, item_id: str, request: Request):
+    """Edit ASS/SRT display time only; never retime archive audio or manifest."""
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        paths = _project_paths(config)
+        output_dir = paths.get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Subtitle timing update must be a JSON object")
+        expected_root = str(body.get("expected_project_root") or "").strip()
+        if expected_root and expected_root != str(config.root):
+            raise ValueError("Subtitle timing project context changed; reopen project")
+        result = save_subtitle_timing_and_refresh(
+            config, output_dir, item_id=item_id,
+            start=body.get("start"), end=body.get("end"),
+            reset=body.get("reset") is True,
+            expected_start=body.get("expected_start"), expected_end=body.get("expected_end"),
+        )
+        return {"ok": True, **result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/project/{project_id}/subtitles/artifacts/refresh")
+async def api_retry_subtitle_artifacts(project_id: str, request: Request):
+    """Retry the derived export after a durable save without resubmitting an edit."""
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        output_dir = _project_paths(config).get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        body = await request.json()
+        if not isinstance(body, dict):
+            raise ValueError("Subtitle artifact retry payload must be an object")
+        expected_root = str(body.get("expected_project_root") or "").strip()
+        if expected_root and expected_root != str(config.root):
+            raise ValueError("Subtitle artifact retry project context changed")
+        refreshed = refresh_derived_subtitle_exports(
+            config, output_dir, force_ass=body.get("force_ass") is True
+        )
+        artifact_error = str(refreshed.get("ass_error") or "")
+        return {
+            "ok": True, "refreshed": refreshed,
+            "artifacts_current": not bool(artifact_error),
+            "artifact_error": artifact_error,
+            "export_status": read_subtitle_export_health(output_dir),
+        }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -518,6 +583,9 @@ async def api_subtitle_layout_settings(request: Request):
             data = dict(form)
         if not isinstance(data, dict):
             raise ValueError("Subtitle settings payload must be an object")
+        expected_root = str(data.get("expected_project_root") or "").strip()
+        if expected_root and expected_root != str(config.root):
+            raise ValueError("Subtitle settings project context changed; reopen the target project and retry")
 
         def as_bool(name: str, default: bool) -> bool:
             value = data.get(name, default)
