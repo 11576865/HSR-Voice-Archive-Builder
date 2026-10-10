@@ -310,11 +310,12 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("Subtitle timing project context changed", response.json()["error"])
 
-    @patch("app.server.refresh_subtitle_artifacts_from_settings", return_value={"ass_error": ""})
-    @patch("app.server.update_subtitle_display_timing", return_value={
-        "id": "11", "start": 1.1, "end": 2.2, "timing_modified": True
+    @patch("app.server.save_subtitle_timing_and_refresh", return_value={
+        "saved": True, "artifacts_current": True,
+        "timing": {"id": "11", "start": 1.1, "end": 2.2, "timing_modified": True},
+        "refreshed": {"ass_error": ""}, "artifact_error": "",
     })
-    def test_timing_edit_uses_existing_regeneration_pipeline(self, timing_mock, refresh_mock):
+    def test_timing_edit_uses_existing_regeneration_pipeline(self, timing_mock):
         current = load_project(self.root)
         response = self.client.post(
             "/api/project/active/subtitles/11/timing",
@@ -332,7 +333,29 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(timing_mock.call_args.kwargs["item_id"], "11")
         self.assertEqual(timing_mock.call_args.kwargs["expected_start"], 1.0)
         self.assertEqual(timing_mock.call_args.kwargs["expected_end"], 2.0)
-        self.assertEqual(refresh_mock.call_count, 1)
+        self.assertTrue(response.json()["saved"])
+        self.assertTrue(response.json()["artifacts_current"])
+
+    @patch("app.server.refresh_derived_subtitle_exports", return_value={
+        "ass_error": "", "srt_file": "test.srt"
+    })
+    def test_retry_artifacts_without_resubmitting_timing(self, retry_mock):
+        current = load_project(self.root)
+        response = self.client.post(
+            "/api/project/active/subtitles/artifacts/refresh",
+            headers=self.headers,
+            json={"expected_project_root": str(current.root), "force_ass": True},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.json()["artifacts_current"])
+        self.assertTrue(retry_mock.call_args.kwargs["force_ass"])
+        response = self.client.post(
+            "/api/project/active/subtitles/artifacts/refresh",
+            headers=self.headers,
+            json={"expected_project_root": str(current.root / "stale")},
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(retry_mock.call_count, 1)
 
     def test_cue_edit_rejects_cross_project_write_before_touching_manifest(self):
         response = self.client.post(
