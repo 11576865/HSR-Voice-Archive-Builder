@@ -6652,6 +6652,8 @@ function layoutCueResetProject(projectKey){
   layoutCueActiveId=null;
   layoutCueClearAudio();
   renderLayoutCueEditor();
+  const status=document.getElementById('layoutCueSaveStatus');
+  if(status){status.textContent='选择当前项目的真实字幕条目后，可以编辑并持久化中文字幕。';status.className='layout-cue-save-note';}
 }
 function layoutCueState(sub){
   if(!sub)return null;
@@ -6708,6 +6710,13 @@ function layoutCueSelect(sub){
   layoutCueActiveId=sub.id;
   const state=layoutCueState(sub);
   renderLayoutCueEditor();
+  const status=document.getElementById('layoutCueSaveStatus');
+  if(status){
+    status.textContent=state.draft!==state.saved
+      ? '条目 #'+sub.id+' 有尚未保存的正文草稿；切换其他条目后仍会在本次会话保留。'
+      : '条目 #'+sub.id+' 正文已载入；修改后点击「保存当前字幕」才会写入项目。';
+    status.className='layout-cue-save-note '+(state.draft!==state.saved?'status-warn':'');
+  }
   return state;
 }
 function layoutCueUpdateDraft(next){
@@ -6753,7 +6762,12 @@ async function saveLayoutCueText(){
     if(!currentProject||layoutActiveProjectKey()!==key)return false;
     if(Number(data.result?.updated_count||0)!==1)throw new Error('后端未确认保存该字幕');
     const row=layoutCueRow(id);
-    if(row)row.final_chs=submitted;
+    if(row){
+      row.final_chs=submitted;
+      if(Array.isArray(data.result?.modified_ids)){
+        row.modified=data.result.modified_ids.map(String).includes(String(id));
+      }
+    }
     state.saved=submitted;
     const currentText=state.draft;
     if(String(layoutCueActiveId)===String(id)){
@@ -7427,6 +7441,9 @@ applyPreviewBackground();
     layoutSampleSource='manual';
     layoutSampleProjectIdentity=layoutActiveProjectKey();
     layoutStressSample=null; // Never reuse a sample's word timings for arbitrary edited text.
+    layoutCorpusSelectedId=null;
+    layoutCueSelect(null); // Scratch trial text must not masquerade as an editable project cue.
+    renderLayoutCorpusRail();
     updateLayoutSampleOrigin();
     const status=document.getElementById('layoutCorpusCheckStatus');
     if(status){status.textContent='正在使用自定义测试文本；项目样本和原有词级时间不会自动套用。';status.className='small muted layout-corpus-status';}
