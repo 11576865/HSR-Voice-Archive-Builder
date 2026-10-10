@@ -90,7 +90,7 @@ async function settle(){await Promise.resolve();await Promise.resolve();}
   assert.equal(node('layoutCorpusList').innerHTML.includes('项目自动选出的中文字幕'),true);
 
   // Project change during fetch must not publish the previous project's text.
-  const oldProject=doAction('loadLayoutStressSample()');
+  const oldProject=doAction('loadLayoutStressSample({refresh:true})');
   project.name='project-b';
   project.root='/projects/b';
   pending.shift()(fixture);
