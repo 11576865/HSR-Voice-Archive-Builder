@@ -5954,7 +5954,7 @@ function libassPreviewPayload(){
 }
 
 function currentLibassPreviewIdentity(){
-  return JSON.stringify([layoutActiveProjectKey(),libassPreviewPayload()]);
+  return JSON.stringify([currentProject?.root||currentProject?.name||null,libassPreviewPayload()]);
 }
 
 async function renderLibassPreview(){
