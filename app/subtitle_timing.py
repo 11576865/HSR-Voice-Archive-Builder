@@ -123,7 +123,7 @@ def update_subtitle_display_timing(
     if expected_start is None or expected_end is None:
         raise ValueError("Expected current subtitle display start/end are required")
     expected_pair = (_finite_seconds(expected_start, "expected_start"), _finite_seconds(expected_end, "expected_end"))
-    if expected_pair != (previous_start, previous_end):
+    if expected_pair != (round(previous_start, 3), round(previous_end, 3)):
         raise ValueError("Subtitle display timing changed since it was loaded; refresh before editing")
     if reset:
         new_start,new_end = raw_start,raw_end
