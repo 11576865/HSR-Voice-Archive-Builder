@@ -7265,13 +7265,14 @@ function layoutTimelineWindow(){
   // A large archive must not spread N rows into Math.min/Math.max arguments.
   for(const sub of layoutCorpusItems){
     const start=Number(sub.source_start??sub.start),end=Number(sub.source_end??sub.end);
+    const effective=layoutTimelineBounds(sub);
     if(!Number.isFinite(start)||!Number.isFinite(end))continue;
-    first=Math.min(first,start);
-    last=Math.max(last,end);
+    first=Math.min(first,start,effective.start);
+    last=Math.max(last,end,effective.end);
   }
   if(!Number.isFinite(first)||!Number.isFinite(last))return {min:0,max:30,empty:true};
-  const min=Math.max(0,Math.floor(first)-2);
-  return {min,max:Math.max(min+1,Math.ceil(last)+2),empty:false};
+  const min=Math.max(0,Math.floor(first)-6);
+  return {min,max:Math.max(min+1,Math.ceil(last)+6),empty:false};
 }
 function layoutTimelineBounds(sub){
   const state=layoutCueTimingDrafts.get(String(sub.id));
