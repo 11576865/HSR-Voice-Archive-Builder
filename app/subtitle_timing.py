@@ -50,6 +50,10 @@ def read_timing_overrides(output_dir: Path) -> dict[str, dict[str, float]]:
         if start < 0 or end-start < MIN_DURATION_SECONDS:
             raise ValueError("Invalid stored subtitle timing window")
         parsed[key] = {"start": start, "end": end}
+        if "source_start" in value and "source_end" in value:
+            parsed[key]["source_start"] = _finite_seconds(value["source_start"], "source_start")
+            parsed[key]["source_end"] = _finite_seconds(value["source_end"], "source_end")
+            parsed[key]["source_member_id"] = str(value.get("source_member_id") or "")
     return parsed
 
 
@@ -80,6 +84,13 @@ def _effective_window(entry: dict[str, Any], overrides: dict[str, dict[str, floa
     override = overrides.get(_entry_id(entry))
     if not override:
         return source_start, source_end
+    if "source_start" in override and "source_end" in override:
+        if (
+            abs(override["source_start"] - source_start) > 0.005
+            or abs(override["source_end"] - source_end) > 0.005
+            or str(override.get("source_member_id") or "") != str(entry.get("source_member_id") or "")
+        ):
+            raise ValueError("Subtitle timing override targets an outdated audio timeline; review it before exporting")
     _validate_window(override["start"], override["end"], source_start, source_end)
     return override["start"], override["end"]
 
@@ -135,7 +146,13 @@ def update_subtitle_display_timing(
         if (new_start, new_end) == (raw_start, raw_end):
             overrides.pop(key, None)
         else:
-            overrides[key] = {"start": new_start, "end": new_end}
+            overrides[key] = {
+                "start": new_start,
+                "end": new_end,
+                "source_start": round(raw_start, 3),
+                "source_end": round(raw_end, 3),
+                "source_member_id": str(entry.get("source_member_id") or ""),
+            }
     path = output_dir / TIMING_OVERRIDES_FILE
     atomic_write_text(
         path,
