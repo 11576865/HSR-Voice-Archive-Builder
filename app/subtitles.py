@@ -546,6 +546,7 @@ def save_subtitle_timing_and_refresh(
             "refreshed": refreshed,
             "artifacts_current": not bool(refresh_error),
             "artifact_error": refresh_error,
+            "export_status": read_subtitle_export_health(output_dir),
         }
 
 
@@ -938,6 +939,7 @@ def _update_project_subtitles_locked(
         "saved": True,
         "artifacts_current": not bool(artifact_error),
         "artifact_error": artifact_error,
+        "export_status": read_subtitle_export_health(output_dir),
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
         "modified_ids": sorted(str(key) for key in overrides),
