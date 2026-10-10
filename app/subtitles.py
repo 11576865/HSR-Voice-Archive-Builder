@@ -229,7 +229,8 @@ def _subtitle_adapters(
     timing_overrides = timing_overrides or {}
     adapters: list[SubtitleEntryAdapter] = []
     for entry in entries:
-        entry_id = str(_entry_id(entry) or "")
+        raw_id = _entry_id(entry)
+        entry_id = "" if raw_id is None else str(raw_id)
         start, end = effective_subtitle_window(entry, timing_overrides)
         adapters.append(
             SubtitleEntryAdapter(
@@ -482,6 +483,9 @@ def get_project_subtitles(
                 "api_chs": "愿这场旅程带我们走向群星。",
                 "original_chs": "愿此行，终抵群星。",
                 "final_chs": "愿此行，终抵群星。",
+                "source_start": 5.0,
+                "source_end": 7.5,
+                "timing_modified": False,
                 "modified": False,
                 "confirmed": False,
             },
@@ -495,6 +499,9 @@ def get_project_subtitles(
                 "api_chs": "规矩就是用来打破的！",
                 "original_chs": "规则，就是用来打破的！",
                 "final_chs": "规则，就是用来打破的！",
+                "source_start": 8.0,
+                "source_end": 11.2,
+                "timing_modified": False,
                 "modified": False,
                 "confirmed": False,
             },
@@ -609,11 +616,13 @@ def get_project_subtitles(
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
             "word_alignment": dict(entry.get("_word_alignment") or {}),
-            "word_alignment_ready": bool(
-                (entry.get("_word_alignment") or {}).get("valid")
+            "word_alignment_ready": (
+                not timing_modified and bool((entry.get("_word_alignment") or {}).get("valid"))
             ),
-            "word_alignment_reason": str(
-                (entry.get("_word_alignment") or {}).get("reason") or "missing"
+            "word_alignment_reason": (
+                "display-timing-adjusted"
+                if timing_modified
+                else str((entry.get("_word_alignment") or {}).get("reason") or "missing")
             ),
         }
         subtitles.append(item)
