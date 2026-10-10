@@ -124,7 +124,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("setPreviewEvidence('rendering')", html)
         self.assertIn("setPreviewEvidence('failed'", html)
         self.assertIn("setPreviewEvidence(hadResult?'stale':'geometry')", html)
-        self.assertIn("真实渲染不会保存试调值", html)
+        self.assertIn("真实渲染不会保存设置", html)
 
     def test_out_of_order_preview_results_cannot_replace_current_state(self) -> None:
         html = self.html
