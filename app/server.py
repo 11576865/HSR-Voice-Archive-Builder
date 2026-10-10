@@ -448,6 +448,9 @@ async def api_post_project_subtitles(
         if isinstance(body, list):
             updates = body
         elif isinstance(body, dict):
+            expected_root = str(body.get("expected_project_root") or "").strip()
+            if expected_root and expected_root != str(config.root):
+                raise ValueError("Subtitle edit project context changed; reopen the target project and retry")
             updates = body.get("subtitles") or body.get("updates") or [body]
         else:
             raise ValueError("Invalid payload format")
