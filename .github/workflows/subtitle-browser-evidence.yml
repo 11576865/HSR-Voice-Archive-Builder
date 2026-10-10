@@ -1,0 +1,36 @@
+name: HSR subtitle browser evidence
+
+on:
+  pull_request:
+    paths:
+      - "app/static/index.html"
+      - "tests/browser_visual_evidence.py"
+      - ".github/workflows/subtitle-browser-evidence.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  chromium-ui:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Chromium automation
+        run: |
+          python -m pip install "playwright==1.55.0"
+          python -m playwright install --with-deps chromium
+      - name: Render responsive workbench and exercise real drag interactions
+        run: python tests/browser_visual_evidence.py --output artifacts/subtitle-browser
+      - name: Upload real browser fixture screenshots and geometry report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: hsr-ass-studio-chromium-${{ github.run_id }}
+          path: artifacts/subtitle-browser/
+          if-no-files-found: warn
+          retention-days: 14
