@@ -6638,6 +6638,64 @@ let layoutCueSaveInFlight=false;
 let layoutCueAudioAbort=null;
 let layoutCueAudioObjectUrl=null;
 let layoutCueAudioIdentity=null;
+let layoutCueWaveformPeaks=null;
+
+function drawLayoutCueWaveform(){
+  const canvas=document.getElementById('layoutCueWaveform');
+  if(!canvas||typeof canvas.getContext!=='function')return;
+  const ctx=canvas.getContext('2d');
+  if(!ctx)return;
+  const w=canvas.width,h=canvas.height,mid=h/2;
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle='#172433';ctx.fillRect(0,0,w,h);
+  ctx.fillStyle='#536a7d';ctx.fillRect(0,mid,w,1);
+  if(Array.isArray(layoutCueWaveformPeaks)&&layoutCueWaveformPeaks.length){
+    ctx.fillStyle='#70d0c8';
+    const bw=w/layoutCueWaveformPeaks.length;
+    for(let i=0;i<layoutCueWaveformPeaks.length;i++){
+      const height=Math.max(2,layoutCueWaveformPeaks[i]*(h-16));
+      ctx.fillRect(i*bw+1,mid-height/2,Math.max(1,bw-2),height);
+    }
+  }else{
+    ctx.fillStyle='#a2b4c1';ctx.font='13px system-ui,sans-serif';
+    ctx.fillText('加载本条原始 WAV 后显示波形',12,mid-10);
+  }
+  const audio=document.getElementById('layoutCueAudio');
+  const progress=audio&&Number.isFinite(audio.duration)&&audio.duration>0
+    ?Math.min(1,Math.max(0,audio.currentTime/audio.duration)):0;
+  ctx.fillStyle='#f3c579';ctx.fillRect(Math.round(progress*w)-1,0,2,h);
+  canvas.setAttribute('aria-valuenow',String(Math.round(progress*100)));
+}
+async function layoutCuePrepareWaveform(blob,identity){
+  const Ctor=window.AudioContext||window.webkitAudioContext;
+  if(typeof Ctor!=='function'||blob.size>12*1024*1024)return;
+  const ctx=new Ctor();
+  try{
+    const decoded=await ctx.decodeAudioData(await blob.arrayBuffer());
+    const channel=decoded.getChannelData(0);
+    const bins=240;
+    const values=[];
+    for(let bin=0;bin<bins;bin++){
+      const begin=Math.floor(channel.length*bin/bins);
+      const end=Math.floor(channel.length*(bin+1)/bins);
+      const step=Math.max(1,Math.ceil((end-begin)/256));
+      let peak=0;
+      for(let i=begin;i<end;i+=step)peak=Math.max(peak,Math.abs(channel[i]||0));
+      values.push(Math.min(1,peak));
+    }
+    if(layoutCueAudioIdentity!==identity)return;
+    layoutCueWaveformPeaks=values;
+    drawLayoutCueWaveform();
+  }finally{
+    if(typeof ctx.close==='function')ctx.close().catch(()=>{});
+  }
+}
+function layoutCueSeekAudio(fraction){
+  const audio=document.getElementById('layoutCueAudio');
+  if(!audio||!Number.isFinite(audio.duration)||audio.duration<=0)return;
+  audio.currentTime=Math.min(audio.duration,Math.max(0,fraction*audio.duration));
+  drawLayoutCueWaveform();
+}
 
 function layoutCueRow(id){
   return layoutCorpusItems.find(item=>String(item.id)===String(id))||null;
@@ -6652,6 +6710,8 @@ function layoutCueClearAudio(){
   }
   if(layoutCueAudioObjectUrl){URL.revokeObjectURL(layoutCueAudioObjectUrl);layoutCueAudioObjectUrl=null;}
   layoutCueAudioIdentity=null;
+  layoutCueWaveformPeaks=null;
+  drawLayoutCueWaveform();
   const label=document.getElementById('layoutCueAudioStatus');
   if(label)label.textContent='按需加载当前条目的原始 WAV';
 }
@@ -6836,7 +6896,11 @@ async function layoutCueLoadAudio(){
     layoutCueAudioObjectUrl=URL.createObjectURL(wav);
     const audio=document.getElementById('layoutCueAudio');
     if(audio){audio.src=layoutCueAudioObjectUrl;audio.load();}
-    if(status)status.textContent='原始 WAV 已载入，可试听本条台词。';
+    if(status)status.textContent='原始 WAV 已载入，可试听或点击波形定位。';
+    layoutCuePrepareWaveform(wav,identity).catch(()=>{
+      if(layoutCueAudioIdentity===identity&&status)
+        status.textContent='原始 WAV 可试听；浏览器无法解码波形，跳转可通过音频播放器操作。';
+    });
   }catch(err){
     if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
     if(status)status.textContent='音频不可用：'+shortError(err);
@@ -7466,6 +7530,20 @@ document.getElementById('layoutCueFinalText')?.addEventListener('input',event=>l
 document.getElementById('layoutCueSaveBtn')?.addEventListener('click',()=>saveLayoutCueText());
 document.getElementById('layoutCueRevertBtn')?.addEventListener('click',layoutCueRevertDraft);
 document.getElementById('layoutCueAudioLoadBtn')?.addEventListener('click',layoutCueLoadAudio);
+document.getElementById('layoutCueAudio')?.addEventListener('timeupdate',drawLayoutCueWaveform);
+document.getElementById('layoutCueAudio')?.addEventListener('loadedmetadata',drawLayoutCueWaveform);
+document.getElementById('layoutCueWaveform')?.addEventListener('click',event=>{
+  const rect=event.currentTarget.getBoundingClientRect();
+  if(rect.width>0)layoutCueSeekAudio((event.clientX-rect.left)/rect.width);
+});
+document.getElementById('layoutCueWaveform')?.addEventListener('keydown',event=>{
+  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
+  const audio=document.getElementById('layoutCueAudio');
+  if(!audio||!Number.isFinite(audio.duration)||audio.duration<=0)return;
+  event.preventDefault();
+  layoutCueSeekAudio((audio.currentTime+(event.key==='ArrowRight'?0.5:-0.5))/audio.duration);
+});
+drawLayoutCueWaveform();
 document.getElementById('layoutCueScrubber')?.addEventListener('input',event=>{
   const other=document.getElementById('prevKaraokePreviewTime');
   if(other)other.value=event.target.value;
