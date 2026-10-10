@@ -47,7 +47,9 @@ const pending = [];
 let previewCalls = 0;
 const project = {name:'project-a',root:'/projects/a'};
 const context = {
-  document:{getElementById:node},
+  document:{getElementById:node,querySelectorAll:()=>[]},
+  escapeHtml:x=>String(x),
+  formatClockTime:x=>String(x),
   currentProject:project,
   api:()=>new Promise(resolve=>pending.push(resolve)),
   updateLayoutPreview:()=>{previewCalls++;},
@@ -84,6 +86,8 @@ async function settle(){await Promise.resolve();await Promise.resolve();}
   assert.equal(node('prevChsText').value,'项目自动选出的中文字幕');
   assert.equal(node('prevPriText').value,'Original project line');
   assert.equal(node('layoutSampleOrigin').textContent,'测试文本 · 项目字幕 #41');
+  assert.equal(node('layoutCorpusCount').textContent,'1 / 1');
+  assert.equal(node('layoutCorpusList').innerHTML.includes('项目自动选出的中文字幕'),true);
 
   // Project change during fetch must not publish the previous project's text.
   const oldProject=doAction('loadLayoutStressSample()');
