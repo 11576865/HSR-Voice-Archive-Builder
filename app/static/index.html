@@ -7216,7 +7216,10 @@ async function saveLayoutCueText(){
   try{
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{id,final_chs:submitted}]})
+      body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{
+        id,final_chs:submitted,expected_final_chs:state.saved,
+        expected_source_member_id:String(sub.source_member_id||'')
+      }]})
     });
     if(!currentProject||layoutActiveProjectKey()!==key)return false;
     if(Number(data.result?.updated_count||0)!==1)throw new Error('后端未确认保存该字幕');
@@ -7247,7 +7250,11 @@ async function saveLayoutCueText(){
     return currentText===submitted;
   }catch(err){
     if(layoutActiveProjectKey()===key&&status){
-      status.textContent='保存字幕失败：'+shortError(err)+'；草稿仍保留在本页面。';
+      const reason=shortError(err);
+      const conflict=/Subtitle (text|source clip|cue identity) changed|Subtitle cue identity is missing or ambiguous/i.test(reason);
+      status.textContent=conflict
+        ? '字幕已在其他编辑会话或重新构建后发生变化：请点击左侧「刷新」核对服务端版本；本页草稿仍保留，不能静默覆盖。'
+        : '保存字幕失败：'+reason+'；草稿仍保留在本页面。';
       status.className='layout-cue-save-note status-bad';
     }
     return false;
