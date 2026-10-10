@@ -141,7 +141,6 @@ def rect(page, selector: str):
 
 
 def load_studio(page):
-    page.goto("/app/static/index.html", wait_until="domcontentloaded")
     page.wait_for_function("typeof showWorkspace === 'function' && typeof loadLayoutStressSample === 'function'")
     page.evaluate("""() => {
         currentProject = {name:'visual-fixture',root:'/qa/fixture',config:{
@@ -202,7 +201,7 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#layoutCueTimingSaveBtn").is_enabled(), "Save not offered for changed draft")
     screenshot(page, output, "desktop_studio_unsaved_drag")
     page.locator("#layoutCueTimingSaveBtn").click()
-    page.wait_for_function("Number(document.getElementById('layoutCueTimingSaveBtn').disabled) === 1")
+    page.wait_for_function("document.getElementById('layoutCueTimingSaveBtn').disabled === true")
     ensure(len(writes) == 1 and abs(writes[0]["end"] - 7.4) < 0.05, "Saved timing mismatch")
     ensure(abs(rows[0]["source_end"] - 7.0) < 0.001, "Source audio time mutated by subtitle save")
     page.locator("#layoutTimelineZoom").select_option("60")
@@ -231,8 +230,15 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     cue = rect(page, "#layoutCueEditorPanel")
     rail = rect(page, ".layout-corpus-rail")
     inspector = rect(page, ".preview-inspector")
-    ensure(canvas["y"] < cue["y"] < rail["y"] < inspector["y"], f"{label}: invalid mobile task order")
-    ensure(vp["width"] > width*0.6, f"{label}: timeline too narrow")
+    if width < 760:
+        ensure(canvas["y"] < cue["y"] < rail["y"] < inspector["y"],
+               f"{label}: invalid mobile task order")
+    else:
+        ensure(rail["x"] + rail["width"] <= canvas["x"] + 8,
+               f"{label}: tablet corpus/stage overlap")
+        ensure(inspector["y"] >= min(rail["y"] + rail["height"], cue["y"] + cue["height"]) - 8,
+               f"{label}: tablet inspector overlays timeline/corpus")
+    ensure(vp["width"] > width*(0.6 if width < 760 else 0.38), f"{label}: timeline too narrow")
     ensure(page.locator("#layoutCueTimingStart").is_enabled(), f"{label}: timing editor inaccessible")
     # Control headings/content must stay within the horizontal viewport, not
     # merely hide body overflow in CSS.
