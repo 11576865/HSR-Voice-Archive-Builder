@@ -2948,6 +2948,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 .layout-export-health button{min-height:36px!important;padding:7px 11px!important;font-size:11px!important;flex-shrink:0}
 @media(max-width:759px){.layout-export-health{padding:11px}}
 
+.layout-cue-text-conflict{margin-top:10px;padding:11px 13px;background:var(--layout-section);border:1px solid var(--layout-border);border-left:3px solid var(--layout-evidence-warning);border-radius:7px;color:var(--layout-text)}
+.layout-cue-text-conflict[hidden]{display:none!important}
+.layout-cue-text-conflict strong{font-size:12px}
+.layout-cue-text-conflict p{margin:5px 0 10px;color:var(--layout-muted);font-size:11px;line-height:1.5}
+.layout-cue-text-conflict-actions{display:flex;gap:7px;flex-wrap:wrap}
+.layout-cue-text-conflict button{min-height:34px!important;padding:6px 10px!important;font-size:11px!important}
+
 </style>
 </head>
 <body>
@@ -3488,6 +3495,14 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <button id="layoutCueSaveBtn" type="button" disabled>保存当前字幕</button>
               <button id="layoutCueRevertBtn" type="button" disabled>放弃未保存修改</button>
               <span id="layoutCueCharCount">0 字</span>
+            </div>
+            <div id="layoutCueTextConflict" class="layout-cue-text-conflict" role="status" aria-live="polite" hidden>
+              <strong>服务器字幕正文已发生变化</strong>
+              <p>本地未保存草稿已经保留。请先比较并明确选择服务器版本或保留本地草稿；不会自动覆盖其他编辑窗口。</p>
+              <div class="layout-cue-text-conflict-actions">
+                <button id="layoutCueUseServerBtn" type="button">采用服务器正文</button>
+                <button id="layoutCueKeepDraftBtn" type="button">确认保留本地草稿</button>
+              </div>
             </div>
             <div class="layout-cue-audio">
               <div class="layout-cue-audio-meta"><strong>原始台词试听</strong><span id="layoutCueAudioStatus">选取条目后按需加载原始 WAV</span></div>
@@ -6916,8 +6931,23 @@ function layoutCueResetProject(projectKey){
 function layoutCueState(sub){
   if(!sub)return null;
   const id=String(sub.id),saved=String(sub.final_chs??'');
-  if(!layoutCueDrafts.has(id))layoutCueDrafts.set(id,{saved,draft:saved,revision:0,saving:false});
-  return layoutCueDrafts.get(id);
+  if(!layoutCueDrafts.has(id)){
+    layoutCueDrafts.set(id,{saved,draft:saved,revision:0,saving:false,serverChanged:false});
+  }
+  const state=layoutCueDrafts.get(id);
+  if(!state.saving&&state.saved!==saved){
+    const unsaved=state.draft!==state.saved;
+    state.saved=saved;
+    if(unsaved){
+      // Refresh updates the baseline, but never silently adopts the existing
+      // draft as permission to overwrite someone else's newly saved text.
+      state.serverChanged=true;
+    }else{
+      state.draft=saved;
+      state.serverChanged=false;
+    }
+  }
+  return state;
 }
 
 function layoutTimingState(sub){
@@ -7198,8 +7228,14 @@ function renderLayoutCueEditor(){
     badge.textContent=!selected?'请选择字幕':!layoutCorpusPersistable?'仅示例 · 不可保存':state.saving?'保存中':dirty?'未保存的正文':'正文已保存';
   }
   const save=document.getElementById('layoutCueSaveBtn'),revert=document.getElementById('layoutCueRevertBtn');
-  if(save)save.disabled=!dirty||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||!layoutCorpusPersistable;
+  if(save)save.disabled=!dirty||!!state?.serverChanged||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||!layoutCorpusPersistable;
   if(revert)revert.disabled=!dirty||state?.saving;
+  const conflict=document.getElementById('layoutCueTextConflict');
+  if(conflict)conflict.hidden=!state?.serverChanged;
+  const useServer=document.getElementById('layoutCueUseServerBtn');
+  const keepDraft=document.getElementById('layoutCueKeepDraftBtn');
+  if(useServer)useServer.disabled=!state?.serverChanged||state?.saving;
+  if(keepDraft)keepDraft.disabled=!state?.serverChanged||state?.saving;
   const audio=document.getElementById('layoutCueAudioLoadBtn');
   if(audio)audio.disabled=!selected;
   renderLayoutCueTiming();
@@ -7256,14 +7292,25 @@ function layoutCueUpdateDraft(next){
 function layoutCueRevertDraft(){
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
   if(!state||state.saving)return;
+  state.serverChanged=false;
   const editor=document.getElementById('layoutCueFinalText');
   if(editor)editor.value=state.saved;
   layoutCueUpdateDraft(state.saved);
+  renderLayoutCueEditor();
+}
+function layoutCueKeepLocalDraft(){
+  const state=layoutCueState(layoutCueRow(layoutCueActiveId));
+  if(!state||!state.serverChanged||state.saving||layoutCueSaveInFlight)return;
+  if(!window.confirm('服务器已有更新版本。确认以当前本地草稿作为下一次提交内容吗？请先自行核对差异。'))return;
+  state.serverChanged=false;
+  const status=document.getElementById('layoutCueSaveStatus');
+  if(status){status.textContent='已明确选择保留本地草稿；下一次保存将以当前服务器正文为基线执行并发检查。';status.className='layout-cue-save-note status-warn';}
+  renderLayoutCueEditor();
 }
 async function saveLayoutCueText(){
   const key=layoutActiveProjectKey();
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
-  if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||state.draft===state.saved)return false;
+  if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||state.serverChanged||state.draft===state.saved)return false;
   layoutCueSaveInFlight=true;
   state.saving=true;
   const id=sub.id,submitted=state.draft;
@@ -8234,6 +8281,8 @@ document.getElementById('layoutCueTimingResetBtn')?.addEventListener('click',()=
 });
 
 document.getElementById('layoutCueRevertBtn')?.addEventListener('click',layoutCueRevertDraft);
+document.getElementById('layoutCueUseServerBtn')?.addEventListener('click',layoutCueRevertDraft);
+document.getElementById('layoutCueKeepDraftBtn')?.addEventListener('click',layoutCueKeepLocalDraft);
 document.getElementById('layoutCueAudioLoadBtn')?.addEventListener('click',layoutCueLoadAudio);
 document.getElementById('layoutCueAudio')?.addEventListener('timeupdate',drawLayoutCueWaveform);
 document.getElementById('layoutCueAudio')?.addEventListener('loadedmetadata',drawLayoutCueWaveform);
