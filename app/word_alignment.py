@@ -230,6 +230,16 @@ def _record_matches_entry(record: dict[str, Any], entry: dict[str, Any]) -> bool
     text = _source_text(entry)
     if str(record.get("source_text_sha256") or "") != _source_fingerprint(text):
         return False
+    # An unchanged transcript/duration does not establish identical audio timing.
+    # Modern manifests record the actual original WAV SHA-256.
+    audio_sha256 = str(entry.get("sha256") or "").strip().lower()
+    if len(audio_sha256) == 64 and all(c in "0123456789abcdef" for c in audio_sha256):
+        if str(record.get("source_audio_sha256") or "").strip().lower() != audio_sha256:
+            return False
+    cached_member = str(record.get("source_member_id") or "").replace("\\", "/").strip()
+    current_member = str(entry.get("source_member_id") or "").replace("\\", "/").strip()
+    if cached_member and current_member and cached_member != current_member:
+        return False
     cached_duration = record.get("duration_seconds")
     if cached_duration is None:
         return True
@@ -464,6 +474,7 @@ def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
             "logical_id": str(entry.get("logical_id") or ""),
             "filename": str(entry.get("filename") or ""),
             "source_text_sha256": _source_fingerprint(_source_text(entry)),
+            "source_audio_sha256": str(entry.get("sha256") or "").strip().lower(),
             "duration_seconds": duration,
             "provider": str(raw.get("provider") or "import"),
             "updated_at": _now(),
