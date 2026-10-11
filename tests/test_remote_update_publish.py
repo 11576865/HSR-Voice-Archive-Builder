@@ -266,6 +266,49 @@ class RevisionPublicationTests(unittest.TestCase):
                          "superseded_or_modified")
         self.assertFalse(revision_status(self.config, self.revision)["can_rollback"])
 
+    def test_rollback_refuses_tampered_old_or_new_index(self):
+        active = self.publish()
+        original_index = self.root / "index.csv"
+        for edited in (original_index, self.index):
+            with self.subTest(index=str(edited)):
+                original = edited.read_bytes()
+                edited.write_bytes(original + b"changed after publishing\n")
+                try:
+                    status = revision_status(self.config, self.revision)
+                    self.assertFalse(status["can_rollback"])
+                    self.assertEqual(
+                        status["prior_index_unchanged"], edited != original_index,
+                    )
+                    self.assertEqual(
+                        status["new_index_unchanged"], edited != self.index,
+                    )
+                    with self.assertRaisesRegex(ValueError, "rollback denied"):
+                        rollback_remote_revision(
+                            self.config, self.revision,
+                            expected_project_sha256=active["current_project_sha256"],
+                        )
+                    self.assertEqual(load_project(self.root).wav_source,
+                                     str(self.audio.relative_to(self.root)))
+                finally:
+                    edited.write_bytes(original)
+        self.assertTrue(revision_status(self.config, self.revision)["can_rollback"])
+
+    def test_rollback_refuses_tampered_prior_config_snapshot(self):
+        status = self.publish()
+        journal_path = (self.root / ".generated" / "incremental_revisions"
+                        / f"{self.revision}.json")
+        journal = json.loads(journal_path.read_text(encoding="utf-8"))
+        journal["previous_config"]["remote_character"] = "injected wrong project"
+        journal_path.write_text(json.dumps(journal), encoding="utf-8")
+        current = (self.root / PROJECT_FILENAME).read_bytes()
+        with self.assertRaisesRegex(ValueError, "previous configuration digest mismatch"):
+            rollback_remote_revision(
+                self.config, self.revision,
+                expected_project_sha256=status["current_project_sha256"],
+            )
+        self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), current)
+        self.assertEqual(json.loads(journal_path.read_text())["state"], "committed")
+
     def test_wrong_preview_sha_or_resource_path_fails_closed(self):
         active = self.publish()
         with self.assertRaisesRegex(ValueError, "changed after rollback preview"):
