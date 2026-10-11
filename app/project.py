@@ -724,6 +724,9 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "quick_scan.json": generated / "quick_scan.json",
         "quick_index_incremental.csv": generated / "quick_index_incremental.csv",
         "combined_audio/": generated / "combined_audio",
+        "combined_audio_versions/": generated / "combined_audio_versions",
+        "active increment index": resolve_project_path(config, config.index_csv),
+        "active WAV source": resolve_project_path(config, config.wav_source),
         "incremental_audio/": generated / "incremental_audio",
         "incremental_reference_audio_zh-CN/": generated / "incremental_reference_audio_zh-CN",
     }
