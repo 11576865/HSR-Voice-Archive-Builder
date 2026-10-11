@@ -8498,7 +8498,7 @@ function renderPreviewCanvasSvg(data, options) {
     if (reasonEl) reasonEl.textContent = layout.failed_condition || 'OVERFLOW';
   } else {
     if (statusBadge) {
-      statusBadge.textContent = '✓ 正常 OK';
+      statusBadge.textContent = '✓ 几何估算通过 · 像素待验证';
       statusBadge.style.color = 'var(--ok)';
     }
     if (banner) banner.classList.add('hidden');
