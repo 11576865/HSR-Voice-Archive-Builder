@@ -6,6 +6,10 @@ import unittest
 from pathlib import Path
 
 from app.archive_audit import audit_archive
+from app.project import create_project
+from app.security import api_token
+from app.server import app, _set_active, _clear_active
+from fastapi.testclient import TestClient
 
 
 class ArchiveAuditTests(unittest.TestCase):
@@ -53,6 +57,33 @@ class ArchiveAuditTests(unittest.TestCase):
                 "invalid_source_timeline", "source_audio_hash_missing",
             }.issubset(codes))
             self.assertEqual(path.read_bytes(), before)
+
+    def test_fastapi_project_route_reports_the_same_audit(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "output"
+            output.mkdir()
+            rows = [dict(index=1, filename="scene.wav",
+                         source_member_id="chapter/scene.wav", group="chapter",
+                         source_text="Hello", target_text="你好", sha256="a" * 64,
+                         start_seconds=0, audio_end_seconds=1, display_end_seconds=1)]
+            (output / "manifest.json").write_text(
+                json.dumps({"entries": rows}), encoding="utf-8",
+            )
+            config = create_project(
+                root, name="audit-test", index_csv="index.csv",
+                wav_source="wavs", output_dir="output",
+            )
+            _set_active(config)
+            try:
+                response = TestClient(app).get(
+                    "/api/project/active/archive/audit",
+                    headers={"X-HSR-Token": api_token()},
+                )
+                self.assertEqual(response.status_code, 200)
+                self.assertEqual(response.json()["audit"]["summary"]["entries"], 1)
+            finally:
+                _clear_active()
 
     def test_requires_existing_manifest(self):
         with tempfile.TemporaryDirectory() as td:
