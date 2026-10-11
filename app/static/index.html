@@ -6762,7 +6762,7 @@ function libassPreviewPayload(){
     target_language:currentProject?.config?.target_language||'zh-CN',
     word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
     preview_duration_seconds:previewDuration,
-    preview_timestamp:Math.max(0.01,Math.min(previewDuration-0.01,previewDuration*previewPercent))
+    preview_timestamp:Math.max(0,Math.min(previewDuration-0.01,previewDuration*previewPercent))
   };
 }
 
