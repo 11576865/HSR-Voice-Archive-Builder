@@ -311,16 +311,60 @@ def format_multiline_karaoke(
     """Apply karaoke only when timings can be mapped without inventing timing."""
     if not lines:
         return ""
-    plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in lines)
-    if not word_alignments or len(lines) != 1:
+    line_texts = [getattr(pos, "text", str(pos)) for pos in lines]
+    plain = "\\N".join(line_texts)
+    if not word_alignments:
         return plain
-    return format_karaoke_text(
-        getattr(lines[0], "text", str(lines[0])),
-        duration_sec,
-        word_alignments,
-        is_cjk=is_cjk,
-        mode=mode,
+    if len(lines) == 1:
+        return format_karaoke_text(
+            line_texts[0], duration_sec, word_alignments,
+            is_cjk=is_cjk, mode=mode,
+        )
+
+    # A line break inserted by the layout solver may fall *between* verified
+    # words. Match each complete alignment token to the actual display text;
+    # never split a timed word, invent a syllable boundary, or reorder text.
+    details = _validated_word_alignment_details(
+        " ".join(line_texts), duration_sec, word_alignments,
     )
+    if not details:
+        return plain
+    rendered_lines: list[str] = []
+    word_index = 0
+    for line_text in line_texts:
+        cursor = 0
+        line_words: list[dict[str, object]] = []
+        while cursor < len(line_text):
+            if not line_text[cursor:].strip():
+                if line_words:
+                    line_words[-1]["word"] = str(line_words[-1]["word"]) + line_text[cursor:]
+                    cursor = len(line_text)
+                    break
+                return plain
+            if word_index >= len(details):
+                return plain
+            original_word, start, end, _duration = details[word_index]
+            expected = _normalized_alignment_text(original_word)
+            if not expected:
+                return plain
+            stop = cursor
+            while (stop < len(line_text) and
+                   len(_normalized_alignment_text(line_text[cursor:stop])) < len(expected)):
+                stop += 1
+            display_word = line_text[cursor:stop]
+            if _normalized_alignment_text(display_word) != expected:
+                return plain
+            line_words.append({"word": display_word, "start": start, "end": end})
+            cursor = stop
+            word_index += 1
+        if not line_words:
+            return plain
+        rendered_lines.append(format_karaoke_text(
+            line_text, duration_sec, line_words, is_cjk=is_cjk, mode=mode,
+        ))
+    if word_index != len(details):
+        return plain
+    return "\\N".join(rendered_lines)
 
 
 def render_ass(
