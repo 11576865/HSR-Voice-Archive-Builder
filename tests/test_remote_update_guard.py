@@ -127,7 +127,7 @@ class RemoteIncrementalSafetyTests(unittest.TestCase):
                     wav.setnchannels(1)
                     wav.setsampwidth(2)
                     wav.setframerate(16000)
-                    wav.writeframes(b"\\x00\\x00" * 32)
+                    wav.writeframes(b"\x00\x00" * 32)
                 content = buf.getvalue()
             wav_path = root / "selected.wav"
             wav_path.write_bytes(content)
