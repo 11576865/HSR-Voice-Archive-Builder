@@ -4895,6 +4895,7 @@ function renderArchiveSourceVerification(result){
     +' · 身份歧义 '+Number(s.ambiguous||0)
     +' · 无法验证 '+Number(s.unverifiable||0)
     +' · 扫描中变更 '+Number(s.changed_during_verify||0)
+    +' · PCM 规范化待核实 '+Number(s.normalization_ambiguous||0)
     +'。'+(s.trusted_complete?'所有条目的原始 WAV 字节与 Manifest 匹配。':'存在待核对结果；请勿视为完整性通过。');
   summary.className='small '+(s.trusted_complete?'status-ok':'status-warn');
   container.replaceChildren();
