@@ -80,7 +80,7 @@ Available modes:
 - **`\kf`** — smooth fill/sweep behavior provided by libass;
 - **dynamic clip** — a separate highlight layer using `\clip(...)` plus timed `\t(...)` changes.
 
-Dynamic clip is currently restricted to a single rendered line. Multi-line text falls back rather than inventing an ambiguous sweep path.
+Dynamic clip is currently restricted to a single rendered line. Multi-line text falls back rather than inventing an ambiguous sweep path. The discrete and smooth karaoke writers use the ASS \kt absolute-start tag to preserve initial silence and gaps between aligned words, rather than just concatenating word durations.
 
 For non-Chinese source projects, word timing normally applies to the primary/source-language subtitle. Chinese target text is not assigned source-language word timing.
 
@@ -101,7 +101,7 @@ A record is bound to a manifest entry using stable identity in this order where 
 - entry id/index;
 - a unique filename fallback.
 
-Each cached record also stores a fingerprint of the normalized source text and the source-audio duration. If the source text or duration changes materially, the cache entry is treated as stale and is not reused.
+New records store the normalized source-text fingerprint, manifest original WAV SHA-256 (where provided), and the source-audio duration. When the manifest provides a WAV hash, legacy caches with no matching audio identity are stale even if text and duration are unchanged. When source audio has no manifest hash, text and duration can provide only limited legacy validation.
 
 Accepted word records use the form:
 
