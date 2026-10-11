@@ -219,6 +219,8 @@ class TestSubtitleEditor(unittest.TestCase):
                 "entries": [
                     {
                         "index": 1,
+                        "filename": "line.wav",
+                        "source_member_id": "scene/line.wav",
                         "start_seconds": 1.0,
                         "display_end_seconds": 5.0,
                         "source_text": "Rules are made to be broken!",
@@ -311,6 +313,7 @@ class TestSubtitleEditor(unittest.TestCase):
                     {
                         "index": 1,
                         "filename": "line.wav",
+                        "source_member_id": "scene/line.wav",
                         "start_seconds": 1.0,
                         "display_end_seconds": 5.0,
                         "source_text": "Rules are made to be broken!",
