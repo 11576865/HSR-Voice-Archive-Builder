@@ -62,6 +62,7 @@ from .project import (
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
 from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions
+from .remote_update_publish import capture_update_boundary, publish_remote_revision, list_remote_revisions, rollback_remote_revision
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
@@ -1273,6 +1274,7 @@ class Handler(BaseHTTPRequestHandler):
                 remote_plan, output / "manifest.json", index,
                 selected_filenames=requested,
             )
+            update_boundary = capture_update_boundary(config, output / "manifest.json")
             project_root = Path(config.root).resolve()
 
             def run(report_progress):
@@ -1400,8 +1402,13 @@ class Handler(BaseHTTPRequestHandler):
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
-                update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                published = publish_remote_revision(
+                    config, manifest_path=output / "manifest.json",
+                    expected_boundary=update_boundary, combined=combined,
+                    updated_index=updated_index, revision_id=version,
+                    selected_filenames=sorted(successful),
+                )
+                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "revision_id": version, "revision_state": published["state"], "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
