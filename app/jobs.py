@@ -13,7 +13,7 @@ from .project import STATE_DIR, atomic_write_json
 JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
 BUILD_KINDS = {"build", "quick-build"}
-MUTATING_KINDS = BUILD_KINDS | {"remote-update-apply"}
+MUTATING_KINDS = BUILD_KINDS | {"remote-update-apply", "remote-update-rollback"}
 
 
 def now() -> str:
