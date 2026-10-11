@@ -36,6 +36,7 @@ from .reference_workbench import (
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
+from .subtitle_recovery import preview_human_subtitle_recovery, apply_human_subtitle_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -1587,6 +1588,39 @@ def api_recovery_import(recovery_text: str = Form(...)):
     try:
         config = _active_config()
         result = import_text_recovery(config, recovery_text)
+        return {"ok": True, "result": result, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/human/preview")
+def api_human_subtitle_recovery_preview(recovery_text: str = Form(...)):
+    try:
+        config = _active_config()
+        result = preview_human_subtitle_recovery(config, recovery_text)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/human/apply")
+def api_human_subtitle_recovery_apply(
+    recovery_text: str = Form(...),
+    selected_source_members: str = Form(...),
+    expected_backup_sha256: str = Form(...),
+    expected_manifest_sha256: str = Form(...),
+    expected_project_root: str = Form(...),
+):
+    try:
+        config = _active_config()
+        selected = json.loads(selected_source_members)
+        result = apply_human_subtitle_recovery(
+            config, recovery_text,
+            selected_source_members=selected,
+            expected_backup_sha256=expected_backup_sha256,
+            expected_manifest_sha256=expected_manifest_sha256,
+            expected_project_root=expected_project_root,
+        )
         return {"ok": True, "result": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
