@@ -5025,7 +5025,7 @@ function buildUpdateChange(row){
   if(category==='changed_existing'){
     const oldText=String(item?.previous?.source_text||'');
     const newText=String(md.english||'');
-    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">档案原文 · 只读</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">远端索引记录 · 待核实</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div><div class="update-change-detail">仅展示来源版本差异；不提供原文编辑，也不自动替换档案原文。</div>';
+    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT · 档案原文 · 只读</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE · 远端索引记录 · 待核实</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div><div class="update-change-detail">仅展示来源版本差异；不提供原文编辑，也不自动替换档案原文。</div>';
     if(item?.changes?.includes('audio_sha256'))body+='<div class="update-change-detail">音频 SHA-256 与当前档案不同；不会被“应用新增”静默覆盖。</div>';
   }else if(category==='variant_of_existing'){
     const existing=Array.isArray(item?.existing)?item.existing.join('、'):'—';
