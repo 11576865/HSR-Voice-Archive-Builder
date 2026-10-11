@@ -1328,7 +1328,7 @@ class Handler(BaseHTTPRequestHandler):
                 combined = generated / "combined_audio"
                 try:
                     extracted = ensure_dir_or_extract(source, temporary_root, "existing")
-                    verify_combined_source_no_collisions(extracted, incoming)
+                    verify_combined_source_no_collisions(extracted, incoming, successful_filenames=successful)
                     staging = temporary_root / "combined"
                     staging.mkdir()
                     # Preserve complete package-relative member identity instead
@@ -1339,9 +1339,8 @@ class Handler(BaseHTTPRequestHandler):
                         shutil.copy2(wav, target)
                     if extracted.parent == temporary_root and extracted != temporary_root:
                         shutil.rmtree(extracted)
-                    for audio in incoming.iterdir():
-                        if audio.is_file() and not audio.name.endswith(".part"):
-                            shutil.copy2(audio, staging / audio.name)
+                    for filename in sorted(successful):
+                        shutil.copy2(incoming / filename, staging / filename)
                     if combined.exists():
                         shutil.rmtree(combined)
                     staging.replace(combined)
