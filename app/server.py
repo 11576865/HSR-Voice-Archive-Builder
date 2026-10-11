@@ -1565,6 +1565,41 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
+@app.get("/api/update/revisions")
+def api_update_revisions():
+    try:
+        config = _active_config()
+        return {"ok": True, "revisions": list_remote_revisions(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/rollback")
+def api_update_rollback(revision_id: str = Form(...), expected_project_sha256: str = Form(...)):
+    try:
+        config = _active_config()
+        status = next(
+            (item for item in list_remote_revisions(config)
+             if item.get("revision_id") == revision_id),
+            None,
+        )
+        if not status or not status.get("can_rollback"):
+            raise ValueError("Selected revision is not safely rollback-eligible")
+        if status.get("current_project_sha256") != expected_project_sha256:
+            raise ValueError("Project changed since rollback preview; refresh first")
+        job = create_job(
+            "remote-update-rollback",
+            lambda: rollback_remote_revision(
+                config, revision_id,
+                expected_project_sha256=expected_project_sha256,
+            ),
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.post("/api/recovery/status")
 def api_recovery_status(project_path: str = Form("")):
     try:
