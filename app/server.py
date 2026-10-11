@@ -24,7 +24,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
-from .archive_audit import audit_archive
+from .archive_audit import audit_archive, verify_archive_source_audio
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
     decorate_subtitles,
