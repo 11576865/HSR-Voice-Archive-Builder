@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import hashlib
 import json
+import os
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -75,7 +77,9 @@ def _entry_id(entry: dict[str, Any]) -> int | str | None:
 def _official_source_sha256(entry: dict[str, Any]) -> str:
     """Fingerprint official source words, not the editable Chinese target."""
     source = str(entry.get("source_text") or entry.get("english") or "")
-    return hashlib.sha256("".join(source.split()).encode("utf-8")).hexdigest()
+    # Preserve meaningful word boundaries: "now here" is not "nowhere".
+    # Normalize formatting whitespace only (CRLF, repeated spaces, line breaks).
+    return hashlib.sha256(" ".join(source.split()).encode("utf-8")).hexdigest()
 
 
 def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
@@ -119,6 +123,37 @@ def load_subtitle_overrides(output_dir: Path) -> dict[str, dict[str, Any]]:
     }
 
 
+def _archive_superseded_subtitle_edits(
+    output_dir: Path, records: list[dict[str, Any]],
+) -> None:
+    """Durably archive previous human edits *before* replacing/deleting them.
+
+    A previous revision must remain recoverable after a reset to the base
+    translation or after a new proofread save. This append-only journal is
+    independent of the current overrides JSON.
+    """
+    if not records:
+        return
+    path = output_dir / "subtitles_override_history.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    payload = "".join(
+        json.dumps({"archived_at": timestamp, **item},
+                   ensure_ascii=False, sort_keys=True) + "\\n"
+        for item in records
+    ).encode("utf-8")
+    # A single append under subtitle_edit_lock, flushed before current-state
+    # replacement. Do not continue if evidence cannot be archived.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        with os.fdopen(fd, "ab", closefd=True) as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        raise
+
+
 def _override_for_entry(
     entry: dict[str, Any],
     overrides: dict[str, dict[str, Any]],
@@ -140,6 +175,14 @@ def _override_for_entry(
                 (not stored_filename or not filename or stored_filename == filename)
                 and (not stored_logical_id or not logical_id or stored_logical_id == logical_id)
                 and (not stored_member or not member_id or stored_member == member_id)
+                and not (
+                    stored_filename and stored_filename in ambiguous_filenames
+                    and (not stored_member or not member_id)
+                )
+                and not (
+                    stored_logical_id and stored_logical_id in ambiguous_logical_ids
+                    and (not stored_member or not member_id)
+                )
             ):
                 return exact
 
