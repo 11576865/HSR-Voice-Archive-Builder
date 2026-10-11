@@ -117,13 +117,15 @@ def publish_remote_revision(
         member = str(row.get("source_member_id") or filename).strip().replace("\\", "/")
         if (not filename or not member or
                 any(part in {"", ".", ".."} for part in member.split("/")) or
-                member.startswith("/") or ":" in member or "\\x00" in member or
+                member.startswith("/") or ":" in member or "\x00" in member or
                 not member.casefold().endswith(".wav")):
             raise ValueError(f"Unsafe published source-member identity on row {number}")
         # Filename can be a package-relative name in historic indexes; its
         # basename still has to identify the same physical WAV as member.
-        if (Path(filename).name.casefold() != member.split("/")[-1].casefold()
-                or ":" in filename or "\\x00" in filename):
+        if (any(part in {"", ".", ".."} for part in filename.split("/"))
+                or filename.startswith("/")
+                or Path(filename).name.casefold() != member.split("/")[-1].casefold()
+                or ":" in filename or "\x00" in filename):
             raise ValueError(f"Published WAV filename/member conflict on row {number}")
         key = member.casefold()
         if key in seen_members:
