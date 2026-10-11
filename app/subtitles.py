@@ -174,6 +174,8 @@ def _override_for_entry(
 def _apply_derived_subtitle_fields(
     entries: list[dict[str, Any]],
     overrides: dict[str, dict[str, Any]],
+    *,
+    include_review_diagnostics: bool = False,
 ) -> None:
     filename_counts: dict[str, int] = {}
     logical_counts: dict[str, int] = {}
@@ -198,10 +200,13 @@ def _apply_derived_subtitle_fields(
         stale_source = bool(
             stored_fingerprint and stored_fingerprint != _official_source_sha256(entry)
         )
-        entry["translation_override_stale"] = stale_source
-        entry["translation_override_previous_chs"] = (
-            str(override.get("final_chs") or "") if stale_source else ""
-        )
+        if include_review_diagnostics:
+            # UI-only diagnostic values. Never persist old human edit text
+            # in the canonical manifest or bilingual export provenance.
+            entry["translation_override_stale"] = stale_source
+            entry["translation_override_previous_chs"] = (
+                str(override.get("final_chs") or "") if stale_source else ""
+            )
         if override is None or stale_source:
             # Retain old human text in subtitles_overrides.json for review,
             # but do not claim that it still translates revised official text.
@@ -698,7 +703,9 @@ def get_project_subtitles(
     overrides = load_subtitle_overrides(output_dir)
     if isinstance(entries, list):
         # Keep displayed baseline identical to ASS/SRT export resolution.
-        _apply_derived_subtitle_fields(entries, overrides)
+        _apply_derived_subtitle_fields(
+            entries, overrides, include_review_diagnostics=True,
+        )
     review_state = load_subtitle_review_state(output_dir)
 
     overflow_file = output_dir / "ass_layout_overflow_report.json"
