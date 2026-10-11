@@ -344,6 +344,10 @@ class Handler(BaseHTTPRequestHandler):
                 "runtime": dependency_status(),
             })
             return
+        if path == "/api/update/revisions":
+            config = _active_config()
+            self._json({"ok": True, "revisions": list_remote_revisions(config)})
+            return
         if path == "/api/recovery/export":
             config = _active_config()
             data, filename, _summary = build_text_recovery(config)
@@ -697,6 +701,29 @@ class Handler(BaseHTTPRequestHandler):
                 "image/png",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
             )
+            return
+
+        if path == "/api/update/rollback":
+            config = _active_config()
+            revision_id = data.get("revision_id", "").strip()
+            expected_sha = data.get("expected_project_sha256", "").strip()
+            status = next(
+                (item for item in list_remote_revisions(config)
+                 if item.get("revision_id") == revision_id),
+                None,
+            )
+            if not status or not status.get("can_rollback"):
+                raise ValueError("Selected revision is not safely rollback-eligible")
+            if status.get("current_project_sha256") != expected_sha:
+                raise ValueError("Project changed since rollback preview; refresh first")
+            job = create_job(
+                "remote-update-rollback",
+                lambda: rollback_remote_revision(
+                    config, revision_id, expected_project_sha256=expected_sha,
+                ),
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
             return
 
         if path == "/api/recovery/status":
