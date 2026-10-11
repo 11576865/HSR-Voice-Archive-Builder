@@ -486,6 +486,15 @@ def _import_provenance_error(
 
 
 def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
+    # Background alignments must not be rebound to a newly rebuilt corpus.
+    manifest_file = output_dir / "manifest.json"
+    expected_manifest_sha = (
+        str(payload.get("expected_manifest_sha256") or "").strip().lower()
+        if isinstance(payload, dict) else ""
+    )
+    if expected_manifest_sha:
+        if hashlib.sha256(manifest_file.read_bytes()).hexdigest() != expected_manifest_sha:
+            raise ValueError("Manifest changed during word alignment; regenerate against the current source")
     entries = _manifest_entries(output_dir)
     lookup = _entry_lookup(entries)
     if isinstance(payload, list):
@@ -547,6 +556,9 @@ def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
         }
         imported.append(item_id)
 
+    if expected_manifest_sha:
+        if hashlib.sha256(manifest_file.read_bytes()).hexdigest() != expected_manifest_sha:
+            raise ValueError("Manifest changed during word alignment; refusing to save stale timings")
     result_payload = {
         "schema_version": SCHEMA_VERSION,
         "updated_at": _now(),
