@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -217,7 +218,18 @@ class TestAdvancedTypography(unittest.TestCase):
                     ]
                     self.assertTrue(primary_events)
                     self.assertTrue(chinese_events)
-                    self.assertTrue(any(original_text in line for line in primary_events))
+                    # ASS Karaoke inserts styling tags *between* source words.
+                    # Compare visible event text, not the raw tagged string.
+                    def visible_text(line):
+                        payload = line.split(",", 9)[-1]
+                        payload = re.sub(r"\\{[^}]*\\}", "", payload)
+                        return "".join(payload.replace(r"\\N", "").split())
+
+                    expected = "".join(original_text.split())
+                    self.assertTrue(
+                        any(visible_text(line) == expected for line in primary_events),
+                        primary_events,
+                    )
                     self.assertTrue(any("愿此行，终抵群星。" in line for line in chinese_events))
                     self.assertTrue(
                         any(("\\k" in line if mode != "clip" else "\\clip(" in line)
