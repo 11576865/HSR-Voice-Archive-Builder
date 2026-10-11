@@ -6170,7 +6170,9 @@ async function saveSubtitleItemInBackground(targetSub){
           id:sentId,final_chs:sentText,
           expected_final_chs:String(targetSub._savedFinal??''),
           expected_source_member_id:String(targetSub.source_member_id||''),
-          expected_source_text_sha256:String(targetSub.source_text_sha256||'')
+          ...(targetSub.source_text_sha256?{
+            expected_source_text_sha256:String(targetSub.source_text_sha256)
+          }:{})
         }]})
       });
       if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
@@ -7541,7 +7543,9 @@ async function saveLayoutCueText(){
       body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{
         id,final_chs:submitted,expected_final_chs:state.saved,
         expected_source_member_id:String(sub.source_member_id||''),
-        expected_source_text_sha256:String(sub.source_text_sha256||'')
+        ...(sub.source_text_sha256?{
+          expected_source_text_sha256:String(sub.source_text_sha256)
+        }:{})
       }]})
     });
     if(!currentProject||layoutActiveProjectKey()!==key)return false;
