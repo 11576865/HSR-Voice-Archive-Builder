@@ -49,6 +49,43 @@ class ArchiveJobMutationBoundaryTests(unittest.TestCase):
             time.sleep(0.03)
         self.assertEqual((get_job(new_job.id) or {}).get("state"), "succeeded")
 
+    def test_rollback_cannot_overlap_active_mutating_job(self):
+        waiting = threading.Event()
+        started = threading.Event()
+        root = "/test-hsr-rollback-exclusive-2026-10-12"
+
+        def slow_build():
+            started.set()
+            if not waiting.wait(timeout=8):
+                raise RuntimeError("timeout")
+            return {"ok": True}
+
+        original = create_job("build", slow_build, project_root=root)
+        try:
+            self.assertTrue(started.wait(timeout=5))
+            with self.assertRaisesRegex(RuntimeError, "拒绝并发"):
+                create_job(
+                    "remote-update-rollback", lambda: None,
+                    project_root=root,
+                )
+        finally:
+            waiting.set()
+        for _ in range(100):
+            if (get_job(original.id) or {}).get("state") == "succeeded":
+                break
+            time.sleep(0.03)
+        self.assertEqual((get_job(original.id) or {}).get("state"), "succeeded")
+
+        rollback = create_job(
+            "remote-update-rollback", lambda: {"restored": True},
+            project_root=root,
+        )
+        for _ in range(100):
+            if (get_job(rollback.id) or {}).get("state") == "succeeded":
+                break
+            time.sleep(0.03)
+        self.assertEqual((get_job(rollback.id) or {}).get("state"), "succeeded")
+
 
 if __name__ == "__main__":
     unittest.main()
