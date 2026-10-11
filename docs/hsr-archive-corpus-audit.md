@@ -313,3 +313,62 @@ selected-only FastAPI writes. They do **not** establish actual historical
 official HSR data provenance, cross-process atomicity or a large real-game
 archive restore. Legacy revision evidence remains a manual restoration
 problem; the system must not claim full historic reconstruction.
+
+
+## Remote incremental publish journal, interruption inspection and rollback
+
+FastAPI and Termux Lite now share `app/remote_update_publish.py` for
+incremental version publication. The current project configuration and index
+are captured by SHA-256 at the beginning of an Apply job, together with the
+manifest hash already bound to the remote comparison. After the downloaded WAVs
+are combined into an immutable
+`.generated/combined_audio_versions/combined-<uuid>/` tree and the new
+`.generated/quick_index_incremental_<uuid>.csv` is written, publication
+validates that:
+
+- The original config, index, and Manifest still match the initial job
+  boundary (not just the previous remote-plan Manifest SHA).
+- Every explicitly selected added WAV has exactly one index record, its
+  `source_member_id` equals its basename, and the staged audio file exists.
+  Termux Lite writes the same required `source_member_id` field as FastAPI.
+- The new paths are precisely the generated paths for this revision ID.
+  Pre-existing versioned resources and their indexes are never removed.
+
+Before replacing project configuration, a revision journal is atomically
+prepared at `.generated/incremental_revisions/<uuid>.json`, containing
+the prior full project configuration, old and proposed config hashes, selected
+names, and resource paths. The project config is then atomically replaced,
+and the journal marked `committed`. **The journal is not considered proof that
+a commit succeeded:** revision inspection always compares the live on-disk
+project SHA against both the old and proposed SHA. Thus an interruption after
+the config switch but before journal finalization is visible as
+`applied_unfinalized`; an earlier interruption stays `not_applied`.
+
+The existing Update panel now provides **增量更新版本与受控回退**. The read-only
+`GET /api/update/revisions` shows revision status, and
+`POST /api/update/rollback` queues a rollback with explicit revision ID and
+the inspected live config SHA-256. The rollback uses the same in-process
+per-project mutation exclusion as Build and Apply; it rechecks that the
+revision is still the active project, the Manifest hasn't changed, and the
+old audio/index files exist. It atomically restores the exact old project
+configuration while preserving both audio/index versions. A later build that
+changes Manifest, an intervening config edit, a missing old source, or a
+second attempted rollback is rejected.
+
+The new `tests/test_remote_update_publish.py` fault-injects failure before
+config replacement and after config replacement but before final journal
+state; it verifies interrupted-state detection, safe manual rollback, wrong
+project/config/manifest/index rejection, and FastAPI route behavior. It also
+rejects incomplete or duplicated selected voice entries and mismatched
+`source_member_id` values. `tests/test_jobs_update_mutation.py` covers
+rollback competing with a build.
+
+**Engineering boundary:** These tests are synthetic files and in-process
+API/CI checks. The project still does *not* implement an ACID transaction
+across OS processes or different machines, immutable enforcement against
+manual file tampering, atomic commit of source/config/manifest/report as a
+single unit, a full filesystem power-loss durability protocol or automated
+old-version garbage collection. No real multi-chapter HSR package or
+physical Android device was used for this acceptance. Do not delete
+`.generated/incremental_revisions`, prior audio versions or prior indexes
+during manual cleanup without separately verified recovery.
