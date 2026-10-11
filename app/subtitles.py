@@ -82,7 +82,7 @@ def _official_source_sha256(entry: dict[str, Any]) -> str:
     return hashlib.sha256(" ".join(source.split()).encode("utf-8")).hexdigest()
 
 
-def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
+def load_subtitle_review_state(output_dir: Path) -> dict[str, Any]:
     path = output_dir / "subtitle_review_state.json"
     if not path.is_file():
         return {}
@@ -92,14 +92,36 @@ def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
         return {}
     if not isinstance(payload, dict):
         return {}
-    return {str(key): bool(value) for key, value in payload.items()}
+    # Preserve old boolean records on disk, but do not certify them against
+    # reindexed source clips: legacy True has no provable provenance.
+    return {str(key): value for key, value in payload.items()
+            if isinstance(value, (bool, dict))}
 
 
-def _write_subtitle_review_state(output_dir: Path, state: dict[str, bool]) -> None:
+def _review_is_current(entry: dict[str, Any], state: dict[str, Any]) -> bool:
+    value = state.get(str(_entry_id(entry)))
+    if not isinstance(value, dict) or value.get("confirmed") is not True:
+        return False
+    return (
+        str(value.get("source_member_id") or "") == str(entry.get("source_member_id") or "")
+        and str(value.get("source_text_sha256") or "") == _official_source_sha256(entry)
+        and bool(value.get("source_text_sha256"))
+    )
+
+
+def _review_receipt(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "confirmed": True,
+        "source_member_id": str(entry.get("source_member_id") or ""),
+        "source_text_sha256": _official_source_sha256(entry),
+    }
+
+
+def _write_subtitle_review_state(output_dir: Path, state: dict[str, Any]) -> None:
     atomic_write_text(
         output_dir / "subtitle_review_state.json",
         json.dumps(
-            {key: True for key, value in state.items() if value},
+            {key: value for key, value in state.items() if value},
             ensure_ascii=False,
             indent=2,
         ),
@@ -820,13 +842,14 @@ def get_project_subtitles(
             "timing_conflict": timing_conflict,
             "source_language": source_lang,
             "source_text": str(entry.get("source_text") or entry.get("english", "")),
+            "source_text_sha256": _official_source_sha256(entry),
             "official_chs": official_chs,
             "api_chs": api_chs,
             "original_chs": target_text,
             "final_chs": final_chs,
             "modified": modified,
             "confirmed": (
-                bool(review_state.get(str_id, False))
+                _review_is_current(entry, review_state)
                 and not bool(entry.get("translation_override_stale"))
             ),
             "layout_overflow": overflow_info is not None,
@@ -1028,7 +1051,7 @@ def _update_project_subtitles_locked(
             overrides[key] = latest
         if key in confirmations:
             if confirmations[key]:
-                review_state[key] = True
+                review_state[key] = _review_receipt(entry)
             else:
                 review_state.pop(key, None)
         elif previous_source_stale:
@@ -1039,12 +1062,18 @@ def _update_project_subtitles_locked(
         text_updated_count += 1
 
     # Confirmation-only updates are valid even when the final text is unchanged.
-    entry_ids = {str(_entry_id(entry)) for entry in entries if _entry_id(entry) is not None}
+    by_confirm_id: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        if _entry_id(entry) is not None:
+            by_confirm_id.setdefault(str(_entry_id(entry)), []).append(entry)
     for key, confirmed in confirmations.items():
-        if key not in entry_ids or key in updates_by_id:
+        if key in updates_by_id:
+            continue
+        matches = by_confirm_id.get(key, [])
+        if len(matches) != 1:
             continue
         if confirmed:
-            review_state[key] = True
+            review_state[key] = _review_receipt(matches[0])
         else:
             review_state.pop(key, None)
         updated_count += 1
@@ -1097,7 +1126,10 @@ def _update_project_subtitles_locked(
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
         "modified_ids": sorted(str(key) for key in overrides),
-        "confirmed_ids": sorted(str(key) for key, value in review_state.items() if value),
+        "confirmed_ids": sorted(
+            str(_entry_id(entry)) for entry in entries
+            if _review_is_current(entry, review_state)
+        ),
         "total_count": len(entries),
         **refreshed,
     }
