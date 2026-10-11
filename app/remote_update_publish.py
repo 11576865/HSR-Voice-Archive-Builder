@@ -181,6 +181,8 @@ def publish_remote_revision(
     # Re-check immediately before the config's atomic publication. The
     # preceding journal write must not entitle a stale proposal to commit.
     _assert_boundary(config, manifest_path, expected_boundary)
+    if _sha(updated_index) != journal["new_index_sha256"]:
+        raise ValueError("Published index changed after revision preparation")
     save_project(proposed)
     config.__dict__.update(vars(proposed))
     if _sha(root / PROJECT_FILENAME) != expected_next_sha:
@@ -300,6 +302,10 @@ def rollback_remote_revision(
         raise ValueError("Rollback journal previous configuration digest mismatch")
     journal["state"] = "rollback_pending"
     atomic_write_json(journal_path, journal)
+    # The journal write is not a license to roll back if another actor has
+    # changed the indexes or project while we were preparing.
+    if not revision_status(config, revision_id)["can_rollback"]:
+        raise ValueError("Rollback inputs changed during preparation")
     # Atomic replace; if a process exits between this and journal finalization,
     # inspection observes prior project digest and marks it not-applied.
     save_project(saved)
