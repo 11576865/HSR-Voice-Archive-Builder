@@ -340,6 +340,18 @@ class RevisionPublicationTests(unittest.TestCase):
         )
         self.assertEqual(restored["state"], "rolled_back")
 
+    def test_legacy_revision_without_recorded_audio_sha_is_unverified_not_damaged(self):
+        self.publish()
+        path = (self.root / ".generated" / "incremental_revisions"
+                / f"{self.revision}.json")
+        journal = json.loads(path.read_text(encoding="utf-8"))
+        del journal["new_audio_sha256"]
+        path.write_text(json.dumps(journal), encoding="utf-8")
+        status = revision_status(self.config, self.revision)
+        self.assertIsNone(status["new_audio_unchanged"])
+        self.assertEqual(status["state"], "active")
+        self.assertTrue(status["can_rollback"])
+
     def test_published_audio_symlink_substitution_is_observable(self):
         state = self.publish()
         target = self.audio / "new.wav"
