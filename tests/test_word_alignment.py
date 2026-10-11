@@ -239,6 +239,26 @@ class TestWordAlignment(unittest.TestCase):
             self.assertEqual(subtitles[0]["word_alignment"]["source"], "cache")
             self.assertEqual(subtitles[0]["word_alignment"]["provider"], "unit-test")
 
+    def test_stale_cache_is_not_reused_after_original_wav_hash_changes(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            _config, output = self._make_project(root)
+            manifest_path = output / "manifest.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+            manifest["entries"][0]["sha256"] = "a" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            payload = {"alignments": [{"id": 1, "provider": "test", "words": [
+                {"word": "Hello ", "start": 0.0, "end": 0.5},
+                {"word": "world", "start": 0.55, "end": 1.2},
+            ]}]}
+            import_word_alignments(output, payload)
+            self.assertEqual(alignment_diagnostics(output)["usable"], 1)
+            manifest["entries"][0]["sha256"] = "b" * 64
+            manifest_path.write_text(json.dumps(manifest), encoding="utf-8")
+            diagnostics = alignment_diagnostics(output)
+            self.assertEqual(diagnostics["usable"], 0)
+            self.assertEqual(diagnostics["entries"][0]["reason"], "stale_cache")
+
     def test_stale_cache_is_not_reused_after_source_text_changes(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
