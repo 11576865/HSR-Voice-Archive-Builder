@@ -925,6 +925,15 @@ def _update_project_subtitles_locked(
         filename = str(entry.get("filename", "") or "")
         logical_id = str(entry.get("logical_id", "") or "")
         member_id = str(entry.get("source_member_id", "") or "")
+        previous_override = _override_for_entry(entry, overrides)
+        previous_source_hash = (
+            str(previous_override.get("source_text_sha256") or "")
+            if previous_override else ""
+        )
+        previous_source_stale = bool(
+            previous_source_hash
+            and previous_source_hash != _official_source_sha256(entry)
+        )
 
         if new_chs == raw_target:
             overrides.pop(key, None)
@@ -958,6 +967,10 @@ def _update_project_subtitles_locked(
                 review_state[key] = True
             else:
                 review_state.pop(key, None)
+        elif previous_source_stale:
+            # The operator has just resolved a stale translation, but has
+            # not explicitly reconfirmed its review status.
+            review_state.pop(key, None)
         updated_count += 1
         text_updated_count += 1
 
