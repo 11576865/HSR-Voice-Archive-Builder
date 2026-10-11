@@ -134,6 +134,33 @@ class ArchiveAuditTests(unittest.TestCase):
             self.assertEqual(after["findings"][0]["id"], "2")
             self.assertEqual((output / "manifest.json").read_bytes(), original_manifest)
 
+    def test_normalized_wav_manifest_hash_is_inconclusive_not_false_corruption(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output, wavs = root / "output", root / "wavs"
+            output.mkdir()
+            wavs.mkdir()
+            raw = b"RIFF-original-pcm"
+            (wavs / "line.wav").write_bytes(raw)
+            (output / "manifest.json").write_text(
+                json.dumps({
+                    "report": {"count_wav_pcm_normalized": 1},
+                    "entries": [{
+                        "index": 1, "filename": "line.wav",
+                        "source_member_id": "line.wav",
+                        "sha256": hashlib.sha256(b"RIFF-normalized-pcm").hexdigest(),
+                    }],
+                }), encoding="utf-8",
+            )
+            config = create_project(
+                root, name="normalization", index_csv="index.csv",
+                wav_source="wavs", output_dir="output",
+            )
+            result = verify_archive_source_audio(config, output)
+            self.assertFalse(result["summary"]["trusted_complete"])
+            self.assertEqual(result["summary"]["normalization_ambiguous"], 1)
+            self.assertEqual(result["summary"]["mismatch"], 0)
+
     def test_source_verifier_never_chooses_ambiguous_basename(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
