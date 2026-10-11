@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import uuid
 import csv
 from pathlib import Path
 
@@ -1435,7 +1436,9 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
 
             generated.mkdir(parents=True, exist_ok=True)
             temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-            combined = generated / "combined_audio"
+            version = uuid.uuid4().hex
+            combined = generated / "combined_audio_versions" / f"combined-{version}"
+            combined.parent.mkdir(parents=True, exist_ok=True)
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
                 verify_combined_source_no_collisions(extracted, incoming, successful_filenames=successful)
@@ -1454,8 +1457,8 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
                     audio = incoming / filename
                     staging_target = staging / filename
                     shutil.copy2(audio, staging_target)
-                if combined.exists():
-                    shutil.rmtree(combined)
+                # Publish into an immutable, unique path. Never delete the
+                # audio directory referenced by the prior project revision.
                 staging.replace(combined)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
@@ -1517,7 +1520,7 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
                     ),
                     "sha256": "",
                 })
-            updated_index = generated / "quick_index_incremental.csv"
+            updated_index = generated / f"quick_index_incremental_{version}.csv"
             with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
