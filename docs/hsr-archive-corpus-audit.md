@@ -133,3 +133,40 @@ The remote audio dataset is still filename-keyed. Distinct same-basename
 voices cannot safely be imported through this incremental path until
 provider records supply disambiguating member IDs. Those can continue to
 be built from a local voice package with its original path hierarchy.
+
+
+## Human Chinese correction retention across official-source revisions
+
+The official EN/JA/KO source transcript remains **read-only**. Human editors
+can change only the derived Chinese `final_chs` subtitle text. New
+`subtitles_overrides.json` records retain a normalized SHA-256 of the
+corresponding official source transcript (`source_text_sha256`).
+
+When the original WAV member is still identifiable but its *official source
+text* changes during a later build, the recorded human correction is **not
+silently applied** to the newly worded sentence. The override remains
+byte-for-byte in the separate project sidecar for manual comparison. The
+current subtitle and derived ASS/SRT use the new base translation until a
+human explicitly reviews and saves a new correction. A prior review
+confirmation is not displayed as valid for stale source text.
+
+The existing proofreading workspace shows a source-revision warning and the
+previous human Chinese sentence as **read-only comparison material**. It does
+not offer an official-source editor, does not apply Karaoke to Chinese, and
+does not auto-reaccept prior human text. New saves bind the new source-text
+fingerprint; unless the operator explicitly reconfirms review, stale prior
+confirmation is cleared. Legacy overrides that lack a fingerprint remain
+supported to avoid dropping earlier user data; without provenance they
+cannot promise the same source-revision safeguard.
+
+Stale translation diagnostics and the previous human correction are
+**query/UI-only derived evidence**. They must never be serialized as new
+canonical Manifest fields. Tests cover a saved human correction, changed
+official source, preserved sidecar, corrected derived exports, manual
+re-review, harmless whitespace, and legacy fallback.
+
+The corrected bilingual CSV also resolves rows by unambiguous
+`source_member_id`; historic rows lacking member identity can use a unique
+filename or (if the manifest has no filename) a unique index, but never a
+duplicate WAV basename or an explicitly stale member fallback. The original
+source transcript is never mutated by this maintenance operation.
