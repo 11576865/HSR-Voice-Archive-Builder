@@ -120,6 +120,20 @@ class TestAdvancedTypography(unittest.TestCase):
         formatted = format_karaoke_text("May this journey.", duration_sec=1.2, word_alignments=alignments)
         self.assertEqual(formatted, r"{\k30}May {\k30}this {\k60}journey.")
 
+    def test_karaoke_preserves_initial_silence_and_word_gaps(self):
+        words = [
+            {"word": "Hello ", "start": 0.40, "end": 0.80},
+            {"word": "world", "start": 1.00, "end": 1.30},
+        ]
+        for mode in ("k", "kf"):
+            formatted = format_karaoke_text(
+                "Hello world", duration_sec=1.60, word_alignments=words, mode=mode,
+            )
+            self.assertEqual(
+                formatted,
+                rf"{{\kt40\{mode}40}}Hello {{\kt100\{mode}30}}world",
+            )
+
     def test_format_kf_karaoke_explicit_word_alignments(self):
         alignments = [
             {"word": "May ", "start": 0.0, "end": 0.3},
