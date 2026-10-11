@@ -388,32 +388,53 @@ def alignment_diagnostics(output_dir: Path) -> dict[str, Any]:
 
 
 def _entry_lookup(entries: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
+    """Index only unambiguous manifest identities.
+
+    A repeated index, member, logical ID or basename must never be resolved
+    by whichever duplicate happens to appear last.
+    """
     lookup: dict[str, dict[str, Any]] = {}
+    ambiguous: set[str] = set()
     filename_counts: dict[str, int] = {}
     for entry in entries:
         filename = str(entry.get("filename") or "")
         if filename:
             filename_counts[filename] = filename_counts.get(filename, 0) + 1
+
+    def add(key: str, entry: dict[str, Any]) -> None:
+        if key in ambiguous:
+            return
+        if key in lookup:
+            ambiguous.add(key)
+            lookup.pop(key, None)
+        else:
+            lookup[key] = entry
+
     for entry in entries:
         item_id = _entry_id(entry)
         if item_id:
-            lookup[f"id:{item_id}"] = entry
+            add(f"id:{item_id}", entry)
         member = str(entry.get("source_member_id") or "").replace("\\", "/").strip()
         if member:
-            lookup[f"member:{member}"] = entry
+            add(f"member:{member}", entry)
         logical = str(entry.get("logical_id") or "").strip()
         if logical:
-            lookup[f"logical:{logical}"] = entry
+            add(f"logical:{logical}", entry)
         filename = str(entry.get("filename") or "")
         if filename and filename_counts.get(filename) == 1:
-            lookup[f"filename:{filename}"] = entry
+            add(f"filename:{filename}", entry)
     return lookup
 
 
 def _resolve_import_entry(
     record: dict[str, Any],
     lookup: dict[str, dict[str, Any]],
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str]:
+    """All supplied identity fields must select exactly the same manifest row.
+
+    A stale ID must not be silently ignored just because another supplied
+    source-member path still happens to exist.
+    """
     candidates = [
         ("source_member_id", "member"),
         ("logical_id", "logical"),
@@ -421,13 +442,47 @@ def _resolve_import_entry(
         ("index", "id"),
         ("filename", "filename"),
     ]
+    selected: dict[str, Any] | None = None
+    supplied = False
     for field, prefix in candidates:
         value = str(record.get(field) or "").replace("\\", "/").strip()
-        if value:
-            entry = lookup.get(f"{prefix}:{value}")
-            if entry is not None:
-                return entry
-    return None
+        if not value:
+            continue
+        supplied = True
+        resolved = lookup.get(f"{prefix}:{value}")
+        if resolved is None:
+            return None, "entry_not_found_or_ambiguous"
+        if selected is not None and resolved is not selected:
+            return None, "identity_conflict"
+        selected = resolved
+    if not supplied:
+        return None, "entry_not_found_or_ambiguous"
+    return selected, "ok"
+
+
+def _import_provenance_error(
+    record: dict[str, Any], entry: dict[str, Any],
+) -> str:
+    """Check optional external evidence, never rebind it to current content."""
+    expected_source_hash = str(record.get("source_text_sha256") or "").strip().lower()
+    if expected_source_hash and expected_source_hash != _source_fingerprint(_source_text(entry)):
+        return "source_text_changed"
+    if "source_text" in record and _normalized_text(str(record["source_text"])) != _normalized_text(_source_text(entry)):
+        return "source_text_changed"
+    expected_audio_hash = str(record.get("source_audio_sha256") or "").strip().lower()
+    current_audio_hash = str(entry.get("sha256") or "").strip().lower()
+    if expected_audio_hash and expected_audio_hash != current_audio_hash:
+        return "source_audio_changed"
+    if "duration_seconds" in record:
+        try:
+            expected_duration = float(record["duration_seconds"])
+            actual_duration = _entry_duration(entry)
+        except (TypeError, ValueError):
+            return "source_duration_changed"
+        if (not math.isfinite(expected_duration) or not math.isfinite(actual_duration)
+                or abs(expected_duration - actual_duration) > 0.02):
+            return "source_duration_changed"
+    return ""
 
 
 def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
@@ -446,17 +501,23 @@ def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
     cached_entries = dict(cache.get("entries", {}))
     imported: list[str] = []
     rejected: list[dict[str, str]] = []
+    seen_keys: set[str] = set()
 
     for raw in records:
         if not isinstance(raw, dict):
             rejected.append({"id": "", "reason": "record_not_object"})
             continue
-        entry = _resolve_import_entry(raw, lookup)
+        entry, identity_reason = _resolve_import_entry(raw, lookup)
         if entry is None:
             rejected.append({
                 "id": str(raw.get("id") or raw.get("source_member_id") or raw.get("filename") or ""),
-                "reason": "entry_not_found_or_ambiguous",
+                "reason": identity_reason,
             })
+            continue
+
+        provenance_error = _import_provenance_error(raw, entry)
+        if provenance_error:
+            rejected.append({"id": _entry_id(entry), "reason": provenance_error})
             continue
 
         words = raw.get("words") or raw.get("word_alignments")
@@ -468,6 +529,10 @@ def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
             continue
 
         key = alignment_key(entry)
+        if key in seen_keys:
+            rejected.append({"id": item_id, "reason": "duplicate_import_identity"})
+            continue
+        seen_keys.add(key)
         cached_entries[key] = {
             "id": item_id,
             "source_member_id": str(entry.get("source_member_id") or ""),
