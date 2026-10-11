@@ -1078,6 +1078,8 @@ def _update_project_subtitles_locked(
                 "logical_id": logical_id,
                 "source_member_id": member_id,
                 "source_text_sha256": _official_source_sha256(entry),
+                "source_text_hash_version": 2,
+                "source_audio_sha256": str(entry.get("sha256") or "").lower().strip(),
             }
             for old_key, value in list(overrides.items()):
                 matches_entry = _override_for_entry(
