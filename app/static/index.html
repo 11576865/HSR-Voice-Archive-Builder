@@ -3534,8 +3534,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
           </div>
           <div>
-            <label for="prevPriText">原文字幕</label>
-            <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
+            <label for="prevPriText">原文排版试调文本（不修改官方台词）</label>
+            <input id="prevPriText" value="May this journey lead us starward." placeholder="仅修改预览样本，不写入档案原文">
           </div>
           <div id="layoutCorpusCheckStatus" class="small muted layout-corpus-status">打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。</div>
           <div class="layout-sample-toolbar" aria-label="测试字幕来源与切换">
@@ -5015,7 +5015,7 @@ function buildUpdateChange(row){
   card.open=category!=='exact_existing';
   const badges=['<span class="badge">'+escapeHtml(updateCategoryLabel(category))+'</span>'];
   if(category==='changed_existing'&&Array.isArray(item?.changes)){
-    for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'文本变化':change==='audio_sha256'?'音频变化':change)+'</span>');
+    for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'原文索引差异（只读）':change==='audio_sha256'?'音频版本差异':change)+'</span>');
   }
   const metaBits=[];
   if(md.character)metaBits.push('角色 '+md.character);
@@ -5025,7 +5025,7 @@ function buildUpdateChange(row){
   if(category==='changed_existing'){
     const oldText=String(item?.previous?.source_text||'');
     const newText=String(md.english||'');
-    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div>';
+    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">档案原文 · 只读</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">远端索引记录 · 待核实</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div><div class="update-change-detail">仅展示来源版本差异；不提供原文编辑，也不自动替换档案原文。</div>';
     if(item?.changes?.includes('audio_sha256'))body+='<div class="update-change-detail">音频 SHA-256 与当前档案不同；不会被“应用新增”静默覆盖。</div>';
   }else if(category==='variant_of_existing'){
     const existing=Array.isArray(item?.existing)?item.existing.join('、'):'—';
