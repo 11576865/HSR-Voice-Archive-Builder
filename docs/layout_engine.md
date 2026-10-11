@@ -82,7 +82,11 @@ Available modes:
 
 Dynamic clip is restricted to a single rendered line. Multi-line text falls back for dynamic clip only; discrete and smooth Karaoke now preserve verified words over layout-inserted line breaks if no timed word is split. Incompatible line wrapping falls back to plain text without fabricated phoneme boundaries. The discrete and smooth karaoke writers use the ASS \kt absolute-start tag to preserve initial silence and gaps between aligned words, rather than just concatenating word durations.
 
-For non-Chinese source projects, word timing normally applies to the primary/source-language subtitle. Chinese target text is not assigned source-language word timing.
+Karaoke is limited to the original voiced-language **Primary** subtitle. The final Chinese **CHS** translation always remains ordinary text in all three Karaoke modes (`\\k`, `\\kf`, dynamic clip), including when the project audio itself is Chinese. An alignment is never transferred from English, Japanese or Korean words onto translated Chinese characters. In a Chinese-only project the renderer does not emit Karaoke. This also holds for the actual FFmpeg/libass preview, since it uses the same writer.
+
+If audio-aware entrance animation starts an ASS event *before* the source WAV begins, the renderer shifts source-word onsets by that pre-roll before generating `\\kt` or timed clips. Original WAV-relative alignment data and canonical source transcript remain unchanged.
+
+The free-text **original-language preview sample** in the Inspector is a sandbox for layout experimentation, not an API to edit the archived official source. The selected real subtitle cue's source text remains read-only; only the translated final Chinese field can be saved. Remote-index text discrepancies are evidence to review, not permission to mutate the source transcript.
 
 ## Word-level timing sidecar
 
