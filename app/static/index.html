@@ -5682,6 +5682,7 @@ async function refreshUpdateRevisions(){
         (record.prior_index_unchanged===false?'\n原有索引内容已变化，禁止自动回退':'')+
         (record.new_index_unchanged===false?'\n新增索引内容已变化，禁止自动回退':'')+
         (record.new_audio_unchanged===false?'\n新增语音的 WAV 字节与发布时不一致；请停止使用该版本并核对或安全回退':'')+
+        (record.new_audio_unchanged===null?'\n历史发布记录没有 WAV 字节指纹；无法证明音频完整性，建议人工核验':'')+
         (record.manifest_unchanged===false?'\n归档 Manifest 已变化，禁止自动回退':'')+
         (record.prior_resources_exist===false?'\n旧来源资源缺失，禁止自动回退':'');
       line.append(summary);
