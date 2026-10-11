@@ -1425,6 +1425,12 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
                 )
             confirmed_references = confirmed_reference_metadata(reference_plan, reference_download)
             reference_successful = set(confirmed_references)
+            # Download resolution may take minutes. Recheck the live archive
+            # immediately before touching persistent source/index state.
+            choose_remote_additions(
+                remote_plan, output / "manifest.json", index,
+                selected_filenames=[str(x["filename"]) for x in targets],
+            )
             report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
 
             generated.mkdir(parents=True, exist_ok=True)
