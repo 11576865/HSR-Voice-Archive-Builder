@@ -159,13 +159,38 @@ def verified_completed_new_wavs(
         digest = hashlib.sha256(path.read_bytes()).hexdigest()
         if digest != expected_digest:
             raise ValueError(f"Downloaded WAV checksum mismatch: {name}")
-        # A name and checksum alone do not establish that a .wav file
-        # contains WAV data. Reject obvious mislabeled provider payloads
-        # before publishing a new archive source.
+        # A checksum only attests returned bytes, not the audio container.
+        # Parse chunk boundaries without assuming PCM codec or decoding sound:
+        # compressed/extended WAVE formats may be handled later by FFmpeg.
+        # A forged 12-byte RIFF/WAVE prefix is not a playable WAV.
+        total_bytes = path.stat().st_size
         with path.open("rb") as stream:
             header = stream.read(12)
-        if len(header) != 12 or header[:4] != b"RIFF" or header[8:] != b"WAVE":
-            raise ValueError(f"Downloaded file is not a RIFF/WAVE audio file: {name}")
+            if (len(header) != 12 or header[:4] != b"RIFF"
+                    or header[8:] != b"WAVE"):
+                raise ValueError(f"Downloaded file is not a RIFF/WAVE audio file: {name}")
+            declared_end = int.from_bytes(header[4:8], "little") + 8
+            if declared_end > total_bytes or declared_end < 44:
+                raise ValueError(f"Invalid downloaded WAVE container length: {name}")
+            offset = 12
+            has_format = False
+            has_samples = False
+            while offset + 8 <= declared_end:
+                stream.seek(offset)
+                chunk = stream.read(8)
+                if len(chunk) != 8:
+                    raise ValueError(f"Truncated downloaded WAVE chunk: {name}")
+                size = int.from_bytes(chunk[4:8], "little")
+                chunk_end = offset + 8 + size
+                if chunk_end > declared_end:
+                    raise ValueError(f"Invalid downloaded WAVE chunk size: {name}")
+                if chunk[:4] == b"fmt " and size >= 16:
+                    has_format = True
+                elif chunk[:4] == b"data" and size > 0:
+                    has_samples = True
+                offset = chunk_end + (size & 1)
+            if not has_format or not has_samples:
+                raise ValueError(f"Downloaded WAVE lacks format or audio data: {name}")
         accepted.add(name)
     return accepted
 
