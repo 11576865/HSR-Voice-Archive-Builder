@@ -943,7 +943,12 @@ def _update_project_subtitles_locked(
         for item in updates
         if item.get("id") is not None and "expected_source_member_id" in item
     }
-    if expected_text or expected_members:
+    expected_source_hashes = {
+        str(item["id"]): str(item["expected_source_text_sha256"]).lower()
+        for item in updates
+        if item.get("id") is not None and "expected_source_text_sha256" in item
+    }
+    if expected_text or expected_members or expected_source_hashes:
         # The same resolver is used by actual derived exports, including
         # filename/member migration of older human overrides. Comparing raw
         # manifest.final_chs or an exact-ID-only entry is insufficient.
@@ -952,7 +957,7 @@ def _update_project_subtitles_locked(
         by_id: dict[str, list[dict[str, Any]]] = {}
         for entry in effective:
             by_id.setdefault(str(_entry_id(entry)), []).append(entry)
-        for key in expected_text.keys() | expected_members.keys():
+        for key in expected_text.keys() | expected_members.keys() | expected_source_hashes.keys():
             matches = by_id.get(key, [])
             if len(matches) != 1:
                 raise ValueError("Subtitle cue identity is missing or ambiguous; refresh before editing")
@@ -961,9 +966,13 @@ def _update_project_subtitles_locked(
                 raise ValueError("Subtitle source clip changed since it was loaded; refresh before editing")
             if key in expected_text and expected_text[key] != str(entry.get("final_chs", "")):
                 raise ValueError("Subtitle text changed since it was loaded; refresh before editing")
+            if (key in expected_source_hashes
+                    and expected_source_hashes[key] != _official_source_sha256(entry)):
+                raise ValueError("Official source text changed since it was loaded; refresh before editing")
 
     updated_count = 0
     text_updated_count = 0
+    archived_old: list[dict[str, Any]] = []
     for entry in entries:
         item_id = _entry_id(entry)
         if item_id is None or str(item_id) not in updates_by_id:
@@ -986,25 +995,19 @@ def _update_project_subtitles_locked(
         )
 
         if new_chs == raw_target:
-            overrides.pop(key, None)
+            # Remove only the resolved current entry's edits. A sibling with
+            # the same filename/logical ID must never be reset accidentally.
             for old_key, value in list(overrides.items()):
-                stored_member = str(value.get("source_member_id", "") or "")
-                if member_id or stored_member:
-                    # Member-aware records only match by member id so a
-                    # same-basename sibling never loses its override.
-                    if member_id and stored_member and member_id == stored_member:
-                        overrides.pop(old_key, None)
-                    continue
-                if (
-                    (filename and str(value.get("filename", "") or "") == filename)
-                    or (
-                        logical_id
-                        and str(value.get("logical_id", "") or "") == logical_id
-                    )
-                ):
+                if _override_for_entry(entry, {old_key: value}) is value:
+                    if value.get("final_chs") is not None:
+                        archived_old.append({
+                            "override_key": old_key, "prior": dict(value),
+                            "source_member_id": member_id,
+                            "operation": "restore_base",
+                        })
                     overrides.pop(old_key, None)
         else:
-            overrides[key] = {
+            latest = {
                 "final_chs": new_chs,
                 "modified": True,
                 "filename": filename,
@@ -1012,6 +1015,17 @@ def _update_project_subtitles_locked(
                 "source_member_id": member_id,
                 "source_text_sha256": _official_source_sha256(entry),
             }
+            for old_key, value in list(overrides.items()):
+                if _override_for_entry(entry, {old_key: value}) is value:
+                    if dict(value) != latest and value.get("final_chs") is not None:
+                        archived_old.append({
+                            "override_key": old_key, "prior": dict(value),
+                            "source_member_id": member_id,
+                            "operation": "superseded",
+                        })
+                    if old_key != key:
+                        overrides.pop(old_key, None)
+            overrides[key] = latest
         if key in confirmations:
             if confirmations[key]:
                 review_state[key] = True
@@ -1038,6 +1052,7 @@ def _update_project_subtitles_locked(
     if updated_count < 1:
         raise ValueError("No matching subtitle entries were updated")
 
+    _archive_superseded_subtitle_edits(output_dir, archived_old)
     atomic_write_text(
         output_dir / "subtitles_overrides.json",
         json.dumps(overrides, ensure_ascii=False, indent=2),
