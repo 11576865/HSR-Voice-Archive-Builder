@@ -80,7 +80,7 @@ Available modes:
 - **`\kf`** — smooth fill/sweep behavior provided by libass;
 - **dynamic clip** — a separate highlight layer using `\clip(...)` plus timed `\t(...)` changes.
 
-Dynamic clip is currently restricted to a single rendered line. Multi-line text falls back rather than inventing an ambiguous sweep path. The discrete and smooth karaoke writers use the ASS \kt absolute-start tag to preserve initial silence and gaps between aligned words, rather than just concatenating word durations.
+Dynamic clip is restricted to a single rendered line. Multi-line text falls back for dynamic clip only; discrete and smooth Karaoke now preserve verified words over layout-inserted line breaks if no timed word is split. Incompatible line wrapping falls back to plain text without fabricated phoneme boundaries. The discrete and smooth karaoke writers use the ASS \kt absolute-start tag to preserve initial silence and gaps between aligned words, rather than just concatenating word durations.
 
 For non-Chinese source projects, word timing normally applies to the primary/source-language subtitle. Chinese target text is not assigned source-language word timing.
 
