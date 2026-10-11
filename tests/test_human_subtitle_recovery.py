@@ -137,6 +137,27 @@ class HumanChineseRecoveryTests(unittest.TestCase):
             legacy = preview_human_subtitle_recovery(target, legacy_backup)
             self.assertEqual(legacy["rows"][0]["status"], "legacy_provenance")
 
+    def test_missing_current_audio_fingerprint_and_duplicate_cue_id_are_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            backup = self._backup(root / "source")
+            target, output = self._project(root / "target")
+            manifest_file = output / "manifest.json"
+            data = json.loads(manifest_file.read_text(encoding="utf-8"))
+            data["entries"][0]["sha256"] = ""
+            manifest_file.write_text(json.dumps(data), encoding="utf-8")
+            no_audio = preview_human_subtitle_recovery(target, backup)
+            self.assertEqual(no_audio["rows"][0]["status"], "missing_audio_provenance")
+            self.assertEqual(no_audio["restorable"], 0)
+
+            data["entries"][0]["sha256"] = "1" * 64
+            data["entries"][1]["index"] = data["entries"][0]["index"]
+            manifest_file.write_text(json.dumps(data), encoding="utf-8")
+            duplicate = preview_human_subtitle_recovery(target, backup)
+            self.assertEqual(duplicate["rows"][0]["status"],
+                             "source_missing_or_ambiguous")
+            self.assertEqual(duplicate["restorable"], 0)
+
     def test_conflicting_current_proofreading_and_changed_manifest_refused(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
