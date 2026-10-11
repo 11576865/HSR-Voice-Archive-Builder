@@ -88,9 +88,13 @@ class RemoteApplyLifecycleTests(unittest.TestCase):
             return {"targets": {"new.wav": {"row_idx": 0}},
                     "reference_targets": {}, "unresolved": []}
         def fake_download(_plan, destination, progress, **kwargs):
-            _wav(destination / "new.wav")
-            return {"completed": [{"filename": "new.wav", "status": "ok"}],
-                    "failed": [], "unresolved": []}
+            downloaded = destination / "new.wav"
+            _wav(downloaded)
+            return {"completed": [{
+                "filename": "new.wav", "status": "ok",
+                "path": str(downloaded),
+                "sha256": hashlib.sha256(downloaded.read_bytes()).hexdigest(),
+            }], "failed": [], "unresolved": []}
         return [
             patch("app.server.download_result_json", side_effect=fake_meta),
             patch("app.server.resolve_targets", side_effect=fake_resolve),
