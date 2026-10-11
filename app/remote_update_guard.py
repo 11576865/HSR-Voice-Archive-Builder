@@ -7,7 +7,9 @@ basename. Reject these collisions instead of overwriting original speech.
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import re
 from pathlib import Path, PurePosixPath
 from typing import Any
 
@@ -104,6 +106,68 @@ def choose_remote_additions(
             "identity resolution required: " + ", ".join(sorted(overlap)[:4])
         )
     return [dict(metadata) for key, metadata in allowed.items() if key in selected_keys]
+
+
+def verified_completed_new_wavs(
+    selected_targets: list[dict[str, Any]],
+    downloaded: dict[str, Any],
+    incoming_dir: Path,
+) -> set[str]:
+    """Accept only WAV bytes from this exact download session.
+
+    The provider downloader can report an existing file without re-fetching it.
+    Such a cache hit has no content hash and is never sufficient evidence of
+    a newly resolved remote voice. Both server implementations must use a
+    unique incoming directory *and* this fail-closed result validator.
+    """
+    if not isinstance(selected_targets, list) or not isinstance(downloaded, dict):
+        raise ValueError("Invalid remote voice download result")
+    expected: dict[str, str] = {}
+    for target in selected_targets:
+        if not isinstance(target, dict):
+            raise ValueError("Invalid selected remote voice")
+        name = _simple_filename(str(target.get("filename") or ""))
+        if name.casefold() in expected:
+            raise ValueError(f"Duplicate selected remote basename: {name}")
+        expected[name.casefold()] = name
+    completed = downloaded.get("completed")
+    if not isinstance(completed, list):
+        raise ValueError("Remote download result has no completed records")
+    accepted: set[str] = set()
+    for record in completed:
+        if not isinstance(record, dict):
+            raise ValueError("Invalid completed remote voice record")
+        name = _simple_filename(str(record.get("filename") or ""))
+        canonical = expected.get(name.casefold())
+        if canonical != name:
+            raise ValueError(f"Unexpected completed remote voice: {name}")
+        if name in accepted:
+            raise ValueError(f"Duplicate completed remote voice: {name}")
+        if record.get("status") != "ok":
+            raise ValueError(f"Unverified cached remote voice is not publishable: {name}")
+        path = incoming_dir / name
+        # Compare the direct (non-resolved) expected path; a symlink must
+        # never turn a different external file into this download's evidence.
+        if path.is_symlink() or not path.is_file():
+            raise ValueError(f"Verified downloaded WAV missing: {name}")
+        declared_path = str(record.get("path") or "")
+        if not declared_path or Path(declared_path).absolute() != path.absolute():
+            raise ValueError(f"Remote download path mismatch: {name}")
+        expected_digest = str(record.get("sha256") or "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_digest):
+            raise ValueError(f"Missing downloaded WAV checksum: {name}")
+        digest = hashlib.sha256(path.read_bytes()).hexdigest()
+        if digest != expected_digest:
+            raise ValueError(f"Downloaded WAV checksum mismatch: {name}")
+        # A name and checksum alone do not establish that a .wav file
+        # contains WAV data. Reject obvious mislabeled provider payloads
+        # before publishing a new archive source.
+        with path.open("rb") as stream:
+            header = stream.read(12)
+        if len(header) != 12 or header[:4] != b"RIFF" or header[8:] != b"WAVE":
+            raise ValueError(f"Downloaded file is not a RIFF/WAVE audio file: {name}")
+        accepted.add(name)
+    return accepted
 
 
 def verify_combined_source_no_collisions(
