@@ -483,6 +483,25 @@ def refresh_subtitle_artifacts_from_settings(
         raise ValueError("Manifest entries must be a list")
 
     overrides = load_subtitle_overrides(output_dir)
+    audited_entries = [dict(entry) for entry in entries]
+    _apply_derived_subtitle_fields(
+        audited_entries, overrides, include_review_diagnostics=True,
+    )
+    pending_review = [
+        str(_entry_id(entry))
+        for entry in audited_entries
+        if entry.get("translation_override_stale")
+    ]
+    if pending_review:
+        explanation = (
+            "Official source text changed; review previous human Chinese subtitles "
+            "before generating new ASS/SRT: " + ", ".join(pending_review[:8])
+        )
+        record_subtitle_export(
+            output_dir, state="failed",
+            ass_required=generate_ass, artifact_error=explanation,
+        )
+        raise ValueError(explanation)
     _apply_derived_subtitle_fields(entries, overrides)
     # Validate the entire derived time layer before mutating manifest/CSV or
     # writing new exports. A stale source clock is a hard failure, not a partial refresh.
