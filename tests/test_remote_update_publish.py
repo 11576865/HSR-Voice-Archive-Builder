@@ -133,7 +133,7 @@ class RevisionPublicationTests(unittest.TestCase):
              "does not contain exactly"),
             ("duplicate_row",
              old_index.decode() + "new.wav,new.wav,Duplicate\n",
-             "does not contain exactly"),
+             "Duplicate published source-member"),
             ("wrong_member",
              old_index.decode().replace("new.wav,new.wav,New",
                                         "new.wav,chapter/new.wav,New"),
@@ -153,7 +153,65 @@ class RevisionPublicationTests(unittest.TestCase):
                 )
         self.index.write_bytes(old_index)
         (self.audio / "new.wav").unlink()
-        with self.assertRaisesRegex(ValueError, "missing or unsafe"):
+        with self.assertRaisesRegex(ValueError, "Published indexed WAV missing"):
+            self.publish()
+        self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
+
+    def test_entire_index_must_resolve_before_configuration_switch(self):
+        original_csv = self.index.read_bytes()
+        original_wav = self.audio / "original.wav"
+        original_bytes = original_wav.read_bytes()
+        try:
+            original_wav.unlink()
+            with self.assertRaisesRegex(ValueError, "Published indexed WAV missing"):
+                self.publish()
+            self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
+            original_wav.write_bytes(original_bytes)
+            for suffix, csv_rows, error in [
+                ("wrong_basename",
+                 "filename,source_member_id,english\n"
+                 "other.wav,original.wav,Hello\n"
+                 "new.wav,new.wav,New\n", "filename/member conflict"),
+                ("traversal",
+                 "filename,source_member_id,english\n"
+                 "original.wav,../original.wav,Hello\n"
+                 "new.wav,new.wav,New\n", "Unsafe published source-member"),
+                ("duplicate_original",
+                 original_csv.decode("utf-8") +
+                 "original.wav,original.wav,Repeated\n", "Duplicate published source-member"),
+            ]:
+                with self.subTest(suffix=suffix):
+                    self.index.write_text(csv_rows, encoding="utf-8")
+                    with self.assertRaisesRegex(ValueError, error):
+                        self.publish()
+                    self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
+        finally:
+            self.index.write_bytes(original_csv)
+            original_wav.write_bytes(original_bytes)
+        self.assertFalse((self.root / ".generated" / "incremental_revisions"
+                         / f"{self.revision}.json").exists())
+
+    def test_nested_same_basename_original_members_are_accepted(self):
+        for chapter in ("chapterA", "chapterB"):
+            folder = self.audio / chapter
+            folder.mkdir()
+            (folder / "dup.wav").write_bytes(chapter.encode("utf-8"))
+        with self.index.open("a", encoding="utf-8") as stream:
+            stream.write("dup.wav,chapterA/dup.wav,First\n")
+            stream.write("dup.wav,chapterB/dup.wav,Second\n")
+        published = self.publish()
+        self.assertEqual(published["state"], "active")
+        self.assertTrue((self.audio / "chapterA" / "dup.wav").exists())
+        self.assertTrue((self.audio / "chapterB" / "dup.wav").exists())
+
+    def test_symlink_as_indexed_original_wav_is_refused(self):
+        original = self.audio / "original.wav"
+        original.unlink()
+        try:
+            original.symlink_to(self.root / "wavs" / "original.wav")
+        except (NotImplementedError, OSError):
+            self.skipTest("Symbolic links are not supported in this test environment")
+        with self.assertRaisesRegex(ValueError, "Unsafe published WAV symlink"):
             self.publish()
         self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
 
