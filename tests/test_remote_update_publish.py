@@ -266,6 +266,42 @@ class RevisionPublicationTests(unittest.TestCase):
                          "superseded_or_modified")
         self.assertFalse(revision_status(self.config, self.revision)["can_rollback"])
 
+    def test_published_index_edit_during_prepare_blocks_commit(self):
+        from app.remote_update_publish import atomic_write_json
+        def edit_new_index(path, data):
+            atomic_write_json(path, data)
+            self.index.write_bytes(self.index.read_bytes() + b"late index edit\n")
+        with patch("app.remote_update_publish.atomic_write_json",
+                   side_effect=edit_new_index):
+            with self.assertRaisesRegex(ValueError, "index changed after revision preparation"):
+                self.publish()
+        self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
+        self.assertEqual(
+            revision_status(self.config, self.revision)["state"], "not_applied"
+        )
+
+    def test_old_index_edit_during_rollback_prepare_blocks_restoration(self):
+        from app.remote_update_publish import atomic_write_json
+        active = self.publish()
+        previous_index = self.root / "index.csv"
+        def edit_previous_index(path, data):
+            atomic_write_json(path, data)
+            if data.get("state") == "rollback_pending":
+                previous_index.write_bytes(previous_index.read_bytes() +
+                                           b"late concurrent mutation\n")
+        with patch("app.remote_update_publish.atomic_write_json",
+                   side_effect=edit_previous_index):
+            with self.assertRaisesRegex(ValueError, "inputs changed during preparation"):
+                rollback_remote_revision(
+                    self.config, self.revision,
+                    expected_project_sha256=active["current_project_sha256"],
+                )
+        self.assertEqual(load_project(self.root).wav_source,
+                         str(self.audio.relative_to(self.root)))
+        self.assertEqual(revision_status(self.config, self.revision)["state"],
+                         "applied_unfinalized")
+        self.assertFalse(revision_status(self.config, self.revision)["can_rollback"])
+
     def test_rollback_refuses_tampered_old_or_new_index(self):
         active = self.publish()
         original_index = self.root / "index.csv"
