@@ -57,6 +57,7 @@ from .project import (
 )
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
+from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
@@ -1348,7 +1349,7 @@ def api_update_check_remote(
 
 
 @app.post("/api/update/apply-remote")
-def api_update_apply_remote():
+def api_update_apply_remote(selected_filenames: str = Form("")):
     """Download reliably resolved additions, adopt a combined source, and leave rebuild explicit."""
     try:
         config = _active_config()
@@ -1364,15 +1365,14 @@ def api_update_apply_remote():
         if not update_plan_path.is_file():
             raise FileNotFoundError("Check the remote index before downloading additions")
         remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
-        targets = []
-        for item in remote_plan.get("new_logical", []):
-            if isinstance(item, dict):
-                metadata = dict(item.get("metadata") or {})
-                metadata.setdefault("filename", item.get("filename", ""))
-                if metadata.get("filename"):
-                    targets.append(metadata)
-        if not targets:
-            raise ValueError("The latest check contains no new voice records")
+        try:
+            requested = json.loads(selected_filenames) if selected_filenames.strip() else None
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid selected_filenames JSON") from exc
+        targets = choose_remote_additions(
+            remote_plan, output / "manifest.json", index,
+            selected_filenames=requested,
+        )
         project_root = Path(config.root).resolve()
 
         def run(report_progress):
@@ -1432,6 +1432,7 @@ def api_update_apply_remote():
             combined = generated / "combined_audio"
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
+                verify_combined_source_no_collisions(extracted, incoming)
                 staging = temporary_root / "combined"
                 staging.mkdir()
                 # Preserve package-relative member paths so same-basename WAVs
