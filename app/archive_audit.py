@@ -138,6 +138,22 @@ def verify_archive_source_audio(
     entries = document.get("entries") if isinstance(document, dict) else None
     if not isinstance(entries, list) or any(not isinstance(x, dict) for x in entries):
         raise ValueError("Manifest 必须包含 entries 对象数组")
+    # The builder may normalize some WAVs to the archive PCM format in
+    # temporary work space. Manifest hashes then describe the *normalized*
+    # WAV, while the user's source package retains the original bytes.
+    # A hash mismatch in such an archive is inconclusive until the original
+    # per-member pre-normalization fingerprint is available.
+    build_report = document.get("report") if isinstance(document, dict) else {}
+    if not isinstance(build_report, dict):
+        build_report = {}
+    if not build_report and (Path(output_dir) / "build_report.json").is_file():
+        try:
+            build_report = json.loads(
+                (Path(output_dir) / "build_report.json").read_text(encoding="utf-8")
+            )
+        except (OSError, ValueError):
+            build_report = {}
+    normalized_count = int(build_report.get("count_wav_pcm_normalized") or 0) if isinstance(build_report, dict) else 0
 
     if report_progress:
         report_progress("resolve", "正在定位原始语音包并检查来源成员身份", 0, max(1, len(entries)))
@@ -151,6 +167,7 @@ def verify_archive_source_audio(
     counts = {
         "verified": 0, "mismatch": 0, "missing": 0,
         "unverifiable": 0, "ambiguous": 0, "changed_during_verify": 0,
+        "normalization_ambiguous": 0,
     }
     group_counts: dict[str, dict[str, Any]] = {}
     findings: list[dict[str, Any]] = []
@@ -162,7 +179,7 @@ def verify_archive_source_audio(
         per_group = group_counts.setdefault(group, {
             "name": group, "verified": 0, "mismatch": 0,
             "missing": 0, "unverifiable": 0, "ambiguous": 0,
-            "changed_during_verify": 0,
+            "changed_during_verify": 0, "normalization_ambiguous": 0,
         })
         code = ""
         detail = ""
@@ -193,10 +210,13 @@ def verify_archive_source_audio(
                             or before.st_mtime_ns != after.st_mtime_ns):
                         code, detail = "changed_during_verify", "WAV 在流式校验期间发生变化"
                     elif actual != expected:
-                        code, detail = "mismatch", (
+                        code = "normalization_ambiguous" if normalized_count > 0 else "mismatch"
+                        detail = (
                             f"{resolved_member} · expected {expected[:16]}…"
                             f" / observed {actual[:16]}…"
                         )
+                        if normalized_count > 0:
+                            detail += " · 本档案曾规范化 PCM；须核对构建前 WAV 哈希，不能直接断定损坏"
                     else:
                         code = "verified"
                         verified_bytes += after.st_size
@@ -226,7 +246,7 @@ def verify_archive_source_audio(
                 "scope": "source-wav-byte-audit",
                 "source_package_changed": True,
                 "summary": counts | {"total": len(entries), "verified_bytes": verified_bytes,
-                                      "trusted_complete": False},
+                                      "trusted_complete": False, "normalized_wav_count": normalized_count},
                 "groups": list(group_counts.values()),
                 "findings": findings[:MAX_ISSUES],
             }
@@ -239,6 +259,7 @@ def verify_archive_source_audio(
         "summary": counts | {
             "total": len(entries), "verified_bytes": verified_bytes,
             "trusted_complete": len(entries) > 0 and counts["verified"] == len(entries),
+            "normalized_wav_count": normalized_count,
         },
         "groups": list(group_counts.values()),
         "findings": findings,
