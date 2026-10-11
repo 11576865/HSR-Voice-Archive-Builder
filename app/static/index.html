@@ -5120,8 +5120,9 @@ function updatePlanSummaryText(plan){
 
 function showPlan(plan){
   currentUpdatePlan=plan;
-  selectedRemoteAdditions=new Set((plan?.remote_rows!==undefined?(plan?.new_logical||[]):[])
-    .map(item=>updateItemFilename(item)).filter(Boolean));
+  // An explicitly reviewed incremental selection begins empty. Inspect
+  // candidates before opting into downloads; never silently check all.
+  selectedRemoteAdditions=new Set();
   const c=plan.counts||{};
   const state=document.getElementById('updatePlanState');
   if(state)state.textContent=plan.applied?'已应用':'检查完成';
@@ -6165,7 +6166,12 @@ async function saveSubtitleItemInBackground(targetSub){
       const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
+        body:JSON.stringify({subtitles:[{
+          id:sentId,final_chs:sentText,
+          expected_final_chs:String(targetSub._savedFinal??''),
+          expected_source_member_id:String(targetSub.source_member_id||''),
+          expected_source_text_sha256:String(targetSub.source_text_sha256||'')
+        }]})
       });
       if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
       const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
@@ -7534,7 +7540,8 @@ async function saveLayoutCueText(){
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{
         id,final_chs:submitted,expected_final_chs:state.saved,
-        expected_source_member_id:String(sub.source_member_id||'')
+        expected_source_member_id:String(sub.source_member_id||''),
+        expected_source_text_sha256:String(sub.source_text_sha256||'')
       }]})
     });
     if(!currentProject||layoutActiveProjectKey()!==key)return false;
