@@ -90,3 +90,46 @@ A byte audit is deliberately **opt-in**, not an automatic preliminary step
 on every panel render. A user switching to another project while the task runs
 must not see its result attached to the new project's archive view. Full
 actual-device and large-archive acceptance remains independent of CI.
+
+## Remote incremental voice updates: selective adoption and identity fence
+
+The existing Update review list now allows each **new** remote voice to be
+selected or deselected, including filtered-by-chapter/character/text bulk
+selection. Existing-source changes, ambiguous identity and variant candidates
+remain review-only; they are not silently promoted into the download list.
+The existing **Apply remote updates** API accepts an optional JSON array
+`selected_filenames` (form field). An omitted field retains backward-compatible
+all-new selection, while `[]` is explicitly rejected (never treated as all).
+
+Before starting any network work, the backend confirms all selected names
+belong to the current `new_logical` plan and are unambiguous WAV basenames,
+that the plan is a **remote** index comparison, and that its embedded
+`manifest_sha256` still matches the current archive. Old update plans
+without that digest require a fresh check. The server also refuses an
+incremental addition whose basename matches any existing member in the
+manifest or current project index (case-insensitive). This conservative guard
+is necessary because the current remote audio provider resolves filenames,
+not full package-relative source-member identities.
+
+At commit time the original extracted WAV members preserve their source
+subdirectories on **both** FastAPI and Termux Lite. The system checks actual
+source WAV basenames before copying and aborts rather than overwriting a
+different original member. Only the files confirmed successful **in this
+application run** enter the combined directory; stale WAV files left in
+`.generated/incremental_audio` from earlier jobs cannot sneak into a
+user's restricted selection. On success, the existing explicit rebuild
+boundary still applies. Human subtitle overrides remain independent output
+sidecars; this update does not rewrite them or auto-accept changed source
+lines. This is not yet a cross-process transactional update mechanism.
+
+### Evidence
+
+- `app/remote_update_guard.py`, `app/remote_index.py`
+- `app/server.py`, `app/lite_server.py`
+- Existing `app/static/index.html` Update list
+- `tests/test_remote_update_guard.py`
+
+The remote audio dataset is still filename-keyed. Distinct same-basename
+voices cannot safely be imported through this incremental path until
+provider records supply disambiguating member IDs. Those can continue to
+be built from a local voice package with its original path hierarchy.
