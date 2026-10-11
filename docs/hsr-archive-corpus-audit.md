@@ -51,3 +51,41 @@ integrity. Failures do not rewrite files.
 Remaining possibilities (not part of this delivery): optional actual-WAV
 hash scans with progress and cancellation, more complete multilingual
 forced-alignment evaluation, and full live-project acceptance.
+
+
+## Optional physical original-WAV checksum verification
+
+The same existing archive-record panel now offers **逐个核验原始 WAV 字节**.
+Both backend variants implement:
+
+\`POST /api/project/{project_id}/archive/verify-sources\`
+
+This starts an \`archive-verify\` progress job; it does not hold the UI thread
+while scanning a character package. It resolves the original configured source
+tree once (a ZIP/7z may need the existing \`.state/reference-preview\` extraction
+cache), uses full package-relative \`source_member_id\` first, and permits a
+basename fallback only when it is unambiguous. It streams WAV bytes through
+SHA-256, checks per-file stat identity before/after hashing, and compares the
+observed SHA-256 against \`manifest.json\`. Package archive stat identity is
+also checked around the verification run.
+
+Results distinguish:
+
+- \`verified\`: source WAV bytes matched the Manifest SHA-256;
+- \`mismatch\`: the source exists but its content hash differs;
+- \`missing\`: exact member or unique-basename WAV not found;
+- \`ambiguous\`: multiple same-basename sources with no explicit member ID;
+- \`unverifiable\`: bad/missing expected hash, unsafe symlink path, or I/O failure;
+- \`changed_during_verify\`: WAV size/mtime changed while being streamed;
+- \`source_package_changed\`: ZIP/7z stat changed during the run, so all prior
+  partial results are *not* a trustworthy all-source certification.
+
+A \`trusted_complete\` result only means all referenced **original WAV member
+bytes** were available and matched the manifest at this run. It does not prove
+the archive's assembled FLAC has the same decoded PCM, nor that derived ASS/SRT,
+AI translation or human proofreading is correct.
+
+A byte audit is deliberately **opt-in**, not an automatic preliminary step
+on every panel render. A user switching to another project while the task runs
+must not see its result attached to the new project's archive view. Full
+actual-device and large-archive acceptance remains independent of CI.
