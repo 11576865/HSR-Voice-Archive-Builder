@@ -395,6 +395,29 @@ class TestWordAlignment(unittest.TestCase):
                 })
             self.assertFalse((output / "word_alignments.json").exists())
 
+    def test_rejected_import_does_not_rewrite_existing_sidecar(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            _config, output = self._make_project(Path(td))
+            words = [{"word": "Hello ", "start": 0.1, "end": 0.4},
+                     {"word": "world", "start": 0.6, "end": 1.2}]
+            ok = import_word_alignments(output, {
+                "alignments": [{"id": 1, "words": words}],
+            })
+            self.assertEqual(ok["imported_count"], 1)
+            cache_path = output / "word_alignments.json"
+            before = cache_path.read_bytes()
+            failed = import_word_alignments(output, {
+                "alignments": [{
+                    "id": 1,
+                    "source_audio_sha256": "f" * 64,
+                    "words": words,
+                }],
+            })
+            self.assertEqual(failed["imported_count"], 0)
+            self.assertEqual(failed["rejected"][0]["reason"], "source_audio_changed")
+            self.assertEqual(cache_path.read_bytes(), before)
+            self.assertEqual(alignment_diagnostics(output)["usable"], 1)
+
     def test_local_mock_en_ja_ko_alignment_is_read_only_and_bound(self) -> None:
         from types import SimpleNamespace
         samples = [
