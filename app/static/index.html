@@ -3985,9 +3985,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
         <div class="actions">
           <button type="button" id="updateOnlyActionableBtn">只看需处理</button>
+          <button type="button" id="updateSelectVisibleBtn">选中当前可见新增</button>
+          <button type="button" id="updateClearVisibleBtn">取消当前可见新增</button>
           <button type="button" id="updateCopySummaryBtn">复制摘要</button>
         </div>
       </div>
+      <div id="updateSelectionStatus" class="small muted" role="status" aria-live="polite">远程检查后可选择本次应用的新增语音。</div>
       <div class="update-review-tools">
         <div>
           <label for="updateSearchQuery">搜索变化</label>
@@ -4930,6 +4933,7 @@ async function startArchiveSourceVerification(){
 document.getElementById('archiveVerifyBtn')?.addEventListener('click',startArchiveSourceVerification);
 
 let currentUpdatePlan=null;
+let selectedRemoteAdditions=new Set();
 let currentUpdateFilter='all';
 let updateOnlyActionable=false;
 let updateSearchQuery='';
@@ -4958,6 +4962,27 @@ function updatePlanEntries(plan){
     for(const item of (plan?.[key]||[]))rows.push({category:key,item});
   }
   return rows;
+}
+function currentUpdateVisibleRows(){
+  let rows=updatePlanEntries(currentUpdatePlan);
+  if(currentUpdateFilter!=='all')rows=rows.filter(row=>row.category===currentUpdateFilter);
+  if(updateOnlyActionable)rows=rows.filter(row=>['new_logical','changed_existing','ambiguous','variant_of_existing'].includes(row.category));
+  const query=updateSearchQuery.trim().toLocaleLowerCase();
+  if(query)rows=rows.filter(row=>updateRowSearchText(row).includes(query));
+  return rows;
+}
+function updateSelectionDisplay(){
+  const isRemote=currentUpdatePlan?.remote_rows!==undefined;
+  const total=(currentUpdatePlan?.new_logical||[]).length;
+  const status=document.getElementById('updateSelectionStatus');
+  if(status)status.textContent=isRemote
+    ? '本次选中新增语音 '+selectedRemoteAdditions.size+' / '+total+'；只下载选中项，已有变化和身份歧义不会自动覆盖。'
+    : '远程检查后可选择本次应用的新增语音；本地候选扫描不会触发下载。';
+  const button=document.getElementById('applyRemoteBtn');
+  if(button){
+    button.disabled=!isRemote||!selectedRemoteAdditions.size||!!currentUpdatePlan?.applied;
+    button.textContent='下载并应用选中新增语音 ('+selectedRemoteAdditions.size+')';
+  }
 }
 function updateRowSearchText(row){
   const item=row.item,md=updateItemMetadata(item);
@@ -5009,7 +5034,12 @@ function buildUpdateChange(row){
   }else if(category==='ambiguous'){
     body='<div class="update-change-detail">无法安全确定身份：'+escapeHtml(item?.reason||'unknown')+'。不会自动下载或归入现有条目。</div>';
   }else if(category==='new_logical'){
-    body='<div class="update-change-detail">远程索引首次出现的逻辑语音；应用更新时将尝试精确定位并下载。</div>';
+    const isRemote=currentUpdatePlan?.remote_rows!==undefined;
+    if(isRemote){
+      body='<label class="small"><input type="checkbox" class="update-select-file" '
+        +(selectedRemoteAdditions.has(filename)?'checked':'')+'> 本次下载此条新增语音</label>';
+    }
+    body+='<div class="update-change-detail">远程索引首次出现的逻辑语音；仅选中后才会尝试精确定位并下载。</div>';
     if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
   }else{
     body='<div class="update-change-detail">当前档案中已存在同一条目，远程元数据没有可比较的变化。</div>';
@@ -5018,6 +5048,12 @@ function buildUpdateChange(row){
     '<summary class="update-change-summary"><span class="update-change-title">'+escapeHtml(filename)+'</span><span class="update-change-badges">'+badges.join('')+'</span></summary>'+
     (metaBits.length?'<div class="update-change-meta">'+metaBits.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+
     '<div class="update-change-body">'+body+'</div>';
+  const select=card.querySelector('.update-select-file');
+  if(select)select.addEventListener('change',()=>{
+    if(select.checked)selectedRemoteAdditions.add(filename);
+    else selectedRemoteAdditions.delete(filename);
+    updateSelectionDisplay();
+  });
   return card;
 }
 function renderUpdateReview(){
@@ -5027,11 +5063,8 @@ function renderUpdateReview(){
     list.innerHTML='<div class="update-empty">尚未加载更新计划。</div>';
     title.textContent='全部变化';meta.textContent='运行检查后显示逐项详情。';return;
   }
-  let rows=updatePlanEntries(currentUpdatePlan);
-  if(currentUpdateFilter!=='all')rows=rows.filter(row=>row.category===currentUpdateFilter);
-  if(updateOnlyActionable)rows=rows.filter(row=>['new_logical','changed_existing','ambiguous','variant_of_existing'].includes(row.category));
+  let rows=currentUpdateVisibleRows();
   const query=updateSearchQuery.trim().toLocaleLowerCase();
-  if(query)rows=rows.filter(row=>updateRowSearchText(row).includes(query));
 
   title.textContent=currentUpdateFilter==='all'?'全部变化':updateCategoryLabel(currentUpdateFilter);
   const groupHint=updateGroupBy==='none'?'不分组':' · '+document.getElementById('updateGroupBy')?.selectedOptions?.[0]?.textContent;
@@ -5081,6 +5114,8 @@ function updatePlanSummaryText(plan){
 
 function showPlan(plan){
   currentUpdatePlan=plan;
+  selectedRemoteAdditions=new Set((plan?.remote_rows!==undefined?(plan?.new_logical||[]):[])
+    .map(item=>updateItemFilename(item)).filter(Boolean));
   const c=plan.counts||{};
   const state=document.getElementById('updatePlanState');
   if(state)state.textContent=plan.applied?'已应用':'检查完成';
@@ -5099,8 +5134,8 @@ function showPlan(plan){
       result.textContent='本地候选清单已扫描；新增成员 '+n(c.new_logical)+' 条，待确认 '+n(c.ambiguous)+' 条。';
     }
   }
-  const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn');
-  button.disabled=additions<1||!!plan.applied;
+  const additions=Number(c.new_logical||0);
+  updateSelectionDisplay();
   setRunReport(plan.applied?'增量更新已应用':additions>0?'检查到新增语音':Number(c.changed_existing||0)+Number(c.ambiguous||0)>0?'检查到待处理变化':'没有新增语音',result?.textContent||'',false);
   renderUpdateReview();
   setLog(plan);
@@ -5519,6 +5554,17 @@ document.getElementById('updateOnlyActionableBtn').onclick=()=>{
   document.getElementById('updateOnlyActionableBtn').textContent=updateOnlyActionable?'显示全部':'只看需处理';
   renderUpdateReview();
 };
+for(const [buttonId,checked] of [['updateSelectVisibleBtn',true],['updateClearVisibleBtn',false]]){
+  document.getElementById(buttonId)?.addEventListener('click',()=>{
+    for(const row of currentUpdateVisibleRows().filter(row=>row.category==='new_logical')){
+      const filename=updateItemFilename(row.item);
+      if(checked)selectedRemoteAdditions.add(filename);
+      else selectedRemoteAdditions.delete(filename);
+    }
+    renderUpdateReview();
+    updateSelectionDisplay();
+  });
+}
 document.getElementById('updateCopySummaryBtn').onclick=()=>{
   if(!currentUpdatePlan){setLog('尚未加载更新计划。');return}
   copyTextValue(updatePlanSummaryText(currentUpdatePlan)).then(()=>{
@@ -5587,7 +5633,15 @@ document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
-document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
+document.getElementById('applyRemoteBtn').onclick=async()=>{try{
+  if(!selectedRemoteAdditions.size)throw new Error('至少选择一条新增语音');
+  document.getElementById('applyRemoteBtn').disabled=true;
+  const form=new FormData();
+  form.set('selected_filenames',JSON.stringify([...selectedRemoteAdditions]));
+  const j=await api('/api/update/apply-remote',{method:'POST',body:form});
+  setLog('选中语音应用任务已启动：'+j.job);
+  watchJob(j.job);
+}catch(x){updateSelectionDisplay();setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
 async function exportTranslationRecovery(){
