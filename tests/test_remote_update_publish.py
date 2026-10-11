@@ -124,6 +124,39 @@ class RevisionPublicationTests(unittest.TestCase):
                         (self.root / PROJECT_FILENAME).write_bytes(config_old)
                         self.config = load_project(self.root)
 
+    def test_publish_rejects_wrong_selected_index_member_or_missing_audio(self):
+        old_index = self.index.read_bytes()
+        cases = [
+            ("missing_row",
+             "filename,source_member_id,english\n"
+             "original.wav,original.wav,Hello\n",
+             "does not contain exactly"),
+            ("duplicate_row",
+             old_index.decode() + "new.wav,new.wav,Duplicate\n",
+             "does not contain exactly"),
+            ("wrong_member",
+             old_index.decode().replace("new.wav,new.wav,New",
+                                        "new.wav,chapter/new.wav,New"),
+             "source-member mismatch"),
+            ("missing_filename_column",
+             "id,text\n1,hello\n", "missing filename column"),
+        ]
+        for label, content, reason in cases:
+            with self.subTest(label=label):
+                self.index.write_text(content, encoding="utf-8")
+                with self.assertRaisesRegex(ValueError, reason):
+                    self.publish()
+                self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
+                self.assertFalse(
+                    (self.root / ".generated" / "incremental_revisions"
+                     / f"{self.revision}.json").exists()
+                )
+        self.index.write_bytes(old_index)
+        (self.audio / "new.wav").unlink()
+        with self.assertRaisesRegex(ValueError, "missing or unsafe"):
+            self.publish()
+        self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
+
     def test_save_failure_keeps_prior_config_and_prepared_evidence(self):
         with patch("app.remote_update_publish.save_project",
                    side_effect=OSError("injected disk failure")):
