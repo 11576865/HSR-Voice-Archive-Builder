@@ -76,7 +76,7 @@ class ArchiveAuditTests(unittest.TestCase):
             )
             _set_active(config)
             try:
-                response = TestClient(app).get(
+                response = TestClient(app, base_url="http://127.0.0.1:8765").get(
                     "/api/project/active/archive/audit",
                     headers={"X-HSR-Token": api_token()},
                 )
