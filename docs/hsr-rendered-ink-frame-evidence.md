@@ -21,3 +21,16 @@ The API is `POST /api/subtitle-layout/inspect-rendered-ink` on FastAPI and Termu
 - Existing `scripts/verify_ass_render.py` uses a one-background heuristic and is **not** elevated to this two-background evidence level merely by this addition.
 
 Tests cover black/white contrast, invalid frame sizes, finite timestamps, endpoint wiring, and fractional-time kinetic position through real FFmpeg/libass when available.
+
+
+## Bounded temporal sampling — 2026-10-12
+
+The existing single-frame action now has **检测动态区间（抽样）** in the same subtitle workbench. It reuses **one** synthesized, unsaved ASS for up to 8 real libass sampled instants (server hard maximum 12), each checked using black and white RGB24 backgrounds and the same SafeArea. There is no new timeline or stored domain state.
+
+`subtitle_layout/temporal_samples.py` constructs candidate instants from start/end, midpoint, stratified time anchors, kinetic fades, soft entry, and Karaoke word starts/midpoints/ends when word timings are available. At most 500 alignments contribute events. Sample selection retains important boundaries and fills large temporal gaps. The response names omitted candidates and the maximum gap between samples. It does **not** assign a fictional coverage percentage to continuous time.
+
+FastAPI and Termux Lite expose `POST /api/subtitle-layout/inspect-rendered-interval`. Response includes `scope=bounded_sampled_timestamps_only` and `full_interval_verified=false` unconditionally, with each sampled time, observed ink bbox, status, `violation_count`, `no_visible_ink_count`, `sample_count`, `candidate_count`, `omitted_candidate_count` and `max_unsampled_gap_seconds`. `sampled_violation` is a real sampled detection; `sampled_no_violation` means **no observed sampled violation**, not whole-interval proof; all-blank results are `no_visible_evidence` rather than safe. Renderer exceptions return failure, not partial success.
+
+FastAPI runs this bounded but potentially long rendering request in a worker thread, while Termux Lite already has request threading. Browser aborts prevent presentation of stale responses but do **not** cancel the server's FFmpeg process after launch. The PR's libass workflow runs dedicated real-FFmpeg regression tests, so a standard CI environment lacking FFmpeg is not counted as sufficient test evidence.
+
+Still pending: full temporal raster sweep or proof based on modeled effect extrema; real target device/font parity; end-to-end saved-ASS artifact identity; high-cost long-cue latency and cancellation; detection of completely clipped offscreen glyphs. The RGB16 threshold leaves very faint effects unobserved.

@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -727,6 +727,30 @@ class Handler(BaseHTTPRequestHandler):
                 config=config, word_alignments=word_alignments,
                 duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
                 timestamp=_float(data.get("preview_timestamp"), 1.0),
+            )
+            self._json(result)
+            return
+
+
+        if path == "/api/subtitle-layout/inspect-rendered-interval":
+            raw = data.get("word_alignments", "")
+            word_alignments = None
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        word_alignments = parsed
+                except (TypeError, ValueError):
+                    word_alignments = None
+            result = inspect_rendered_ink_interval(
+                english_text=data.get("english_text", ""),
+                chinese_text=data.get("chinese_text", ""),
+                source_language=data.get("source_language", "en") or "en",
+                target_language=data.get("target_language", "zh-CN") or "zh-CN",
+                config=preview_config_from_payload(data),
+                word_alignments=word_alignments,
+                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                sample_limit=_int(data.get("sample_limit"), 8),
             )
             self._json(result)
             return

@@ -3556,6 +3556,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                     <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewInkCheckBtn" title="按需在当前时间点用真实 FFmpeg/libass 的黑白背景差分检查可见像素，不代表整段字幕均安全">检测当前帧边界</button>
+                    <button type="button" class="secondary" id="previewInkSpanBtn" title="抽取字幕起止、词级变化、淡入淡出和中间时间点；只对抽样帧提供证据">检测动态区间（抽样）</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
                     <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
                   </div>
@@ -6852,11 +6853,64 @@ async function renderLibassPreview(){
 }
 
 
+
+async function inspectRenderedInkInterval(){
+  const status=document.getElementById('previewInkCheckStatus');
+  const generation=++renderedInkGeneration;
+  const payload={...libassPreviewPayload(),sample_limit:8};
+  const identity=currentLibassPreviewIdentity();
+  const current=()=>generation===renderedInkGeneration&&identity===currentLibassPreviewIdentity();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  if(renderedInkController)renderedInkController.abort();
+  renderedInkController=controller;
+  for(const id of ['previewInkCheckBtn','previewInkSpanBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=true;
+  }
+  try{
+    if(status){status.textContent='正在按需抽样至多 8 个真实 libass 时间点；结果不代表未取样时间。';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/inspect-rendered-interval',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
+    });
+    if(!current())return;
+    const result=await response.json();
+    if(!response.ok||result.ok!==true)throw new Error(result.error||'动态抽样失败');
+    if(result.scope!=='bounded_sampled_timestamps_only'||result.full_interval_verified!==false)throw new Error('抽样证据声明不符合预期');
+    const total=Number(result.sample_count||0);
+    const gap=Number(result.max_unsampled_gap_seconds||0).toFixed(2);
+    const omitted=Number(result.omitted_candidate_count||0);
+    const cover='已检测 '+total+' 个时间点，最大相邻采样间隔 '+gap+' s；'+omitted+' 个候选点未抽样，未验证中间连续时间。';
+    if(result.status==='sampled_violation'){
+      const bad=(result.samples||[]).filter(row=>row.status==='outside_safe_area').map(row=>Number(row.timestamp_seconds).toFixed(2)+'s');
+      status.textContent='检测到 '+result.violation_count+' 个越界帧（'+bad.slice(0,6).join('、')+'）。'+cover;
+      status.className='small status-bad';
+    }else if(result.status==='no_visible_evidence'){
+      status.textContent='未检测到任何可见字幕像素，不能判定安全。'+cover;
+      status.className='small status-warn';
+    }else if(result.status==='sampled_no_violation'){
+      status.textContent='已抽样帧未发现越界（其中 '+result.no_visible_ink_count+' 帧无可见像素）；'+cover;
+      status.className='small status-warn';
+    }else throw new Error('未识别的抽样结果');
+    if(result.word_alignment_input_truncated)status.textContent+=' 词级输入超过 500 条，候选事件已截断。';
+  }catch(err){
+    if(!current())return;
+    if(status){status.textContent='动态帧抽样失败：'+shortError(err)+'；未知安全状态。';status.className='small status-bad';}
+  }finally{
+    if(renderedInkController===controller)renderedInkController=null;
+    if(generation===renderedInkGeneration){
+      for(const id of ['previewInkCheckBtn','previewInkSpanBtn']){
+        const button=document.getElementById(id);if(button)button.disabled=false;
+      }
+    }
+  }
+}
+
 function invalidateRenderedInkCheck(){
   renderedInkGeneration++;
   if(renderedInkController){renderedInkController.abort();renderedInkController=null;}
-  const button=document.getElementById('previewInkCheckBtn');
-  if(button)button.disabled=false;
+  for(const id of ['previewInkCheckBtn','previewInkSpanBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=false;
+  }
   const status=document.getElementById('previewInkCheckStatus');
   if(status){status.textContent='当前参数或时间点尚未进行真实像素边界检查。';status.className='small muted';}
 }
@@ -8965,6 +9019,7 @@ document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>apply
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
 document.getElementById('previewInkCheckBtn')?.addEventListener('click',inspectRenderedInkAtCurrentTime);
+document.getElementById('previewInkSpanBtn')?.addEventListener('click',inspectRenderedInkInterval);
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();

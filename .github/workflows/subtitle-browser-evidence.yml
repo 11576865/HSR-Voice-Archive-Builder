@@ -4,6 +4,11 @@ on:
   pull_request:
     paths:
       - "app/static/index.html"
+      - "app/ass_preview.py"
+      - "subtitle_layout/rendered_ink.py"
+      - "subtitle_layout/temporal_samples.py"
+      - "tests/test_rendered_ink_boundary.py"
+      - "tests/test_rendered_ink_interval.py"
       - "tests/browser_visual_evidence.py"
       - "tests/test_subtitle_integrated_export.py"
       - "app/subtitles.py"
@@ -58,7 +63,10 @@ jobs:
       - name: Prove generated ASS displays only inside saved time window
         env:
           HSR_LIBASS_EVIDENCE_DIR: artifacts/subtitle-libass
-        run: python -m unittest tests.test_subtitle_integrated_export -v
+        run: |
+          python -m unittest tests.test_subtitle_integrated_export -v
+          python -m unittest tests.test_rendered_ink_boundary -v
+          python -m unittest tests.test_rendered_ink_interval -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
         uses: actions/upload-artifact@v4

@@ -130,6 +130,97 @@ def render_ass_preview_png(
             raise RuntimeError(f"FFmpeg/libass 预览失败: {detail[:1200]}")
         return png_path.read_bytes()
 
+
+def inspect_rendered_ink_interval(
+    *, english_text: str, chinese_text: str,
+    source_language: str, target_language: str,
+    config: SubtitleRenderConfig,
+    word_alignments: list[object] | None = None,
+    duration_seconds: float = 3.0,
+    sample_limit: int = 8,
+) -> dict[str, object]:
+    """Inspect a bounded selection of actual libass frames.
+
+    Successful sampled frames NEVER certify every timestamp or the published ASS.
+    FFmpeg errors fail the whole action: partial renders are not labeled success.
+    """
+    from subtitle_layout.temporal_samples import plan_temporal_samples
+
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("Temporal pixel sampling requires FFmpeg/libass")
+    duration, _ = _preview_times(duration_seconds, 0)
+    # Reject abusive/unbounded or silently coerced sample counts.
+    plan = plan_temporal_samples(
+        duration,
+        word_alignments=word_alignments,
+        enable_karaoke=bool(config.enable_karaoke),
+        enable_kinetic=bool(config.enable_kinetic),
+        fade_in_ms=config.fade_in_ms, fade_out_ms=config.fade_out_ms,
+        enable_soft_entry=bool(config.enable_soft_entry),
+        soft_entry_ms=config.soft_entry_ms,
+        sample_limit=sample_limit,
+    )
+    entry = PreviewEntry(
+        english=str(english_text or ""), chinese=str(chinese_text or ""),
+        display_end_seconds=duration, word_alignments=word_alignments,
+    )
+    h = max(0.0, min(0.40, float(config.margin_horizontal_percent)))
+    v = max(0.0, min(0.40, float(config.margin_vertical_percent)))
+    area = SafeArea(
+        margin_left_percent=h, margin_right_percent=h,
+        margin_top_percent=v, margin_bottom_percent=v,
+    )
+    safe = {"x_min": area.x_min, "x_max": area.x_max,
+            "y_min": area.y_min, "y_max": area.y_max}
+    samples: list[dict[str, object]] = []
+    with tempfile.TemporaryDirectory(prefix="hsr-ass-time-ink-") as td:
+        ass_path = Path(td) / "span.ass"
+        _write_preview_ass(ass_path, entry, config, source_language, target_language)
+        for item in plan["samples"]:
+            stamp = float(item["timestamp_seconds"])
+            black = _render_raw_rgb(ffmpeg, ass_path, timestamp=stamp, background="black")
+            white = _render_raw_rgb(ffmpeg, ass_path, timestamp=stamp, background="white")
+            box = visible_ink_bbox(black, white, 1920, 1080, threshold=16)
+            if box is None:
+                outcome = "no_visible_ink"
+            elif safe["x_min"] <= box[0] and box[2] <= safe["x_max"] and safe["y_min"] <= box[1] and box[3] <= safe["y_max"]:
+                outcome = "inside_safe_area"
+            else:
+                outcome = "outside_safe_area"
+            samples.append({
+                "timestamp_seconds": stamp,
+                "reasons": item["reasons"],
+                "bbox": list(box) if box else None,
+                "status": outcome,
+            })
+    violations = sum(row["status"] == "outside_safe_area" for row in samples)
+    empty = sum(row["status"] == "no_visible_ink" for row in samples)
+    observed = len(samples) - empty
+    status = "sampled_violation" if violations else "no_visible_evidence" if not observed else "sampled_no_violation"
+    return {
+        "ok": True,
+        "renderer": "ffmpeg-libass",
+        "evidence": "bounded_dual_background_rgb_samples",
+        "scope": "bounded_sampled_timestamps_only",
+        "full_interval_verified": False,
+        "status": status,
+        "duration_seconds": duration,
+        "threshold_rgb": 16,
+        "safe_area": safe,
+        "sample_count": len(samples),
+        "visible_sample_count": observed,
+        "no_visible_ink_count": empty,
+        "violation_count": violations,
+        "samples": samples,
+        "candidate_count": plan["candidate_count"],
+        "omitted_candidate_count": plan["omitted_candidate_count"],
+        "recognized_word_count": plan["recognized_word_count"],
+        "word_alignment_input_truncated": plan["word_alignment_input_truncated"],
+        "max_unsampled_gap_seconds": plan["max_unsampled_gap_seconds"],
+        "sample_limit": plan["sample_limit"],
+    }
+
 def _preview_times(duration_seconds: float, timestamp: float) -> tuple[float, float]:
     duration = float(duration_seconds)
     instant = float(timestamp)

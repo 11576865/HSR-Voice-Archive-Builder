@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -783,6 +783,30 @@ async def api_subtitle_layout_render_preview(request: Request):
             status_code=400,
         )
 
+
+
+@app.post("/api/subtitle-layout/inspect-rendered-interval")
+async def api_subtitle_layout_inspect_rendered_interval(request: Request):
+    try:
+        from starlette.concurrency import run_in_threadpool
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Rendered interval inspection payload must be an object")
+        alignments = data.get("word_alignments")
+        result = await run_in_threadpool(
+            inspect_rendered_ink_interval,
+            english_text=str(data.get("english_text") or ""),
+            chinese_text=str(data.get("chinese_text") or ""),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            config=preview_config_from_payload(data),
+            word_alignments=alignments if isinstance(alignments, list) else None,
+            duration_seconds=float(data.get("preview_duration_seconds") if data.get("preview_duration_seconds") is not None else 3.0),
+            sample_limit=data.get("sample_limit", 8),
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 @app.get("/api/status")
 def api_status():

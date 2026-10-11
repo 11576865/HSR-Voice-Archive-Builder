@@ -439,7 +439,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("'/word-alignments'", html)
         self.assertIn("word_alignments:Array.isArray(layoutStressSample?.word_alignments)", html)
         self.assertIn("preview_duration_seconds:previewDuration", html)
-        self.assertIn("preview_timestamp:Math.max(0.01,previewDuration*previewPercent)", html)
+        self.assertIn("preview_timestamp:Math.max(0,Math.min(previewDuration-0.01,previewDuration*previewPercent))", html)
         self.assertIn('id="prevEnableArchiveHud"', html)
         self.assertIn('id="prevArchiveHudSize"', html)
         self.assertIn('id="prevArchiveHudOpacity"', html)
