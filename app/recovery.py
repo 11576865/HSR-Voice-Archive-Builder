@@ -197,6 +197,22 @@ def build_text_recovery(config: ProjectConfig) -> tuple[bytes, str, dict[str, An
     if index is not None and index.is_file():
         files["indexes/current.csv"] = _encode_file(index)
 
+    # Include manually edited Chinese subtitles and their append-only
+    # provenance journal in every text-only recovery package. On import,
+    # the whole verified package is preserved under recovery_imports rather
+    # than silently applying edits to potentially different voice members.
+    output = resolve_project_path(config, config.output_dir)
+    if output is not None:
+        for name in (
+            "subtitles_overrides.json",
+            "subtitles_override_history.jsonl",
+            "subtitle_review_state.json",
+            "subtitle_timing_overrides.json",
+        ):
+            path = output / name
+            if path.is_file():
+                files[f"output/{name}"] = _encode_file(path)
+
     glossary = resolve_project_path(config, config.glossary_path)
     if glossary is not None and glossary.is_file():
         suffix = glossary.suffix.lower() if glossary.suffix else ".txt"
