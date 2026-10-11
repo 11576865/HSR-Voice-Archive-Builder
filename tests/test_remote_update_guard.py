@@ -158,9 +158,9 @@ class RemoteIncrementalSafetyTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "not a RIFF/WAVE"):
                 verified_completed_new_wavs(target, {"completed": [updated]}, root)
             for malformed, reason in [
-                (b"RIFF" + (80).to_bytes(4, "little") + b"WAVE" + b"0" * 32,
+                (b"RIFF" + (80).to_bytes(4, "little") + b"WAVE" + bytes(32),
                  "container length"),
-                (b"RIFF" + (36).to_bytes(4, "little") + b"WAVE" + b"0" * 32,
+                (b"RIFF" + (36).to_bytes(4, "little") + b"WAVE" + bytes(32),
                  "lacks format or audio data"),
             ]:
                 with self.subTest(reason=reason):
