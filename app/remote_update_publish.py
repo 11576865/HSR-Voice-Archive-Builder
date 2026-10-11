@@ -220,6 +220,20 @@ def revision_status(config: ProjectConfig, revision_id: str) -> dict[str, Any]:
         prev_source and prev_source.exists()
         and prev_index and prev_index.is_file()
     )
+    # Existence alone cannot prove the old index still describes the old
+    # source. Refuse rollback if either the previous or new index was edited
+    # after publication, even if the project configuration still matches.
+    previous_index_unchanged = bool(
+        prev_index and prev_index.is_file()
+        and _sha(prev_index) == str(
+            (journal.get("previous_boundary") or {}).get("index_sha256") or ""
+        )
+    )
+    next_index = Path(str(journal.get("new_index_csv") or ""))
+    new_index_unchanged = bool(
+        next_index.is_file()
+        and _sha(next_index) == str(journal.get("new_index_sha256") or "")
+    )
     return {
         "revision_id": revision_id,
         "state": live_state,
@@ -229,8 +243,11 @@ def revision_status(config: ProjectConfig, revision_id: str) -> dict[str, Any]:
         "expected_new_project_sha256": next_sha,
         "manifest_unchanged": same_manifest,
         "prior_resources_exist": prior_resources_exist,
+        "prior_index_unchanged": previous_index_unchanged,
+        "new_index_unchanged": new_index_unchanged,
         "can_rollback": live_state in {"active", "applied_unfinalized"}
-            and same_manifest and prior_resources_exist,
+            and same_manifest and prior_resources_exist
+            and previous_index_unchanged and new_index_unchanged,
         "new_wav_source": str(journal.get("new_wav_source") or ""),
         "new_index_csv": str(journal.get("new_index_csv") or ""),
     }
@@ -273,6 +290,14 @@ def rollback_remote_revision(
         raise ValueError("Unsafe rollback journal project identity")
 
     saved = ProjectConfig(**previous)
+    root = Path(config.root).resolve()
+    snapshot_bytes = json.dumps(
+        {**asdict(saved), "root": str(root)},
+        ensure_ascii=False, indent=2, default=str,
+    ).encode("utf-8")
+    if (hashlib.sha256(snapshot_bytes).hexdigest()
+            != str((journal.get("previous_boundary") or {}).get("project_sha256") or "")):
+        raise ValueError("Rollback journal previous configuration digest mismatch")
     journal["state"] = "rollback_pending"
     atomic_write_json(journal_path, journal)
     # Atomic replace; if a process exits between this and journal finalization,
