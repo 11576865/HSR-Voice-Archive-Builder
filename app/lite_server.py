@@ -536,6 +536,24 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path.startswith("/api/project/") and path.endswith("/archive/verify-sources"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None or not (output / "manifest.json").is_file():
+                raise FileNotFoundError("请先完成档案构建")
+
+            def run(report_progress):
+                return verify_archive_source_audio(
+                    config, output, report_progress=report_progress,
+                )
+
+            job = create_job(
+                "archive-verify", run, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
+            return
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             assert_project_idle(config.root)
