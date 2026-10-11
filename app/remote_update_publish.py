@@ -10,6 +10,7 @@ This is intentionally NOT a cross-process lock or multi-file transaction.
 from __future__ import annotations
 
 import copy
+import csv
 import hashlib
 import json
 import re
@@ -90,6 +91,33 @@ def publish_remote_revision(
         raise ValueError("Published index version is empty or missing")
     if not selected_filenames or len(set(selected_filenames)) != len(selected_filenames):
         raise ValueError("Invalid revision selection")
+    selected = {name.casefold() for name in selected_filenames}
+    if len(selected) != len(selected_filenames):
+        raise ValueError("Selected filenames differ only by case")
+    if any(Path(name).name != name or not name.lower().endswith(".wav")
+           for name in selected_filenames):
+        raise ValueError("Selected WAV identity must be a simple basename")
+    # Validate the final published pair, not merely the incoming download
+    # count. This catches a malformed generated index and missing staged WAV
+    # before the project config is redirected to immutable resources.
+    with updated_index.open("r", encoding="utf-8-sig", newline="") as stream:
+        reader = csv.DictReader(stream)
+        if not reader.fieldnames or "filename" not in reader.fieldnames:
+            raise ValueError("Published index is missing filename column")
+        rows = list(reader)
+    counts: dict[str, int] = {}
+    for row in rows:
+        identity = str(row.get("source_member_id") or row.get("filename") or "")
+        if str(row.get("filename") or "").casefold() in selected:
+            if identity != str(row.get("filename") or ""):
+                raise ValueError("Published added WAV source-member mismatch")
+            key = identity.casefold()
+            counts[key] = counts.get(key, 0) + 1
+    if set(counts) != selected or any(count != 1 for count in counts.values()):
+        raise ValueError("Published index does not contain exactly the selected WAV records")
+    for name in selected_filenames:
+        if not (combined / name).is_file() or (combined / name).is_symlink():
+            raise ValueError(f"Selected published WAV missing or unsafe: {name}")
     if revision_path.exists():
         raise ValueError("Incremental revision ID already exists")
 
