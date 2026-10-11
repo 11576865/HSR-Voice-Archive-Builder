@@ -330,7 +330,13 @@ validates that:
   boundary (not just the previous remote-plan Manifest SHA).
 - Every explicitly selected added WAV has exactly one index record, its
   `source_member_id` equals its basename, and the staged audio file exists.
-  Termux Lite writes the same required `source_member_id` field as FastAPI.
+  **Every inherited row** must also resolve to a real member inside the
+  combined tree, with a matching WAV basename, safe package-relative path,
+  unique case-folded member identity and no symlink component. Legitimate
+  chapter-specific duplicate basenames remain supported because their full
+  member paths are distinct. A missing original WAV now blocks publication,
+  even when all newly downloaded WAVs were valid. Termux Lite writes the same
+  required `source_member_id` field as FastAPI.
 - The new paths are precisely the generated paths for this revision ID.
   Pre-existing versioned resources and their indexes are never removed.
 
@@ -350,7 +356,11 @@ The existing Update panel now provides **增量更新版本与受控回退**. Th
 the inspected live config SHA-256. The rollback uses the same in-process
 per-project mutation exclusion as Build and Apply; it rechecks that the
 revision is still the active project, the Manifest hasn't changed, and the
-old audio/index files exist. It atomically restores the exact old project
+old audio/index files exist **with unchanged old and new index SHA-256**.
+The saved old configuration must reproduce the prior on-disk SHA before
+rollback is allowed; a tampered old configuration in the journal is rejected.
+Indexes and rollback eligibility are rechecked after the preparation
+journal write, immediately before replacing config. It atomically restores the exact old project
 configuration while preserving both audio/index versions. A later build that
 changes Manifest, an intervening config edit, a missing old source, or a
 second attempted rollback is rejected.
@@ -360,7 +370,11 @@ config replacement and after config replacement but before final journal
 state; it verifies interrupted-state detection, safe manual rollback, wrong
 project/config/manifest/index rejection, and FastAPI route behavior. It also
 rejects incomplete or duplicated selected voice entries and mismatched
-`source_member_id` values. `tests/test_jobs_update_mutation.py` covers
+`source_member_id` values. Additional cases cover missing **original** WAV
+members, duplicate or unsafe member paths, existing chapter-specific WAVs
+with the same basename, symlinked files, changed old or new indexes, forged
+rollback snapshots, and injected index edits between journal preparation and
+config publication. `tests/test_jobs_update_mutation.py` covers
 rollback competing with a build.
 
 **Engineering boundary:** These tests are synthetic files and in-process
