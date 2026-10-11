@@ -162,8 +162,16 @@ def _validate_recovery_package_bytes(
         decoded[name] = payload
 
     checkpoint_data = decoded.get("state/.translation_checkpoint.json")
-    if require_checkpoint and checkpoint_data is None:
-        raise ValueError("Recovery package contains no translation checkpoint")
+    manual_names = {
+        "output/subtitles_overrides.json",
+        "output/subtitles_override_history.jsonl",
+        "output/subtitle_review_state.json",
+        "output/subtitle_timing_overrides.json",
+    }
+    if checkpoint_data is None and (
+        require_checkpoint or not any(name in decoded for name in manual_names)
+    ):
+        raise ValueError("Recovery package contains no translation checkpoint or human subtitle evidence")
     if checkpoint_data is not None:
         checkpoint = _read_json_bytes(
             checkpoint_data, "state/.translation_checkpoint.json"
@@ -302,7 +310,7 @@ def auto_recovery_status(config: ProjectConfig) -> dict[str, Any]:
     if has_backup:
         try:
             latest_data = latest.read_bytes()
-            _validate_recovery_package_bytes(latest_data)
+            _validate_recovery_package_bytes(latest_data, require_checkpoint=False)
             package_sha256 = _sha256(latest_data)
             expected_sha256 = str(status.get("package_sha256", "") or "")
             if expected_sha256 and expected_sha256 != package_sha256:
@@ -315,7 +323,7 @@ def auto_recovery_status(config: ProjectConfig) -> dict[str, Any]:
     previous_valid = False
     if previous_exists:
         try:
-            _validate_recovery_package_bytes(previous.read_bytes())
+            _validate_recovery_package_bytes(previous.read_bytes(), require_checkpoint=False)
             previous_valid = True
         except (OSError, ValueError, TypeError):
             previous_valid = False
@@ -349,7 +357,15 @@ def write_auto_text_recovery(
 ) -> dict[str, Any]:
     state = resolve_project_path(config, config.state_dir)
     checkpoint = state / ".translation_checkpoint.json" if state is not None else None
-    if checkpoint is None or not checkpoint.is_file():
+    output = resolve_project_path(config, config.output_dir)
+    has_human_edits = bool(output and any(
+        (output / name).is_file()
+        for name in (
+            "subtitles_overrides.json", "subtitles_override_history.jsonl",
+            "subtitle_review_state.json", "subtitle_timing_overrides.json",
+        )
+    ))
+    if (checkpoint is None or not checkpoint.is_file()) and not has_human_edits:
         status = auto_recovery_status(config)
         status.update({
             "reason": str(reason or "checkpoint-not-ready"),
@@ -359,7 +375,7 @@ def write_auto_text_recovery(
         return status
 
     data, _filename, summary = build_text_recovery(config)
-    _validate_recovery_package_bytes(data)
+    _validate_recovery_package_bytes(data, require_checkpoint=False)
     expected_sha256 = _sha256(data)
 
     directory = _auto_recovery_dir(config)
@@ -373,7 +389,7 @@ def write_auto_text_recovery(
     if latest.is_file():
         try:
             old_data = latest.read_bytes()
-            _validate_recovery_package_bytes(old_data)
+            _validate_recovery_package_bytes(old_data, require_checkpoint=False)
             atomic_write_text(previous, old_data.decode("utf-8"))
         except (OSError, UnicodeDecodeError, ValueError, TypeError):
             # Never promote a known-bad latest package into previous.
@@ -384,7 +400,7 @@ def write_auto_text_recovery(
     # Read after write and validate the exact bytes on disk before reporting
     # success. This catches truncation/corruption rather than trusting the write.
     written = latest.read_bytes()
-    _validate_recovery_package_bytes(written)
+    _validate_recovery_package_bytes(written, require_checkpoint=False)
     actual_sha256 = _sha256(written)
     if actual_sha256 != expected_sha256:
         raise ValueError("Recovery package SHA-256 mismatch after write")
