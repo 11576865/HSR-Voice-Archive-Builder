@@ -139,7 +139,7 @@ def _archive_superseded_subtitle_edits(
     timestamp = datetime.now(timezone.utc).isoformat()
     payload = "".join(
         json.dumps({"archived_at": timestamp, **item},
-                   ensure_ascii=False, sort_keys=True) + "\\n"
+                   ensure_ascii=False, sort_keys=True) + "\n"
         for item in records
     ).encode("utf-8")
     # A single append under subtitle_edit_lock, flushed before current-state
