@@ -180,6 +180,9 @@ def apply_human_subtitle_recovery(
             updates.append({
                 "id": current_id,
                 "final_chs": row["saved_chinese"],
+                # Existing review receipts certify a different editorial
+                # state; the restored translation must be proofread again.
+                "confirmed": False,
                 "expected_final_chs": row["current_chinese"],
                 "expected_source_member_id": member,
                 "expected_source_text_sha256": _current_source_digest(
