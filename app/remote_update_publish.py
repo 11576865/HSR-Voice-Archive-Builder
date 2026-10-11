@@ -105,19 +105,43 @@ def publish_remote_revision(
         if not reader.fieldnames or "filename" not in reader.fieldnames:
             raise ValueError("Published index is missing filename column")
         rows = list(reader)
+    if not rows:
+        raise ValueError("Published index contains no voice records")
+    # The new index is a complete replacement, not a list of additions.
+    # Validate every existing chapter-specific WAV member too; a partial
+    # staged tree must never become the project's active source directory.
     counts: dict[str, int] = {}
-    for row in rows:
-        identity = str(row.get("source_member_id") or row.get("filename") or "")
-        if str(row.get("filename") or "").casefold() in selected:
-            if identity != str(row.get("filename") or ""):
+    seen_members: set[str] = set()
+    for number, row in enumerate(rows, 1):
+        filename = str(row.get("filename") or "").strip().replace("\\", "/")
+        member = str(row.get("source_member_id") or filename).strip().replace("\\", "/")
+        if (not filename or not member or
+                any(part in {"", ".", ".."} for part in member.split("/")) or
+                member.startswith("/") or ":" in member or "\\x00" in member or
+                not member.casefold().endswith(".wav")):
+            raise ValueError(f"Unsafe published source-member identity on row {number}")
+        # Filename can be a package-relative name in historic indexes; its
+        # basename still has to identify the same physical WAV as member.
+        if (Path(filename).name.casefold() != member.split("/")[-1].casefold()
+                or ":" in filename or "\\x00" in filename):
+            raise ValueError(f"Published WAV filename/member conflict on row {number}")
+        key = member.casefold()
+        if key in seen_members:
+            raise ValueError(f"Duplicate published source-member identity: {member}")
+        seen_members.add(key)
+        current = combined
+        for component in member.split("/"):
+            current = current / component
+            if current.is_symlink():
+                raise ValueError(f"Unsafe published WAV symlink: {member}")
+        if not current.is_file():
+            raise ValueError(f"Published indexed WAV missing: {member}")
+        if filename.casefold() in selected:
+            if member != filename:
                 raise ValueError("Published added WAV source-member mismatch")
-            key = identity.casefold()
             counts[key] = counts.get(key, 0) + 1
     if set(counts) != selected or any(count != 1 for count in counts.values()):
         raise ValueError("Published index does not contain exactly the selected WAV records")
-    for name in selected_filenames:
-        if not (combined / name).is_file() or (combined / name).is_symlink():
-            raise ValueError(f"Selected published WAV missing or unsafe: {name}")
     if revision_path.exists():
         raise ValueError("Incremental revision ID already exists")
 
