@@ -5678,7 +5678,11 @@ async function refreshUpdateRevisions(){
       summary.textContent=(labels[record.state]||record.state)+' · '+
         String(record.revision_id||'').slice(0,12)+' · '+
         (record.created_at||'')+'\n'+
-        '语音：'+(record.selected_filenames||[]).join('、');
+        '语音：'+(record.selected_filenames||[]).join('、')+
+        (record.prior_index_unchanged===false?'\n原有索引内容已变化，禁止自动回退':'')+
+        (record.new_index_unchanged===false?'\n新增索引内容已变化，禁止自动回退':'')+
+        (record.manifest_unchanged===false?'\n归档 Manifest 已变化，禁止自动回退':'')+
+        (record.prior_resources_exist===false?'\n旧来源资源缺失，禁止自动回退':'');
       line.append(summary);
       const rollback=document.createElement('button');
       rollback.type='button';
