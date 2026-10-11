@@ -60,6 +60,7 @@ from .project import (
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
 from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions
+from .remote_update_publish import capture_update_boundary, publish_remote_revision, list_remote_revisions, rollback_remote_revision
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
@@ -1375,6 +1376,7 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
             remote_plan, output / "manifest.json", index,
             selected_filenames=requested,
         )
+        update_boundary = capture_update_boundary(config, output / "manifest.json")
         project_root = Path(config.root).resolve()
 
         def run(report_progress):
@@ -1526,7 +1528,12 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
                 writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
                 writer.writerows(existing_rows)
-            update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
+            published = publish_remote_revision(
+                config, manifest_path=output / "manifest.json",
+                expected_boundary=update_boundary, combined=combined,
+                updated_index=updated_index, revision_id=version,
+                selected_filenames=sorted(successful),
+            )
             report = {
                 "resolved": len(resolved["targets"]),
                 "unresolved": resolved["unresolved"],
@@ -1540,6 +1547,8 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
                 "unreferenced_api_translation": len(successful - reference_successful),
                 "api_translation_required": len(successful - reference_successful),
                 "project_updated": True,
+                "revision_id": version,
+                "revision_state": published["state"],
                 "rebuild_required": True,
                 "applied_filenames": sorted(successful),
             }
