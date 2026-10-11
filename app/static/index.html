@@ -3981,6 +3981,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
       </div>
       <div id="updateResult" class="small muted" role="status" aria-live="polite">尚未检查。</div>
+      <details id="updateRevisionRecovery" style="margin-top:10px">
+        <summary>增量更新版本与受控回退</summary>
+        <p class="small muted">仅在新语音尚未重新构建、项目配置及 Manifest 未改变、旧来源仍存在时可回退。不会删除已下载音频，遇到版本变化或中断需重新检查。</p>
+        <div class="actions"><button type="button" id="refreshUpdateRevisionsBtn">核查增量发布记录</button></div>
+        <div id="updateRevisionStatus" class="small muted" role="status" aria-live="polite">尚未检查发布记录。</div>
+        <div id="updateRevisionRows" style="display:grid;gap:8px;margin-top:8px"></div>
+      </details>
 
       <div id="updateStats" class="stats update-stats">
         <button type="button" class="stat existing update-filter" data-update-filter="exact_existing"><b id="uExisting">—</b><span>已存在</span></button>
@@ -5647,6 +5654,60 @@ document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
+async function refreshUpdateRevisions(){
+  const box=document.getElementById('updateRevisionRows');
+  const message=document.getElementById('updateRevisionStatus');
+  box.replaceChildren();
+  if(!currentProject){message.textContent='请先打开项目。';return;}
+  const expectedRoot=String(currentProject.root||'');
+  message.textContent='正在比较发布记录和实际项目配置…';
+  try{
+    const data=await api('/api/update/revisions',{cache:'no-store'});
+    if(String(currentProject?.root||'')!==expectedRoot)throw new Error('项目已切换，请重新检查');
+    const records=data.revisions||[];
+    for(const record of records){
+      const line=document.createElement('div');
+      line.style.cssText='border:1px solid var(--line);border-radius:7px;padding:10px';
+      const summary=document.createElement('div');
+      summary.style.whiteSpace='pre-wrap';
+      const labels={
+        active:'当前活动版本',applied_unfinalized:'配置已切换，提交记录未完成',
+        rolled_back:'已回退',not_applied:'准备中断，尚未生效',
+        superseded_or_modified:'后续项目状态已变化',invalid_journal:'发布记录无效'
+      };
+      summary.textContent=(labels[record.state]||record.state)+' · '+
+        String(record.revision_id||'').slice(0,12)+' · '+
+        (record.created_at||'')+'\n'+
+        '语音：'+(record.selected_filenames||[]).join('、');
+      line.append(summary);
+      const rollback=document.createElement('button');
+      rollback.type='button';
+      rollback.textContent='回退到应用前的音频和索引';
+      rollback.disabled=!record.can_rollback;
+      rollback.style.marginTop='8px';
+      rollback.onclick=async()=>{
+        if(!record.can_rollback||!currentProject||
+           String(currentProject.root||'')!==expectedRoot)return;
+        if(!window.confirm('确认只回退当前项目的音频来源和索引配置？旧版与新版文件都保留；若已构建新成品，请先不要执行。'))return;
+        rollback.disabled=true;
+        try{
+          const form=new FormData();
+          form.set('revision_id',record.revision_id);
+          form.set('expected_project_sha256',record.current_project_sha256);
+          const result=await api('/api/update/rollback',{method:'POST',body:form});
+          message.textContent='已创建受控回退任务；正在等待最终状态…';
+          watchJob(result.job);
+        }catch(err){message.textContent='回退拒绝：'+shortError(err);setLog(String(err));
+          await refreshUpdateRevisions();}
+      };
+      line.append(rollback);box.append(line);
+    }
+    message.textContent=records.length?
+      '已核验 '+records.length+' 条发布记录。仅当前未被修改且原 Manifest 未变化的版本可回退。':
+      '暂无本项目的增量发布记录。';
+  }catch(err){message.textContent='发布记录核查失败：'+shortError(err);setLog(String(err))}
+}
+document.getElementById('refreshUpdateRevisionsBtn').onclick=refreshUpdateRevisions;
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{
   if(!selectedRemoteAdditions.size)throw new Error('至少选择一条新增语音');
   document.getElementById('applyRemoteBtn').disabled=true;
