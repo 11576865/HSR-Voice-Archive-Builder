@@ -215,6 +215,23 @@ class RevisionPublicationTests(unittest.TestCase):
             self.publish()
         self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), self.before)
 
+    def test_stale_loaded_project_does_not_overwrite_external_project_changes(self):
+        stored = json.loads((self.root / PROJECT_FILENAME).read_text(encoding="utf-8"))
+        stored["wav_source"] = "wavs-from-another-process"
+        (self.root / PROJECT_FILENAME).write_text(
+            json.dumps(stored, ensure_ascii=False, indent=2), encoding="utf-8",
+        )
+        before = (self.root / PROJECT_FILENAME).read_bytes()
+        with self.assertRaisesRegex(ValueError, "differs from loaded state"):
+            capture_update_boundary(self.config, self.manifest)
+        with self.assertRaisesRegex(ValueError, "differs from loaded state"):
+            self.publish()
+        self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), before)
+        self.assertFalse(
+            (self.root / ".generated" / "incremental_revisions"
+             / f"{self.revision}.json").exists()
+        )
+
     def test_save_failure_keeps_prior_config_and_prepared_evidence(self):
         with patch("app.remote_update_publish.save_project",
                    side_effect=OSError("injected disk failure")):
