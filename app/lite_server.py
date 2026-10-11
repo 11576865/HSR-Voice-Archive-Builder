@@ -38,6 +38,7 @@ from .reference_workbench import (
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
+from .subtitle_recovery import preview_human_subtitle_recovery, apply_human_subtitle_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -710,6 +711,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/recovery/import":
             config = _active_config()
             result = import_text_recovery(config, data.get("recovery_text", ""))
+            self._json({"ok": True, "result": result, "project": project_summary(config)})
+            return
+
+        if path == "/api/recovery/human/preview":
+            config = _active_config()
+            result = preview_human_subtitle_recovery(config, data.get("recovery_text", ""))
+            self._json({"ok": True, "result": result})
+            return
+
+        if path == "/api/recovery/human/apply":
+            config = _active_config()
+            selected = json.loads(data.get("selected_source_members", "[]"))
+            result = apply_human_subtitle_recovery(
+                config, data.get("recovery_text", ""),
+                selected_source_members=selected,
+                expected_backup_sha256=data.get("expected_backup_sha256", ""),
+                expected_manifest_sha256=data.get("expected_manifest_sha256", ""),
+                expected_project_root=data.get("expected_project_root", ""),
+            )
             self._json({"ok": True, "result": result, "project": project_summary(config)})
             return
 
