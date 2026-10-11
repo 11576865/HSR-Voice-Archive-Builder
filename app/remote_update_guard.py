@@ -106,15 +106,26 @@ def choose_remote_additions(
     return [dict(metadata) for key, metadata in allowed.items() if key in selected_keys]
 
 
-def verify_combined_source_no_collisions(extracted_root: Path, incoming_dir: Path) -> None:
+def verify_combined_source_no_collisions(
+    extracted_root: Path,
+    incoming_dir: Path,
+    *,
+    successful_filenames: set[str] | None = None,
+) -> None:
     """Fail closed before copying any downloaded WAV into a combined archive."""
     existing: set[str] = set()
     for path in extracted_root.rglob("*"):
         if path.is_file() and path.suffix.casefold() == ".wav":
             existing.add(path.name.casefold())
+    selected = (
+        {_simple_filename(name).casefold() for name in successful_filenames}
+        if successful_filenames is not None else None
+    )
     incoming: set[str] = set()
     for path in incoming_dir.iterdir():
         if not path.is_file() or path.name.endswith(".part"):
+            continue
+        if selected is not None and path.name.casefold() not in selected:
             continue
         name = _simple_filename(path.name)
         if path.is_symlink():
@@ -127,3 +138,6 @@ def verify_combined_source_no_collisions(extracted_root: Path, incoming_dir: Pat
             raise ValueError(
                 f"Downloaded voice basename collides with original archive WAV: {name}"
             )
+    if selected is not None and incoming != selected:
+        missing = sorted(selected - incoming)
+        raise ValueError("Downloaded voice files missing from staging: " + ", ".join(missing[:5]))
