@@ -71,6 +71,56 @@ def checkpoint(model: str = "gpt-5.6-terra", english: str = "Hello.") -> dict:
 
 
 class TextRecoveryTests(unittest.TestCase):
+    def test_human_only_auto_backup_preserves_edits_without_ai_checkpoint(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            state_file = root / "state.json"
+            state_dir = root / "external-recovery"
+            project_root = root / "manual-project"
+            write_index(project_root / ".generated" / "quick_index.csv")
+            output = project_root / "output"
+            output.mkdir()
+            history_bytes = (
+                '{"prior":{"final_chs":"最早人工译文"},'
+                '"source_member_id":"chapter/line.wav"}\n'
+            ).encode("utf-8")
+            (output / "subtitles_override_history.jsonl").write_bytes(history_bytes)
+            (output / "subtitles_overrides.json").write_text(
+                '{"1":{"final_chs":"新译文"}}', encoding="utf-8",
+            )
+            with patch("app.project.STATE_FILE", state_file), patch(
+                "app.recovery.STATE_DIR", state_dir,
+            ):
+                config = create_project(
+                    project_root, name="No-translation",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "voice.zip"), output_dir="output",
+                )
+                backup = write_auto_text_recovery(config, reason="pre-delete-safety")
+                self.assertTrue(backup["healthy"], backup)
+                data = Path(backup["path"]).read_bytes()
+                package = json.loads(data)
+                self.assertIn("output/subtitles_override_history.jsonl", package["files"])
+                self.assertIn("output/subtitles_overrides.json", package["files"])
+                self.assertNotIn("state/.translation_checkpoint.json", package["files"])
+                self.assertTrue(backup["has_backup"])
+
+                target_root = root / "import-to"
+                write_index(target_root / ".generated" / "quick_index.csv")
+                target = create_project(
+                    target_root, name="import-human",
+                    index_csv=".generated/quick_index.csv",
+                    wav_source=str(root / "other.zip"), output_dir="output",
+                )
+                imported = import_text_recovery(target, data.decode("utf-8"))
+                self.assertEqual(imported["imported_records"], 0)
+                self.assertTrue(imported["human_subtitle_files_preserved"])
+                self.assertTrue(Path(imported["preserved_package"]).is_file())
+                self.assertFalse((target_root / "output" / "subtitles_overrides.json").exists())
+                self.assertEqual(
+                    Path(imported["preserved_package"]).read_bytes(), data,
+                )
+
     def test_export_contains_text_state_but_no_audio(self) -> None:
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
