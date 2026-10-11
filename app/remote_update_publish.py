@@ -51,6 +51,22 @@ def capture_update_boundary(config: ProjectConfig, manifest_path: Path) -> dict[
         raise FileNotFoundError("Existing index or project configuration missing")
     if not manifest_path.is_file():
         raise FileNotFoundError("Existing archive Manifest missing")
+    # The worker's in-memory ProjectConfig is not authoritative if another
+    # process has edited the project file before this operation begins.
+    # Snapshot hashes alone would bless the newer *file* while later
+    # publishing paths copied from the stale in-memory config.
+    stored = json.loads(config_file.read_text(encoding="utf-8"))
+    if not isinstance(stored, dict):
+        raise ValueError("Invalid stored project configuration")
+    for field in (
+        "index_csv", "wav_source", "output_dir", "source_text_language",
+        "target_language", "reference_text_embedded",
+    ):
+        if field in stored and stored[field] != getattr(config, field):
+            raise ValueError(
+                "Project configuration differs from loaded state; reopen project "
+                "before remote update"
+            )
     return {
         "project_sha256": _sha(config_file),
         "index_sha256": _sha(index),
