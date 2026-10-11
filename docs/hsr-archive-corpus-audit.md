@@ -6,12 +6,12 @@ Date: 2026-10-11
 
 The existing **Archive / Build Records（档案与构建记录）** area contains
 **检查章节与来源覆盖**. It reads the active project's persisted
-\`manifest.json\` and displays group/chapter coverage without adding a
+`manifest.json` and displays group/chapter coverage without adding a
 separate workspace, changing source files, or invoking a build.
 
 Both web backends expose the same read-only route:
 
-\`GET /api/project/{project_id}/archive/audit\`
+`GET /api/project/{project_id}/archive/audit`
 
 The response includes:
 
@@ -25,12 +25,12 @@ The response includes:
 
 ## Invariants
 
-A repeated basename is not a conflict when \`source_member_id\` distinguishes
+A repeated basename is not a conflict when `source_member_id` distinguishes
 the files. Duplicate member identities or indexes are flagged.
 
 A missing target text is **coverage** information and may be intentional;
-the canonical manifest's \`target_text\` is reported without borrowing human
-\`final_chs\` overrides. Source audio positions are not adjusted.
+the canonical manifest's `target_text` is reported without borrowing human
+`final_chs` overrides. Source audio positions are not adjusted.
 
 The audit is intentionally cheap and **manifest-structural-only**. It does
 not reread actual WAV bytes to recompute SHA-256, verify the assembled FLAC's
@@ -40,7 +40,7 @@ integrity. Failures do not rewrite files.
 
 ## Existing Karaoke improvements in this increment
 
-- The ASS \`k\` / \`kf\` compiler preserves real word onsets with \`kt\`.
+- The ASS `k` / `kf` compiler preserves real word onsets with `kt`.
   Initial silence and pauses are not compressed to consecutive voiced durations.
 - The derived alignment sidecar records the manifest original-WAV SHA-256,
   and an audio revision invalidates the cached alignment even if the text
@@ -48,9 +48,7 @@ integrity. Failures do not rewrite files.
 - Existing word timing controls and ASS preview are reused. There is no new
   Karaoke tab or extra subtitle-layout workbench surface.
 
-Remaining possibilities (not part of this delivery): optional actual-WAV
-hash scans with progress and cancellation, more complete multilingual
-forced-alignment evaluation, and full live-project acceptance.
+Remaining possibilities (not part of this delivery): multilingual forced-alignment evaluation, optional per-member pre-normalization provenance, and full live-project acceptance.
 
 
 ## Optional physical original-WAV checksum verification
@@ -58,29 +56,32 @@ forced-alignment evaluation, and full live-project acceptance.
 The same existing archive-record panel now offers **逐个核验原始 WAV 字节**.
 Both backend variants implement:
 
-\`POST /api/project/{project_id}/archive/verify-sources\`
+`POST /api/project/{project_id}/archive/verify-sources`
 
-This starts an \`archive-verify\` progress job; it does not hold the UI thread
+This starts an `archive-verify` progress job; it does not hold the UI thread
 while scanning a character package. It resolves the original configured source
-tree once (a ZIP/7z may need the existing \`.state/reference-preview\` extraction
-cache), uses full package-relative \`source_member_id\` first, and permits a
+tree once (a ZIP/7z may need the existing `.state/reference-preview` extraction
+cache), uses full package-relative `source_member_id` first, and permits a
 basename fallback only when it is unambiguous. It streams WAV bytes through
 SHA-256, checks per-file stat identity before/after hashing, and compares the
-observed SHA-256 against \`manifest.json\`. Package archive stat identity is
+observed SHA-256 against `manifest.json`. Package archive stat identity is
 also checked around the verification run.
 
 Results distinguish:
 
-- \`verified\`: source WAV bytes matched the Manifest SHA-256;
-- \`mismatch\`: the source exists but its content hash differs;
-- \`missing\`: exact member or unique-basename WAV not found;
-- \`ambiguous\`: multiple same-basename sources with no explicit member ID;
-- \`unverifiable\`: bad/missing expected hash, unsafe symlink path, or I/O failure;
-- \`changed_during_verify\`: WAV size/mtime changed while being streamed;
-- \`source_package_changed\`: ZIP/7z stat changed during the run, so all prior
+- `verified`: source WAV bytes matched the Manifest SHA-256;
+- `mismatch`: the source exists but its content hash differs, with no recorded PCM normalization in this build;
+- `normalization_ambiguous`: a source hash differs in a build that normalized some WAVs; without per-member pre-normalization hashes this does not prove corruption and is never treated as trusted;
+- `missing`: exact member or unique-basename WAV not found;
+- `ambiguous`: multiple same-basename sources with no explicit member ID;
+- `unverifiable`: bad/missing expected hash, unsafe symlink path, or I/O failure;
+- `changed_during_verify`: WAV size/mtime changed while being streamed;
+- `source_package_changed`: ZIP/7z stat changed during the run, so all prior
   partial results are *not* a trustworthy all-source certification.
 
-A \`trusted_complete\` result only means all referenced **original WAV member
+A normalized build's aggregate conversion count cannot identify the specific members rewritten. In such a build, mismatches are classified as inconclusive rather than incorrectly called corrupted. This result does not establish original-to-normalized byte equivalence.
+
+A `trusted_complete` result only means all referenced **original WAV member
 bytes** were available and matched the manifest at this run. It does not prove
 the archive's assembled FLAC has the same decoded PCM, nor that derived ASS/SRT,
 AI translation or human proofreading is correct.
