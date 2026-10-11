@@ -13,6 +13,7 @@ from .project import STATE_DIR, atomic_write_json
 JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
 BUILD_KINDS = {"build", "quick-build"}
+MUTATING_KINDS = BUILD_KINDS | {"remote-update-apply"}
 
 
 def now() -> str:
@@ -131,6 +132,14 @@ def create_job(
                 raise RuntimeError(
                     "已有构建任务正在运行，请等待它完成后再开始新的构建"
                 )
+        if kind in MUTATING_KINDS and job.project_root:
+            for active in _JOBS.values():
+                if (active.project_root == job.project_root
+                        and active.kind in MUTATING_KINDS
+                        and active.state in {"queued", "running"}):
+                    raise RuntimeError(
+                        "同一项目已有构建或增量写入任务，拒绝并发修改来源和索引"
+                    )
         _JOBS[job.id] = job
         _persist_locked()
 
