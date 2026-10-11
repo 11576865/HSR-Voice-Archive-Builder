@@ -193,17 +193,24 @@ def _override_for_entry(
             stored_filename = str(exact.get("filename", "") or "")
             stored_logical_id = str(exact.get("logical_id", "") or "")
             stored_member = str(exact.get("source_member_id", "") or "")
+            # A reused numeric row ID is not proof of the same original
+            # voice. Require any recorded identity to agree, and never
+            # apply a fully identity-less historical override to a modern
+            # member-aware row solely by its index.
+            reliable_member = bool(stored_member and member_id and stored_member == member_id)
+            has_stored_identity = bool(stored_filename or stored_logical_id or stored_member)
             if (
-                (not stored_filename or not filename or stored_filename == filename)
-                and (not stored_logical_id or not logical_id or stored_logical_id == logical_id)
-                and (not stored_member or not member_id or stored_member == member_id)
+                (not stored_member or reliable_member)
+                and (not stored_filename or stored_filename == filename or reliable_member)
+                and (not stored_logical_id or stored_logical_id == logical_id or reliable_member)
+                and (has_stored_identity or not (filename or logical_id or member_id))
                 and not (
                     stored_filename and stored_filename in ambiguous_filenames
-                    and (not stored_member or not member_id)
+                    and not reliable_member
                 )
                 and not (
                     stored_logical_id and stored_logical_id in ambiguous_logical_ids
-                    and (not stored_member or not member_id)
+                    and not reliable_member
                 )
             ):
                 return exact
