@@ -59,6 +59,7 @@ from .project import (
 )
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
+from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
@@ -1242,15 +1243,15 @@ class Handler(BaseHTTPRequestHandler):
             if not update_plan_path.is_file():
                 raise FileNotFoundError("Check the remote index before downloading additions")
             remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
-            targets = []
-            for item in remote_plan.get("new_logical", []):
-                if isinstance(item, dict):
-                    metadata = dict(item.get("metadata") or {})
-                    metadata.setdefault("filename", item.get("filename", ""))
-                    if metadata.get("filename"):
-                        targets.append(metadata)
-            if not targets:
-                raise ValueError("The latest check contains no new voice records")
+            raw_selected = data.get("selected_filenames", "").strip()
+            try:
+                requested = json.loads(raw_selected) if raw_selected else None
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Invalid selected_filenames JSON") from exc
+            targets = choose_remote_additions(
+                remote_plan, output / "manifest.json", index,
+                selected_filenames=requested,
+            )
             project_root = Path(config.root).resolve()
 
             def run(report_progress):
@@ -1327,21 +1328,28 @@ class Handler(BaseHTTPRequestHandler):
                 combined = generated / "combined_audio"
                 try:
                     extracted = ensure_dir_or_extract(source, temporary_root, "existing")
+                    verify_combined_source_no_collisions(extracted, incoming)
+                    staging = temporary_root / "combined"
+                    staging.mkdir()
+                    # Preserve complete package-relative member identity instead
+                    # of flattening original speech into one basename namespace.
                     for wav in extracted.rglob("*.wav"):
-                        target = temporary_root / wav.name
-                        if wav.resolve() != target.resolve():
-                            shutil.copy2(wav, target)
+                        target = staging / wav.relative_to(extracted)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(wav, target)
                     if extracted.parent == temporary_root and extracted != temporary_root:
                         shutil.rmtree(extracted)
                     for audio in incoming.iterdir():
                         if audio.is_file() and not audio.name.endswith(".part"):
-                            shutil.copy2(audio, temporary_root / audio.name)
+                            shutil.copy2(audio, staging / audio.name)
                     if combined.exists():
                         shutil.rmtree(combined)
-                    temporary_root.replace(combined)
+                    staging.replace(combined)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     raise
+                else:
+                    shutil.rmtree(temporary_root, ignore_errors=True)
                 with index.open("r", encoding="utf-8-sig", newline="") as handle:
                     existing_rows = list(csv.DictReader(handle))
                     fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256"]
