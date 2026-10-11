@@ -24,6 +24,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
+from .archive_audit import audit_archive
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
     decorate_subtitles,
@@ -260,6 +261,20 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
+
+
+@app.get("/api/project/{project_id}/archive/audit")
+def api_get_project_archive_audit(project_id: str):
+    try:
+        config = _resolve_project(project_id)
+        output_dir = _project_paths(config).get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        return {"ok": True, "audit": audit_archive(output_dir)}
+    except FileNotFoundError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.get("/api/project/{project_id}/subtitles")
