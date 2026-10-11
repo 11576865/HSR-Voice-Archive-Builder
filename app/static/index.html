@@ -3317,7 +3317,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         <p class="small muted">恢复包可包含翻译检查点、人工中文字幕和修订历史；不包含 WAV、FLAC、MKV 或 API 密钥。普通导入只合并兼容翻译检查点；要恢复人工中文字幕，须单独预览并逐条选择，绝不修改原语言原文。</p>
         <div id="autoRecoveryStatus" class="notice" style="margin-bottom:10px">自动恢复保护尚无状态。</div>
         <div class="actions">
-          <button type="button" class="success" id="exportRecoveryBtn">导出翻译恢复包</button>
+          <button type="button" class="success" id="exportRecoveryBtn">导出翻译及人工校对恢复包</button>
           <input type="file" id="importRecoveryFile" accept=".hsrbackup,application/json" style="max-width:320px">
           <button type="button" id="importRecoveryBtn">导入翻译恢复包</button>
         </div>
@@ -4820,7 +4820,7 @@ function fillProject(p){
     const a=p.recovery?.automatic||{};
     if(a.valid_backup){
       const when=a.last_backup?new Date(a.last_backup).toLocaleString():'时间未知';
-      autoBox.textContent='自动恢复保护：已校验 · '+when+' · '+n(a.translation_records)+' 条翻译 · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知')+(a.previous_valid?' · 上一代恢复包可用':'');
+      autoBox.textContent='自动恢复保护：已校验 · '+when+' · '+n(a.translation_records)+' 条翻译检查点记录（恢复包亦可包含人工字幕历史） · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知')+(a.previous_valid?' · 上一代恢复包可用':'');
       autoBox.className='notice '+(a.healthy?'ok':'warn');
     }else if(a.previous_valid){
       autoBox.textContent='自动恢复保护：latest 校验失败，但上一代恢复包仍可用。'+(a.error?' · '+a.error:'');
@@ -4829,7 +4829,7 @@ function fillProject(p){
       autoBox.textContent='自动恢复保护：最近一次保存失败 · '+a.error;
       autoBox.className='notice warn';
     }else{
-      autoBox.textContent='自动恢复保护：尚无 API 翻译检查点；产生翻译后会自动创建外置恢复包。';
+      autoBox.textContent='自动恢复保护：当前暂无已验证的恢复包；产生翻译检查点或人工字幕修订记录后可创建外置恢复包。';
       autoBox.className='notice';
     }
   }
@@ -5683,7 +5683,9 @@ async function importTranslationRecovery(){
     fillProject(j.project);
     const x=j.result||{};
     const extra=x.checkpoint_conflict?'；当前项目已有不同翻译路线的检查点，未覆盖':'';
-    if(s)s.textContent='包内翻译 '+n(x.package_records)+' 条；当前输入完全匹配 '+n(x.matching_now)+' 条；输入已变化 '+n(x.changed_now)+' 条；当前项目不存在 '+n(x.not_present_now)+' 条；已恢复/合并 '+n(x.imported_records)+' 条'+extra+'。';
+    if(s)s.textContent=Array.isArray(x.human_subtitle_files_preserved)
+      ? '人工中文字幕恢复包已校验并保存；未自动覆盖当前字幕。请使用下方「预览人工中文字幕恢复」逐条核对来源并手动选择。'
+      : '包内翻译 '+n(x.package_records)+' 条；当前输入完全匹配 '+n(x.matching_now)+' 条；输入已变化 '+n(x.changed_now)+' 条；当前项目不存在 '+n(x.not_present_now)+' 条；已恢复/合并 '+n(x.imported_records)+' 条'+extra+'。';
     setLog(j.result||j);
   }catch(x){if(s)s.textContent='导入失败：'+shortError(x);setLog(String(x))}
   finally{if(button)button.disabled=false}
