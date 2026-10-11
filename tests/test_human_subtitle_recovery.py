@@ -102,6 +102,23 @@ class HumanChineseRecoveryTests(unittest.TestCase):
             self.assertEqual(preview_human_subtitle_recovery(target, backup)["counts"],
                              {"current_edit_exists": 1})
 
+    def test_restoration_clears_existing_review_receipt_without_current_edit(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            backup = self._backup(root / "source")
+            target, output = self._project(root / "target")
+            with patch("app.subtitles.invalidate_subtitle_stages"):
+                update_project_subtitles(target, output, [{
+                    "id": 1, "confirmed": True,
+                }])
+            self.assertTrue(get_project_subtitles(target, output)[0]["confirmed"])
+            preview = preview_human_subtitle_recovery(target, backup)
+            self.assertEqual(preview["restorable"], 1)
+            self._apply(target, backup, preview)
+            self.assertFalse(get_project_subtitles(target, output)[0]["confirmed"])
+            self.assertEqual(get_project_subtitles(target, output)[0]["final_chs"],
+                             "人工译文保留")
+
     def test_missing_text_audio_and_legacy_provenance_are_review_only(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
