@@ -105,6 +105,32 @@ class RemoteIncrementalSafetyTests(unittest.TestCase):
                 verify_combined_source_no_collisions(original, incoming)
             self.assertEqual((original / "chapter_a" / "voice.wav").read_bytes(), before)
 
+    def test_old_download_cache_is_not_part_of_selected_successful_set(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            original, incoming = root / "original", root / "incoming"
+            original.mkdir()
+            incoming.mkdir()
+            (original / "existing.wav").write_bytes(b"original")
+            (incoming / "chosen.wav").write_bytes(b"chosen")
+            (incoming / "old-cache.wav").write_bytes(b"left-from-other-run")
+            verify_combined_source_no_collisions(
+                original, incoming, successful_filenames={"chosen.wav"},
+            )
+            with self.assertRaisesRegex(ValueError, "missing"):
+                verify_combined_source_no_collisions(
+                    original, incoming, successful_filenames={"not-downloaded.wav"},
+                )
+            # Unselected cached WAVs must not block the requested comparison.
+            (incoming / "existing.wav").write_bytes(b"stale-conflict")
+            verify_combined_source_no_collisions(
+                original, incoming, successful_filenames={"chosen.wav"},
+            )
+            with self.assertRaisesRegex(ValueError, "collides"):
+                verify_combined_source_no_collisions(
+                    original, incoming, successful_filenames={"existing.wav"},
+                )
+
     def test_api_rejects_legacy_unbound_plan_before_starting_job(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
