@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
 from dataclasses import dataclass
 from pathlib import Path
@@ -69,6 +70,12 @@ def _entry_id(entry: dict[str, Any]) -> int | str | None:
     if item_id is None:
         item_id = entry.get("id") or entry.get("filename")
     return item_id
+
+
+def _official_source_sha256(entry: dict[str, Any]) -> str:
+    """Fingerprint official source words, not the editable Chinese target."""
+    source = str(entry.get("source_text") or entry.get("english") or "")
+    return hashlib.sha256("".join(source.split()).encode("utf-8")).hexdigest()
 
 
 def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
@@ -184,7 +191,20 @@ def _apply_derived_subtitle_fields(
     for entry in entries:
         raw_target = str(entry.get("target_text") or entry.get("chinese", ""))
         override = _override_for_entry(entry, overrides, ambiguous, ambiguous_logical)
-        if override is None:
+        stored_fingerprint = (
+            str(override.get("source_text_sha256") or "").strip().lower()
+            if override is not None else ""
+        )
+        stale_source = bool(
+            stored_fingerprint and stored_fingerprint != _official_source_sha256(entry)
+        )
+        entry["translation_override_stale"] = stale_source
+        entry["translation_override_previous_chs"] = (
+            str(override.get("final_chs") or "") if stale_source else ""
+        )
+        if override is None or stale_source:
+            # Retain old human text in subtitles_overrides.json for review,
+            # but do not claim that it still translates revised official text.
             entry["final_chs"] = raw_target
             entry["modified"] = False
             continue
@@ -758,6 +778,10 @@ def get_project_subtitles(
             "confirmed": bool(review_state.get(str_id, False)),
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
+            "translation_override_stale": bool(entry.get("translation_override_stale")),
+            "translation_override_previous_chs": str(
+                entry.get("translation_override_previous_chs") or ""
+            ),
             "word_alignment": dict(entry.get("_word_alignment") or {}),
             "word_alignment_ready": (
                 not timing_modified and bool((entry.get("_word_alignment") or {}).get("valid"))
@@ -924,6 +948,7 @@ def _update_project_subtitles_locked(
                 "filename": filename,
                 "logical_id": logical_id,
                 "source_member_id": member_id,
+                "source_text_sha256": _official_source_sha256(entry),
             }
         if key in confirmations:
             if confirmations[key]:
