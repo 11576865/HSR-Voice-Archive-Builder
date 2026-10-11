@@ -115,14 +115,21 @@ def format_karaoke_text(
     mode: str = "k",
 ) -> str:
     """Apply ASS karaoke tags only for complete, monotonic word-level timing."""
-    validated = _validated_word_alignments(text, duration_sec, word_alignments)
+    validated = _validated_word_alignment_details(text, duration_sec, word_alignments)
     if not validated:
         return text
     tag = "kf" if str(mode).lower() == "kf" else "k"
-    return "".join(
-        f"{{\\{tag}{max(1, round(duration * 100))}}}{word}"
-        for word, duration in validated
-    )
+    # The \kt tag preserves real onset after initial silence or word gaps.
+    # Absolute centisecond anchors avoid cumulative duration rounding drift.
+    parts: list[str] = []
+    previous_end_cs = 0
+    for word, start, end, _duration in validated:
+        start_cs = max(0, round(start * 100))
+        end_cs = max(start_cs + 1, round(end * 100))
+        absolute_start = f"\\kt{start_cs}" if start_cs != previous_end_cs else ""
+        parts.append(f"{{{absolute_start}\\{tag}{end_cs - start_cs}}}{word}")
+        previous_end_cs = end_cs
+    return "".join(parts)
 
 
 def generate_clip_karaoke_overlay(
