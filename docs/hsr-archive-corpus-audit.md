@@ -170,3 +170,84 @@ The corrected bilingual CSV also resolves rows by unambiguous
 filename or (if the manifest has no filename) a unique index, but never a
 duplicate WAV basename or an explicitly stale member fallback. The original
 source transcript is never mutated by this maintenance operation.
+
+
+## Reliability repair: source-bound human history and revision-safe remote publication
+
+**Source authority and immutability are separate.** The editor never changes
+the source-language transcript. An imported script can originate in a package
+LAB file or in a third-party index; its read-only state does **not** certify
+that it is an authenticated official game transcript. All Karaoke still
+belongs to source-language Primary; Chinese translations remain plain text.
+
+### Chinese proofreading revision control
+
+The live `subtitles_overrides.json` is a current-state cache, not a revision
+history. On replacing a human translation, resetting a subtitle to its source
+translation, or reusing a numbered slot for a different WAV, the previous
+record is now **durably appended first** to
+`subtitles_override_history.jsonl` with its original source identity,
+provenance and old Chinese text. Failure to append blocks the change. The
+journal is retained outside the canonical Manifest; it does not expose an
+English editing path.
+
+New source-text fingerprints normalize **whitespace boundaries**, rather
+than removing all whitespace; `now here` differs from `nowhere`. Both the
+proofreader autosave and Layout cue editor include the source fingerprint
+observed at load. The backend checks source/member/text baseline before
+writing; stale editor drafts are rejected instead of silently claiming that
+a former Chinese translation belongs to revised source text. Existing
+confirmations are stored with the full original WAV member and source-text
+fingerprint; bare legacy boolean confirmations stay on disk, but cannot be
+displayed as verified for an unproven reindexed entry.
+
+When a **fingerprinted** human Chinese override no longer matches the current
+source transcript, the old text stays available for comparison and is
+excluded from the new derived subtitles. ASS/SRT export is **blocked as
+failed** until the operator explicitly reviews/saves it; an old output
+cannot be newly certified under the wrong source. Old source-member-only
+overrides without a saved transcript fingerprint remain a compatibility
+limitation: the previous source revision cannot be proven from absent
+provenance. A review/migration workflow is still required for strong
+historical guarantees. Do not silently assert those records are fully safe.
+
+### Remote updates and recovery
+
+Both FastAPI and Termux Lite now prevent simultaneous background build and
+remote Apply jobs for the *same project within this process*. An update
+candidate selection begins **empty**, and the backend revalidates the
+current Manifest and selected identities immediately before the Apply
+publish step after downloading.
+
+Each successful Apply writes a new immutable
+`.generated/combined_audio_versions/combined-<version>/` tree and
+`.generated/quick_index_incremental_<version>.csv` index. Previous
+combined audio and indexes are no longer removed or overwritten. The
+project configuration changes only after the new source and CSV exist, so
+an interrupted publication retains the old source files. Older versions
+consume disk space until deliberately archived/pruned; the code does not
+blindly reclaim them. This is not a guarantee of an atomic cross-process
+transaction covering OS termination, config and every dependent artifact.
+
+Verified text recovery packages now include existing human subtitle override,
+review state and append-only history files. If those files exist but no AI
+translation checkpoint does, the automatic recovery process still creates a
+validated text-only backup. Importing a human-only backup **quarantines
+and preserves** its verified bytes without applying possibly stale
+translations to another package. Manual source-aware restoration remains a
+separate operation; importing a backup is not a claim that old subtitles were
+already restored into the active Manifest.
+
+### Evidence and known boundaries
+
+- `tests/test_subtitle_source_revision.py`: new source revision,
+  `now here` / `nowhere`, stale saves, identity-bound review,
+  history preservation, reused ID and export fail-closed
+- `tests/test_jobs_update_mutation.py`: same-project build/apply exclusion
+- `tests/test_remote_update_guard.py`: versioned publication regression
+- `tests/test_recovery.py`: manual-subtitle-only external backup/import
+- `tests/test_subtitle_editor.py`: valid stable-member rebuild migration
+
+These tests are synthetic unit/UI/fixture evidence. Real user archives, full
+crash-injection, multi-process writers and physical Android devices remain
+unverified. Do not merge into `main` solely on the basis of green CI.
