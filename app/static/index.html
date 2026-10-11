@@ -3301,6 +3301,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
       <details id="archiveOutputs" style="margin-top:14px">
         <summary>Archive / Build Records（档案与构建记录）</summary>
         <p class="small muted">Manifest、时间轴、构建报告与更新计划用于审计、复现和后续自动化，不是普通播放所必需的成品。</p>
+        <div class="actions"><button type="button" class="small secondary" id="archiveAuditBtn">检查章节与来源覆盖</button></div>
+        <div id="archiveAuditSummary" class="small muted" role="status" aria-live="polite">按需检查 Manifest 结构，不重写语音档案。</div>
+        <div id="archiveAuditGroups"></div>
+        <div id="archiveAuditIssues"></div>
         <table><tbody id="archiveOutputTable"></tbody></table>
       </details>
       <details id="translationRecovery" style="margin-top:14px">
@@ -4744,6 +4748,10 @@ function fillProject(p){
   hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
+  const archiveAuditSummary=document.getElementById('archiveAuditSummary');
+  if(archiveAuditSummary)archiveAuditSummary.textContent='按需检查 Manifest 结构，不重写语音档案。';
+  document.getElementById('archiveAuditGroups')?.replaceChildren();
+  document.getElementById('archiveAuditIssues')?.replaceChildren();
   const usage=[];
   if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
   if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
@@ -4806,6 +4814,62 @@ function fillProject(p){
     if(p)fetchSubtitles();
   }
 }
+async function loadArchiveAudit(){
+  const summary=document.getElementById('archiveAuditSummary');
+  const groups=document.getElementById('archiveAuditGroups');
+  const issues=document.getElementById('archiveAuditIssues');
+  const button=document.getElementById('archiveAuditBtn');
+  if(!currentProject||!summary||!groups||!issues)return;
+  const owner=currentProject.root||currentProject.name;
+  if(button)button.disabled=true;
+  summary.textContent='正在检查章节、台词覆盖和来源身份…';
+  groups.replaceChildren();
+  issues.replaceChildren();
+  try{
+    const response=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/archive/audit');
+    if(owner!==(currentProject?.root||currentProject?.name))return;
+    const audit=response.audit||{},info=audit.summary||{};
+    summary.textContent='条目 '+Number(info.entries||0)+' · 章节 '+Number(info.groups||0)+' · 原文 '+Number(info.source_text_present||0)+' · 目标文本 '+Number(info.target_text_present||0)+' · WAV 哈希 '+Number(info.audio_hash_present||0)+' · 待核对 '+Number(info.issues||0)+'。本检查不重新读取 WAV 字节。';
+    const table=document.createElement('table');
+    const header=document.createElement('thead');
+    header.innerHTML='<tr><th>章节 / 分组</th><th>条目</th><th>原文</th><th>目标文本</th></tr>';
+    table.appendChild(header);
+    const body=document.createElement('tbody');
+    for(const group of audit.groups||[]){
+      const tr=document.createElement('tr');
+      for(const value of [group.name,group.entries,group.source_text_present,group.target_text_present]){
+        const cell=document.createElement('td');
+        cell.textContent=String(value);
+        tr.appendChild(cell);
+      }
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    groups.appendChild(table);
+    if((audit.issues||[]).length){
+      const title=document.createElement('p');
+      title.className='small status-warn';
+      title.textContent='需要核对 '+Number(info.issues||0)+' 项（仅显示前 '+audit.issues.length+' 项）';
+      issues.appendChild(title);
+      const list=document.createElement('ul');
+      for(const issue of audit.issues){
+        const item=document.createElement('li');
+        item.className='small';
+        item.textContent='#'+String(issue.id||'?')+' · '+String(issue.code||'issue')+' · '+String(issue.detail||'');
+        list.appendChild(item);
+      }
+      issues.appendChild(list);
+    }
+  }catch(err){
+    if(owner===(currentProject?.root||currentProject?.name)){
+      summary.textContent='档案核查失败：'+shortError(err);
+    }
+  }finally{
+    if(button)button.disabled=false;
+  }
+}
+document.getElementById('archiveAuditBtn')?.addEventListener('click',loadArchiveAudit);
+
 let currentUpdatePlan=null;
 let currentUpdateFilter='all';
 let updateOnlyActionable=false;
