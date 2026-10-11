@@ -564,10 +564,13 @@ def import_word_alignments(output_dir: Path, payload: Any) -> dict[str, Any]:
         "updated_at": _now(),
         "entries": cached_entries,
     }
-    atomic_write_text(
-        output_dir / CACHE_FILENAME,
-        json.dumps(result_payload, ensure_ascii=False, indent=2),
-    )
+    # A fully rejected import must not rewrite the existing evidence sidecar
+    # (even just to change updated_at). Preserve previous accepted timing.
+    if imported:
+        atomic_write_text(
+            output_dir / CACHE_FILENAME,
+            json.dumps(result_payload, ensure_ascii=False, indent=2),
+        )
     summary = alignment_diagnostics(output_dir)
     return {
         "ok": True,
