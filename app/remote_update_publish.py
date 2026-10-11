@@ -250,12 +250,17 @@ def revision_status(config: ProjectConfig, revision_id: str) -> dict[str, Any]:
         and _sha(next_index) == str(journal.get("new_index_sha256") or "")
     )
     audio_hashes = journal.get("new_audio_sha256")
-    new_audio_unchanged = isinstance(audio_hashes, dict) and bool(audio_hashes)
+    # Journals from earlier versions never recorded audio digests. Unknown
+    # evidence is not proof of corruption, and must not display as such.
+    new_audio_unchanged: bool | None = (
+        None if "new_audio_sha256" not in journal
+        else isinstance(audio_hashes, dict) and bool(audio_hashes)
+    )
     if new_audio_unchanged:
         root = Path(config.root).resolve()
         expected_combined = root / ".generated" / "combined_audio_versions" / f"combined-{revision_id}"
         source_path = Path(str(journal.get("new_wav_source") or ""))
-        if source_path != expected_combined:
+        if source_path != expected_combined or source_path.is_symlink():
             new_audio_unchanged = False
         else:
             for member, digest in audio_hashes.items():
