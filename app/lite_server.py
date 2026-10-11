@@ -624,6 +624,9 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_min_central_gap=max(
                     0.0, min(200.0, _float(data.get("min_central_gap"), config.subtitle_min_central_gap))
                 ),
+                subtitle_primary_region_ratio=max(
+                    0.20, min(0.80, _float(data.get("primary_region_ratio"), config.subtitle_primary_region_ratio))
+                ),
                 subtitle_enable_karaoke=_bool(data.get("enable_karaoke", str(config.subtitle_enable_karaoke))),
                 subtitle_karaoke_mode=((data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() if (data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() in {"k", "kf", "clip"} else "k"),
                 subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
@@ -657,6 +660,7 @@ class Handler(BaseHTTPRequestHandler):
             margin_left_percent = _float(data.get("margin_left_percent"), 0.03)
             margin_top_percent = _float(data.get("margin_top_percent"), 0.05)
             min_central_gap = _float(data.get("min_central_gap"), 20.0)
+            primary_region_ratio = _float(data.get("primary_region_ratio"), 0.60)
 
             result = preview_subtitle_layout(
                 english_text=english_text,
@@ -668,6 +672,7 @@ class Handler(BaseHTTPRequestHandler):
                 margin_left_percent=margin_left_percent,
                 margin_top_percent=margin_top_percent,
                 min_central_gap=min_central_gap,
+                primary_region_ratio=primary_region_ratio,
                 chs_font=data.get("chs_font") or "汉仪旗黑",
                 primary_font=data.get("primary_font") or "Noto Sans",
             )

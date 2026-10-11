@@ -3601,6 +3601,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
             <div style="display:flex;justify-content:space-between;margin-top:8px">
+              <label for="prevPrimaryRatio" style="margin:0">原文 / 译文空间分配</label>
+              <span id="prevPrimaryRatioVal" class="small muted">60% / 40%</span>
+            </div>
+            <input type="range" id="prevPrimaryRatio" min="20" max="80" value="60" step="1" aria-describedby="prevPrimaryRatioHint">
+            <div id="prevPrimaryRatioHint" class="small muted inspector-help">默认 60/40，可调整；分配的是安全区内扣除中央间隔后的空间，不是两组字体的缩放比例。</div>
+            <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevCentralGap" style="margin:0">中央间隔</label>
               <span id="prevCentralGapVal" class="small muted">20 px</span>
             </div>
@@ -3715,7 +3721,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <label for="prevKaraokePreviewTime" style="margin:0">实际预览时间点</label>
               <span id="prevKaraokePreviewTimeVal" class="small muted">50%</span>
             </div>
-            <input type="range" id="prevKaraokePreviewTime" min="5" max="95" value="50" step="5">
+            <input type="range" id="prevKaraokePreviewTime" min="0" max="100" value="50" step="1">
+            <p class="small muted">拖动定位时间，松手后生成对应时刻的 FFmpeg/libass 真实帧。这不是连续视频播放。</p>
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
@@ -3755,9 +3762,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <summary>画布与诊断</summary>
           <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔（布局辅助）</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文字布局估算框（非实际字形边界）</label>
           </div>
+          <p class="small muted">只存在一个输出安全区。布局框仅用于辅助诊断，不另施加安全边距；字形、描边、阴影与动态特效仍需真实 ASS 渲染确认。</p>
           <div class="preview-background-controls">
             <div>
               <label for="previewBackgroundMode">工作台背景</label>
@@ -6739,7 +6747,7 @@ function showGeometryPreview(){
 }
 
 function libassPreviewPayload(){
-  const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
+  const previewPercent=Math.max(0,Math.min(100,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
   const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
   return {
     ...subtitleSettingsPayload(),
@@ -6749,7 +6757,7 @@ function libassPreviewPayload(){
     target_language:currentProject?.config?.target_language||'zh-CN',
     word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
     preview_duration_seconds:previewDuration,
-    preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
+    preview_timestamp:Math.max(0.01,Math.min(previewDuration-0.01,previewDuration*previewPercent))
   };
 }
 
@@ -6955,7 +6963,7 @@ async function importWordAlignmentFile(file){
 
 
 const layoutStyleControlIds=[
-  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV',
+  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevPrimaryRatio','prevCentralGap','prevMarginH','prevMarginV',
   'prevEnableKaraoke','prevKaraokeMode','prevEnableCard','prevEnableOutline',
   'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
@@ -7028,6 +7036,7 @@ function subtitleSettingsPayload(){
     margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '3') / 100,
     margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
     min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
+    primary_region_ratio: parseFloat(document.getElementById('prevPrimaryRatio')?.value || '60') / 100,
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
     karaoke_mode: document.getElementById('prevKaraokeMode')?.value || 'k',
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
@@ -7067,6 +7076,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.03)*100);
   set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
   set('prevCentralGap',config.subtitle_min_central_gap??20);
+  set('prevPrimaryRatio',Number(config.subtitle_primary_region_ratio??0.60)*100);
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
   set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
   check('prevEnableCard',config.subtitle_enable_translucent_card);
@@ -8363,6 +8373,7 @@ async function updateLayoutPreview() {
   const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '48', 10);
   const priSize = parseInt(document.getElementById('prevPriSize')?.value || '42', 10);
   const centralGap = parseFloat(document.getElementById('prevCentralGap')?.value || '20');
+  const primaryRatio = parseFloat(document.getElementById('prevPrimaryRatio')?.value || '60') / 100;
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
@@ -8373,6 +8384,7 @@ async function updateLayoutPreview() {
   if (document.getElementById('prevChsSizeVal')) document.getElementById('prevChsSizeVal').textContent = chsSize + ' px';
   if (document.getElementById('prevPriSizeVal')) document.getElementById('prevPriSizeVal').textContent = priSize + ' px';
   if (document.getElementById('prevCentralGapVal')) document.getElementById('prevCentralGapVal').textContent = centralGap + ' px';
+  if (document.getElementById('prevPrimaryRatioVal')) document.getElementById('prevPrimaryRatioVal').textContent = Math.round(primaryRatio*100) + '% / ' + Math.round((1-primaryRatio)*100) + '%';
   if (document.getElementById('prevMarginHVal')) {
     const pxH = Math.round(1920 * (marginH / 100));
     document.getElementById('prevMarginHVal').textContent = marginH + ' % (' + pxH + 'px)';
@@ -8415,6 +8427,7 @@ async function updateLayoutPreview() {
         margin_left_percent: marginH / 100.0,
         margin_top_percent: marginV / 100.0,
         min_central_gap: centralGap,
+        primary_region_ratio: primaryRatio,
         chs_font: chsFont,
         primary_font: priFont,
         source_language: currentProject?.config?.source_text_language || 'en',
@@ -8429,13 +8442,13 @@ async function updateLayoutPreview() {
     if(corpusStatus&&layoutStressSample){
       const layout=res?.layout||{};
       if(layout.failed){
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 在当前设置下仍无法安全显示：'+(layout.failed_condition||'OVERFLOW')+'。请调整字号、边距或中央间隔。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的几何布局超出安全区：'+(layout.failed_condition||'OVERFLOW')+'。请调整字号、边距或中央间隔。';
         corpusStatus.className='small status-bad layout-corpus-status';
       }else if(Number(layout.scale_percent||100)<100){
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 需要由排版求解器缩放到 '+layout.scale_percent+'% 才能安全显示。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的布局度量需要缩放到 '+layout.scale_percent+'%；请用实际 ASS 渲染核对字形。';
         corpusStatus.className='small status-warn layout-corpus-status';
       }else{
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 在当前设置下可安全显示（100%）。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的布局度量在安全区内（100%）；尚未验证可见字形。';
         corpusStatus.className='small status-ok layout-corpus-status';
       }
     }
@@ -8500,7 +8513,7 @@ function renderPreviewCanvasSvg(data, options) {
   if (options.showSafeArea) {
     const strokeColor = layout.failed && (layout.failed_condition === 'HORIZONTAL_OVERFLOW' || layout.failed_condition === 'TOP_OVERFLOW' || layout.failed_condition === 'BOTTOM_OVERFLOW') ? '#ef6b73' : '#38b46b';
     elements.push(`<rect x="${sa.x_min}" y="${sa.y_min}" width="${sa.max_printable_width}" height="${sa.max_printable_height}" fill="rgba(56,180,107,0.02)" stroke="${strokeColor}" stroke-width="2" stroke-dasharray="8 6" />`);
-    elements.push(`<text x="${sa.x_min + 8}" y="${sa.y_min + 20}" font-size="14" fill="${strokeColor}" font-weight="600" opacity="0.85">Safe Area (${sa.max_printable_width}×${sa.max_printable_height})</text>`);
+    elements.push(`<text x="${sa.x_min + 8}" y="${sa.y_min + 20}" font-size="14" fill="${strokeColor}" font-weight="600" opacity="0.85">唯一安全区（布局估算 ${sa.max_printable_width}×${sa.max_printable_height}）</text>`);
   }
 
   // Central Gap Area
@@ -8512,7 +8525,7 @@ function renderPreviewCanvasSvg(data, options) {
   }
 
   // Parallax Baseline Region Guides
-  if (parallax) {
+  if (parallax && options.showBBox) {
     const pX = sa.x_min - 35;
     if (pX > 20) {
       // Primary displacement indicator (growing upward from y_top)
@@ -8789,7 +8802,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 });
 
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevPrimaryRatio','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -8824,6 +8837,8 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',updateLayoutPreview);
 });
+document.getElementById('prevKaraokePreviewTime')?.addEventListener('change',()=>renderLibassPreview());
+document.getElementById('layoutCueScrubber')?.addEventListener('change',()=>renderLibassPreview());
 document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>{
   const label=document.getElementById('prevKaraokePreviewTimeVal');
   const input=document.getElementById('prevKaraokePreviewTime');
@@ -8843,6 +8858,7 @@ function applySubtitlePreset(name){
     document.getElementById('prevChsSize').value=48;
     document.getElementById('prevPriSize').value=42;
     document.getElementById('prevCentralGap').value=20;
+    document.getElementById('prevPrimaryRatio').value=60;
     document.getElementById('prevMarginH').value=3;
     document.getElementById('prevMarginV').value=5;
     document.getElementById('prevEnableKinetic').checked=true;

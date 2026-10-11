@@ -21,6 +21,8 @@ def check_bilingual_collision_with_reason(
     primary_block: LayoutBlock,
     safe_area: SafeArea = DEFAULT_SAFE_AREA,
     min_central_gap: float = 20.0,
+    chs_font_path: str | None = None,
+    primary_font_path: str | None = None,
 ) -> tuple[bool, str | None]:
     """Safety and boundary validator for Center-Outward Bilingual Subtitles.
 
@@ -45,12 +47,12 @@ def check_bilingual_collision_with_reason(
     """
     # 1. Primary horizontal overflow
     for line in primary_block.lines:
-        if measure_text_width(line, primary_block.font_size) > safe_area.max_printable_width:
+        if measure_text_width(line, primary_block.font_size, primary_font_path) > safe_area.max_printable_width:
             return True, "HORIZONTAL_OVERFLOW"
 
     # 2. Chinese / Secondary horizontal overflow
     for line in chs_block.lines:
-        if measure_text_width(line, chs_block.font_size) > safe_area.max_printable_width:
+        if measure_text_width(line, chs_block.font_size, chs_font_path) > safe_area.max_printable_width:
             return True, "HORIZONTAL_OVERFLOW"
 
     # 3. Primary vertical bounds check (growing upward towards y_min)

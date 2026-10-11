@@ -420,6 +420,8 @@ def render_ass(
     primary_font_path = resolve_font_path(primary_font)
     margin_h = round(1920 * max(0.0, min(0.40, float(cfg.margin_horizontal_percent))))
     margin_v = round(1080 * max(0.0, min(0.40, float(cfg.margin_vertical_percent))))
+    # Positioned subtitles have explicit \pos and \N; only the solver
+    # SafeArea supplies padding. Archive HUD retains its own style margins.
     header = f"""[Script Info]
 Title: HSR Voice Archive
 ScriptType: v4.00+
@@ -430,8 +432,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,{margin_h},{margin_h},{margin_v},1
-Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,{margin_h},{margin_h},{margin_v},1
+Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
+Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
 Style: Card,{primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 Style: Archive,{primary_font},{int(cfg.archive_hud_font_size)},&H{_ass_alpha_for_opacity(cfg.archive_hud_opacity)}FFFFFF,&HFFFFFFFF,&H80000000,&HFF000000,0,0,0,0,100,100,0,0,1,1,0,7,{margin_h},{margin_h},{margin_v},1
 
@@ -493,6 +495,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             base_primary_size=int(cfg.base_primary_size),
             safe_area=safe_area,
             min_central_gap=float(cfg.min_central_gap),
+            primary_region_ratio=float(cfg.primary_region_ratio),
             chs_font_path=chs_font_path,
             primary_font_path=primary_font_path,
         )
