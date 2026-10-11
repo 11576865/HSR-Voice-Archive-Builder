@@ -1,7 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import io
 import json
+import wave
 import tempfile
 import unittest
 from pathlib import Path
@@ -11,7 +13,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.project import create_project
-from app.remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions
+from app.remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions, verified_completed_new_wavs
 from app.security import api_token
 from app.server import app, _clear_active, _set_active
 
@@ -115,6 +117,49 @@ class RemoteIncrementalSafetyTests(unittest.TestCase):
                 self.assertIn("staging.replace(combined)", source)
                 self.assertNotIn("shutil.rmtree(combined)", source)
                 self.assertIn("choose_remote_additions(", source)
+
+    def test_completed_download_requires_exact_session_file_hash_and_wav_header(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            root.mkdir(exist_ok=True)
+            with io.BytesIO() as buf:
+                with wave.open(buf, "wb") as wav:
+                    wav.setnchannels(1)
+                    wav.setsampwidth(2)
+                    wav.setframerate(16000)
+                    wav.writeframes(b"\\x00\\x00" * 32)
+                content = buf.getvalue()
+            wav_path = root / "selected.wav"
+            wav_path.write_bytes(content)
+            target = [{"filename": "selected.wav"}]
+            record = {
+                "filename": "selected.wav", "status": "ok",
+                "path": str(wav_path),
+                "sha256": hashlib.sha256(content).hexdigest(),
+            }
+            self.assertEqual(
+                verified_completed_new_wavs(target, {"completed": [record]}, root),
+                {"selected.wav"},
+            )
+            failures = [
+                (dict(record, filename="unselected.wav"), "Unexpected completed"),
+                (dict(record, filename="../selected.wav"), "non-basename"),
+                (dict(record, status="exists"), "Unverified cached"),
+                (dict(record, path=str(root / "elsewhere.wav")), "path mismatch"),
+                (dict(record, sha256="a" * 64), "checksum mismatch"),
+            ]
+            for bad, reason in failures:
+                with self.subTest(reason=reason), self.assertRaisesRegex(ValueError, reason):
+                    verified_completed_new_wavs(target, {"completed": [bad]}, root)
+            with self.assertRaisesRegex(ValueError, "Duplicate completed"):
+                verified_completed_new_wavs(target, {"completed": [record, record]}, root)
+            wav_path.write_bytes(b"not audio at all")
+            updated = dict(record, sha256=hashlib.sha256(wav_path.read_bytes()).hexdigest())
+            with self.assertRaisesRegex(ValueError, "not a RIFF/WAVE"):
+                verified_completed_new_wavs(target, {"completed": [updated]}, root)
+            wav_path.unlink()
+            with self.assertRaisesRegex(ValueError, "missing"):
+                verified_completed_new_wavs(target, {"completed": [record]}, root)
 
     def test_old_download_cache_is_not_part_of_selected_successful_set(self):
         with tempfile.TemporaryDirectory() as td:
