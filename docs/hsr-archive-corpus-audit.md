@@ -386,3 +386,47 @@ old-version garbage collection. No real multi-chapter HSR package or
 physical Android device was used for this acceptance. Do not delete
 `.generated/incremental_revisions`, prior audio versions or prior indexes
 during manual cleanup without separately verified recovery.
+
+
+## Incremental source WAV attestation after staging (2026-10-12)
+
+The versioned incremental publisher already verifies **every** row of the
+candidate index against the staged source tree, including inherited chapter
+WAVs with repeated basenames. Additional verification now attests the
+**actual bytes** of every *selected new* WAV:
+
+- Before writing the prepare journal, record SHA-256 for each selected WAV,
+  indexed by its exact package-relative member identity, in
+  `new_audio_sha256`. At the pre-config-swap boundary, recheck selected
+  member paths (including symlink rejection) and their SHA-256; if even one
+  changed after the original validation, **refuse to switch the project's
+  configured audio directory or CSV**.
+- Revision inspection hashes the same new WAVs on disk again. Distinguish
+  `new_audio_unchanged: true` (matching published bytes),
+  `false` (new bytes missing, replaced or corrupt), and `null` (old
+  journal lacks this field, so integrity is *unknown*, not proven corrupted).
+  The existing Update Revision inspector now surfaces that distinction.
+- A damaged new revision can still be *rolled back* if all the prior
+  revision's eligibility guards pass: this recovery action does not rely on
+  the health of the discarded new audio, does not delete any package, and
+  may be blocked after further builds or config changes. Inspecting a
+  revision does not automatically revert it.
+- Publication boundary capture refuses stale in-memory project settings
+  when the on-disk config was already changed by another process. Index,
+  Manifest and config digest checking still occurs again before commit.
+  This closes one stale-capture scenario, **not** the general cross-process
+  check-then-replace race.
+
+`tests/test_remote_update_publish.py` injects a changed selected WAV
+*after* the prepare record is written; asserts that the previous project
+config is unchanged; detects post-commit audio corruption and symlink
+substitution; proves old journals report unknown instead of corruption;
+and tests external config modifications versus a stale loaded config.
+
+**Boundaries:** SHA attestations are limited to the newly adopted WAVs.
+Unchanged existing package WAV bytes are *not* all rehashed on every
+publish, and source authenticity/playable audio format is outside this
+check. The journal and atomic single-file project config replacement
+still do not constitute a cross-process ACID transaction or a physical
+power-loss acceptance test. No English/Japanese/Korean source text
+editing or translated-Chinese Karaoke is involved.
