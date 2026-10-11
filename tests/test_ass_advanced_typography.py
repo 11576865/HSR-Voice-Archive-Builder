@@ -222,8 +222,8 @@ class TestAdvancedTypography(unittest.TestCase):
                     # Compare visible event text, not the raw tagged string.
                     def visible_text(line):
                         payload = line.split(",", 9)[-1]
-                        payload = re.sub(r"\\{[^}]*\\}", "", payload)
-                        return "".join(payload.replace(r"\\N", "").split())
+                        payload = re.sub(r"\{[^}]*\}", "", payload)
+                        return "".join(payload.replace(r"\N", "").split())
 
                     expected = "".join(original_text.split())
                     self.assertTrue(
