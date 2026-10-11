@@ -237,6 +237,48 @@ class HumanTranslationSourceRevisionTests(unittest.TestCase):
             [x["final_chs"] for x in entries], ["女性字幕", "男性字幕"],
         )
 
+    def test_bare_legacy_row_id_does_not_apply_to_new_member(self):
+        from app.subtitles import _apply_derived_subtitle_fields
+        entries = [{
+            "index": 1, "filename": "new.wav", "source_member_id": "scene/new.wav",
+            "source_text": "New voice", "target_text": "新字幕",
+        }]
+        _apply_derived_subtitle_fields(
+            entries, {"1": {"final_chs": "未知来源旧人工译文", "modified": True}},
+        )
+        self.assertEqual(entries[0]["final_chs"], "新字幕")
+        self.assertFalse(entries[0]["modified"])
+
+    def test_reused_numeric_key_still_archives_unrelated_old_translation(self):
+        with tempfile.TemporaryDirectory() as temp:
+            cfg, output = self._project(Path(temp))
+            (output / "subtitles_overrides.json").write_text(
+                json.dumps({"1": {
+                    "filename": "other.wav",
+                    "source_member_id": "old/other.wav",
+                    "final_chs": "旧来源的人工校对",
+                    "source_text_sha256": "a" * 64,
+                    "modified": True,
+                }}, ensure_ascii=False),
+                encoding="utf-8",
+            )
+            with patch("app.subtitles.invalidate_subtitle_stages"):
+                update_project_subtitles(cfg, output, [{
+                    "id": 1,
+                    "final_chs": "现来源的新译文",
+                }])
+            records = [
+                json.loads(x) for x in
+                (output / "subtitles_override_history.jsonl")
+                .read_text(encoding="utf-8").splitlines()
+            ]
+            self.assertEqual(records[0]["operation"], "key_reassigned")
+            self.assertEqual(records[0]["prior"]["final_chs"], "旧来源的人工校对")
+            self.assertEqual(
+                load_subtitle_overrides(output)["1"]["final_chs"],
+                "现来源的新译文",
+            )
+
     def test_ui_passes_source_revision_for_both_editors_and_explicit_selection(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text(
             encoding="utf-8",
