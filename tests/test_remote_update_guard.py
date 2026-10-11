@@ -157,6 +157,21 @@ class RemoteIncrementalSafetyTests(unittest.TestCase):
             updated = dict(record, sha256=hashlib.sha256(wav_path.read_bytes()).hexdigest())
             with self.assertRaisesRegex(ValueError, "not a RIFF/WAVE"):
                 verified_completed_new_wavs(target, {"completed": [updated]}, root)
+            for malformed, reason in [
+                (b"RIFF" + (80).to_bytes(4, "little") + b"WAVE" + b"0" * 32,
+                 "container length"),
+                (b"RIFF" + (36).to_bytes(4, "little") + b"WAVE" + b"0" * 32,
+                 "lacks format or audio data"),
+            ]:
+                with self.subTest(reason=reason):
+                    wav_path.write_bytes(malformed)
+                    forged = dict(
+                        record, sha256=hashlib.sha256(malformed).hexdigest(),
+                    )
+                    with self.assertRaisesRegex(ValueError, reason):
+                        verified_completed_new_wavs(
+                            target, {"completed": [forged]}, root,
+                        )
             wav_path.unlink()
             with self.assertRaisesRegex(ValueError, "missing"):
                 verified_completed_new_wavs(target, {"completed": [record]}, root)
