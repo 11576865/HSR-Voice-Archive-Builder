@@ -967,10 +967,9 @@ class TestProgressUI(unittest.TestCase):
         self.assertNotIn("保存并下一条", html)
         self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
-        self.assertIn(
-            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})",
-            html,
-        )
+        self.assertIn("expected_final_chs:String(targetSub._savedFinal", html)
+        self.assertIn("expected_source_member_id:String(targetSub.source_member_id", html)
+        self.assertIn("expected_source_text_sha256:String(targetSub.source_text_sha256", html)
         self.assertNotIn("confirmed:!!targetSub.confirmed", html)
         self.assertIn('id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"', html)
         self.assertIn('id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"', html)
