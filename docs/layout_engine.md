@@ -98,14 +98,26 @@ Imported timing is stored in:
 output/word_alignments.json
 ```
 
-A record is bound to a manifest entry using stable identity in this order where available:
+An imported record can identify the manifest entry using `source_member_id`,
+`logical_id`, `id`/`index`, or an unambiguous `filename`. **Every
+supplied identity must resolve to the same manifest row**; a stale ID may not
+be ignored in favor of a valid member path. Duplicated IDs, logical IDs,
+member paths, and basenames are fail-closed rather than silently selecting
+the last match.
 
-- `source_member_id`;
-- `logical_id`;
-- entry id/index;
-- a unique filename fallback.
+New records store a normalized source-text fingerprint, the WAV SHA-256
+recorded in the Manifest (where present), and its duration. **The Manifest
+SHA-256 may represent post-normalization PCM**, not bytes of the unmodified
+original package; see `docs/hsr-archive-corpus-audit.md` for provenance
+limits. When a Manifest provides a WAV hash, legacy caches with no matching
+audio identity become stale. Projects without a hash still have only
+limited-confidence text/duration validation.
 
-New records store the normalized source-text fingerprint, manifest original WAV SHA-256 (where provided), and the source-audio duration. When the manifest provides a WAV hash, legacy caches with no matching audio identity are stale even if text and duration are unchanged. When source audio has no manifest hash, text and duration can provide only limited legacy validation.
+External imports may also supply `source_text_sha256`,
+`source_audio_sha256`, `source_text`, or `duration_seconds`. When present,
+these must match the target Manifest rather than being silently rebound to
+current content. Duplicate records for the same entry in a single batch are
+rejected after the first accepted occurrence.
 
 Accepted word records use the form:
 
@@ -150,12 +162,22 @@ python -m pip install whisperx
 The provider:
 
 - uses the project's declared `source_text_language`; `auto` is rejected because language guessing would make alignment semantics ambiguous;
-- resolves the original project WAV for each manifest entry;
-- uses the existing canonical source text as the forced-alignment transcript;
+- resolves the project source WAV for each manifest entry;
+- uses the existing canonical, **read-only** source text as the
+  forced-alignment transcript, with no translation text in the word timer;
+- binds asynchronous results to the exact Manifest SHA-256 observed when the
+  job began; if the archive is rebuilt before import, the old timings are
+  rejected and the sidecar is not rewritten;
+- carries source-member ID and source-text/audio fingerprints into the
+  import validator;
 - preserves already-valid cached alignments unless a forced regeneration is explicitly requested;
 - validates every generated result through the same cache validator before accepting it;
 - writes accepted results only to `output/word_alignments.json`;
 - reports per-entry failures instead of inventing timing;
+- requires script-specific model support for the declared language, rather
+  than treating English, Japanese and Korean tokenization as equivalent;
+  synthetic EN/JA/KO tests confirm safe result handling, **not** actual
+  spoken-word alignment accuracy on game audio;
 - runs as a normal background job so long alignment passes appear in the existing task center.
 
 The dashboard endpoint reports whether the optional provider is installed. No large dependency is installed automatically. Inference is local, although WhisperX itself may need to download an alignment model on first use when the required model is not already present in its local cache.
