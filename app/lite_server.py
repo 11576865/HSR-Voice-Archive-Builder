@@ -61,7 +61,7 @@ from .project import (
 )
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
-from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions
+from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions, verified_completed_new_wavs
 from .remote_update_publish import capture_update_boundary, publish_remote_revision, list_remote_revisions, rollback_remote_revision
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
@@ -1340,13 +1340,16 @@ class Handler(BaseHTTPRequestHandler):
                         len(targets),
                     )
                     return report
-                incoming = generated / "incremental_audio"
+                # A fresh per-job directory is required: the provider downloader
+                # otherwise treats a matching cached stem as a completed remote WAV.
+                download_session = generated / "incremental_download_sessions" / f"session-{uuid.uuid4().hex}"
+                incoming = download_session / "source"
                 downloaded = download_resolved_audio(
                     resolved, incoming,
                     lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
                     dataset=dataset,
                 )
-                successful = {Path(row["filename"]).name for row in downloaded["completed"]}
+                successful = verified_completed_new_wavs(targets, downloaded, incoming)
                 atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
                 if not successful:
                     raise RuntimeError("没有新增音频下载成功；未修改项目")
@@ -1361,7 +1364,7 @@ class Handler(BaseHTTPRequestHandler):
                 if reference_plan["targets"]:
                     reference_download = download_resolved_audio(
                         reference_plan,
-                        generated / "incremental_reference_audio_zh-CN",
+                        download_session / "chinese-reference",
                         lambda current, total, name: report_progress(
                             "reference", f"正在同步下载中文对照语音：{current}/{total} · {name}", current, total
                         ),
@@ -1437,6 +1440,10 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "revision_id": version, "revision_state": published["state"], "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
+                # The published immutable combined version now owns the WAV bytes.
+                # A failed/incomplete job intentionally retains its isolated download
+                # session for diagnosis; never let another job reuse those files.
+                shutil.rmtree(download_session, ignore_errors=True)
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
 
