@@ -131,6 +131,8 @@ def publish_remote_revision(
         if key in seen_members:
             raise ValueError(f"Duplicate published source-member identity: {member}")
         seen_members.add(key)
+        if filename.casefold() in selected and member != filename:
+            raise ValueError("Published added WAV source-member mismatch")
         current = combined
         for component in member.split("/"):
             current = current / component
@@ -139,8 +141,6 @@ def publish_remote_revision(
         if not current.is_file():
             raise ValueError(f"Published indexed WAV missing: {member}")
         if filename.casefold() in selected:
-            if member != filename:
-                raise ValueError("Published added WAV source-member mismatch")
             counts[key] = counts.get(key, 0) + 1
     if set(counts) != selected or any(count != 1 for count in counts.values()):
         raise ValueError("Published index does not contain exactly the selected WAV records")
