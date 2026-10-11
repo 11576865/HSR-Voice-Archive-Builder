@@ -1054,14 +1054,18 @@ def _update_project_subtitles_locked(
                 "source_text_sha256": _official_source_sha256(entry),
             }
             for old_key, value in list(overrides.items()):
-                if _override_for_entry(
+                matches_entry = _override_for_entry(
                     entry, {old_key: value}, ambiguous_names, ambiguous_logicals,
-                ) is value:
+                ) is value
+                if matches_entry or old_key == key:
+                    # A reused numeric key can replace an unrelated member.
+                    # Journal it even when it would not be *applied* to this
+                    # source. Otherwise assignments discard historical text.
                     if dict(value) != latest and value.get("final_chs") is not None:
                         archived_old.append({
                             "override_key": old_key, "prior": dict(value),
                             "source_member_id": member_id,
-                            "operation": "superseded",
+                            "operation": "superseded" if matches_entry else "key_reassigned",
                         })
                     if old_key != key:
                         overrides.pop(old_key, None)
