@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import math
 import shutil
 import subprocess
 import tempfile
@@ -9,6 +10,8 @@ from pathlib import Path
 from subtitle_layout.ass_writer import write_ass
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
+from subtitle_layout.safe_area import SafeArea
+from subtitle_layout.rendered_ink import visible_ink_bbox
 
 
 @dataclass
@@ -86,8 +89,7 @@ def render_ass_preview_png(
     if not ffmpeg:
         raise RuntimeError("实际 ASS 预览需要 FFmpeg")
 
-    duration = max(0.25, min(120.0, float(duration_seconds)))
-    render_timestamp = max(0.0, min(duration - 0.01, float(timestamp)))
+    duration, render_timestamp = _preview_times(duration_seconds, timestamp)
     entry = PreviewEntry(
         english=str(english_text or ""),
         chinese=str(chinese_text or ""),
@@ -98,14 +100,7 @@ def render_ass_preview_png(
         root = Path(td)
         ass_path = root / "preview.ass"
         png_path = root / "preview.png"
-        write_ass(
-            [entry],
-            ass_path,
-            source_language=source_language or "en",
-            target_language=target_language or "zh-CN",
-            config=config,
-            overflow_report_path=root / "overflow.json",
-        )
+        _write_preview_ass(ass_path, entry, config, source_language, target_language)
         escaped_ass = _escape_subtitles_filter_path(ass_path)
         command = [
             ffmpeg,
@@ -116,11 +111,9 @@ def render_ass_preview_png(
             "-f",
             "lavfi",
             "-i",
-            f"color=c=black:s=1920x1080:r=1:d={max(3.0, duration):.3f}",
-            "-ss",
-            f"{render_timestamp:.3f}",
+            "color=c=black:s=1920x1080:r=1:d=1",
             "-vf",
-            f"subtitles='{escaped_ass}'",
+            f"settb=AVTB,setpts=PTS+{render_timestamp:.3f}/TB,subtitles='{escaped_ass}'",
             "-frames:v",
             "1",
             str(png_path),
@@ -136,3 +129,110 @@ def render_ass_preview_png(
             detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
             raise RuntimeError(f"FFmpeg/libass 预览失败: {detail[:1200]}")
         return png_path.read_bytes()
+
+def _preview_times(duration_seconds: float, timestamp: float) -> tuple[float, float]:
+    duration = float(duration_seconds)
+    instant = float(timestamp)
+    if not math.isfinite(duration) or not math.isfinite(instant):
+        raise ValueError("Preview duration and timestamp must be finite")
+    duration = max(0.25, min(120.0, duration))
+    return duration, max(0.0, min(duration - 0.01, instant))
+
+
+def _write_preview_ass(
+    path: Path, entry: PreviewEntry, config: SubtitleRenderConfig,
+    source_language: str, target_language: str,
+) -> None:
+    write_ass(
+        [entry], path,
+        source_language=source_language or "en",
+        target_language=target_language or "zh-CN",
+        config=config, overflow_report_path=path.with_suffix(".overflow.json"),
+    )
+
+
+def _render_raw_rgb(
+    ffmpeg: str, ass_path: Path, *, timestamp: float, background: str,
+    width: int = 1920, height: int = 1080,
+) -> bytes:
+    if background not in {"black", "white"}:
+        raise ValueError("Only canonical black and white analysis backgrounds are allowed")
+    # Input cadence is deliberately one frame; the microsecond timebase
+    # must be set BEFORE offsetting PTS, otherwise fractional timing rounds
+    # to the 1 fps clock and Karaoke/\\move snapshots are incorrect.
+    filter_graph = (
+        f"settb=AVTB,setpts=PTS+{timestamp:.3f}/TB,"
+        f"subtitles='{_escape_subtitles_filter_path(ass_path)}'"
+    )
+    command = [
+        ffmpeg, "-hide_banner", "-loglevel", "error",
+        "-f", "lavfi", "-i",
+        f"color=c={background}:s={width}x{height}:r=1:d=1",
+        "-vf", filter_graph, "-frames:v", "1",
+        "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
+    ]
+    completed = subprocess.run(command, capture_output=True, timeout=20, check=False)
+    expected_bytes = width * height * 3
+    if completed.returncode or len(completed.stdout) != expected_bytes:
+        detail = completed.stderr.decode("utf-8", errors="replace")[:900]
+        raise RuntimeError(f"FFmpeg/libass RGB frame unavailable: {detail}")
+    return completed.stdout
+
+
+def inspect_rendered_ink_frame(
+    *, english_text: str, chinese_text: str,
+    source_language: str, target_language: str,
+    config: SubtitleRenderConfig,
+    word_alignments: list[object] | None = None,
+    duration_seconds: float = 3.0,
+    timestamp: float = 1.0,
+) -> dict[str, object]:
+    """Check visible subtitle ink at ONE real libass instant, never a whole timeline."""
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("Real rendered-pixel safety inspection requires FFmpeg/libass")
+    duration, instant = _preview_times(duration_seconds, timestamp)
+    entry = PreviewEntry(
+        english=str(english_text or ""), chinese=str(chinese_text or ""),
+        display_end_seconds=duration, word_alignments=word_alignments,
+    )
+    width, height = 1920, 1080
+    with tempfile.TemporaryDirectory(prefix="hsr-ass-ink-") as td:
+        ass_path = Path(td) / "ink.ass"
+        _write_preview_ass(ass_path, entry, config, source_language, target_language)
+        on_black = _render_raw_rgb(ffmpeg, ass_path, timestamp=instant, background="black")
+        on_white = _render_raw_rgb(ffmpeg, ass_path, timestamp=instant, background="white")
+
+    # Blended shadows can be invisible on black even when text is visible,
+    # and light text can be invisible on white. Both reference backgrounds
+    # are necessary to retain the dark and light effect coverage.
+    box = visible_ink_bbox(on_black, on_white, width, height, threshold=16)
+    horizontal = max(0.0, min(0.40, float(config.margin_horizontal_percent)))
+    vertical = max(0.0, min(0.40, float(config.margin_vertical_percent)))
+    area = SafeArea(
+        margin_left_percent=horizontal, margin_right_percent=horizontal,
+        margin_top_percent=vertical, margin_bottom_percent=vertical,
+    )
+    allowed = {"x_min": area.x_min, "x_max": area.x_max,
+               "y_min": area.y_min, "y_max": area.y_max}
+    if box is None:
+        status = "no_visible_ink"
+    elif not (
+        allowed["x_min"] <= box[0] and box[2] <= allowed["x_max"]
+        and allowed["y_min"] <= box[1] and box[3] <= allowed["y_max"]
+    ):
+        status = "outside_safe_area"
+    else:
+        status = "inside_safe_area"
+    return {
+        "ok": True,
+        "renderer": "ffmpeg-libass",
+        "evidence": "single_frame_dual_background_rgb",
+        "scope": "single_timestamp_only",
+        "timestamp_seconds": instant,
+        "duration_seconds": duration,
+        "threshold_rgb": 16,
+        "bbox": None if box is None else list(box),
+        "safe_area": allowed,
+        "status": status,
+    }

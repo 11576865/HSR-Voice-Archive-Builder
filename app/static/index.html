@@ -3497,7 +3497,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </section>
             <div class="layout-cue-scrub">
               <label for="layoutCueScrubber">片段内预览位置 <output id="layoutCueScrubberTime">—</output></label>
-              <input type="range" id="layoutCueScrubber" min="5" max="95" step="5" value="50" disabled aria-describedby="layoutCueTimeNote" />
+              <input type="range" id="layoutCueScrubber" min="0" max="100" step="1" value="50" disabled aria-describedby="layoutCueTimeNote" />
               <p id="layoutCueTimeNote">滑块控制当前片段的 ASS 效果预览时间，不保存时间修改；上方时间输入另行保存至字幕显示时间覆写层。</p>
             </div>
             <div class="layout-cue-grid">
@@ -3555,6 +3555,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
+                    <button type="button" class="secondary" id="previewInkCheckBtn" title="按需在当前时间点用真实 FFmpeg/libass 的黑白背景差分检查可见像素，不代表整段字幕均安全">检测当前帧边界</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
                     <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
                   </div>
@@ -3565,6 +3566,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+                <div id="previewInkCheckStatus" role="status" aria-live="polite" class="small muted">真实像素边界尚未检查。仅按需检查当前时间点，不能替代完整动态时间轴验收。</div>
 
         <div class="preview-controls">
           <details class="layout-inspector-section layout-section-primary" open>
@@ -6691,6 +6693,8 @@ let savedSubtitleSettings = null;
 let subtitleSettingsSavePending = false;
 let libassPreviewObjectUrl = null;
 let libassPreviewGeneration = 0;
+let renderedInkGeneration = 0;
+let renderedInkController = null;
 let geometryPreviewGeneration = 0;
 let libassPreviewController = null;
 let geometryPreviewController = null;
@@ -6719,6 +6723,7 @@ function setPreviewEvidence(mode, detail = '') {
 }
 
 function invalidateLibassPreview(){
+  invalidateRenderedInkCheck();
   libassPreviewGeneration++;
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   const renderButton=document.getElementById('previewLibassBtn');
@@ -6843,6 +6848,57 @@ async function renderLibassPreview(){
   }finally{
     if(libassPreviewController===controller)libassPreviewController=null;
     if(button&&generation===libassPreviewGeneration)button.disabled=false;
+  }
+}
+
+
+function invalidateRenderedInkCheck(){
+  renderedInkGeneration++;
+  if(renderedInkController){renderedInkController.abort();renderedInkController=null;}
+  const button=document.getElementById('previewInkCheckBtn');
+  if(button)button.disabled=false;
+  const status=document.getElementById('previewInkCheckStatus');
+  if(status){status.textContent='当前参数或时间点尚未进行真实像素边界检查。';status.className='small muted';}
+}
+
+async function inspectRenderedInkAtCurrentTime(){
+  const status=document.getElementById('previewInkCheckStatus');
+  const button=document.getElementById('previewInkCheckBtn');
+  const generation=++renderedInkGeneration;
+  const payload=libassPreviewPayload();
+  const identity=currentLibassPreviewIdentity();
+  const stillCurrent=()=>generation===renderedInkGeneration&&identity===currentLibassPreviewIdentity();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  if(renderedInkController)renderedInkController.abort();
+  renderedInkController=controller;
+  try{
+    if(button)button.disabled=true;
+    if(status){status.textContent='正在用 FFmpeg/libass 在黑白背景上分别渲染当前帧并检查像素…';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/inspect-rendered-ink',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
+    });
+    if(!stillCurrent())return;
+    const result=await response.json();
+    if(!response.ok||result.ok!==true)throw new Error(result.error||'实际像素检查失败');
+    if(result.renderer!=='ffmpeg-libass'||result.scope!=='single_timestamp_only')throw new Error('像素检查缺少预期的渲染证据');
+    const point=Number(result.timestamp_seconds).toFixed(2)+' s';
+    if(result.status==='no_visible_ink'){
+      status.textContent='当前 '+point+' 未检测到可见字幕像素，不能据此判定整段安全。';
+      status.className='small status-warn';
+    }else if(result.status==='inside_safe_area'){
+      status.textContent='当前 '+point+' 真实可见像素处于唯一安全区内；仅检查这一帧，其他时间点尚未验证。';
+      status.className='small status-ok';
+    }else if(result.status==='outside_safe_area'){
+      status.textContent='当前 '+point+' 检测到实际像素超出安全区：'+result.bbox.join(' / ')+'；请调整布局或样式。';
+      status.className='small status-bad';
+    }else throw new Error('未识别的像素边界结果');
+  }catch(err){
+    if(!stillCurrent())return;
+    if(status){status.textContent='当前帧像素检查失败：'+shortError(err)+'；安全状态未知。';status.className='small status-bad';}
+  }finally{
+    if(renderedInkController===controller)renderedInkController=null;
+    if(button&&generation===renderedInkGeneration)button.disabled=false;
   }
 }
 
@@ -7601,7 +7657,7 @@ function layoutCueTimePreview(){
   if(!slider||!output)return;
   if(!sub){slider.disabled=true;output.textContent='—';return;}
   slider.disabled=false;
-  const percent=Math.max(5,Math.min(95,Number(slider.value||50)));
+  const percent=Math.max(0,Math.min(100,Number(slider.value||50)));
   const state=layoutTimingState(sub);
   const start=Number(state?.start??sub.start??0);
   const span=Math.max(0,Number(state?.end??sub.end??0)-start);
@@ -8908,6 +8964,7 @@ document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>apply
 
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
+document.getElementById('previewInkCheckBtn')?.addEventListener('click',inspectRenderedInkAtCurrentTime);
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();

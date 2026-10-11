@@ -12,7 +12,7 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -770,7 +770,7 @@ async def api_subtitle_layout_render_preview(request: Request):
             config=config,
             word_alignments=word_alignments,
             duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
-            timestamp=float(data.get("preview_timestamp") or 1.0),
+            timestamp=float(data.get("preview_timestamp") if data.get("preview_timestamp") is not None else 1.0),
         )
         return Response(
             content=png,
@@ -1805,3 +1805,29 @@ def legacy_build(
         return JSONResponse({"ok": True, "report": report})
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/inspect-rendered-ink")
+async def api_subtitle_layout_inspect_rendered_ink(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Rendered ink inspection payload must be an object")
+        alignments = data.get("word_alignments")
+        result = inspect_rendered_ink_frame(
+            english_text=str(data.get("english_text") or ""),
+            chinese_text=str(data.get("chinese_text") or ""),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            config=preview_config_from_payload(data),
+            word_alignments=alignments if isinstance(alignments, list) else None,
+            duration_seconds=float(data.get("preview_duration_seconds") if data.get("preview_duration_seconds") is not None else 3.0),
+            timestamp=float(data.get("preview_timestamp") if data.get("preview_timestamp") is not None else 1.0),
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
+

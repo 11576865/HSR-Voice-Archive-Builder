@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -706,6 +706,29 @@ class Handler(BaseHTTPRequestHandler):
                 "image/png",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
             )
+            return
+
+        if path == "/api/subtitle-layout/inspect-rendered-ink":
+            config = preview_config_from_payload(data)
+            word_alignments = None
+            raw = data.get("word_alignments", "")
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        word_alignments = parsed
+                except (TypeError, ValueError):
+                    word_alignments = None
+            result = inspect_rendered_ink_frame(
+                english_text=data.get("english_text", ""),
+                chinese_text=data.get("chinese_text", ""),
+                source_language=data.get("source_language", "en") or "en",
+                target_language=data.get("target_language", "zh-CN") or "zh-CN",
+                config=config, word_alignments=word_alignments,
+                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                timestamp=_float(data.get("preview_timestamp"), 1.0),
+            )
+            self._json(result)
             return
 
         if path == "/api/update/rollback":
