@@ -5,6 +5,7 @@ import shutil
 import sys
 import csv
 import tempfile
+import uuid
 from email.parser import BytesParser
 from email.policy import default as email_policy
 from http import cookies
@@ -1331,7 +1332,9 @@ class Handler(BaseHTTPRequestHandler):
                 report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
                 generated.mkdir(parents=True, exist_ok=True)
                 temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-                combined = generated / "combined_audio"
+                version = uuid.uuid4().hex
+                combined = generated / "combined_audio_versions" / f"combined-{version}"
+                combined.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     extracted = ensure_dir_or_extract(source, temporary_root, "existing")
                     verify_combined_source_no_collisions(extracted, incoming, successful_filenames=successful)
@@ -1347,8 +1350,8 @@ class Handler(BaseHTTPRequestHandler):
                         shutil.rmtree(extracted)
                     for filename in sorted(successful):
                         shutil.copy2(incoming / filename, staging / filename)
-                    if combined.exists():
-                        shutil.rmtree(combined)
+                    # Publish into an immutable, unique path. Never delete the
+                    # audio directory referenced by the prior project revision.
                     staging.replace(combined)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
@@ -1368,7 +1371,7 @@ class Handler(BaseHTTPRequestHandler):
                         metadata = details.get(filename, {})
                         reference = confirmed_references.get(filename, {})
                         existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": dataset, "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
-                updated_index = generated / "quick_index_incremental.csv"
+                updated_index = generated / f"quick_index_incremental_{version}.csv"
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
