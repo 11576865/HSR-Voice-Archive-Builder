@@ -59,6 +59,12 @@ def choose_remote_additions(
     """
     if not isinstance(remote_plan, dict) or "remote_rows" not in remote_plan:
         raise ValueError("Please check the remote index before applying updates")
+    if not manifest_path.is_file():
+        raise FileNotFoundError("Existing archive manifest not found; build first")
+    import hashlib
+    current_manifest_hash = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
+    if remote_plan.get("manifest_sha256") != current_manifest_hash:
+        raise ValueError("Archive changed since update check; refresh remote comparison before applying")
     rows = remote_plan.get("new_logical")
     if not isinstance(rows, list):
         raise ValueError("Invalid remote update plan")
