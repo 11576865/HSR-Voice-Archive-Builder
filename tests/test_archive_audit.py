@@ -1,11 +1,14 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
-from app.archive_audit import audit_archive
+from app.archive_audit import audit_archive, verify_archive_source_audio
 from app.project import create_project
 from app.security import api_token
 from app.server import app, _set_active, _clear_active
@@ -82,6 +85,100 @@ class ArchiveAuditTests(unittest.TestCase):
                 )
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response.json()["audit"]["summary"]["entries"], 1)
+            finally:
+                _clear_active()
+
+    def test_stream_source_verification_respects_member_identity_and_flags_mismatch(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "output"
+            wavs = root / "wavs"
+            output.mkdir()
+            rows = []
+            for index, chapter, data in (
+                (1, "first", b"RIFF-original-one"),
+                (2, "second", b"RIFF-original-two"),
+            ):
+                folder = wavs / chapter
+                folder.mkdir(parents=True)
+                (folder / "same.wav").write_bytes(data)
+                rows.append({
+                    "index": index, "filename": "same.wav",
+                    "source_member_id": chapter + "/same.wav",
+                    "group": chapter, "sha256": hashlib.sha256(data).hexdigest(),
+                    "source_text": "Original", "target_text": "翻译",
+                    "start_seconds": index, "audio_end_seconds": index + 1,
+                    "display_end_seconds": index + 1,
+                })
+            (output / "manifest.json").write_text(
+                json.dumps({"entries": rows}), encoding="utf-8",
+            )
+            config = create_project(
+                root, name="verify-test", index_csv="index.csv",
+                wav_source="wavs", output_dir="output",
+            )
+            progress = []
+            initial = verify_archive_source_audio(
+                config, output, report_progress=lambda *args: progress.append(args),
+            )
+            self.assertTrue(initial["summary"]["trusted_complete"])
+            self.assertEqual(initial["summary"]["verified"], 2)
+            self.assertEqual(initial["summary"]["mismatch"], 0)
+            self.assertTrue(progress)
+            original_manifest = (output / "manifest.json").read_bytes()
+            (wavs / "second" / "same.wav").write_bytes(b"RIFF-changed-same-duration")
+            after = verify_archive_source_audio(config, output)
+            self.assertFalse(after["summary"]["trusted_complete"])
+            self.assertEqual(after["summary"]["verified"], 1)
+            self.assertEqual(after["summary"]["mismatch"], 1)
+            self.assertEqual(after["findings"][0]["id"], "2")
+            self.assertEqual((output / "manifest.json").read_bytes(), original_manifest)
+
+    def test_source_verifier_never_chooses_ambiguous_basename(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out, wavs = root / "output", root / "wavs"
+            out.mkdir()
+            for dirname in ("a", "b"):
+                sub = wavs / dirname
+                sub.mkdir(parents=True)
+                (sub / "same.wav").write_bytes(b"RIFF" + dirname.encode())
+            (out / "manifest.json").write_text(
+                json.dumps({"entries": [{
+                    "index": 1, "filename": "same.wav", "sha256": "a" * 64,
+                }]}), encoding="utf-8",
+            )
+            config = create_project(
+                root, name="ambiguous", index_csv="index.csv",
+                wav_source="wavs", output_dir="output",
+            )
+            result = verify_archive_source_audio(config, out)
+            self.assertEqual(result["summary"]["ambiguous"], 1)
+            self.assertEqual(result["summary"]["verified"], 0)
+
+    def test_fastapi_start_hash_job_reports_existing_project(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            out = root / "output"
+            out.mkdir()
+            (out / "manifest.json").write_text('{"entries":[]}', encoding="utf-8")
+            config = create_project(
+                root, name="job-test", index_csv="index.csv",
+                wav_source="wavs", output_dir="output",
+            )
+            _set_active(config)
+            try:
+                with patch("app.server.create_job", return_value=SimpleNamespace(id="job-a")) as job:
+                    response = TestClient(
+                        app, base_url="http://127.0.0.1:8765",
+                    ).post(
+                        "/api/project/active/archive/verify-sources",
+                        headers={"X-HSR-Token": api_token()},
+                    )
+                self.assertEqual(response.status_code, 200, response.text)
+                self.assertEqual(response.json()["job"], "job-a")
+                job.assert_called_once()
+                self.assertEqual(job.call_args.args[0], "archive-verify")
             finally:
                 _clear_active()
 
