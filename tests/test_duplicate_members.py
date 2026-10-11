@@ -19,7 +19,7 @@ from app.builder import (
 )
 from app.quick import create_quick_project, quick_scan, source_inventory
 from app.schema import normalize_index
-from app.subtitles import _apply_derived_subtitle_fields, _override_for_entry
+from app.subtitles import _apply_derived_subtitle_fields, _override_for_entry, _sync_corrected_csv
 
 
 CREDENTIALS_OK = {
@@ -514,6 +514,112 @@ class SubtitleOverrideMemberTests(unittest.TestCase):
         )
         self.assertIsNotNone(override)
         self.assertEqual(override["final_chs"], "旧改动")
+
+
+class SubtitleMemberMigrationSafetyTests(unittest.TestCase):
+    def test_changed_member_must_not_inherit_same_logical_id_translation(self) -> None:
+        entries = [
+            {"index": 8, "filename": "new-voice.wav",
+             "source_member_id": "new/chapter/new-voice.wav",
+             "logical_id": "same-logical", "target_text": "新官方中文"},
+        ]
+        overrides = {
+            "old-id": {
+                "filename": "old-voice.wav",
+                "source_member_id": "old/chapter/old-voice.wav",
+                "logical_id": "same-logical",
+                "final_chs": "旧人工校对",
+                "modified": True,
+            }
+        }
+        _apply_derived_subtitle_fields(entries, overrides)
+        self.assertEqual(entries[0]["final_chs"], "新官方中文")
+        self.assertFalse(entries[0]["modified"])
+        self.assertEqual(overrides["old-id"]["final_chs"], "旧人工校对")
+
+    def test_reordered_index_with_exact_source_member_keeps_human_translation(self) -> None:
+        entries = [
+            {"index": 45, "filename": "line.wav",
+             "source_member_id": "scene/line.wav",
+             "logical_id": "shared", "target_text": "原翻译"},
+        ]
+        overrides = {
+            "old-7": {
+                "filename": "line.wav", "source_member_id": "scene/line.wav",
+                "logical_id": "shared", "final_chs": "人工校对", "modified": True,
+            }
+        }
+        _apply_derived_subtitle_fields(entries, overrides)
+        self.assertEqual(entries[0]["final_chs"], "人工校对")
+        self.assertTrue(entries[0]["modified"])
+
+    def test_duplicate_logical_id_without_member_does_not_transfer_legacy_edit(self) -> None:
+        entries = [
+            {"index": 5, "filename": "one.wav", "logical_id": "shared", "target_text": "甲"},
+            {"index": 6, "filename": "two.wav", "logical_id": "shared", "target_text": "乙"},
+        ]
+        overrides = {"old": {"logical_id": "shared", "final_chs": "旧版本", "modified": True}}
+        _apply_derived_subtitle_fields(entries, overrides)
+        self.assertEqual([entry["final_chs"] for entry in entries], ["甲", "乙"])
+
+    def test_corrected_csv_only_matches_unambiguous_original_member(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td)
+            corrected = output / "bilingual_index_corrected.csv"
+            original_rows = [
+                {"index": "1", "filename": "dup.wav",
+                 "source_member_id": "female/dup.wav", "final_chs": "旧女", "modified": "false"},
+                {"index": "2", "filename": "dup.wav",
+                 "source_member_id": "male/dup.wav", "final_chs": "旧男", "modified": "false"},
+                {"index": "9", "filename": "dup.wav",
+                 "source_member_id": "removed/dup.wav", "final_chs": "失效行", "modified": "false"},
+                {"index": "2", "filename": "dup.wav",
+                 "source_member_id": "", "final_chs": "无路径旧行", "modified": "false"},
+                {"index": "99", "filename": "solo.wav",
+                 "source_member_id": "", "final_chs": "旧独有", "modified": "false"},
+                {"index": "1", "filename": "",
+                 "source_member_id": "", "final_chs": "仅索引", "modified": "false"},
+            ]
+            fields = list(original_rows[0].keys())
+            write_csv(corrected, fields, original_rows)
+            entries = [
+                {"index": 1, "filename": "dup.wav", "source_member_id": "female/dup.wav",
+                 "final_chs": "女性校对", "modified": True},
+                {"index": 2, "filename": "dup.wav", "source_member_id": "male/dup.wav",
+                 "final_chs": "男性校对", "modified": True},
+                {"index": 3, "filename": "solo.wav", "source_member_id": "solo.wav",
+                 "final_chs": "独有校对", "modified": True},
+            ]
+            _sync_corrected_csv(output, entries)
+            updated = read_csv(corrected)
+            self.assertEqual(updated[0]["final_chs"], "女性校对")
+            self.assertEqual(updated[1]["final_chs"], "男性校对")
+            self.assertEqual(updated[0]["modified"], "true")
+            self.assertEqual(updated[1]["modified"], "true")
+            self.assertEqual(updated[2]["final_chs"], "失效行")
+            self.assertEqual(updated[3]["final_chs"], "无路径旧行")
+            self.assertEqual(updated[4]["final_chs"], "独有校对")
+            # Old index-only record is recognized, but does not select a
+            # same-basename sibling based on the duplicated name.
+            self.assertEqual(updated[5]["final_chs"], "女性校对")
+            self.assertEqual(updated[5]["modified"], "true")
+
+    def test_corrected_csv_duplicate_member_identity_must_not_choose_last(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td)
+            corrected = output / "bilingual_index_corrected.csv"
+            write_csv(corrected, ["index", "filename", "source_member_id", "final_chs"], [
+                {"index": "8", "filename": "dup.wav",
+                 "source_member_id": "same/dup.wav", "final_chs": "旧"},
+            ])
+            entries = [
+                {"index": 8, "filename": "dup.wav",
+                 "source_member_id": "same/dup.wav", "final_chs": "甲", "modified": True},
+                {"index": 9, "filename": "dup.wav",
+                 "source_member_id": "same/dup.wav", "final_chs": "乙", "modified": True},
+            ]
+            _sync_corrected_csv(output, entries)
+            self.assertEqual(read_csv(corrected)[0]["final_chs"], "旧")
 
 
 class EndToEndDuplicateBuildTests(unittest.TestCase):
