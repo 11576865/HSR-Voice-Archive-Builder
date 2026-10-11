@@ -134,6 +134,33 @@ class TestAdvancedTypography(unittest.TestCase):
                 rf"{{\kt40\{mode}40}}Hello {{\kt100\{mode}30}}world",
             )
 
+    def test_multiline_karaoke_preserves_verified_words_across_line_break(self):
+        lines = [
+            SubtitleLinePos(text="May this", font_size=42, x=960, y=400, alignment=2),
+            SubtitleLinePos(text="journey", font_size=42, x=960, y=450, alignment=2),
+        ]
+        words = [
+            {"word": "May ", "start": 0.40, "end": 0.60},
+            {"word": "this ", "start": 0.60, "end": 0.90},
+            {"word": "journey", "start": 1.10, "end": 1.50},
+        ]
+        rendered = format_multiline_karaoke(lines, 1.60, words, mode="k")
+        self.assertEqual(
+            rendered,
+            r"{\kt40\k20}May{\k30} this\N{\kt110\k40}journey",
+        )
+
+    def test_multiline_karaoke_refuses_to_split_word(self):
+        lines = [
+            SubtitleLinePos(text="jour", font_size=42, x=960, y=400, alignment=2),
+            SubtitleLinePos(text="ney", font_size=42, x=960, y=450, alignment=2),
+        ]
+        words = [{"word": "journey", "start": 0.20, "end": 0.80}]
+        self.assertEqual(
+            format_multiline_karaoke(lines, 1.0, words, mode="kf"),
+            r"jour\Nney",
+        )
+
     def test_format_kf_karaoke_explicit_word_alignments(self):
         alignments = [
             {"word": "May ", "start": 0.0, "end": 0.3},
