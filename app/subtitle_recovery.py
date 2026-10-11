@@ -68,6 +68,9 @@ def _recovery_snapshot(
         for record in existing.values() if isinstance(record, dict)
     }
     existing_keys = set(existing)
+    current_ids = Counter(
+        str(_entry_id(row)) for row in entries if isinstance(row, dict)
+    )
 
     result_rows: list[dict[str, Any]] = []
     for old_key, record in saved.items():
@@ -77,6 +80,8 @@ def _recovery_snapshot(
         match = members.get(member, []) if member else []
         status = "available"
         if not member or len(match) != 1 or recorded_members.get(member, 0) != 1:
+            status = "source_missing_or_ambiguous"
+        elif current_ids.get(str(_entry_id(match[0])), 0) != 1:
             status = "source_missing_or_ambiguous"
         elif not isinstance(text, str) or not text.strip():
             status = "empty_translation"
@@ -92,7 +97,7 @@ def _recovery_snapshot(
             audio_now = str(match[0].get("sha256") or "").lower().strip()
             if audio_before and audio_now and audio_before != audio_now:
                 status = "source_audio_changed"
-            elif audio_now and not audio_before:
+            elif (audio_now and not audio_before) or (audio_before and not audio_now):
                 status = "missing_audio_provenance"
             elif (member in existing_members
                   or str(_entry_id(match[0])) in existing_keys):
