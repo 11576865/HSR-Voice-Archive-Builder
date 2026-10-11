@@ -70,17 +70,19 @@ class HumanTranslationSourceRevisionTests(unittest.TestCase):
             self.assertTrue(result["translation_override_stale"])
             self.assertEqual(result["translation_override_previous_chs"], "人工翻译一")
 
-            refresh_subtitle_artifacts(cfg, output)
+            with self.assertRaisesRegex(ValueError, "Official source text changed"):
+                refresh_subtitle_artifacts(cfg, output)
+            from app.subtitle_export_status import read_subtitle_export_health
+            self.assertEqual(read_subtitle_export_health(output)["state"], "failed")
             saved_manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
             entry = saved_manifest["entries"][0]
             self.assertEqual(entry["source_text"], "Revised official line")
-            self.assertEqual(entry["final_chs"], "新版原始中文")
+            self.assertEqual(entry["target_text"], "新版原始中文")
             self.assertNotIn("translation_override_stale", entry)
             self.assertNotIn("translation_override_previous_chs", entry)
             self.assertEqual((output / "subtitles_overrides.json").read_bytes(), overrides_before)
-            srt = (output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
-            self.assertIn("新版原始中文", srt)
-            self.assertNotIn("人工翻译一", srt)
+            old_srt = (output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
+            self.assertNotIn("新版原始中文", old_srt)
 
             with patch("app.subtitles.invalidate_subtitle_stages"):
                 saved_again = update_project_subtitles(cfg, output, [{
@@ -95,6 +97,10 @@ class HumanTranslationSourceRevisionTests(unittest.TestCase):
             self.assertFalse(after["translation_override_stale"])
             self.assertFalse(after["confirmed"])
             self.assertEqual(after["translation_override_previous_chs"], "")
+            self.assertEqual(read_subtitle_export_health(output)["state"], "current")
+            reviewed_srt = (output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
+            self.assertIn("新版人工复核译文", reviewed_srt)
+            self.assertNotIn("人工翻译一", reviewed_srt)
             self.assertNotEqual(
                 load_subtitle_overrides(output)["1"]["source_text_sha256"],
                 record["source_text_sha256"],
