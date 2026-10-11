@@ -111,6 +111,7 @@ def publish_remote_revision(
     # Validate every existing chapter-specific WAV member too; a partial
     # staged tree must never become the project's active source directory.
     counts: dict[str, int] = {}
+    selected_audio_hashes: dict[str, str] = {}
     seen_members: set[str] = set()
     for number, row in enumerate(rows, 1):
         filename = str(row.get("filename") or "").strip().replace("\\", "/")
@@ -142,6 +143,9 @@ def publish_remote_revision(
             raise ValueError(f"Published indexed WAV missing: {member}")
         if filename.casefold() in selected:
             counts[key] = counts.get(key, 0) + 1
+            # These new bytes are the newly downloaded source evidence,
+            # not a pre-existing audio member to be rewritten in place.
+            selected_audio_hashes[member] = _sha(current)
     if set(counts) != selected or any(count != 1 for count in counts.values()):
         raise ValueError("Published index does not contain exactly the selected WAV records")
     if revision_path.exists():
@@ -172,6 +176,7 @@ def publish_remote_revision(
         "new_wav_source": str(combined),
         "new_index_csv": str(updated_index),
         "new_index_sha256": _sha(updated_index),
+        "new_audio_sha256": selected_audio_hashes,
         "new_project_sha256": expected_next_sha,
         "selected_filenames": list(selected_filenames),
     }
@@ -183,6 +188,14 @@ def publish_remote_revision(
     _assert_boundary(config, manifest_path, expected_boundary)
     if _sha(updated_index) != journal["new_index_sha256"]:
         raise ValueError("Published index changed after revision preparation")
+    for member, digest in selected_audio_hashes.items():
+        current = combined
+        for component in member.split("/"):
+            current = current / component
+            if current.is_symlink():
+                raise ValueError("Published WAV identity changed after revision preparation")
+        if not current.is_file() or _sha(current) != digest:
+            raise ValueError("Published WAV changed after revision preparation: " + member)
     save_project(proposed)
     config.__dict__.update(vars(proposed))
     if _sha(root / PROJECT_FILENAME) != expected_next_sha:
@@ -236,6 +249,32 @@ def revision_status(config: ProjectConfig, revision_id: str) -> dict[str, Any]:
         next_index.is_file()
         and _sha(next_index) == str(journal.get("new_index_sha256") or "")
     )
+    audio_hashes = journal.get("new_audio_sha256")
+    new_audio_unchanged = isinstance(audio_hashes, dict) and bool(audio_hashes)
+    if new_audio_unchanged:
+        root = Path(config.root).resolve()
+        expected_combined = root / ".generated" / "combined_audio_versions" / f"combined-{revision_id}"
+        source_path = Path(str(journal.get("new_wav_source") or ""))
+        if source_path != expected_combined:
+            new_audio_unchanged = False
+        else:
+            for member, digest in audio_hashes.items():
+                parts = str(member).split("/")
+                if (not parts or any(part in {"", ".", ".."} for part in parts)
+                        or not isinstance(digest, str) or len(digest) != 64):
+                    new_audio_unchanged = False
+                    break
+                candidate = source_path
+                for part in parts:
+                    candidate = candidate / part
+                    if candidate.is_symlink():
+                        new_audio_unchanged = False
+                        break
+                if not new_audio_unchanged:
+                    break
+                if not candidate.is_file() or _sha(candidate) != digest:
+                    new_audio_unchanged = False
+                    break
     return {
         "revision_id": revision_id,
         "state": live_state,
@@ -247,6 +286,7 @@ def revision_status(config: ProjectConfig, revision_id: str) -> dict[str, Any]:
         "prior_resources_exist": prior_resources_exist,
         "prior_index_unchanged": previous_index_unchanged,
         "new_index_unchanged": new_index_unchanged,
+        "new_audio_unchanged": new_audio_unchanged,
         "can_rollback": live_state in {"active", "applied_unfinalized"}
             and same_manifest and prior_resources_exist
             and previous_index_unchanged and new_index_unchanged,
