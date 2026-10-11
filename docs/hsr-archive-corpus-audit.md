@@ -251,3 +251,65 @@ already restored into the active Manifest.
 These tests are synthetic unit/UI/fixture evidence. Real user archives, full
 crash-injection, multi-process writers and physical Android devices remain
 unverified. Do not merge into `main` solely on the basis of green CI.
+
+
+## Human Chinese recovery: provenance-gated explicit selection
+
+Backup import and **restoring selected human edits into a live archive** are now
+separate operations. The existing Translation Recovery section includes
+"预览人工中文字幕恢复" and "恢复选中的安全匹配项". The preview performs no
+write, displays saved Chinese text as recovery evidence and starts with every
+checkbox unchecked. Both FastAPI and Termux Lite implement the same
+`/api/recovery/human/preview` and `/api/recovery/human/apply` contract.
+
+Restoration is permitted only if:
+
+- The recovery package passes its original size/hash/file integrity checks
+  and contains `output/subtitles_overrides.json` (the backed-up **current**
+  human CHS corrections).
+- A saved **complete source_member_id** uniquely identifies one current WAV
+  member and one unique subtitle entry ID; no sibling of the same basename
+  is silently selected.
+- The saved transcript evidence uses the **whitespace-preserving v2**
+  fingerprint scheme and exactly matches the current read-only source text.
+  Legacy v1/unknown hashes remain review-only because removing all word
+  boundaries previously made distinct English expressions hash alike.
+- If the backup contains an original audio hash, the current Manifest must
+  contain the same hash; if the current Manifest has a hash but the backup
+  does not, automatic restoration also refuses unproven identity.
+- No current human correction occupies the target source member or
+  current item ID; conflicts are never overwritten. The old CHS must differ
+  from the current base Chinese to be useful.
+
+The Apply request contains **explicitly selected source members**, expected
+backup bytes hash, expected Manifest bytes hash and expected project root.
+It re-parses both files **inside the existing subtitle edit lock** and rejects
+a changed or ambiguous preview before calling the ordinary subtitle saver,
+which checks the current source member, base Chinese and transcript hash
+again. The original validated package is preserved under
+`.state/recovery_imports/` before any edit. Restoration re-saves only the
+Chinese `final_chs` value, **not** the official/source transcript, previous
+confirmation receipt, source audio, Karaoke timings, or unrelated sidecars.
+A repaired record is treated as an unconfirmed current edit until it has
+been reviewed in the present project.
+
+Importantly, `subtitles_override_history.jsonl` contains **past revisions**
+that may have been superseded or explicitly reset. This version of the
+recovery UI **does not automatically replay those historical revisions**:
+they are preserved inside the backup for manual investigation. A human-only
+backup imported through the old generic import endpoint is still
+quarantined rather than automatically applied. Restoration is opt-in using
+the new separate preview/apply endpoints.
+
+Evidence: `app/subtitle_recovery.py`,
+`tests/test_human_subtitle_recovery.py`,
+`app/server.py`, `app/lite_server.py`,
+and the existing Recovery panel in `app/static/index.html`.
+The tests use synthetic member/Manifest fixtures and explicitly check
+same-basename siblings, reindexed entries, legacy hashes, changed original
+text or audio, missing current audio hashes, duplicated current IDs, an
+existing human correction, altered Manifest between preview/Apply, and
+selected-only FastAPI writes. They do **not** establish actual historical
+official HSR data provenance, cross-process atomicity or a large real-game
+archive restore. Legacy revision evidence remains a manual restoration
+problem; the system must not claim full historic reconstruction.
