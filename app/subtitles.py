@@ -116,6 +116,7 @@ def _override_for_entry(
     entry: dict[str, Any],
     overrides: dict[str, dict[str, Any]],
     ambiguous_filenames: frozenset[str] = frozenset(),
+    ambiguous_logical_ids: frozenset[str] = frozenset(),
 ) -> dict[str, Any] | None:
     item_id = _entry_id(entry)
     filename = str(entry.get("filename", "") or "")
@@ -151,8 +152,14 @@ def _override_for_entry(
                 continue
             return candidate
         if logical_id and stored_logical_id == logical_id:
-            if filename in ambiguous_filenames:
+            if logical_id in ambiguous_logical_ids or filename in ambiguous_filenames:
                 continue
+            # A logical ID is not evidence that two chapter-specific WAV
+            # members are the same utterance. Never migrate an old human
+            # translation to a different member through this fallback.
+            if stored_member or member_id:
+                if not stored_member or not member_id or stored_member != member_id:
+                    continue
             return candidate
     return None
 
@@ -162,14 +169,21 @@ def _apply_derived_subtitle_fields(
     overrides: dict[str, dict[str, Any]],
 ) -> None:
     filename_counts: dict[str, int] = {}
+    logical_counts: dict[str, int] = {}
     for entry in entries:
         name = str(entry.get("filename", "") or "")
+        logical = str(entry.get("logical_id", "") or "")
         if name:
             filename_counts[name] = filename_counts.get(name, 0) + 1
+        if logical:
+            logical_counts[logical] = logical_counts.get(logical, 0) + 1
     ambiguous = frozenset(name for name, count in filename_counts.items() if count > 1)
+    ambiguous_logical = frozenset(
+        key for key, count in logical_counts.items() if count > 1
+    )
     for entry in entries:
         raw_target = str(entry.get("target_text") or entry.get("chinese", ""))
-        override = _override_for_entry(entry, overrides, ambiguous)
+        override = _override_for_entry(entry, overrides, ambiguous, ambiguous_logical)
         if override is None:
             entry["final_chs"] = raw_target
             entry["modified"] = False
@@ -193,27 +207,55 @@ def _sync_corrected_csv(
     except (OSError, csv.Error):
         return
 
-    by_member = {
-        str(entry.get("source_member_id", "")): entry
-        for entry in entries
-        if str(entry.get("source_member_id", "") or "")
-    }
-    by_filename = {
-        str(entry.get("filename", "")): entry
-        for entry in entries
-        if str(entry.get("filename", ""))
-    }
-    by_index = {
-        str(_entry_id(entry)): entry
-        for entry in entries
-        if _entry_id(entry) is not None
-    }
+    # Do not resolve duplicate members, filenames or indices by dict
+    # last-wins. Each CSV row must identify one specific original WAV.
+    by_member: dict[str, dict[str, Any]] = {}
+    by_filename: dict[str, dict[str, Any]] = {}
+    by_index: dict[str, dict[str, Any]] = {}
+    ambiguous_members: set[str] = set()
+    ambiguous_names: set[str] = set()
+    ambiguous_indices: set[str] = set()
+
+    def register(
+        mapping: dict[str, dict[str, Any]],
+        ambiguous: set[str],
+        key: str,
+        entry: dict[str, Any],
+    ) -> None:
+        if not key or key in ambiguous:
+            return
+        if key in mapping:
+            ambiguous.add(key)
+            mapping.pop(key, None)
+        else:
+            mapping[key] = entry
+
+    for entry in entries:
+        register(by_member, ambiguous_members,
+                 str(entry.get("source_member_id") or "").replace("\\", "/"), entry)
+        register(by_filename, ambiguous_names,
+                 str(entry.get("filename") or ""), entry)
+        raw_id = _entry_id(entry)
+        register(by_index, ambiguous_indices,
+                 str(raw_id) if raw_id is not None else "", entry)
+
     for row in rows:
-        entry = by_member.get(str(row.get("source_member_id", "") or ""))
-        if entry is None:
-            entry = by_filename.get(str(row.get("filename", "")))
-        if entry is None:
-            entry = by_index.get(str(row.get("index", "")))
+        member = str(row.get("source_member_id") or "").replace("\\", "/")
+        filename = str(row.get("filename") or "")
+        index = str(row.get("index") or "")
+        if member:
+            # Explicit package-relative identity is authoritative. An old
+            # source member may have disappeared after a rebuild; do not
+            # transplant the text to a new member using its old basename/ID.
+            entry = by_member.get(member)
+        elif filename:
+            # Old corrected CSVs may not have member identity. Only a
+            # globally unique filename may be used as a migration fallback.
+            entry = by_filename.get(filename)
+        else:
+            # Only very old index-only rows reach here; duplicate indices
+            # cannot be inferred from row ordering.
+            entry = by_index.get(index)
         if entry is None:
             continue
         row["final_chs"] = str(entry.get("final_chs", ""))
