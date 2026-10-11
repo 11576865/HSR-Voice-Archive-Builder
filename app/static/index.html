@@ -3314,7 +3314,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
       </details>
       <details id="translationRecovery" style="margin-top:14px">
         <summary>Translation Recovery（翻译恢复）</summary>
-        <p class="small muted">导出仅包含翻译检查点、QA、索引与必要文本元数据；不包含 WAV、FLAC、MKV 或 API 密钥。导入会先校验完整性，再合并可复用的翻译记录。</p>
+        <p class="small muted">恢复包可包含翻译检查点、人工中文字幕和修订历史；不包含 WAV、FLAC、MKV 或 API 密钥。普通导入只合并兼容翻译检查点；要恢复人工中文字幕，须单独预览并逐条选择，绝不修改原语言原文。</p>
         <div id="autoRecoveryStatus" class="notice" style="margin-bottom:10px">自动恢复保护尚无状态。</div>
         <div class="actions">
           <button type="button" class="success" id="exportRecoveryBtn">导出翻译恢复包</button>
@@ -3322,6 +3322,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <button type="button" id="importRecoveryBtn">导入翻译恢复包</button>
         </div>
         <div id="recoveryImportStatus" class="small muted" style="margin-top:8px" role="status" aria-live="polite">尚未导入恢复包。</div>
+        <div class="actions">
+          <button type="button" id="previewHumanRestoreBtn">预览人工中文字幕恢复</button>
+          <button type="button" id="applyHumanRestoreBtn" disabled>恢复选中的安全匹配项</button>
+        </div>
+        <p class="small muted">不会自动选择任何译文。来源缺失、原文或音频版本不符、旧指纹不可验证、当前已有人工校对的记录仅供检查，不参与自动恢复。</p>
+        <div id="humanRecoveryStatus" class="small muted" role="status" aria-live="polite">请选择恢复包后预览。</div>
+        <div id="humanRecoveryCandidates" style="display:grid;gap:7px;margin-top:9px"></div>
       </details>
       <details id="projectResources" style="margin-top:14px">
         <summary>Project Resources（项目资源）</summary>
@@ -5681,6 +5688,104 @@ async function importTranslationRecovery(){
   }catch(x){if(s)s.textContent='导入失败：'+shortError(x);setLog(String(x))}
   finally{if(button)button.disabled=false}
 }
+let humanRestorePreview=null;
+let humanRestoreText='';
+function clearHumanRestorePreview(){
+  humanRestorePreview=null;humanRestoreText='';
+  const items=document.getElementById('humanRecoveryCandidates');
+  if(items)items.replaceChildren();
+  const apply=document.getElementById('applyHumanRestoreBtn');
+  if(apply)apply.disabled=true;
+  const status=document.getElementById('humanRecoveryStatus');
+  if(status)status.textContent='请选择恢复包后预览。';
+}
+document.getElementById('importRecoveryFile').addEventListener('change',clearHumanRestorePreview);
+function chosenHumanRestoreMembers(){
+  const candidates=document.getElementById('humanRecoveryCandidates');
+  return Array.from(candidates.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(node=>node.value);
+}
+function updateHumanRestoreButton(){
+  const button=document.getElementById('applyHumanRestoreBtn');
+  if(button)button.disabled=!humanRestorePreview||chosenHumanRestoreMembers().length===0;
+}
+async function previewHumanSubtitleRestore(){
+  const input=document.getElementById('importRecoveryFile');
+  const status=document.getElementById('humanRecoveryStatus');
+  const button=document.getElementById('previewHumanRestoreBtn');
+  clearHumanRestorePreview();
+  try{
+    if(!input.files?.[0])throw new Error('请先选择 .hsrbackup 文件');
+    if(button)button.disabled=true;
+    if(status)status.textContent='正在核验备份、语音来源和原文版本…';
+    const raw=await input.files[0].text();
+    const data=new FormData();data.set('recovery_text',raw);
+    const result=await api('/api/recovery/human/preview',{method:'POST',body:data});
+    const preview=result.result||{};
+    if(!currentProject||String(currentProject.root||'')!==String(preview.project_root||'')){
+      throw new Error('预览期间项目已切换，请重新预览');
+    }
+    humanRestorePreview=preview;humanRestoreText=raw;
+    const panel=document.getElementById('humanRecoveryCandidates');
+    const messages={
+      available:'可选择恢复',
+      source_missing_or_ambiguous:'来源路径缺失或重复',
+      empty_translation:'旧译文为空',
+      legacy_provenance:'历史版本证据不足',
+      source_text_changed:'原文版本不同',
+      source_audio_changed:'音频版本不同',
+      missing_audio_provenance:'缺少音频来源指纹',
+      current_edit_exists:'当前已有人工校对',
+      already_base:'与当前基础译文相同'
+    };
+    for(const row of preview.rows||[]){
+      const label=document.createElement('label');
+      label.style.cssText='display:flex;gap:9px;align-items:flex-start;padding:8px;border:1px solid var(--line);border-radius:6px;margin:0';
+      const checkbox=document.createElement('input');
+      checkbox.type='checkbox';checkbox.value=String(row.source_member_id||'');
+      checkbox.disabled=!row.restorable;checkbox.checked=false;
+      checkbox.style.cssText='width:auto;min-height:unset;margin-top:4px';
+      checkbox.addEventListener('change',updateHumanRestoreButton);
+      const copy=document.createElement('span');
+      copy.style.whiteSpace='pre-wrap';copy.style.minWidth='0';
+      copy.textContent=(row.restorable?'可恢复':'仅供检查')+' · '+
+        (messages[row.status]||row.status)+' · '+(row.source_member_id||'缺少路径')+
+        '\n'+String(row.saved_chinese||'');
+      label.append(checkbox,copy);panel.append(label);
+    }
+    if(status)status.textContent='包内 '+Number(preview.total||0)+' 条；严格来源匹配可恢复 '+
+      Number(preview.restorable||0)+' 条。请手动勾选，未选择项不会写入。';
+  }catch(err){clearHumanRestorePreview();if(status)status.textContent='预览失败：'+shortError(err)}
+  finally{if(button)button.disabled=false}
+}
+async function applyHumanSubtitleRestore(){
+  const status=document.getElementById('humanRecoveryStatus');
+  const button=document.getElementById('applyHumanRestoreBtn');
+  try{
+    if(!humanRestorePreview||!humanRestoreText)throw new Error('请先预览恢复包');
+    const selected=chosenHumanRestoreMembers();
+    if(!selected.length)throw new Error('请先勾选需要恢复的中文字幕');
+    if(!currentProject||String(currentProject.root||'')!==humanRestorePreview.project_root)
+      throw new Error('项目已切换，请重新预览');
+    if(!window.confirm('确认恢复 '+selected.length+' 条人工中文字幕？不会修改原文、覆盖已有人工译文或自动恢复旧版已校对标记。'))return;
+    button.disabled=true;if(status)status.textContent='正在恢复已选择的中文字幕并刷新字幕…';
+    const data=new FormData();
+    data.set('recovery_text',humanRestoreText);
+    data.set('selected_source_members',JSON.stringify(selected));
+    data.set('expected_backup_sha256',humanRestorePreview.backup_sha256);
+    data.set('expected_manifest_sha256',humanRestorePreview.manifest_sha256);
+    data.set('expected_project_root',humanRestorePreview.project_root);
+    const response=await api('/api/recovery/human/apply',{method:'POST',body:data});
+    const result=response.result||{};
+    clearHumanRestorePreview();
+    if(status)status.textContent='已恢复 '+Number(result.restored_count||0)+' 条中文字幕；备份已保留。'+
+      (result.artifact_error?' 字幕导出仍需处理：'+result.artifact_error:'');
+    if(typeof refresh==='function')await refresh();
+  }catch(err){if(status)status.textContent='恢复失败：'+shortError(err);setLog(String(err));updateHumanRestoreButton()}
+  finally{if(button&&!humanRestorePreview)button.disabled=true}
+}
+document.getElementById('previewHumanRestoreBtn').onclick=previewHumanSubtitleRestore;
+document.getElementById('applyHumanRestoreBtn').onclick=applyHumanSubtitleRestore;
 document.getElementById('exportRecoveryBtn').onclick=exportTranslationRecovery;
 document.getElementById('importRecoveryBtn').onclick=importTranslationRecovery;
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
