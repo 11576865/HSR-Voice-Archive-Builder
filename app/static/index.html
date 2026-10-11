@@ -3897,6 +3897,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 <span class="proof-editor-meta"><span id="subInitialSourceBadge" class="badge">初始来源 —</span><span id="subCharCounter" class="small muted">0 字</span></span>
               </div>
               <textarea id="subFinalEditor" class="sub-textarea" placeholder="官方中文存在时以官方中文为初始字幕；否则使用补译结果。"></textarea>
+              <div id="subRevisionWarning" class="notice warn" hidden role="status">
+                <strong>官方原文版本发生变化</strong>
+                <p class="small">先前人工中文字幕未自动沿用，旧校对文本仍保存在项目中。请对照新版原文重新核对，再明确保存。</p>
+                <div class="small muted">旧版人工中文字幕（只读供对照）：</div>
+                <div id="subPreviousTranslation" class="sub-ref-content" style="white-space:pre-wrap"></div>
+              </div>
               <div class="sub-nav-bar proofreading-nav-actions">
                 <button type="button" id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)" title="上一条字幕 (Alt+Up)">上一条</button>
                 <button type="button" id="subNextBtn" aria-label="下一条字幕 (Alt+Down)" title="下一条字幕 (Alt+Down)">下一条</button>
@@ -5999,6 +6005,8 @@ function renderSubtitleList(){
       : sub._dirty
         ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
         : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
+    const staleTag=sub.translation_override_stale
+      ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">原文变化·需复核</span>' : '';
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
     const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
     const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
@@ -6011,7 +6019,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+refTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+staleTag+srcTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -6050,6 +6058,9 @@ function renderSubtitleEditState(){
   else if(sub._dirty)parts.push('<span class="badge" style="color:var(--warn)">未保存</span>');
   else if(sub.modified)parts.push('<span class="badge" style="color:var(--ok)">已人工修改</span>');
   else parts.push('<span class="badge" style="color:var(--muted)">未修改</span>');
+  if(sub.translation_override_stale){
+    parts.push('<span class="badge" style="color:var(--warn)">旧校对待复核</span>');
+  }
   badge.innerHTML=parts.join(' ');
 }
 
@@ -6073,6 +6084,8 @@ function renderActiveSubtitle(){
     document.getElementById('subSourceFileMeta').textContent='源文件：—';
     document.getElementById('subFinalEditor').value='';
     document.getElementById('subFinalEditor').disabled=true;
+    const revisionNote=document.getElementById('subRevisionWarning');
+    if(revisionNote)revisionNote.hidden=true;
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
@@ -6095,6 +6108,10 @@ function renderActiveSubtitle(){
   document.getElementById('subSourceLangBadge').textContent=(sub.source_language||'EN').toUpperCase();
   document.getElementById('subSourceFileMeta').textContent='源文件：'+(sub.source_member_id||sub.filename||'未记录');
 
+  const revisionNote=document.getElementById('subRevisionWarning');
+  if(revisionNote)revisionNote.hidden=!sub.translation_override_stale;
+  const oldTranslation=document.getElementById('subPreviousTranslation');
+  if(oldTranslation)oldTranslation.textContent=String(sub.translation_override_previous_chs||'');
   const editor=document.getElementById('subFinalEditor');
   const initialText=subtitleInitialText(sub);
   const displayText=String(sub.final_chs||initialText);
