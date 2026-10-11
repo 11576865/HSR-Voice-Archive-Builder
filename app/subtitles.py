@@ -249,9 +249,15 @@ def _sync_corrected_csv(
             # transplant the text to a new member using its old basename/ID.
             entry = by_member.get(member)
         elif filename:
-            # Old corrected CSVs may not have member identity. Only a
-            # globally unique filename may be used as a migration fallback.
+            # Old corrected CSVs may not have member identity. Prefer a
+            # unique filename. Some older manifests have no filename at all;
+            # allow a unique index only when the target manifest row likewise
+            # has no filename, never when names conflict or are duplicated.
             entry = by_filename.get(filename)
+            if entry is None and filename not in ambiguous_names:
+                indexed = by_index.get(index)
+                if indexed is not None and not str(indexed.get("filename") or ""):
+                    entry = indexed
         else:
             # Only very old index-only rows reach here; duplicate indices
             # cannot be inferred from row ordering.
