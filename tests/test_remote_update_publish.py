@@ -302,6 +302,57 @@ class RevisionPublicationTests(unittest.TestCase):
                          "applied_unfinalized")
         self.assertFalse(revision_status(self.config, self.revision)["can_rollback"])
 
+    def test_selected_audio_modified_after_preparation_blocks_commit(self):
+        from app.remote_update_publish import atomic_write_json
+        previous = (self.root / PROJECT_FILENAME).read_bytes()
+        added_wav = self.audio / "new.wav"
+        original = added_wav.read_bytes()
+
+        def corrupt_after_preparation(path, data):
+            atomic_write_json(path, data)
+            if data.get("state") == "prepared":
+                added_wav.write_bytes(b"different voice content")
+
+        with patch("app.remote_update_publish.atomic_write_json",
+                   side_effect=corrupt_after_preparation):
+            with self.assertRaisesRegex(ValueError, "Published WAV changed"):
+                self.publish()
+        self.assertEqual((self.root / PROJECT_FILENAME).read_bytes(), previous)
+        self.assertEqual(load_project(self.root).wav_source, "wavs")
+        self.assertEqual(revision_status(self.config, self.revision)["state"], "not_applied")
+        self.assertFalse(revision_status(self.config, self.revision)["new_audio_unchanged"])
+        self.assertEqual(original, b"new voice")
+
+    def test_published_audio_mutation_is_observable_without_deleting_prior_source(self):
+        active = self.publish()
+        self.assertTrue(active["new_audio_unchanged"])
+        (self.audio / "new.wav").write_bytes(b"tampered voice, same member name")
+        state = revision_status(self.config, self.revision)
+        self.assertEqual(state["state"], "active")
+        self.assertFalse(state["new_audio_unchanged"])
+        self.assertTrue((self.root / "wavs" / "original.wav").exists())
+        # Recovery to the previous intact index/source remains possible;
+        # damaged new bytes are never silently trusted.
+        self.assertTrue(state["can_rollback"])
+        restored = rollback_remote_revision(
+            self.config, self.revision,
+            expected_project_sha256=active["current_project_sha256"],
+        )
+        self.assertEqual(restored["state"], "rolled_back")
+
+    def test_published_audio_symlink_substitution_is_observable(self):
+        state = self.publish()
+        target = self.audio / "new.wav"
+        target.unlink()
+        try:
+            target.symlink_to(self.root / "wavs" / "original.wav")
+        except (OSError, NotImplementedError):
+            self.skipTest("Symbolic links are unsupported here")
+        actual = revision_status(self.config, self.revision)
+        self.assertFalse(actual["new_audio_unchanged"])
+        self.assertEqual(actual["state"], "active")
+        self.assertEqual(state["revision_id"], actual["revision_id"])
+
     def test_rollback_refuses_tampered_old_or_new_index(self):
         active = self.publish()
         original_index = self.root / "index.csv"
