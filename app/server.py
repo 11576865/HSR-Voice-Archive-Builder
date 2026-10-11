@@ -263,6 +263,32 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
     }
 
 
+@app.post("/api/project/{project_id}/archive/verify-sources")
+def api_verify_project_archive_sources(project_id: str):
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        output_dir = _project_paths(config).get("output")
+        if output_dir is None or not (output_dir / "manifest.json").is_file():
+            raise FileNotFoundError("请先完成档案构建")
+
+        def run(report_progress):
+            return verify_archive_source_audio(
+                config, output_dir, report_progress=report_progress,
+            )
+
+        job = create_job(
+            "archive-verify", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
+
+
 @app.get("/api/project/{project_id}/archive/audit")
 def api_get_project_archive_audit(project_id: str):
     try:
