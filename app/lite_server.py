@@ -15,6 +15,7 @@ from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
+from .ass_artifact_evidence import verify_exported_ass, read_exported_ass_evidence
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -23,7 +24,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, cancel_job
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -308,6 +309,11 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/subtitle-layout/exported-evidence":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            self._json({"ok": True, **read_exported_ass_evidence(output, config)})
+            return
         if path == "/api/subtitle-layout/fonts":
             query = parse_qs(urlsplit(self.path).query)
             q = (query.get("q") or [""])[-1]
@@ -544,6 +550,33 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/subtitle-layout/exported-evidence/start":
+            config = _active_config()
+            if not data.get("expected_project_root") or data["expected_project_root"] != config.root:
+                raise ValueError("Active project changed; refusing to verify another project's ASS")
+            raw_limit = data.get("sample_limit", "8")
+            if not raw_limit.isdigit() or not 1 <= int(raw_limit) <= 12:
+                raise ValueError("sample_limit must be an integer between 1 and 12")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Output directory is not configured")
+            from .ass_artifact_evidence import _export_identity
+            _export_identity(output, config)
+            def run(cancel_event, report_progress):
+                return verify_exported_ass(
+                    config, output, cancel_event=cancel_event,
+                    report_progress=report_progress, sample_limit=int(raw_limit),
+                )
+            job = create_job(
+                "ass-artifact-evidence", run, with_cancel=True, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id, "scope": "bounded_exported_ass_samples"})
+            return
+        if path == "/api/subtitle-layout/exported-evidence/cancel":
+            config = _active_config()
+            self._json({"ok": True, "job": cancel_job(data.get("job", ""), project_root=config.root)})
+            return
         if path.startswith("/api/project/") and path.endswith("/archive/verify-sources"):
             config = _active_config()
             assert_project_idle(config.root)

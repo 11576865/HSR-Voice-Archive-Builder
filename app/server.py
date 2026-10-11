@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
+from .ass_artifact_evidence import verify_exported_ass, read_exported_ass_evidence
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -21,7 +22,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, cancel_job
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -1701,6 +1702,62 @@ def api_human_subtitle_recovery_apply(
             expected_project_root=expected_project_root,
         )
         return {"ok": True, "result": result, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+
+@app.get("/api/subtitle-layout/exported-evidence")
+def api_subtitle_export_evidence():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        return {"ok": True, **read_exported_ass_evidence(output, config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/exported-evidence/start")
+async def api_subtitle_export_evidence_start(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("ASS evidence payload must be a JSON object")
+        config = _active_config()
+        if not data.get("expected_project_root") or data["expected_project_root"] != config.root:
+            raise ValueError("Active project changed; refusing to verify another project's ASS")
+        limit = data.get("sample_limit", 8)
+        if type(limit) is not int or not 1 <= limit <= 12:
+            raise ValueError("sample_limit must be an integer between 1 and 12")
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is not configured")
+        from .ass_artifact_evidence import _export_identity
+        _export_identity(output, config)
+
+        def verify(cancel_event, report_progress):
+            return verify_exported_ass(
+                config, output, cancel_event=cancel_event,
+                report_progress=report_progress, sample_limit=limit,
+            )
+
+        job = create_job(
+            "ass-artifact-evidence", verify, with_cancel=True, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id, "scope": "bounded_exported_ass_samples"}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/exported-evidence/cancel")
+async def api_subtitle_export_evidence_cancel(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict) or not str(data.get("job") or ""):
+            raise ValueError("Evidence job id is required")
+        config = _active_config()
+        return {"ok": True, "job": cancel_job(str(data["job"]), project_root=config.root)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 

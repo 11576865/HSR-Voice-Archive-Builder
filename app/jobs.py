@@ -14,6 +14,7 @@ JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
 BUILD_KINDS = {"build", "quick-build"}
 MUTATING_KINDS = BUILD_KINDS | {"remote-update-apply", "remote-update-rollback"}
+CANCELABLE_KINDS = {"ass-artifact-evidence"}
 
 
 def now() -> str:
@@ -36,10 +37,12 @@ class Job:
     progress_total: int = 0
     project_root: str = ""
     project_name: str = ""
+    cancel_requested: bool = False
 
 
 _LOCK = threading.Lock()
 _JOBS: dict[str, Job] = {}
+_CANCEL_EVENTS: dict[str, threading.Event] = {}
 
 
 def _persist_locked() -> None:
@@ -115,7 +118,11 @@ def create_job(
     with_progress: bool = False,
     project_root: str = "",
     project_name: str = "",
+    with_cancel: bool = False,
 ) -> Job:
+    if with_cancel and kind not in CANCELABLE_KINDS:
+        raise ValueError("This job kind cannot be canceled")
+    cancel_event = threading.Event() if with_cancel else None
     job = Job(
         id=uuid.uuid4().hex,
         kind=kind,
@@ -140,7 +147,13 @@ def create_job(
                     raise RuntimeError(
                         "同一项目已有构建或增量写入任务，拒绝并发修改来源和索引"
                     )
+        if with_cancel and job.project_root:
+            if any(other.kind == kind and other.project_root == job.project_root
+                   and other.state in {"queued", "running"} for other in _JOBS.values()):
+                raise RuntimeError("同一项目已有运行中的 ASS 证据任务")
         _JOBS[job.id] = job
+        if cancel_event is not None:
+            _CANCEL_EVENTS[job.id] = cancel_event
         _persist_locked()
 
     def report_progress(
@@ -160,13 +173,29 @@ def create_job(
 
     def runner() -> None:
         with _LOCK:
+            if cancel_event is not None and cancel_event.is_set():
+                job.state = "canceled"
+                job.finished_at = now()
+                job.message = "已取消"
+                _CANCEL_EVENTS.pop(job.id, None)
+                _persist_locked()
+                return
             job.state = "running"
             job.message = "正在准备"
             job.started_at = now()
             _persist_locked()
         try:
-            result = fn(report_progress) if with_progress else fn()
+            result = (fn(cancel_event, report_progress) if with_cancel and with_progress
+                      else fn(cancel_event) if with_cancel
+                      else fn(report_progress) if with_progress else fn())
             with _LOCK:
+                if cancel_event is not None and cancel_event.is_set():
+                    job.state = "canceled"
+                    job.message = "已取消"
+                    job.result = None
+                    job.finished_at = now()
+                    _persist_locked()
+                    return
                 job.result = result
                 job.state = "succeeded"
                 job.phase = "done"
@@ -179,19 +208,43 @@ def create_job(
         except Exception as exc:
             with _LOCK:
                 waiting = getattr(exc, "job_state", "") == "awaiting_input"
-                job.state = "awaiting_input" if waiting else "failed"
-                job.message = "等待用户提交人工修订" if waiting else ("构建失败" if kind in BUILD_KINDS else "失败")
+                canceled = cancel_event is not None and cancel_event.is_set()
+                job.state = "canceled" if canceled else "awaiting_input" if waiting else "failed"
+                job.message = "已取消" if canceled else "等待用户提交人工修订" if waiting else ("构建失败" if kind in BUILD_KINDS else "失败")
                 if waiting:
                     job.result = getattr(exc, "job_result", None)
                 job.finished_at = now()
                 job.error = f"{type(exc).__name__}: {exc}\n{traceback.format_exc(limit=8)}"
                 _persist_locked()
+        finally:
+            with _LOCK:
+                _CANCEL_EVENTS.pop(job.id, None)
 
     # Jobs intentionally remain daemon threads so closing the local application
     # is not blocked by a long FFmpeg/network operation. The persistent journal
     # marks unfinished work as "interrupted" on the next start.
     threading.Thread(target=runner, name=f"hsr-job-{job.id[:8]}", daemon=True).start()
     return job
+
+
+def cancel_job(job_id: str, *, project_root: str) -> dict[str, Any]:
+    """Cooperative cancellation of current-project, allowlisted evidence jobs."""
+    with _LOCK:
+        job = _JOBS.get(job_id)
+        if job is None:
+            raise ValueError("Job not found")
+        if not project_root or job.project_root != project_root:
+            raise ValueError("Job does not belong to the active project")
+        event = _CANCEL_EVENTS.get(job.id)
+        if job.kind not in CANCELABLE_KINDS or event is None:
+            raise ValueError("Job is not cancelable")
+        if job.state not in {"queued", "running"}:
+            raise ValueError("Job has already completed")
+        job.cancel_requested = True
+        job.message = "正在取消渲染检查…"
+        event.set()
+        _persist_locked()
+        return asdict(job)
 
 
 def get_job(job_id: str) -> dict[str, Any] | None:

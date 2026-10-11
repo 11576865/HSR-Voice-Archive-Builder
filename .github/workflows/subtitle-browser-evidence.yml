@@ -9,6 +9,9 @@ on:
       - "subtitle_layout/temporal_samples.py"
       - "tests/test_rendered_ink_boundary.py"
       - "tests/test_rendered_ink_interval.py"
+      - "app/ass_artifact_evidence.py"
+      - "app/jobs.py"
+      - "tests/test_export_ass_infrastructure.py"
       - "tests/browser_visual_evidence.py"
       - "tests/test_subtitle_integrated_export.py"
       - "app/subtitles.py"
@@ -67,6 +70,7 @@ jobs:
           python -m unittest tests.test_subtitle_integrated_export -v
           python -m unittest tests.test_rendered_ink_boundary -v
           python -m unittest tests.test_rendered_ink_interval -v
+          python -m unittest tests.test_export_ass_infrastructure -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
         uses: actions/upload-artifact@v4

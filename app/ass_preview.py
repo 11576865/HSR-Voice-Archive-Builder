@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import math
+import threading
+import time
 import shutil
 import subprocess
 import tempfile
@@ -245,6 +247,8 @@ def _write_preview_ass(
 def _render_raw_rgb(
     ffmpeg: str, ass_path: Path, *, timestamp: float, background: str,
     width: int = 1920, height: int = 1080,
+    cancel_event: threading.Event | None = None,
+    timeout_seconds: float = 12.0,
 ) -> bytes:
     if background not in {"black", "white"}:
         raise ValueError("Only canonical black and white analysis backgrounds are allowed")
@@ -262,12 +266,33 @@ def _render_raw_rgb(
         "-vf", filter_graph, "-frames:v", "1",
         "-pix_fmt", "rgb24", "-f", "rawvideo", "-",
     ]
-    completed = subprocess.run(command, capture_output=True, timeout=20, check=False)
-    expected_bytes = width * height * 3
-    if completed.returncode or len(completed.stdout) != expected_bytes:
-        detail = completed.stderr.decode("utf-8", errors="replace")[:900]
-        raise RuntimeError(f"FFmpeg/libass RGB frame unavailable: {detail}")
-    return completed.stdout
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("ASS pixel sampling canceled")
+    # Polling without draining pipes deadlocks for a 6-MB RGB frame.
+    # communicate(timeout=...) preserves partial stdout across retries.
+    proc = subprocess.Popen(command, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    deadline = time.monotonic() + timeout_seconds
+    try:
+        while True:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("ASS pixel sampling canceled")
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                raise TimeoutError("ASS pixel rendering exceeded the per-frame deadline")
+            try:
+                stdout, stderr = proc.communicate(timeout=min(0.25, remaining))
+                break
+            except subprocess.TimeoutExpired:
+                continue
+        expected_bytes = width * height * 3
+        if proc.returncode or len(stdout) != expected_bytes:
+            detail = stderr.decode("utf-8", errors="replace")[:900]
+            raise RuntimeError(f"FFmpeg/libass RGB frame unavailable: {detail}")
+        return stdout
+    finally:
+        if proc.poll() is None:
+            proc.kill()
+        proc.communicate()
 
 
 def inspect_rendered_ink_frame(

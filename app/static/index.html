@@ -3568,6 +3568,11 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
                 <div id="previewInkCheckStatus" role="status" aria-live="polite" class="small muted">真实像素边界尚未检查。仅按需检查当前时间点，不能替代完整动态时间轴验收。</div>
+                <div class="layout-export-evidence" role="group" aria-label="已导出 ASS 的渲染证据">
+                  <button type="button" class="secondary" id="exportAssEvidenceStartBtn">验证已导出 ASS（抽样）</button>
+                  <button type="button" class="secondary" id="exportAssEvidenceCancelBtn" disabled>取消验证</button>
+                  <div id="exportAssEvidenceStatus" role="status" aria-live="polite" class="small muted">未检查当前导出文件。验证将绑定 ASS、导出回执及当前样式策略；不代表全时段无越界。</div>
+                </div>
 
         <div class="preview-controls">
           <details class="layout-inspector-section layout-section-primary" open>
@@ -4748,6 +4753,7 @@ function fillProject(p){
   const archiveProjectChanged=nextOwner!==archiveAuditOwner;
   archiveAuditOwner=nextOwner;
   currentProject=p;
+  if(archiveProjectChanged)syncExportedEvidenceProject();
   for(const button of workspaceButtons){
     if(['review','export','update'].includes(button.dataset.workspaceTarget))button.disabled=!p;
   }
@@ -6854,6 +6860,126 @@ async function renderLibassPreview(){
 
 
 
+
+let exportedEvidenceJobId=null;
+let exportedEvidenceGeneration=0;
+let exportedEvidenceProjectKey=null;
+
+function syncExportedEvidenceProject(){
+  const key=layoutActiveProjectKey();
+  if(key===exportedEvidenceProjectKey)return;
+  exportedEvidenceProjectKey=key;
+  resetExportedEvidenceUi();
+  if(key)loadExportedAssEvidence();
+}
+
+
+function resetExportedEvidenceUi(){
+  exportedEvidenceGeneration++;
+  exportedEvidenceJobId=null;
+  const start=document.getElementById('exportAssEvidenceStartBtn');
+  const cancel=document.getElementById('exportAssEvidenceCancelBtn');
+  if(start)start.disabled=false;
+  if(cancel)cancel.disabled=true;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  if(status){status.textContent='项目或样式已切换，必须重新核对已导出 ASS 的证据身份。';status.className='small muted';}
+}
+
+async function loadExportedAssEvidence(){
+  const key=layoutActiveProjectKey();
+  const generation=exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  if(!key||!status)return;
+  try{
+    const response=await fetch('/api/subtitle-layout/exported-evidence',{headers:headers(),cache:'no-store'});
+    const value=await response.json();
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    if(!response.ok||!value.ok)throw new Error(value.error||'读取已导出 ASS 证据失败');
+    if(value.verified&&value.evidence?.full_interval_verified===false){
+      const e=value.evidence;
+      const prefix=value.state==='sampled_violation'?'抽样发现越界':value.state==='sampled_no_violation'?'抽样未发现越界':'无足够可见像素';
+      status.textContent=prefix+'；已核对 ASS + 回执 + 样式 SHA-256；检查 '+e.sample_count+'/'+e.unique_window_count+' 个独立字幕时窗，未检查 '+e.unexamined_unique_windows+' 个。全时段未验证。';
+      status.className='small '+(value.state==='sampled_violation'?'status-bad':'status-warn');
+    }else{
+      status.textContent=value.state==='stale'?'已导出 ASS 证据过期：'+(value.reason||'文件或样式已变化'):'当前项目尚无经过确认的导出 ASS 抽样证据。';
+      status.className='small muted';
+    }
+  }catch(err){
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    status.textContent='导出证据读取失败：'+shortError(err);status.className='small status-bad';
+  }
+}
+
+async function startExportedAssEvidence(){
+  const key=layoutActiveProjectKey();
+  const root=currentProject?.root||'';
+  if(!key||!root)return;
+  const generation=++exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  const start=document.getElementById('exportAssEvidenceStartBtn');
+  const cancel=document.getElementById('exportAssEvidenceCancelBtn');
+  if(start)start.disabled=true;
+  try{
+    if(status){status.textContent='正在创建已导出 ASS 的后台抽样任务…';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/exported-evidence/start',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify({expected_project_root:root,sample_limit:8})
+    });
+    const result=await response.json();
+    if(!response.ok||!result.ok)throw new Error(result.error||'启动失败');
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    exportedEvidenceJobId=result.job;
+    if(cancel)cancel.disabled=false;
+    while(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()){
+      const jobResponse=await fetch('/api/jobs/'+encodeURIComponent(result.job),{headers:headers(),cache:'no-store'});
+      const jobData=await jobResponse.json();
+      if(!jobResponse.ok||!jobData.ok)throw new Error(jobData.error||'任务状态不可用');
+      if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+      const job=jobData.job;
+      if(['succeeded','failed','canceled','interrupted'].includes(job.state)){
+        if(job.state==='succeeded'){
+          status.textContent='已导出 ASS 的后台抽样完成；正在核对持久化证据…';
+          exportedEvidenceJobId=null;
+          await loadExportedAssEvidence();
+        }else{
+          status.textContent=job.state==='canceled'?'已取消，未完成的验证不构成证据':'已导出 ASS 验证失败：'+shortError(job.error||job.message);
+          status.className='small '+(job.state==='canceled'?'muted':'status-bad');
+        }
+        break;
+      }
+      if(status){status.textContent=(job.message||'抽样检查中')+' ('+Number(job.progress_current||0)+'/'+Number(job.progress_total||8)+')';status.className='small muted';}
+      await new Promise(resolve=>setTimeout(resolve,750));
+    }
+  }catch(err){
+    if(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()&&status){
+      status.textContent='已导出 ASS 检查失败：'+shortError(err);status.className='small status-bad';
+    }
+  }finally{
+    if(generation===exportedEvidenceGeneration){
+      exportedEvidenceJobId=null;
+      if(start)start.disabled=false;
+      if(cancel)cancel.disabled=true;
+    }
+  }
+}
+
+async function cancelExportedAssEvidence(){
+  const job=exportedEvidenceJobId;
+  if(!job)return;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  try{
+    const response=await fetch('/api/subtitle-layout/exported-evidence/cancel',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify({job})
+    });
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'取消请求被拒绝');
+    if(status)status.textContent='正在等待 FFmpeg 停止并清理任务…';
+  }catch(err){
+    if(status){status.textContent='无法取消检查：'+shortError(err);status.className='small status-bad';}
+  }
+}
+
 async function inspectRenderedInkInterval(){
   const status=document.getElementById('previewInkCheckStatus');
   const generation=++renderedInkGeneration;
@@ -7267,6 +7393,7 @@ async function saveSubtitleLayoutSettings(){
     }
     savedSubtitleSettings=submittedIdentity;
     markSubtitleSettingsDirty();
+    loadExportedAssEvidence();
     if(newerDraft){
       if(status){status.textContent='保存期间又调整了样式：之前提交的设置已保存，新试调值仍未保存。请再次保存后再生成 ASS。';status.className='small status-warn';}
       return false; // Do not export the older settings as though they were this draft.
@@ -9020,6 +9147,8 @@ document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeom
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
 document.getElementById('previewInkCheckBtn')?.addEventListener('click',inspectRenderedInkAtCurrentTime);
 document.getElementById('previewInkSpanBtn')?.addEventListener('click',inspectRenderedInkInterval);
+document.getElementById('exportAssEvidenceStartBtn')?.addEventListener('click',startExportedAssEvidence);
+document.getElementById('exportAssEvidenceCancelBtn')?.addEventListener('click',cancelExportedAssEvidence);
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();
