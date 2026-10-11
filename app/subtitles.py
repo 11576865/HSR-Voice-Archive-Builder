@@ -775,7 +775,10 @@ def get_project_subtitles(
             "original_chs": target_text,
             "final_chs": final_chs,
             "modified": modified,
-            "confirmed": bool(review_state.get(str_id, False)),
+            "confirmed": (
+                bool(review_state.get(str_id, False))
+                and not bool(entry.get("translation_override_stale"))
+            ),
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
             "translation_override_stale": bool(entry.get("translation_override_stale")),
