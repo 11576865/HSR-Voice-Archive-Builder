@@ -469,11 +469,36 @@ def try_write_auto_text_recovery(
 
 def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str, Any]:
     raw = str(recovery_text or "").encode("utf-8")
-    package, decoded = _validate_recovery_package_bytes(raw)
+    package, decoded = _validate_recovery_package_bytes(
+        raw, require_checkpoint=False,
+    )
 
     checkpoint_data = decoded.get("state/.translation_checkpoint.json")
     if checkpoint_data is None:
-        raise ValueError("Recovery package contains no translation checkpoint")
+        # Historical Chinese corrections must survive deletion/import even
+        # when the project never used AI translation. Do not blindly apply
+        # old source-member edits to a potentially unrelated new archive.
+        state = resolve_project_path(config, config.state_dir)
+        if state is None:
+            raise ValueError("Project state directory is not configured")
+        import_dir = state / "recovery_imports"
+        import_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
+        preserved = import_dir / f"human-subtitles-{stamp}.hsrbackup"
+        atomic_write_text(preserved, raw.decode("utf-8"))
+        return {
+            "package_project": str((package.get("project") or {}).get("name", "")),
+            "package_records": 0, "package_route": None,
+            "active_route": None, "matching_now": 0, "changed_now": 0,
+            "not_present_now": 0, "imported_records": 0,
+            "skipped_existing": 0, "checkpoint_conflict": False,
+            "preserved_package": str(preserved),
+            "contains_audio": False,
+            "human_subtitle_files_preserved": sorted(
+                name for name in decoded if name.startswith("output/")
+            ),
+            "message": "人工中文字幕历史恢复包已验证并单独保存；须核对来源身份后手动恢复，未自动覆盖当前项目。",
+        }
     imported_checkpoint = _read_json_bytes(
         checkpoint_data, "state/.translation_checkpoint.json"
     )
