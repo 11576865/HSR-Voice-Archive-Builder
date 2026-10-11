@@ -3301,7 +3301,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
       <details id="archiveOutputs" style="margin-top:14px">
         <summary>Archive / Build Records（档案与构建记录）</summary>
         <p class="small muted">Manifest、时间轴、构建报告与更新计划用于审计、复现和后续自动化，不是普通播放所必需的成品。</p>
-        <div class="actions"><button type="button" class="small secondary" id="archiveAuditBtn">检查章节与来源覆盖</button></div>
+        <div class="actions">
+          <button type="button" class="small secondary" id="archiveAuditBtn">检查章节与来源覆盖</button>
+          <button type="button" class="small secondary" id="archiveVerifyBtn">逐个核验原始 WAV 字节</button>
+        </div>
+        <div id="archiveVerifySummary" class="small muted" role="status" aria-live="polite">深度核验为按需任务，可耗时较长；不会覆盖 Manifest 或字幕。</div>
+        <div id="archiveVerifyIssues"></div>
         <div id="archiveAuditSummary" class="small muted" role="status" aria-live="polite">按需检查 Manifest 结构，不重写语音档案。</div>
         <div id="archiveAuditGroups"></div>
         <div id="archiveAuditIssues"></div>
@@ -4703,7 +4708,11 @@ function renderProjectOverview(p){
   document.getElementById('overviewAttention').innerHTML=attention.map(([label,value,cls])=>'<div class="overview-line"><span>'+label+'</span><span class="'+cls+'">'+value+'</span></div>').join('');
 }
 
+let archiveAuditOwner='';
 function fillProject(p){
+  const nextOwner=p?(p.root||p.name||''):'';
+  const archiveProjectChanged=nextOwner!==archiveAuditOwner;
+  archiveAuditOwner=nextOwner;
   currentProject=p;
   for(const button of workspaceButtons){
     if(['review','export','update'].includes(button.dataset.workspaceTarget))button.disabled=!p;
@@ -4748,10 +4757,15 @@ function fillProject(p){
   hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
-  const archiveAuditSummary=document.getElementById('archiveAuditSummary');
-  if(archiveAuditSummary)archiveAuditSummary.textContent='按需检查 Manifest 结构，不重写语音档案。';
-  document.getElementById('archiveAuditGroups')?.replaceChildren();
-  document.getElementById('archiveAuditIssues')?.replaceChildren();
+  if(archiveProjectChanged){
+    const archiveAuditSummary=document.getElementById('archiveAuditSummary');
+    if(archiveAuditSummary)archiveAuditSummary.textContent='按需检查 Manifest 结构，不重写语音档案。';
+    document.getElementById('archiveAuditGroups')?.replaceChildren();
+    document.getElementById('archiveAuditIssues')?.replaceChildren();
+    const verifySummary=document.getElementById('archiveVerifySummary');
+    if(verifySummary)verifySummary.textContent='深度核验为按需任务，可耗时较长；不会覆盖 Manifest 或字幕。';
+    document.getElementById('archiveVerifyIssues')?.replaceChildren();
+  }
   const usage=[];
   if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
   if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
@@ -4869,6 +4883,50 @@ async function loadArchiveAudit(){
   }
 }
 document.getElementById('archiveAuditBtn')?.addEventListener('click',loadArchiveAudit);
+
+function renderArchiveSourceVerification(result){
+  const summary=document.getElementById('archiveVerifySummary');
+  const container=document.getElementById('archiveVerifyIssues');
+  if(!summary||!container)return;
+  const s=result?.summary||{};
+  summary.textContent='原始 WAV 字节核验：'+Number(s.verified||0)+'/'+Number(s.total||0)
+    +' 匹配 · 哈希不同 '+Number(s.mismatch||0)
+    +' · 缺失 '+Number(s.missing||0)
+    +' · 身份歧义 '+Number(s.ambiguous||0)
+    +' · 无法验证 '+Number(s.unverifiable||0)
+    +' · 扫描中变更 '+Number(s.changed_during_verify||0)
+    +'。'+(s.trusted_complete?'所有条目的原始 WAV 字节与 Manifest 匹配。':'存在待核对结果；请勿视为完整性通过。');
+  summary.className='small '+(s.trusted_complete?'status-ok':'status-warn');
+  container.replaceChildren();
+  const findings=result?.findings||[];
+  if(findings.length){
+    const list=document.createElement('ul');
+    for(const item of findings){
+      const li=document.createElement('li');
+      li.className='small';
+      li.textContent='#'+String(item.id||'?')+' · '+String(item.group||'')
+        +' · '+String(item.code||'')+' · '+String(item.detail||'');
+      list.appendChild(li);
+    }
+    container.appendChild(list);
+  }
+}
+
+async function startArchiveSourceVerification(){
+  const button=document.getElementById('archiveVerifyBtn');
+  const status=document.getElementById('archiveVerifySummary');
+  if(!currentProject)return;
+  if(button)button.disabled=true;
+  if(status){status.textContent='正在启动原始 WAV 流式核验任务…';status.className='small muted';}
+  try{
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/archive/verify-sources',{method:'POST'});
+    watchJob(result.job);
+  }catch(err){
+    if(status){status.textContent='原始 WAV 核验启动失败：'+shortError(err);status.className='small status-bad';}
+    if(button)button.disabled=false;
+  }
+}
+document.getElementById('archiveVerifyBtn')?.addEventListener('click',startArchiveSourceVerification);
 
 let currentUpdatePlan=null;
 let currentUpdateFilter='all';
@@ -5299,7 +5357,7 @@ function renderJobs(jobs){
     setBuildButtonsDisabled(latest?.state==='awaiting_input');
   }
   const box=document.getElementById('jobs');
-  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','ass-export':'生成 ASS 字幕','black-video-export':'生成黑屏 MKV'};
+  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','ass-export':'生成 ASS 字幕','black-video-export':'生成黑屏 MKV','archive-verify':'原始 WAV 字节核验'};
   const states={queued:'等待',running:'运行中',succeeded:'完成',failed:'失败',interrupted:'已中断',awaiting_input:'等待人工修订'};
   const row=j=>{
     const when=j.finished_at||j.started_at||j.created_at||'';
@@ -5367,6 +5425,15 @@ async function watchJob(id){
             if(status)status.textContent='黑屏 MKV 已生成。';
             setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
             setLog(x.job.result||x.job);
+          }else if(x.job.kind==='archive-verify'){
+            const owner=x.job.project_root||'';
+            await refresh();
+            if(owner&&(currentProject?.root||'')===owner){
+              renderArchiveSourceVerification(x.job.result||{});
+              const verifyBtn=document.getElementById('archiveVerifyBtn');
+              if(verifyBtn)verifyBtn.disabled=false;
+            }
+            setRunReport('原始 WAV 字节核验完成',completedReport(x.job),!(x.job.result?.summary?.trusted_complete));
           }else if(x.job.kind==='word-align'){
             const r=x.job.result||{};
             const status=document.getElementById('wordAlignmentStatus');
@@ -5389,6 +5456,15 @@ async function watchJob(id){
           if(['ass-export','black-video-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
+          }
+          if(x.job.kind==='archive-verify'){
+            const status=document.getElementById('archiveVerifySummary');
+            if(status&&(currentProject?.root||'')===x.job.project_root){
+              status.textContent='原始 WAV 核验失败：'+shortError(x.job.error||x.job);
+              status.className='small status-bad';
+              const verifyBtn=document.getElementById('archiveVerifyBtn');
+              if(verifyBtn)verifyBtn.disabled=false;
+            }
           }
           if(x.job.kind==='word-align'){
             const status=document.getElementById('wordAlignmentStatus');
