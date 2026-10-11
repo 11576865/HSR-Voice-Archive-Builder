@@ -484,7 +484,7 @@ def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str,
         import_dir = state / "recovery_imports"
         import_dir.mkdir(parents=True, exist_ok=True)
         stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
-        preserved = import_dir / f"human-subtitles-{stamp}.hsrbackup"
+        preserved = import_dir / f"human-subtitles-{stamp}-{_sha256(raw)[:16]}.hsrbackup"
         atomic_write_text(preserved, raw.decode("utf-8"))
         return {
             "package_project": str((package.get("project") or {}).get("name", "")),
@@ -518,7 +518,7 @@ def import_text_recovery(config: ProjectConfig, recovery_text: str) -> dict[str,
     stamp = datetime.now(timezone.utc).strftime("%Y%m%d-%H%M%SZ")
     imports_dir = state / "recovery_imports"
     imports_dir.mkdir(parents=True, exist_ok=True)
-    preserved_package = imports_dir / f"text-recovery-{stamp}.hsrbackup"
+    preserved_package = imports_dir / f"text-recovery-{stamp}-{_sha256(raw)[:16]}.hsrbackup"
     atomic_write_text(preserved_package, raw.decode("utf-8"))
 
     current_rows: dict[str, dict[str, str]] = {}
