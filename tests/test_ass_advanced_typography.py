@@ -280,7 +280,7 @@ class TestAdvancedTypography(unittest.TestCase):
                 primary = [line for line in ass.splitlines()
                            if line.startswith("Dialogue:")
                            and ",Primary," in line
-                           and "Hello world" in line]
+                           and "Hello " in line and "world" in line]
                 self.assertTrue(primary, ass)
                 self.assertTrue(all("0:00:01.20" in line for line in primary))
                 if mode == "k":
