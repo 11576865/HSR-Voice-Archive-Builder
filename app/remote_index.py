@@ -631,6 +631,9 @@ def remote_update_plan(
     from .diff import classify_names
 
     result = classify_names(manifest_path, [row["filename"] for row in records])
+    # Bind the reviewed plan to the exact archive revision checked.
+    # A new build or reordered manifest requires a fresh remote comparison.
+    result["manifest_sha256"] = hashlib.sha256(manifest_path.read_bytes()).hexdigest()
     details = {Path(row["filename"]).name: row for row in records}
     by_filename: dict[str, list[dict[str, str]]] = {}
     for row in records:
