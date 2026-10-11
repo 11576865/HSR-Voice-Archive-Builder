@@ -105,6 +105,17 @@ class RemoteIncrementalSafetyTests(unittest.TestCase):
                 verify_combined_source_no_collisions(original, incoming)
             self.assertEqual((original / "chapter_a" / "voice.wav").read_bytes(), before)
 
+    def test_fastapi_and_termux_publish_immutable_audio_versions(self):
+        project_root = Path(__file__).resolve().parents[1]
+        for backend in ("server.py", "lite_server.py"):
+            with self.subTest(backend=backend):
+                source = (project_root / "app" / backend).read_text(encoding="utf-8")
+                self.assertIn('generated / "combined_audio_versions" / f"combined-{version}"', source)
+                self.assertIn('generated / f"quick_index_incremental_{version}.csv"', source)
+                self.assertIn("staging.replace(combined)", source)
+                self.assertNotIn("shutil.rmtree(combined)", source)
+                self.assertIn("choose_remote_additions(", source)
+
     def test_old_download_cache_is_not_part_of_selected_successful_set(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
