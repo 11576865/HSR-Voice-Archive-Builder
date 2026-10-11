@@ -993,6 +993,17 @@ def _update_project_subtitles_locked(
                     and expected_source_hashes[key] != _official_source_sha256(entry)):
                 raise ValueError("Official source text changed since it was loaded; refresh before editing")
 
+    names: dict[str, int] = {}
+    logicals: dict[str, int] = {}
+    for row in entries:
+        name = str(row.get("filename") or "")
+        logical = str(row.get("logical_id") or "")
+        if name:
+            names[name] = names.get(name, 0) + 1
+        if logical:
+            logicals[logical] = logicals.get(logical, 0) + 1
+    ambiguous_names = frozenset(k for k, n in names.items() if n > 1)
+    ambiguous_logicals = frozenset(k for k, n in logicals.items() if n > 1)
     updated_count = 0
     text_updated_count = 0
     archived_old: list[dict[str, Any]] = []
@@ -1007,7 +1018,9 @@ def _update_project_subtitles_locked(
         filename = str(entry.get("filename", "") or "")
         logical_id = str(entry.get("logical_id", "") or "")
         member_id = str(entry.get("source_member_id", "") or "")
-        previous_override = _override_for_entry(entry, overrides)
+        previous_override = _override_for_entry(
+            entry, overrides, ambiguous_names, ambiguous_logicals,
+        )
         previous_source_hash = (
             str(previous_override.get("source_text_sha256") or "")
             if previous_override else ""
@@ -1021,7 +1034,9 @@ def _update_project_subtitles_locked(
             # Remove only the resolved current entry's edits. A sibling with
             # the same filename/logical ID must never be reset accidentally.
             for old_key, value in list(overrides.items()):
-                if _override_for_entry(entry, {old_key: value}) is value:
+                if _override_for_entry(
+                    entry, {old_key: value}, ambiguous_names, ambiguous_logicals,
+                ) is value:
                     if value.get("final_chs") is not None:
                         archived_old.append({
                             "override_key": old_key, "prior": dict(value),
@@ -1039,7 +1054,9 @@ def _update_project_subtitles_locked(
                 "source_text_sha256": _official_source_sha256(entry),
             }
             for old_key, value in list(overrides.items()):
-                if _override_for_entry(entry, {old_key: value}) is value:
+                if _override_for_entry(
+                    entry, {old_key: value}, ambiguous_names, ambiguous_logicals,
+                ) is value:
                     if dict(value) != latest and value.get("final_chs") is not None:
                         archived_old.append({
                             "override_key": old_key, "prior": dict(value),
