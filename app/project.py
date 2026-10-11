@@ -731,12 +731,12 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "incremental_reference_audio_zh-CN/": generated / "incremental_reference_audio_zh-CN",
     }
     for name, p in resource_paths.items():
-        exists = p.exists()
+        exists = bool(p is not None and p.exists())
         project_resources[name] = {
             "exists": exists,
             "kind": "directory" if exists and p.is_dir() else ("file" if exists and p.is_file() else ""),
             "size_bytes": p.stat().st_size if exists and p.is_file() else 0,
-            "path": str(p),
+            "path": str(p) if p is not None else "",
         }
 
     source_status = {
