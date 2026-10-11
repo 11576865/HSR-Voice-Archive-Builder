@@ -1432,7 +1432,7 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
             combined = generated / "combined_audio"
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
-                verify_combined_source_no_collisions(extracted, incoming)
+                verify_combined_source_no_collisions(extracted, incoming, successful_filenames=successful)
                 staging = temporary_root / "combined"
                 staging.mkdir()
                 # Preserve package-relative member paths so same-basename WAVs
@@ -1444,11 +1444,10 @@ def api_update_apply_remote(selected_filenames: str = Form("")):
                     shutil.copy2(wav, target)
                 if extracted.parent == temporary_root and extracted != temporary_root:
                     shutil.rmtree(extracted)
-                for audio in incoming.iterdir():
-                    if audio.is_file() and not audio.name.endswith(".part"):
-                        staging_target = staging / audio.name
-                        staging_target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(audio, staging_target)
+                for filename in sorted(successful):
+                    audio = incoming / filename
+                    staging_target = staging / filename
+                    shutil.copy2(audio, staging_target)
                 if combined.exists():
                     shutil.rmtree(combined)
                 staging.replace(combined)
