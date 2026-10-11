@@ -117,7 +117,10 @@ External imports may also supply `source_text_sha256`,
 `source_audio_sha256`, `source_text`, or `duration_seconds`. When present,
 these must match the target Manifest rather than being silently rebound to
 current content. Duplicate records for the same entry in a single batch are
-rejected after the first accepted occurrence.
+rejected after the first accepted occurrence. If an import accepts **zero**
+new records, the existing `word_alignments.json` is left byte-for-byte
+unchanged: rejected work does not update the sidecar's timestamp or evict
+already valid results.
 
 Accepted word records use the form:
 
