@@ -20,6 +20,16 @@ class UigsVisualCaptureContractTest(unittest.TestCase):
         self.assertEqual(by_id["HSR.LAYOUT.WORKBENCH.DESKTOP_DARK"]["selector"], "#subtitleLayoutPreviewCard")
         self.assertEqual(by_id["HSR.EXPORT.WORKSPACE.DESKTOP_DARK"]["selector"], "#gptSovitsCard")
         self.assertEqual(by_id["HSR.UPDATE.WORKSPACE.DESKTOP_DARK"]["selector"], "#updateCard")
+        for capture_id, width in (
+            ("HSR.LAYOUT.WORKBENCH.TABLET_DARK", 1024),
+            ("HSR.LAYOUT.WORKBENCH.MOBILE_DARK", 390),
+        ):
+            item = by_id[capture_id]
+            self.assertEqual(item["selector"], "#subtitleLayoutPreviewCard")
+            self.assertEqual(item["capture_region"], "viewport")
+            self.assertEqual(item["viewport"]["width"], width)
+            self.assertEqual(item["fixture"]["workspace"], "layout")
+            self.assertEqual(item["evidence_level"], "production-rendered")
 
 if __name__ == "__main__":
     unittest.main()

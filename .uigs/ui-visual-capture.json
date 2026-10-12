@@ -112,6 +112,80 @@
       ]
     },
     {
+      "id": "HSR.LAYOUT.WORKBENCH.TABLET_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.LAYOUT",
+        "HSR.LAYOUT.PREVIEW_WORKBENCH",
+        "HSR.LAYOUT.PREVIEW_INSPECTOR",
+        "HSR.LAYOUT.INSPECTOR_SECTIONS"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#subtitleLayoutPreviewCard",
+      "capture_region": "viewport",
+      "viewport": {
+        "width": 1024,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#subtitleLayoutPreviewCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "layout"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.LAYOUT.WORKBENCH.TABLET_DARK.png",
+      "limitations": [
+        "Tablet layout and editable control hierarchy only.",
+        "Not runtime-backed libass verification; no active project data is fabricated."
+      ]
+    },
+    {
+      "id": "HSR.LAYOUT.WORKBENCH.MOBILE_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.LAYOUT",
+        "HSR.LAYOUT.PREVIEW_WORKBENCH",
+        "HSR.LAYOUT.PREVIEW_INSPECTOR",
+        "HSR.LAYOUT.INSPECTOR_SECTIONS"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#subtitleLayoutPreviewCard",
+      "capture_region": "viewport",
+      "viewport": {
+        "width": 390,
+        "height": 844,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#subtitleLayoutPreviewCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "layout"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.LAYOUT.WORKBENCH.MOBILE_DARK.png",
+      "limitations": [
+        "Phone viewport and inspector action visibility only.",
+        "Not runtime-backed libass verification; no active project data is fabricated."
+      ]
+    },
+    {
       "id": "HSR.EXPORT.WORKSPACE.DESKTOP_DARK",
       "surface_ids": [
         "HSR.WORKSPACE.EXPORT"

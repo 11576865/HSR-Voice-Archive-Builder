@@ -687,7 +687,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('class="proof-step proof-step-layout"', html)
         self.assertIn('class="sub-nav-bar proofreading-nav-actions"', html)
         self.assertIn('id="layoutCorpusCheckStatus"', html)
-        self.assertIn("function loadLayoutStressSample()", html)
+        self.assertIn("async function loadLayoutStressSample(", html)
         self.assertIn("function subtitleLayoutStressScore(", html)
         self.assertNotIn('id="prevPresetLongText"', html)
         self.assertNotIn('id="prevPresetCollision"', html)
