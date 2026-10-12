@@ -72,6 +72,19 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
     def read_srt(self):
         return (self.output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
 
+    def test_actual_ass_writer_persists_effective_render_policy_identity(self):
+        from app.subtitle_export_status import export_render_policy_sha256
+
+        refresh_subtitle_artifacts_from_settings(
+            self.output, generate_ass=True,
+            render_config=self.render_cfg,
+            source_language="en", target_language="zh-CN",
+        )
+        receipt = json.loads((self.output / "subtitle_export_receipt.json").read_text("utf-8"))
+        expected = export_render_policy_sha256(self.render_cfg, "en", "zh-CN")
+        self.assertEqual(receipt["render_policy_sha256"], expected)
+        self.assertTrue((self.output / "HSR_Voice_Archive.ass").is_file())
+
     def test_real_ass_srt_and_source_clock_survive_timing_and_text_round_trip(self):
         saved = save_subtitle_timing_and_refresh(
             self.config, self.output, item_id=7,

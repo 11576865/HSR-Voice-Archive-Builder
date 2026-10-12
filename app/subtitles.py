@@ -12,7 +12,7 @@ from typing import Any
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
 from .timeline import write_ass, write_srt
-from .subtitle_export_status import record_subtitle_export, read_subtitle_export_health
+from .subtitle_export_status import record_subtitle_export, read_subtitle_export_health, export_render_policy_sha256
 from .subtitle_timing import (
     read_timing_overrides,
     effective_subtitle_window,
@@ -572,6 +572,10 @@ def refresh_subtitle_artifacts_from_settings(
     record_subtitle_export(
         output_dir, state="failed" if ass_error else "current",
         ass_required=generate_ass, artifact_error=ass_error,
+        render_policy_sha256=(
+            export_render_policy_sha256(render_config, source_language, target_language)
+            if generate_ass and not ass_error else ""
+        ),
     )
     return {
         "ass_file": str(ass_file) if generate_ass and not ass_error else "",

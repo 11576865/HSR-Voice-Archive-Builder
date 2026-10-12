@@ -7,6 +7,7 @@ after reload and validates both its source inputs and produced outputs.
 from __future__ import annotations
 
 import hashlib
+from dataclasses import asdict
 import json
 from datetime import datetime, timezone
 from pathlib import Path
@@ -22,6 +23,23 @@ INPUT_NAMES = (
 )
 SRT_NAME = "HSR_Voice_Archive.srt"
 ASS_NAME = "HSR_Voice_Archive.ass"
+
+
+def export_render_policy_sha256(render_config: Any, source_language: str, target_language: str) -> str:
+    """Fingerprint actual ASS writer inputs, not a later UI/project setting snapshot."""
+    from subtitle_layout.config import SubtitleRenderConfig
+
+    if render_config is None:
+        render_config = SubtitleRenderConfig()
+    policy = {
+        "render_config": asdict(render_config),
+        "source_language": source_language or "en",
+        "target_language": target_language or "zh-CN",
+    }
+    payload = json.dumps(policy, sort_keys=True, ensure_ascii=False,
+                         separators=(",", ":"), allow_nan=False)
+    return hashlib.sha256(payload.encode("utf-8")).hexdigest()
+
 
 
 def _sha256(path: Path) -> str | None:
@@ -44,6 +62,7 @@ def record_subtitle_export(
     state: str,
     ass_required: bool,
     artifact_error: str = "",
+    render_policy_sha256: str = "",
 ) -> dict[str, Any]:
     if state not in {"pending", "failed", "current"}:
         raise ValueError("Invalid subtitle export state")
@@ -57,6 +76,11 @@ def record_subtitle_export(
         "state": state,
         "ass_required": bool(ass_required),
         "artifact_error": str(artifact_error or ""),
+        # An absent fingerprint is legacy evidence: regular export health can
+        # still be current, but raster verification may not certify its style.
+        "render_policy_sha256": (
+            str(render_policy_sha256) if state == "current" and ass_required else ""
+        ),
         "written_at": datetime.now(timezone.utc).isoformat(),
         "inputs": _inputs(output_dir),
         "outputs": {

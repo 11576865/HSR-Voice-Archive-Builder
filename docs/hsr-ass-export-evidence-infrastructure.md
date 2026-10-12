@@ -19,3 +19,10 @@ The verification is bounded to at most 12 sampled windows and 64 MiB ASS text in
 ## Tests
 
 `tests/test_export_ass_infrastructure.py`: real ASS event planning; invalid/oversized inputs; hash-bound proof; changed style/bytes invalidation; cancel-before-publication; job ownership; FastAPI contract; UI wiring. Existing Chromium and libass CI should remain green. No Canonical UIGS update on a single repo change.
+
+
+## Render policy provenance gap closed (2026-10-12)
+
+A stale exported ASS may have a `current` text/clock receipt while its style settings have changed. The receipt now includes `render_policy_sha256`, computed **at the time the ASS writer actually runs** from the effective `SubtitleRenderConfig` dataclass and the exported source/target languages. Exported ASS inspection rejects absent (legacy) or mismatching fingerprints and instructs a fresh ASS export; it cannot retroactively attest old style inputs. Ordinary historical SRT/ASS export-health semantics remain unchanged. This is a fail-closed upgrade of the *render evidence* contract, not a claim that every old export must be rebuilt to remain readable.
+
+Regression checks: current writer-derived receipt fingerprint matches current project; a changed style without a new render is rejected; an old receipt lacking the fingerprint is rejected for raster evidence; identical source time/text but changed style cannot obtain false current render evidence.

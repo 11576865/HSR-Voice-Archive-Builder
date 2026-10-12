@@ -19,7 +19,8 @@ from app.ass_artifact_evidence import (
 from app.jobs import create_job, cancel_job, get_job
 from app.security import api_token
 from app.server import app as fastapi_app, _set_active, _clear_active
-from app.subtitle_export_status import ASS_NAME, SRT_NAME, record_subtitle_export
+from app.subtitle_export_status import ASS_NAME, SRT_NAME, record_subtitle_export, export_render_policy_sha256
+from app.subtitles import subtitle_render_config
 
 
 ASS_FIXTURE = """[Script Info]
@@ -51,7 +52,12 @@ class ExportedAssInfraTests(unittest.TestCase):
         (self.output / "manifest.json").write_text('{"entries":[]}', encoding="utf-8")
         (self.output / SRT_NAME).write_text("subtitle\n", encoding="utf-8")
         (self.output / ASS_NAME).write_text(ASS_FIXTURE, encoding="utf-8")
-        record_subtitle_export(self.output, state="current", ass_required=True)
+        record_subtitle_export(
+            self.output, state="current", ass_required=True,
+            render_policy_sha256=export_render_policy_sha256(
+                subtitle_render_config(self.config), "en", "zh-CN"
+            ),
+        )
 
     def test_plan_selects_widely_distributed_actual_ass_windows(self):
         plan = plan_export_ass_samples(ASS_FIXTURE, 2)
@@ -68,6 +74,18 @@ class ExportedAssInfraTests(unittest.TestCase):
             plan_export_ass_samples(ASS_FIXTURE, 50)
         with self.assertRaises(ValueError):
             plan_export_ass_samples(ASS_FIXTURE.replace("0:00:02.00", "nan"))
+
+    def test_legacy_receipt_requires_real_ass_regeneration_before_new_evidence(self):
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        from app.ass_artifact_evidence import _export_identity
+        with self.assertRaisesRegex(ValueError, "regenerate ASS"):
+            _export_identity(self.output, self.config)
+
+    def test_style_changed_after_export_without_regeneration_is_blocked(self):
+        from app.ass_artifact_evidence import _export_identity
+        self.config.subtitle_chs_size += 4
+        with self.assertRaisesRegex(ValueError, "regenerate ASS"):
+            _export_identity(self.output, self.config)
 
     @patch("app.ass_artifact_evidence.load_project")
     @patch("app.ass_artifact_evidence.visible_ink_bbox")

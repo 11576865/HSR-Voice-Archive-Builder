@@ -22,6 +22,7 @@ from .builder import atomic_write_text
 from .project import ProjectConfig, load_project, resolve_project_path
 from .subtitle_export_status import (
     ASS_NAME, EXPORT_RECEIPT_NAME, _sha256, read_subtitle_export_health,
+    export_render_policy_sha256,
 )
 from subtitle_layout.rendered_ink import visible_ink_bbox
 from subtitle_layout.safe_area import SafeArea
@@ -112,6 +113,18 @@ def _export_identity(output_dir: Path, config: ProjectConfig) -> dict[str, str]:
         raise ValueError("ASS evidence rejects symlinked artifact or receipt")
     if not ass.is_file() or ass.stat().st_size > MAX_ASS_BYTES:
         raise ValueError("Missing or oversized exported ASS artifact")
+    try:
+        receipt_data = json.loads(receipt.read_text(encoding="utf-8"))
+    except (OSError, ValueError) as exc:
+        raise ValueError("Unreadable ASS export receipt") from exc
+    from .subtitles import subtitle_render_config
+    actual = export_render_policy_sha256(
+        subtitle_render_config(config),
+        config.source_text_language or "en",
+        config.target_language or "zh-CN",
+    )
+    if not isinstance(receipt_data, dict) or receipt_data.get("render_policy_sha256") != actual:
+        raise ValueError("ASS render policy is unverified or outdated; regenerate ASS with saved settings")
     return {
         "ass_sha256": _sha256(ass) or "",
         "export_receipt_sha256": _sha256(receipt) or "",
