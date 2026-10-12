@@ -145,8 +145,9 @@ def render_ass_preview_video(
     config: SubtitleRenderConfig,
     word_alignments: list[object] | None = None,
     duration_seconds: float = 3.0,
+    container_format: str = "mp4",
 ) -> bytes:
-    """Create an actual playable H.264 clip with animated ASS rendered by libass.
+    """Create actual playable MP4/WebM clips with animated ASS rendered by libass.
 
     The background is intentionally black: this is an effect-motion proof, not
     a claim that subtitles were composited over a user-provided movie.
@@ -156,6 +157,9 @@ def render_ass_preview_video(
     duration = float(duration_seconds)
     if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
         raise ValueError("Dynamic preview duration must be between 0.5 and 8 seconds")
+    fmt = str(container_format).lower()
+    if fmt not in {"mp4", "webm"}:
+        raise ValueError("Unsupported preview container: use mp4 or webm")
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("动态视频预览需要 FFmpeg")
@@ -168,7 +172,7 @@ def render_ass_preview_video(
     with tempfile.TemporaryDirectory(prefix="hsr-effect-video-") as td:
         root = Path(td)
         ass_path = root / "preview.ass"
-        video_path = root / "effect-preview.mp4"
+        video_path = root / ("effect-preview." + fmt)
         write_ass(
             [entry],
             ass_path,
@@ -183,10 +187,15 @@ def render_ass_preview_video(
             "-f", "lavfi", "-i",
             f"color=c=black:s=960x540:r=24:d={duration:.3f}",
             "-vf", f"subtitles='{escaped_ass}':original_size=1920x1080,format=yuv420p",
-            "-an", "-c:v", "libx264", "-preset", "ultrafast",
-            "-crf", "22", "-movflags", "+faststart",
-            "-t", f"{duration:.3f}", str(video_path),
+            "-an",
         ]
+        if fmt == "webm":
+            # VP8 is decodable by Chromium/Firefox builds without proprietary H.264.
+            command += ["-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-b:v", "1200k"]
+        else:
+            command += ["-c:v", "libx264", "-preset", "ultrafast",
+                        "-crf", "22", "-movflags", "+faststart"]
+        command += ["-t", f"{duration:.3f}", str(video_path)]
         try:
             completed = subprocess.run(
                 command, capture_output=True, text=True, timeout=50, check=False
