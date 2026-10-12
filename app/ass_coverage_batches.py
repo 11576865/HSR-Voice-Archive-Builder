@@ -36,6 +36,23 @@ MAX_BATCH_RECEIPT_BYTES = 256 * 1024
 MAX_CHECKPOINT_BYTES = 1024 * 1024
 
 
+def _checkpoint_identity_for_restart(output_dir: Path) -> str | None:
+    """Identify (not endorse) old checkpoint bytes during explicit restart.
+
+    A fresh run inherits no old batch evidence; never spend time auditing
+    discarded old receipts. Refuse if even the old checkpoint bytes change
+    while new frames render, including if it appears or disappears.
+    """
+    path = output_dir / COVERAGE_FILE
+    if path.is_symlink():
+        raise ValueError("Coverage checkpoint symlink")
+    if not path.exists():
+        return None
+    if not path.is_file() or path.stat().st_size > MAX_CHECKPOINT_BYTES:
+        raise ValueError("Coverage checkpoint is not a bounded regular file")
+    return _sha256(path)
+
+
 def _receipt_path(output_dir: Path, run_id: str, batch_id: int) -> Path:
     if not re.fullmatch(r"[0-9a-f]{32}", run_id):
         raise ValueError("Invalid coverage run identity")
@@ -275,6 +292,11 @@ def _inspect_next_exported_ass_batch_locked(
     if not ffmpeg:
         raise RuntimeError("Sequential coverage requires FFmpeg/libass")
     identity = _export_identity(output_dir, config)
+    # Restart discards old evidence, but must not publish atop a concurrently
+    # replaced checkpoint even if an external writer ignores our OS lock.
+    old_checkpoint_identity = (
+        _checkpoint_identity_for_restart(output_dir) if restart else None
+    )
     # Pre-render snapshot is provisional: we do not scan the entire old
     # receipt chain before a long FFmpeg batch. Strict audit occurs after
     # rendering, before any new receipt or checkpoint is published.
@@ -357,16 +379,25 @@ def _inspect_next_exported_ass_batch_locked(
     if (latest_output is None or latest_output.resolve() != output_dir.resolve()
             or _export_identity(output_dir, latest) != identity):
         raise RuntimeError("ASS, receipt or saved policy changed during batch verification")
-    current = read_exported_ass_coverage(output_dir, latest)
-    if not restart and (
-        (previous is None and current["state"] != "unverified") or
-        (previous is not None and (
-            current["state"] != "partial" or
-            current["coverage"]["last_batch_receipt_sha256"] !=
-                previous["last_batch_receipt_sha256"]
-        ))
-    ):
-        raise RuntimeError("Another process advanced the coverage ledger")
+    if restart:
+        # An explicit new run cannot inherit old evidence, so a full audit of
+        # that discarded chain provides no safety benefit. Verify only the
+        # pre-render checkpoint identity and keep the new run independent.
+        if _checkpoint_identity_for_restart(output_dir) != old_checkpoint_identity:
+            raise RuntimeError("Coverage checkpoint changed during explicit restart")
+    else:
+        # Ordinary resume MUST validate the complete history at the commit
+        # boundary; no provisional cursor can become verified implicitly.
+        current = read_exported_ass_coverage(output_dir, latest)
+        if (
+            (previous is None and current["state"] != "unverified") or
+            (previous is not None and (
+                current["state"] != "partial" or
+                current["coverage"]["last_batch_receipt_sha256"] !=
+                    previous["last_batch_receipt_sha256"]
+            ))
+        ):
+            raise RuntimeError("Another process advanced the coverage ledger")
     violations = sum(s["status"] == "outside_safe_area" for s in samples)
     invisible = sum(s["status"] == "no_visible_ink" for s in samples)
     receipt = {

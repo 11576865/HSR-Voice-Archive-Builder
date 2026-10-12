@@ -410,6 +410,76 @@ class CoverageBatchTests(unittest.TestCase):
         self.assertEqual(read_exported_ass_coverage(
             self.output, self.config)["state"], "stale")
 
+    def test_explicit_restart_skips_discarded_history_without_claiming_old_coverage(self):
+        from app import ass_coverage_batches as coverage
+        first = self.run_mock()
+        self.run_mock(cursor=2)
+        old_receipts = sorted((self.output / RECEIPTS_DIR).glob("*.json"))
+        # Invalid historical bytes are deliberately not inherited by a fresh
+        # run. A normal resume, unlike restart, MUST fail closed.
+        old_receipts[0].write_text("{}", encoding="utf-8")
+        self.assertEqual(read_exported_ass_coverage(
+            self.output, self.config)["state"], "stale")
+        with patch.object(coverage, "_audit_committed_batches",
+                          side_effect=AssertionError("discarded chain was audited")) as audit:
+            fresh = self.run_mock(restart=True)
+        self.assertEqual(audit.call_count, 0)
+        self.assertEqual(fresh["batch_count"], 1)
+        self.assertNotEqual(fresh["run_id"], first["run_id"])
+        self.assertEqual(fresh["next_cursor"], 2)
+        self.assertEqual(fresh["sample_count"], 2)
+        self.assertFalse(fresh["full_interval_verified"])
+        self.assertTrue(read_exported_ass_coverage(
+            self.output, self.config)["verified"])
+        self.assertEqual(old_receipts[0].read_text("utf-8"), "{}")
+
+    def test_restart_aborts_when_old_checkpoint_changes_during_render(self):
+        from app import ass_coverage_batches as coverage
+        self.run_mock()
+        checkpoint = self.output / COVERAGE_FILE
+        previously_committed = set((self.output / RECEIPTS_DIR).glob("*.json"))
+        def rewrite_checkpoint(*args, **kwargs):
+            current = json.loads(checkpoint.read_text(encoding="utf-8"))
+            current["captured_at"] = "external-uncooperative-writer"
+            checkpoint.write_text(json.dumps(current), encoding="utf-8")
+            return b"fake"
+        with (patch("app.ass_coverage_batches.shutil.which",
+                    return_value="/usr/bin/ffmpeg"),
+              patch("app.ass_coverage_batches.load_project",
+                    return_value=self.config),
+              patch("app.ass_coverage_batches._render_raw_rgb",
+                    side_effect=rewrite_checkpoint),
+              patch("app.ass_coverage_batches.visible_ink_bbox",
+                    return_value=(100, 100, 200, 200)),
+              patch.object(coverage, "_audit_committed_batches",
+                           side_effect=AssertionError("restart audited old receipts"))):
+            with self.assertRaisesRegex(RuntimeError, "changed during explicit restart"):
+                inspect_next_exported_ass_batch(
+                    self.config, self.output, expected_cursor=0,
+                    sample_limit=2, restart=True,
+                )
+        self.assertEqual(
+            set((self.output / RECEIPTS_DIR).glob("*.json")),
+            previously_committed,
+        )
+
+    def test_restart_fails_closed_if_checkpoint_is_symlink(self):
+        old = self.run_mock()
+        checkpoint = self.output / COVERAGE_FILE
+        elsewhere = self.output / "other-checkpoint"
+        elsewhere.write_bytes(checkpoint.read_bytes())
+        checkpoint.unlink()
+        try:
+            checkpoint.symlink_to(elsewhere)
+        except (OSError, NotImplementedError):
+            self.skipTest("Symlinks unavailable on this filesystem")
+        with self.assertRaisesRegex(ValueError, "symlink"):
+            self.run_mock(restart=True)
+        self.assertEqual(elsewhere.read_bytes(), checkpoint.read_bytes())
+        self.assertEqual(len(list(
+            (self.output / RECEIPTS_DIR).glob(f"{old['run_id']}-*.json")
+        )), 1)
+
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
         with self.assertRaisesRegex(ValueError, "cursor changed"):
