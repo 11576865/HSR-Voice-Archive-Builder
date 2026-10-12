@@ -177,6 +177,7 @@ def _effect_candidates(window: dict[str, Any]) -> tuple[dict[float, set[str]], b
                 except (ValueError, OverflowError, IndexError):
                     truncated = True
             if marker_count >= MAX_EVENT_MARKERS_PER_WINDOW:
+                truncated = True
                 break
         # Karaoke timeline is decoded separately to ensure cumulative centiseconds
         # span multiple ASS override blocks and remain bounded.
@@ -195,8 +196,10 @@ def _effect_candidates(window: dict[str, Any]) -> tuple[dict[float, set[str]], b
                 point(elapsed_cs * 10 - 10, "karaoke_pre_change")
                 point(elapsed_cs * 10 + 10, "karaoke_post_change")
             if marker_count >= MAX_EVENT_MARKERS_PER_WINDOW:
+                truncated = True
                 break
         if marker_count >= MAX_EVENT_MARKERS_PER_WINDOW:
+            truncated = True
             break
     return results, truncated
 
