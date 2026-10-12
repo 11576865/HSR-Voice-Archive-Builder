@@ -228,11 +228,25 @@ def desktop_check(browser, base_url, output, report):
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
     page.locator("#previewVideoBtn").click()
-    page.wait_for_function("""() => {
-      const video=document.getElementById('libassVideoPreview');
-      return video && video.readyState>=2 &&
-        document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video';
-    }""", timeout=20000)
+    try:
+        page.wait_for_function("""() => {
+          const video=document.getElementById('libassVideoPreview');
+          return video && video.readyState>=2 &&
+            document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video';
+        }""", timeout=20000)
+    except Exception:
+        details=page.evaluate("""() => {
+          const v=document.getElementById('libassVideoPreview');
+          return {readyState:v.readyState,networkState:v.networkState,error:v.error?.message,
+            src:v.currentSrc,duration:v.duration,
+            studio:document.getElementById('subtitleLayoutPreviewCard').dataset.studioMode,
+            evidence:document.querySelector('.layout-preview-evidence').dataset.previewEvidence,
+            status:document.getElementById('videoPreviewStatus').textContent,
+            buttonDisabled:document.getElementById('previewVideoBtn').disabled,
+            presentation:document.getElementById('libassVideoPreview').className};
+        }""")
+        print("CHROMIUM VIDEO DIAGNOSTIC",json.dumps(details,ensure_ascii=False),flush=True)
+        raise
     ensure(page.locator("#libassVideoPreview").is_visible(), "Decoded video not visible")
     page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
     page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
