@@ -121,6 +121,20 @@ class HsrEffectVideoBackendTests(unittest.TestCase):
             self.assertEqual(self.call_renderer(), b"fake-mp4-payload")
             writer.assert_called_once()
 
+
+    def test_webm_uses_real_vp8_encoder_instead_of_h264(self):
+        def fake_run(cmd, **kwargs):
+            self.assertIn("libvpx", cmd)
+            self.assertNotIn("libx264", cmd)
+            self.assertTrue(str(cmd[-1]).endswith(".webm"))
+            Path(cmd[-1]).write_bytes(b"webm-rendered")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+
+        with patch("app.ass_preview.shutil.which", return_value="ffmpeg"), \
+                patch("app.ass_preview.write_ass"), \
+                patch("app.ass_preview.subprocess.run", side_effect=fake_run):
+            self.assertEqual(self.call_renderer(container_format="webm"), b"webm-rendered")
+
     def test_authenticated_fastapi_returns_video_mimetype_not_image(self):
         client = TestClient(fastapi_app, base_url="http://127.0.0.1:8765")
         payload = {"english_text": "A", "chinese_text": "甲", "preview_duration_seconds": 2.5}
@@ -132,6 +146,15 @@ class HsrEffectVideoBackendTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.headers["content-type"], "video/mp4")
         self.assertEqual(response.content, b"video-payload")
+        with patch("app.server.render_ass_preview_video", return_value=b"webm-payload") as backend:
+            webm = client.post(
+                url, json={**payload, "preview_format": "webm"},
+                headers={"X-HSR-Token": api_token()},
+            )
+        self.assertEqual(webm.status_code, 200, webm.text)
+        self.assertEqual(webm.headers["content-type"], "video/webm")
+        self.assertEqual(webm.content, b"webm-payload")
+        self.assertEqual(backend.call_args.kwargs["container_format"], "webm")
 
 
     def test_real_ffmpeg_video_can_be_decoded_and_contains_motion(self):
