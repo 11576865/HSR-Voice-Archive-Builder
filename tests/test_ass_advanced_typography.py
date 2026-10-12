@@ -1,3 +1,4 @@
+import re
 import tempfile
 import unittest
 from pathlib import Path
@@ -120,6 +121,47 @@ class TestAdvancedTypography(unittest.TestCase):
         formatted = format_karaoke_text("May this journey.", duration_sec=1.2, word_alignments=alignments)
         self.assertEqual(formatted, r"{\k30}May {\k30}this {\k60}journey.")
 
+    def test_karaoke_preserves_initial_silence_and_word_gaps(self):
+        words = [
+            {"word": "Hello ", "start": 0.40, "end": 0.80},
+            {"word": "world", "start": 1.00, "end": 1.30},
+        ]
+        for mode in ("k", "kf"):
+            formatted = format_karaoke_text(
+                "Hello world", duration_sec=1.60, word_alignments=words, mode=mode,
+            )
+            self.assertEqual(
+                formatted,
+                rf"{{\kt40\{mode}40}}Hello {{\kt100\{mode}30}}world",
+            )
+
+    def test_multiline_karaoke_preserves_verified_words_across_line_break(self):
+        lines = [
+            SubtitleLinePos(text="May this", font_size=42, x=960, y=400, alignment=2),
+            SubtitleLinePos(text="journey", font_size=42, x=960, y=450, alignment=2),
+        ]
+        words = [
+            {"word": "May ", "start": 0.40, "end": 0.60},
+            {"word": "this ", "start": 0.60, "end": 0.90},
+            {"word": "journey", "start": 1.10, "end": 1.50},
+        ]
+        rendered = format_multiline_karaoke(lines, 1.60, words, mode="k")
+        self.assertEqual(
+            rendered,
+            r"{\kt40\k20}May{\k30} this\N{\kt110\k40}journey",
+        )
+
+    def test_multiline_karaoke_refuses_to_split_word(self):
+        lines = [
+            SubtitleLinePos(text="jour", font_size=42, x=960, y=400, alignment=2),
+            SubtitleLinePos(text="ney", font_size=42, x=960, y=450, alignment=2),
+        ]
+        words = [{"word": "journey", "start": 0.20, "end": 0.80}]
+        self.assertEqual(
+            format_multiline_karaoke(lines, 1.0, words, mode="kf"),
+            r"jour\Nney",
+        )
+
     def test_format_kf_karaoke_explicit_word_alignments(self):
         alignments = [
             {"word": "May ", "start": 0.0, "end": 0.3},
@@ -133,6 +175,144 @@ class TestAdvancedTypography(unittest.TestCase):
             mode="kf",
         )
         self.assertEqual(formatted, r"{\kf30}May {\kf30}this {\kf60}journey.")
+
+    def test_original_language_only_karaoke_never_on_chinese_translation(self):
+        samples = [
+            ("en", "May this journey.", [
+                {"word": "May ", "start": 0.1, "end": 0.35},
+                {"word": "this ", "start": 0.35, "end": 0.65},
+                {"word": "journey.", "start": 0.8, "end": 1.4},
+            ]),
+            ("ja", "星へ行こう", [
+                {"word": "星へ", "start": 0.1, "end": 0.5},
+                {"word": "行こう", "start": 0.65, "end": 1.4},
+            ]),
+            ("ko", "별을 향해", [
+                {"word": "별을 ", "start": 0.1, "end": 0.6},
+                {"word": "향해", "start": 0.7, "end": 1.4},
+            ]),
+        ]
+        for language, original_text, words in samples:
+            entry = DummyEntry(
+                english=original_text, chinese="愿此行，终抵群星。",
+                start_seconds=1.0, display_end_seconds=3.0,
+                word_alignments=words,
+            )
+            for mode in ("k", "kf", "clip"):
+                with self.subTest(language=language, mode=mode):
+                    config = SubtitleRenderConfig(
+                        enable_karaoke=True, karaoke_mode=mode,
+                        enable_kinetic=False,
+                    )
+                    ass = render_ass(
+                        [entry], config=config,
+                        source_language=language, target_language="zh-CN",
+                    )
+                    primary_events = [
+                        line for line in ass.splitlines()
+                        if line.startswith("Dialogue:") and ",Primary," in line
+                    ]
+                    chinese_events = [
+                        line for line in ass.splitlines()
+                        if line.startswith("Dialogue:") and ",CHS," in line
+                    ]
+                    self.assertTrue(primary_events)
+                    self.assertTrue(chinese_events)
+                    # ASS Karaoke inserts styling tags *between* source words.
+                    # Compare visible event text, not the raw tagged string.
+                    def visible_text(line):
+                        payload = line.split(",", 9)[-1]
+                        payload = re.sub(r"\{[^}]*\}", "", payload)
+                        return "".join(payload.replace(r"\N", "").split())
+
+                    expected = "".join(original_text.split())
+                    self.assertTrue(
+                        any(visible_text(line) == expected for line in primary_events),
+                        primary_events,
+                    )
+                    self.assertTrue(any("愿此行，终抵群星。" in line for line in chinese_events))
+                    self.assertTrue(
+                        any(("\\k" in line if mode != "clip" else "\\clip(" in line)
+                            for line in primary_events),
+                    )
+                    for line in chinese_events:
+                        self.assertNotIn(r"\k", line)
+                        self.assertNotIn(r"\kf", line)
+                        self.assertNotIn(r"\kt", line)
+                        self.assertNotIn(r"\clip(", line)
+
+    def test_chinese_source_cannot_enable_karaoke_on_chinese_display(self):
+        entry = DummyEntry(
+            english="你好", chinese="你好", start_seconds=1.0,
+            display_end_seconds=2.0,
+            word_alignments=[
+                {"word": "你", "start": 0.0, "end": 0.4},
+                {"word": "好", "start": 0.4, "end": 0.8},
+            ],
+        )
+        for mode in ("k", "kf", "clip"):
+            with self.subTest(mode=mode):
+                config = SubtitleRenderConfig(
+                    enable_karaoke=True, karaoke_mode=mode,
+                    enable_kinetic=False,
+                )
+                ass = render_ass(
+                    [entry], config=config,
+                    source_language="zh-CN", target_language="zh-CN",
+                )
+                events = [line for line in ass.splitlines()
+                          if line.startswith("Dialogue:")]
+                self.assertTrue(any(",CHS," in line for line in events))
+                self.assertFalse(any(r"\k" in line or r"\clip(" in line
+                                     for line in events))
+
+    def test_source_word_timing_compensates_for_audio_aware_pre_roll(self):
+        first = DummyEntry(
+            english="First.", chinese="第一句。",
+            start_seconds=0.0, display_end_seconds=1.0,
+        )
+        second_words = [
+            {"word": "Hello ", "start": 0.10, "end": 0.40},
+            {"word": "world", "start": 0.60, "end": 1.00},
+        ]
+        second = DummyEntry(
+            english="Hello world", chinese="你好，世界。",
+            start_seconds=1.4, display_end_seconds=2.6,
+            word_alignments=second_words,
+        )
+        before = [dict(word) for word in second_words]
+        for mode in ("k", "kf", "clip"):
+            with self.subTest(mode=mode):
+                config = SubtitleRenderConfig(
+                    enable_karaoke=True, karaoke_mode=mode,
+                    enable_kinetic=True, use_audio_aware_fade=True,
+                    fade_in_ms=200,
+                )
+                ass = render_ass([first, second], config=config)
+                primary = [line for line in ass.splitlines()
+                           if line.startswith("Dialogue:")
+                           and ",Primary," in line
+                           and "Hello " in line and "world" in line]
+                self.assertTrue(primary, ass)
+                self.assertTrue(all("0:00:01.20" in line for line in primary))
+                if mode == "k":
+                    self.assertIn(r"{\kt30\k30}Hello ", primary[0])
+                    self.assertIn(r"{\kt80\k40}world", primary[0])
+                if mode == "kf":
+                    self.assertIn(r"{\kt30\kf30}Hello ", primary[0])
+                    self.assertIn(r"{\kt80\kf40}world", primary[0])
+                if mode == "clip":
+                    self.assertTrue(any(r"\t(300,600," in line
+                                        for line in primary), primary)
+                    self.assertTrue(any(r"\t(800,1200," in line
+                                        for line in primary), primary)
+                chs = [line for line in ass.splitlines()
+                       if line.startswith("Dialogue:") and ",CHS," in line]
+                self.assertTrue(all(r"\k" not in line and r"\clip(" not in line
+                                    for line in chs))
+        # The alignment sidecar represents original WAV-relative timing;
+        # rendering is never allowed to mutate cached word offsets.
+        self.assertEqual(second_words, before)
 
     def test_render_ass_clip_karaoke_uses_progressive_clip_layer(self):
         entry = DummyEntry(

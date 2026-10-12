@@ -5,6 +5,7 @@ import shutil
 import sys
 import csv
 import tempfile
+import uuid
 from email.parser import BytesParser
 from email.policy import default as email_policy
 from http import cookies
@@ -26,6 +27,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
+from .archive_audit import audit_archive, verify_archive_source_audio
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
     decorate_subtitles,
@@ -36,6 +38,7 @@ from .reference_workbench import (
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
+from .subtitle_recovery import preview_human_subtitle_recovery, apply_human_subtitle_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -58,6 +61,8 @@ from .project import (
 )
 from .version import APP_VERSION, runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
+from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions, verified_completed_new_wavs
+from .remote_update_publish import capture_update_boundary, publish_remote_revision, list_remote_revisions, rollback_remote_revision
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
@@ -339,6 +344,10 @@ class Handler(BaseHTTPRequestHandler):
                 "runtime": dependency_status(),
             })
             return
+        if path == "/api/update/revisions":
+            config = _active_config()
+            self._json({"ok": True, "revisions": list_remote_revisions(config)})
+            return
         if path == "/api/recovery/export":
             config = _active_config()
             data, filename, _summary = build_text_recovery(config)
@@ -354,6 +363,13 @@ class Handler(BaseHTTPRequestHandler):
             return
         if path == "/api/jobs":
             self._json({"ok": True, "jobs": recent_jobs(20)})
+            return
+        if path.startswith("/api/project/") and path.endswith("/archive/audit"):
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            self._json({"ok": True, "audit": audit_archive(output)})
             return
         if path.startswith("/api/project/") and "/word-alignments/" in path:
             config = _active_config()
@@ -528,6 +544,24 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path.startswith("/api/project/") and path.endswith("/archive/verify-sources"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None or not (output / "manifest.json").is_file():
+                raise FileNotFoundError("请先完成档案构建")
+
+            def run(report_progress):
+                return verify_archive_source_audio(
+                    config, output, report_progress=report_progress,
+                )
+
+            job = create_job(
+                "archive-verify", run, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
+            return
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             assert_project_idle(config.root)
@@ -669,6 +703,29 @@ class Handler(BaseHTTPRequestHandler):
             )
             return
 
+        if path == "/api/update/rollback":
+            config = _active_config()
+            revision_id = data.get("revision_id", "").strip()
+            expected_sha = data.get("expected_project_sha256", "").strip()
+            status = next(
+                (item for item in list_remote_revisions(config)
+                 if item.get("revision_id") == revision_id),
+                None,
+            )
+            if not status or not status.get("can_rollback"):
+                raise ValueError("Selected revision is not safely rollback-eligible")
+            if status.get("current_project_sha256") != expected_sha:
+                raise ValueError("Project changed since rollback preview; refresh first")
+            job = create_job(
+                "remote-update-rollback",
+                lambda: rollback_remote_revision(
+                    config, revision_id, expected_project_sha256=expected_sha,
+                ),
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
+            return
+
         if path == "/api/recovery/status":
             raw = data.get("project_path", "").strip()
             config = (
@@ -682,6 +739,25 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/recovery/import":
             config = _active_config()
             result = import_text_recovery(config, data.get("recovery_text", ""))
+            self._json({"ok": True, "result": result, "project": project_summary(config)})
+            return
+
+        if path == "/api/recovery/human/preview":
+            config = _active_config()
+            result = preview_human_subtitle_recovery(config, data.get("recovery_text", ""))
+            self._json({"ok": True, "result": result})
+            return
+
+        if path == "/api/recovery/human/apply":
+            config = _active_config()
+            selected = json.loads(data.get("selected_source_members", "[]"))
+            result = apply_human_subtitle_recovery(
+                config, data.get("recovery_text", ""),
+                selected_source_members=selected,
+                expected_backup_sha256=data.get("expected_backup_sha256", ""),
+                expected_manifest_sha256=data.get("expected_manifest_sha256", ""),
+                expected_project_root=data.get("expected_project_root", ""),
+            )
             self._json({"ok": True, "result": result, "project": project_summary(config)})
             return
 
@@ -1216,15 +1292,16 @@ class Handler(BaseHTTPRequestHandler):
             if not update_plan_path.is_file():
                 raise FileNotFoundError("Check the remote index before downloading additions")
             remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
-            targets = []
-            for item in remote_plan.get("new_logical", []):
-                if isinstance(item, dict):
-                    metadata = dict(item.get("metadata") or {})
-                    metadata.setdefault("filename", item.get("filename", ""))
-                    if metadata.get("filename"):
-                        targets.append(metadata)
-            if not targets:
-                raise ValueError("The latest check contains no new voice records")
+            raw_selected = data.get("selected_filenames", "").strip()
+            try:
+                requested = json.loads(raw_selected) if raw_selected else None
+            except (TypeError, ValueError) as exc:
+                raise ValueError("Invalid selected_filenames JSON") from exc
+            targets = choose_remote_additions(
+                remote_plan, output / "manifest.json", index,
+                selected_filenames=requested,
+            )
+            update_boundary = capture_update_boundary(config, output / "manifest.json")
             project_root = Path(config.root).resolve()
 
             def run(report_progress):
@@ -1263,13 +1340,16 @@ class Handler(BaseHTTPRequestHandler):
                         len(targets),
                     )
                     return report
-                incoming = generated / "incremental_audio"
+                # A fresh per-job directory is required: the provider downloader
+                # otherwise treats a matching cached stem as a completed remote WAV.
+                download_session = generated / "incremental_download_sessions" / f"session-{uuid.uuid4().hex}"
+                incoming = download_session / "source"
                 downloaded = download_resolved_audio(
                     resolved, incoming,
                     lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
                     dataset=dataset,
                 )
-                successful = {Path(row["filename"]).name for row in downloaded["completed"]}
+                successful = verified_completed_new_wavs(targets, downloaded, incoming)
                 atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
                 if not successful:
                     raise RuntimeError("没有新增音频下载成功；未修改项目")
@@ -1284,7 +1364,7 @@ class Handler(BaseHTTPRequestHandler):
                 if reference_plan["targets"]:
                     reference_download = download_resolved_audio(
                         reference_plan,
-                        generated / "incremental_reference_audio_zh-CN",
+                        download_session / "chinese-reference",
                         lambda current, total, name: report_progress(
                             "reference", f"正在同步下载中文对照语音：{current}/{total} · {name}", current, total
                         ),
@@ -1295,47 +1375,75 @@ class Handler(BaseHTTPRequestHandler):
                     )
                 confirmed_references = confirmed_reference_metadata(reference_plan, reference_download)
                 reference_successful = set(confirmed_references)
+                # Download resolution may take minutes. Recheck the live archive
+                # immediately before touching persistent source/index state.
+                choose_remote_additions(
+                    remote_plan, output / "manifest.json", index,
+                    selected_filenames=[str(x["filename"]) for x in targets],
+                )
                 report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
                 generated.mkdir(parents=True, exist_ok=True)
                 temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-                combined = generated / "combined_audio"
+                version = uuid.uuid4().hex
+                combined = generated / "combined_audio_versions" / f"combined-{version}"
+                combined.parent.mkdir(parents=True, exist_ok=True)
                 try:
                     extracted = ensure_dir_or_extract(source, temporary_root, "existing")
+                    verify_combined_source_no_collisions(extracted, incoming, successful_filenames=successful)
+                    staging = temporary_root / "combined"
+                    staging.mkdir()
+                    # Preserve complete package-relative member identity instead
+                    # of flattening original speech into one basename namespace.
                     for wav in extracted.rglob("*.wav"):
-                        target = temporary_root / wav.name
-                        if wav.resolve() != target.resolve():
-                            shutil.copy2(wav, target)
+                        target = staging / wav.relative_to(extracted)
+                        target.parent.mkdir(parents=True, exist_ok=True)
+                        shutil.copy2(wav, target)
                     if extracted.parent == temporary_root and extracted != temporary_root:
                         shutil.rmtree(extracted)
-                    for audio in incoming.iterdir():
-                        if audio.is_file() and not audio.name.endswith(".part"):
-                            shutil.copy2(audio, temporary_root / audio.name)
-                    if combined.exists():
-                        shutil.rmtree(combined)
-                    temporary_root.replace(combined)
+                    for filename in sorted(successful):
+                        shutil.copy2(incoming / filename, staging / filename)
+                    # Publish into an immutable, unique path. Never delete the
+                    # audio directory referenced by the prior project revision.
+                    staging.replace(combined)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     raise
+                else:
+                    shutil.rmtree(temporary_root, ignore_errors=True)
                 with index.open("r", encoding="utf-8-sig", newline="") as handle:
                     existing_rows = list(csv.DictReader(handle))
-                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256"]
-                for field in ("reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source"):
+                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256", "source_member_id"]
+                for field in ("reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "source_member_id"):
                     if field not in fields:
                         fields.append(field)
                 known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
+                known_members = {
+                    str(row.get("source_member_id", "")).strip()
+                    or Path(str(row.get("filename", ""))).name
+                    for row in existing_rows
+                }
                 details = {Path(str(row.get("filename", ""))).name: row for row in targets}
                 for filename in sorted(successful):
-                    if filename not in known:
+                    if filename not in known and filename not in known_members:
                         metadata = details.get(filename, {})
                         reference = confirmed_references.get(filename, {})
-                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": dataset, "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
-                updated_index = generated / "quick_index_incremental.csv"
+                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source_member_id": filename, "source": "huggingface", "source_detail": dataset, "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
+                updated_index = generated / f"quick_index_incremental_{version}.csv"
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
-                update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                published = publish_remote_revision(
+                    config, manifest_path=output / "manifest.json",
+                    expected_boundary=update_boundary, combined=combined,
+                    updated_index=updated_index, revision_id=version,
+                    selected_filenames=sorted(successful),
+                )
+                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "revision_id": version, "revision_state": published["state"], "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
+                # The published immutable combined version now owns the WAV bytes.
+                # A failed/incomplete job intentionally retains its isolated download
+                # session for diagnosis; never let another job reuse those files.
+                shutil.rmtree(download_session, ignore_errors=True)
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
 

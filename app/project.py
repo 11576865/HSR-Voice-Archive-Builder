@@ -724,16 +724,19 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "quick_scan.json": generated / "quick_scan.json",
         "quick_index_incremental.csv": generated / "quick_index_incremental.csv",
         "combined_audio/": generated / "combined_audio",
+        "combined_audio_versions/": generated / "combined_audio_versions",
+        "active increment index": resolve_project_path(config, config.index_csv),
+        "active WAV source": resolve_project_path(config, config.wav_source),
         "incremental_audio/": generated / "incremental_audio",
         "incremental_reference_audio_zh-CN/": generated / "incremental_reference_audio_zh-CN",
     }
     for name, p in resource_paths.items():
-        exists = p.exists()
+        exists = bool(p is not None and p.exists())
         project_resources[name] = {
             "exists": exists,
             "kind": "directory" if exists and p.is_dir() else ("file" if exists and p.is_file() else ""),
             "size_bytes": p.stat().st_size if exists and p.is_file() else 0,
-            "path": str(p),
+            "path": str(p) if p is not None else "",
         }
 
     source_status = {

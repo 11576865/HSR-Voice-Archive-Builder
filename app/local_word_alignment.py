@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import importlib.metadata
 import importlib.util
+import hashlib
 import json
 from pathlib import Path
 from typing import Any, Callable
@@ -212,6 +213,8 @@ def generate_local_word_alignments(
     language = _normalize_language_code(config.source_text_language)
     device = "cuda" if bool(getattr(torch.cuda, "is_available", lambda: False)()) else "cpu"
 
+    manifest_file = output_dir / "manifest.json"
+    expected_manifest_sha256 = hashlib.sha256(manifest_file.read_bytes()).hexdigest()
     entries = _manifest_entries(output_dir)
     wanted = {str(value) for value in (item_ids or []) if str(value)}
     diagnostics = alignment_diagnostics(output_dir)
@@ -279,6 +282,11 @@ def generate_local_word_alignments(
             )
             generated.append({
                 "id": item_id,
+                "source_member_id": str(entry.get("source_member_id") or ""),
+                "source_text_sha256": hashlib.sha256(
+                    "".join(_source_text(entry).split()).encode("utf-8")
+                ).hexdigest(),
+                "source_audio_sha256": str(entry.get("sha256") or "").lower().strip(),
                 "provider": PROVIDER_ID,
                 "words": words,
             })
@@ -299,7 +307,10 @@ def generate_local_word_alignments(
     if generated:
         imported = import_word_alignments(
             output_dir,
-            {"alignments": generated},
+            {
+                "alignments": generated,
+                "expected_manifest_sha256": expected_manifest_sha256,
+            },
         )
 
     final_diagnostics = alignment_diagnostics(output_dir)

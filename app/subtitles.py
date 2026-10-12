@@ -1,7 +1,10 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import json
+import os
+from datetime import datetime, timezone
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -71,7 +74,15 @@ def _entry_id(entry: dict[str, Any]) -> int | str | None:
     return item_id
 
 
-def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
+def _official_source_sha256(entry: dict[str, Any]) -> str:
+    """Fingerprint official source words, not the editable Chinese target."""
+    source = str(entry.get("source_text") or entry.get("english") or "")
+    # Preserve meaningful word boundaries: "now here" is not "nowhere".
+    # Normalize formatting whitespace only (CRLF, repeated spaces, line breaks).
+    return hashlib.sha256(" ".join(source.split()).encode("utf-8")).hexdigest()
+
+
+def load_subtitle_review_state(output_dir: Path) -> dict[str, Any]:
     path = output_dir / "subtitle_review_state.json"
     if not path.is_file():
         return {}
@@ -81,14 +92,36 @@ def load_subtitle_review_state(output_dir: Path) -> dict[str, bool]:
         return {}
     if not isinstance(payload, dict):
         return {}
-    return {str(key): bool(value) for key, value in payload.items()}
+    # Preserve old boolean records on disk, but do not certify them against
+    # reindexed source clips: legacy True has no provable provenance.
+    return {str(key): value for key, value in payload.items()
+            if isinstance(value, (bool, dict))}
 
 
-def _write_subtitle_review_state(output_dir: Path, state: dict[str, bool]) -> None:
+def _review_is_current(entry: dict[str, Any], state: dict[str, Any]) -> bool:
+    value = state.get(str(_entry_id(entry)))
+    if not isinstance(value, dict) or value.get("confirmed") is not True:
+        return False
+    return (
+        str(value.get("source_member_id") or "") == str(entry.get("source_member_id") or "")
+        and str(value.get("source_text_sha256") or "") == _official_source_sha256(entry)
+        and bool(value.get("source_text_sha256"))
+    )
+
+
+def _review_receipt(entry: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "confirmed": True,
+        "source_member_id": str(entry.get("source_member_id") or ""),
+        "source_text_sha256": _official_source_sha256(entry),
+    }
+
+
+def _write_subtitle_review_state(output_dir: Path, state: dict[str, Any]) -> None:
     atomic_write_text(
         output_dir / "subtitle_review_state.json",
         json.dumps(
-            {key: True for key, value in state.items() if value},
+            {key: value for key, value in state.items() if value},
             ensure_ascii=False,
             indent=2,
         ),
@@ -112,10 +145,42 @@ def load_subtitle_overrides(output_dir: Path) -> dict[str, dict[str, Any]]:
     }
 
 
+def _archive_superseded_subtitle_edits(
+    output_dir: Path, records: list[dict[str, Any]],
+) -> None:
+    """Durably archive previous human edits *before* replacing/deleting them.
+
+    A previous revision must remain recoverable after a reset to the base
+    translation or after a new proofread save. This append-only journal is
+    independent of the current overrides JSON.
+    """
+    if not records:
+        return
+    path = output_dir / "subtitles_override_history.jsonl"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    timestamp = datetime.now(timezone.utc).isoformat()
+    payload = "".join(
+        json.dumps({"archived_at": timestamp, **item},
+                   ensure_ascii=False, sort_keys=True) + "\n"
+        for item in records
+    ).encode("utf-8")
+    # A single append under subtitle_edit_lock, flushed before current-state
+    # replacement. Do not continue if evidence cannot be archived.
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o600)
+    try:
+        with os.fdopen(fd, "ab", closefd=True) as stream:
+            stream.write(payload)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except Exception:
+        raise
+
+
 def _override_for_entry(
     entry: dict[str, Any],
     overrides: dict[str, dict[str, Any]],
     ambiguous_filenames: frozenset[str] = frozenset(),
+    ambiguous_logical_ids: frozenset[str] = frozenset(),
 ) -> dict[str, Any] | None:
     item_id = _entry_id(entry)
     filename = str(entry.get("filename", "") or "")
@@ -128,10 +193,25 @@ def _override_for_entry(
             stored_filename = str(exact.get("filename", "") or "")
             stored_logical_id = str(exact.get("logical_id", "") or "")
             stored_member = str(exact.get("source_member_id", "") or "")
+            # A reused numeric row ID is not proof of the same original
+            # voice. Require any recorded identity to agree, and never
+            # apply a fully identity-less historical override to a modern
+            # member-aware row solely by its index.
+            reliable_member = bool(stored_member and member_id and stored_member == member_id)
+            has_stored_identity = bool(stored_filename or stored_logical_id or stored_member)
             if (
-                (not stored_filename or not filename or stored_filename == filename)
-                and (not stored_logical_id or not logical_id or stored_logical_id == logical_id)
-                and (not stored_member or not member_id or stored_member == member_id)
+                (not stored_member or reliable_member)
+                and (not stored_filename or stored_filename == filename or reliable_member)
+                and (not stored_logical_id or stored_logical_id == logical_id or reliable_member)
+                and (has_stored_identity or not (filename or logical_id or member_id))
+                and not (
+                    stored_filename and stored_filename in ambiguous_filenames
+                    and not reliable_member
+                )
+                and not (
+                    stored_logical_id and stored_logical_id in ambiguous_logical_ids
+                    and not reliable_member
+                )
             ):
                 return exact
 
@@ -151,8 +231,14 @@ def _override_for_entry(
                 continue
             return candidate
         if logical_id and stored_logical_id == logical_id:
-            if filename in ambiguous_filenames:
+            if logical_id in ambiguous_logical_ids or filename in ambiguous_filenames:
                 continue
+            # A logical ID is not evidence that two chapter-specific WAV
+            # members are the same utterance. Never migrate an old human
+            # translation to a different member through this fallback.
+            if stored_member or member_id:
+                if not stored_member or not member_id or stored_member != member_id:
+                    continue
             return candidate
     return None
 
@@ -160,17 +246,42 @@ def _override_for_entry(
 def _apply_derived_subtitle_fields(
     entries: list[dict[str, Any]],
     overrides: dict[str, dict[str, Any]],
+    *,
+    include_review_diagnostics: bool = False,
 ) -> None:
     filename_counts: dict[str, int] = {}
+    logical_counts: dict[str, int] = {}
     for entry in entries:
         name = str(entry.get("filename", "") or "")
+        logical = str(entry.get("logical_id", "") or "")
         if name:
             filename_counts[name] = filename_counts.get(name, 0) + 1
+        if logical:
+            logical_counts[logical] = logical_counts.get(logical, 0) + 1
     ambiguous = frozenset(name for name, count in filename_counts.items() if count > 1)
+    ambiguous_logical = frozenset(
+        key for key, count in logical_counts.items() if count > 1
+    )
     for entry in entries:
         raw_target = str(entry.get("target_text") or entry.get("chinese", ""))
-        override = _override_for_entry(entry, overrides, ambiguous)
-        if override is None:
+        override = _override_for_entry(entry, overrides, ambiguous, ambiguous_logical)
+        stored_fingerprint = (
+            str(override.get("source_text_sha256") or "").strip().lower()
+            if override is not None else ""
+        )
+        stale_source = bool(
+            stored_fingerprint and stored_fingerprint != _official_source_sha256(entry)
+        )
+        if include_review_diagnostics:
+            # UI-only diagnostic values. Never persist old human edit text
+            # in the canonical manifest or bilingual export provenance.
+            entry["translation_override_stale"] = stale_source
+            entry["translation_override_previous_chs"] = (
+                str(override.get("final_chs") or "") if stale_source else ""
+            )
+        if override is None or stale_source:
+            # Retain old human text in subtitles_overrides.json for review,
+            # but do not claim that it still translates revised official text.
             entry["final_chs"] = raw_target
             entry["modified"] = False
             continue
@@ -193,27 +304,61 @@ def _sync_corrected_csv(
     except (OSError, csv.Error):
         return
 
-    by_member = {
-        str(entry.get("source_member_id", "")): entry
-        for entry in entries
-        if str(entry.get("source_member_id", "") or "")
-    }
-    by_filename = {
-        str(entry.get("filename", "")): entry
-        for entry in entries
-        if str(entry.get("filename", ""))
-    }
-    by_index = {
-        str(_entry_id(entry)): entry
-        for entry in entries
-        if _entry_id(entry) is not None
-    }
+    # Do not resolve duplicate members, filenames or indices by dict
+    # last-wins. Each CSV row must identify one specific original WAV.
+    by_member: dict[str, dict[str, Any]] = {}
+    by_filename: dict[str, dict[str, Any]] = {}
+    by_index: dict[str, dict[str, Any]] = {}
+    ambiguous_members: set[str] = set()
+    ambiguous_names: set[str] = set()
+    ambiguous_indices: set[str] = set()
+
+    def register(
+        mapping: dict[str, dict[str, Any]],
+        ambiguous: set[str],
+        key: str,
+        entry: dict[str, Any],
+    ) -> None:
+        if not key or key in ambiguous:
+            return
+        if key in mapping:
+            ambiguous.add(key)
+            mapping.pop(key, None)
+        else:
+            mapping[key] = entry
+
+    for entry in entries:
+        register(by_member, ambiguous_members,
+                 str(entry.get("source_member_id") or "").replace("\\", "/"), entry)
+        register(by_filename, ambiguous_names,
+                 str(entry.get("filename") or ""), entry)
+        raw_id = _entry_id(entry)
+        register(by_index, ambiguous_indices,
+                 str(raw_id) if raw_id is not None else "", entry)
+
     for row in rows:
-        entry = by_member.get(str(row.get("source_member_id", "") or ""))
-        if entry is None:
-            entry = by_filename.get(str(row.get("filename", "")))
-        if entry is None:
-            entry = by_index.get(str(row.get("index", "")))
+        member = str(row.get("source_member_id") or "").replace("\\", "/")
+        filename = str(row.get("filename") or "")
+        index = str(row.get("index") or "")
+        if member:
+            # Explicit package-relative identity is authoritative. An old
+            # source member may have disappeared after a rebuild; do not
+            # transplant the text to a new member using its old basename/ID.
+            entry = by_member.get(member)
+        elif filename:
+            # Old corrected CSVs may not have member identity. Prefer a
+            # unique filename. Some older manifests have no filename at all;
+            # allow a unique index only when the target manifest row likewise
+            # has no filename, never when names conflict or are duplicated.
+            entry = by_filename.get(filename)
+            if entry is None and filename not in ambiguous_names:
+                indexed = by_index.get(index)
+                if indexed is not None and not str(indexed.get("filename") or ""):
+                    entry = indexed
+        else:
+            # Only very old index-only rows reach here; duplicate indices
+            # cannot be inferred from row ordering.
+            entry = by_index.get(index)
         if entry is None:
             continue
         row["final_chs"] = str(entry.get("final_chs", ""))
@@ -338,6 +483,25 @@ def refresh_subtitle_artifacts_from_settings(
         raise ValueError("Manifest entries must be a list")
 
     overrides = load_subtitle_overrides(output_dir)
+    audited_entries = [dict(entry) for entry in entries]
+    _apply_derived_subtitle_fields(
+        audited_entries, overrides, include_review_diagnostics=True,
+    )
+    pending_review = [
+        str(_entry_id(entry))
+        for entry in audited_entries
+        if entry.get("translation_override_stale")
+    ]
+    if pending_review:
+        explanation = (
+            "Official source text changed; review previous human Chinese subtitles "
+            "before generating new ASS/SRT: " + ", ".join(pending_review[:8])
+        )
+        record_subtitle_export(
+            output_dir, state="failed",
+            ass_required=generate_ass, artifact_error=explanation,
+        )
+        raise ValueError(explanation)
     _apply_derived_subtitle_fields(entries, overrides)
     # Validate the entire derived time layer before mutating manifest/CSV or
     # writing new exports. A stale source clock is a hard failure, not a partial refresh.
@@ -630,7 +794,9 @@ def get_project_subtitles(
     overrides = load_subtitle_overrides(output_dir)
     if isinstance(entries, list):
         # Keep displayed baseline identical to ASS/SRT export resolution.
-        _apply_derived_subtitle_fields(entries, overrides)
+        _apply_derived_subtitle_fields(
+            entries, overrides, include_review_diagnostics=True,
+        )
     review_state = load_subtitle_review_state(output_dir)
 
     overflow_file = output_dir / "ass_layout_overflow_report.json"
@@ -702,14 +868,22 @@ def get_project_subtitles(
             "timing_conflict": timing_conflict,
             "source_language": source_lang,
             "source_text": str(entry.get("source_text") or entry.get("english", "")),
+            "source_text_sha256": _official_source_sha256(entry),
             "official_chs": official_chs,
             "api_chs": api_chs,
             "original_chs": target_text,
             "final_chs": final_chs,
             "modified": modified,
-            "confirmed": bool(review_state.get(str_id, False)),
+            "confirmed": (
+                _review_is_current(entry, review_state)
+                and not bool(entry.get("translation_override_stale"))
+            ),
             "layout_overflow": overflow_info is not None,
             "overflow_condition": overflow_info.get("failed_condition") if overflow_info else None,
+            "translation_override_stale": bool(entry.get("translation_override_stale")),
+            "translation_override_previous_chs": str(
+                entry.get("translation_override_previous_chs") or ""
+            ),
             "word_alignment": dict(entry.get("_word_alignment") or {}),
             "word_alignment_ready": (
                 not timing_modified and bool((entry.get("_word_alignment") or {}).get("valid"))
@@ -818,7 +992,12 @@ def _update_project_subtitles_locked(
         for item in updates
         if item.get("id") is not None and "expected_source_member_id" in item
     }
-    if expected_text or expected_members:
+    expected_source_hashes = {
+        str(item["id"]): str(item["expected_source_text_sha256"]).lower()
+        for item in updates
+        if item.get("id") is not None and "expected_source_text_sha256" in item
+    }
+    if expected_text or expected_members or expected_source_hashes:
         # The same resolver is used by actual derived exports, including
         # filename/member migration of older human overrides. Comparing raw
         # manifest.final_chs or an exact-ID-only entry is insufficient.
@@ -827,7 +1006,7 @@ def _update_project_subtitles_locked(
         by_id: dict[str, list[dict[str, Any]]] = {}
         for entry in effective:
             by_id.setdefault(str(_entry_id(entry)), []).append(entry)
-        for key in expected_text.keys() | expected_members.keys():
+        for key in expected_text.keys() | expected_members.keys() | expected_source_hashes.keys():
             matches = by_id.get(key, [])
             if len(matches) != 1:
                 raise ValueError("Subtitle cue identity is missing or ambiguous; refresh before editing")
@@ -836,9 +1015,24 @@ def _update_project_subtitles_locked(
                 raise ValueError("Subtitle source clip changed since it was loaded; refresh before editing")
             if key in expected_text and expected_text[key] != str(entry.get("final_chs", "")):
                 raise ValueError("Subtitle text changed since it was loaded; refresh before editing")
+            if (key in expected_source_hashes
+                    and expected_source_hashes[key] != _official_source_sha256(entry)):
+                raise ValueError("Official source text changed since it was loaded; refresh before editing")
 
+    names: dict[str, int] = {}
+    logicals: dict[str, int] = {}
+    for row in entries:
+        name = str(row.get("filename") or "")
+        logical = str(row.get("logical_id") or "")
+        if name:
+            names[name] = names.get(name, 0) + 1
+        if logical:
+            logicals[logical] = logicals.get(logical, 0) + 1
+    ambiguous_names = frozenset(k for k, n in names.items() if n > 1)
+    ambiguous_logicals = frozenset(k for k, n in logicals.items() if n > 1)
     updated_count = 0
     text_updated_count = 0
+    archived_old: list[dict[str, Any]] = []
     for entry in entries:
         item_id = _entry_id(entry)
         if item_id is None or str(item_id) not in updates_by_id:
@@ -850,48 +1044,85 @@ def _update_project_subtitles_locked(
         filename = str(entry.get("filename", "") or "")
         logical_id = str(entry.get("logical_id", "") or "")
         member_id = str(entry.get("source_member_id", "") or "")
+        previous_override = _override_for_entry(
+            entry, overrides, ambiguous_names, ambiguous_logicals,
+        )
+        previous_source_hash = (
+            str(previous_override.get("source_text_sha256") or "")
+            if previous_override else ""
+        )
+        previous_source_stale = bool(
+            previous_source_hash
+            and previous_source_hash != _official_source_sha256(entry)
+        )
 
         if new_chs == raw_target:
-            overrides.pop(key, None)
+            # Remove only the resolved current entry's edits. A sibling with
+            # the same filename/logical ID must never be reset accidentally.
             for old_key, value in list(overrides.items()):
-                stored_member = str(value.get("source_member_id", "") or "")
-                if member_id or stored_member:
-                    # Member-aware records only match by member id so a
-                    # same-basename sibling never loses its override.
-                    if member_id and stored_member and member_id == stored_member:
-                        overrides.pop(old_key, None)
-                    continue
-                if (
-                    (filename and str(value.get("filename", "") or "") == filename)
-                    or (
-                        logical_id
-                        and str(value.get("logical_id", "") or "") == logical_id
-                    )
-                ):
+                if _override_for_entry(
+                    entry, {old_key: value}, ambiguous_names, ambiguous_logicals,
+                ) is value:
+                    if value.get("final_chs") is not None:
+                        archived_old.append({
+                            "override_key": old_key, "prior": dict(value),
+                            "source_member_id": member_id,
+                            "operation": "restore_base",
+                        })
                     overrides.pop(old_key, None)
         else:
-            overrides[key] = {
+            latest = {
                 "final_chs": new_chs,
                 "modified": True,
                 "filename": filename,
                 "logical_id": logical_id,
                 "source_member_id": member_id,
+                "source_text_sha256": _official_source_sha256(entry),
+                "source_text_hash_version": 2,
+                "source_audio_sha256": str(entry.get("sha256") or "").lower().strip(),
             }
+            for old_key, value in list(overrides.items()):
+                matches_entry = _override_for_entry(
+                    entry, {old_key: value}, ambiguous_names, ambiguous_logicals,
+                ) is value
+                if matches_entry or old_key == key:
+                    # A reused numeric key can replace an unrelated member.
+                    # Journal it even when it would not be *applied* to this
+                    # source. Otherwise assignments discard historical text.
+                    if dict(value) != latest and value.get("final_chs") is not None:
+                        archived_old.append({
+                            "override_key": old_key, "prior": dict(value),
+                            "source_member_id": member_id,
+                            "operation": "superseded" if matches_entry else "key_reassigned",
+                        })
+                    if old_key != key:
+                        overrides.pop(old_key, None)
+            overrides[key] = latest
         if key in confirmations:
             if confirmations[key]:
-                review_state[key] = True
+                review_state[key] = _review_receipt(entry)
             else:
                 review_state.pop(key, None)
+        elif previous_source_stale:
+            # The operator has just resolved a stale translation, but has
+            # not explicitly reconfirmed its review status.
+            review_state.pop(key, None)
         updated_count += 1
         text_updated_count += 1
 
     # Confirmation-only updates are valid even when the final text is unchanged.
-    entry_ids = {str(_entry_id(entry)) for entry in entries if _entry_id(entry) is not None}
+    by_confirm_id: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        if _entry_id(entry) is not None:
+            by_confirm_id.setdefault(str(_entry_id(entry)), []).append(entry)
     for key, confirmed in confirmations.items():
-        if key not in entry_ids or key in updates_by_id:
+        if key in updates_by_id:
+            continue
+        matches = by_confirm_id.get(key, [])
+        if len(matches) != 1:
             continue
         if confirmed:
-            review_state[key] = True
+            review_state[key] = _review_receipt(matches[0])
         else:
             review_state.pop(key, None)
         updated_count += 1
@@ -899,6 +1130,7 @@ def _update_project_subtitles_locked(
     if updated_count < 1:
         raise ValueError("No matching subtitle entries were updated")
 
+    _archive_superseded_subtitle_edits(output_dir, archived_old)
     atomic_write_text(
         output_dir / "subtitles_overrides.json",
         json.dumps(overrides, ensure_ascii=False, indent=2),
@@ -943,7 +1175,10 @@ def _update_project_subtitles_locked(
         "updated_count": updated_count,
         "updated_ids": sorted(updates_by_id),
         "modified_ids": sorted(str(key) for key in overrides),
-        "confirmed_ids": sorted(str(key) for key, value in review_state.items() if value),
+        "confirmed_ids": sorted(
+            str(_entry_id(entry)) for entry in entries
+            if _review_is_current(entry, review_state)
+        ),
         "total_count": len(entries),
         **refreshed,
     }

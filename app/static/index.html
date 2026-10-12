@@ -3301,18 +3301,34 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
       <details id="archiveOutputs" style="margin-top:14px">
         <summary>Archive / Build Records（档案与构建记录）</summary>
         <p class="small muted">Manifest、时间轴、构建报告与更新计划用于审计、复现和后续自动化，不是普通播放所必需的成品。</p>
+        <div class="actions">
+          <button type="button" class="small secondary" id="archiveAuditBtn">检查章节与来源覆盖</button>
+          <button type="button" class="small secondary" id="archiveVerifyBtn">逐个核验原始 WAV 字节</button>
+        </div>
+        <div id="archiveVerifySummary" class="small muted" role="status" aria-live="polite">深度核验为按需任务，可耗时较长；不会覆盖 Manifest 或字幕。</div>
+        <div id="archiveVerifyIssues"></div>
+        <div id="archiveAuditSummary" class="small muted" role="status" aria-live="polite">按需检查 Manifest 结构，不重写语音档案。</div>
+        <div id="archiveAuditGroups"></div>
+        <div id="archiveAuditIssues"></div>
         <table><tbody id="archiveOutputTable"></tbody></table>
       </details>
       <details id="translationRecovery" style="margin-top:14px">
         <summary>Translation Recovery（翻译恢复）</summary>
-        <p class="small muted">导出仅包含翻译检查点、QA、索引与必要文本元数据；不包含 WAV、FLAC、MKV 或 API 密钥。导入会先校验完整性，再合并可复用的翻译记录。</p>
+        <p class="small muted">恢复包可包含翻译检查点、人工中文字幕和修订历史；不包含 WAV、FLAC、MKV 或 API 密钥。普通导入只合并兼容翻译检查点；要恢复人工中文字幕，须单独预览并逐条选择，绝不修改原语言原文。</p>
         <div id="autoRecoveryStatus" class="notice" style="margin-bottom:10px">自动恢复保护尚无状态。</div>
         <div class="actions">
-          <button type="button" class="success" id="exportRecoveryBtn">导出翻译恢复包</button>
+          <button type="button" class="success" id="exportRecoveryBtn">导出翻译及人工校对恢复包</button>
           <input type="file" id="importRecoveryFile" accept=".hsrbackup,application/json" style="max-width:320px">
           <button type="button" id="importRecoveryBtn">导入翻译恢复包</button>
         </div>
         <div id="recoveryImportStatus" class="small muted" style="margin-top:8px" role="status" aria-live="polite">尚未导入恢复包。</div>
+        <div class="actions">
+          <button type="button" id="previewHumanRestoreBtn">预览人工中文字幕恢复</button>
+          <button type="button" id="applyHumanRestoreBtn" disabled>恢复选中的安全匹配项</button>
+        </div>
+        <p class="small muted">不会自动选择任何译文。来源缺失、原文或音频版本不符、旧指纹不可验证、当前已有人工校对的记录仅供检查，不参与自动恢复。</p>
+        <div id="humanRecoveryStatus" class="small muted" role="status" aria-live="polite">请选择恢复包后预览。</div>
+        <div id="humanRecoveryCandidates" style="display:grid;gap:7px;margin-top:9px"></div>
       </details>
       <details id="projectResources" style="margin-top:14px">
         <summary>Project Resources（项目资源）</summary>
@@ -3525,8 +3541,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
           </div>
           <div>
-            <label for="prevPriText">原文字幕</label>
-            <input id="prevPriText" value="May this journey lead us starward." placeholder="输入原文/英文字幕…">
+            <label for="prevPriText">原文排版试调文本（不修改官方台词）</label>
+            <input id="prevPriText" value="May this journey lead us starward." placeholder="仅修改预览样本，不写入档案原文">
           </div>
           <div id="layoutCorpusCheckStatus" class="small muted layout-corpus-status">打开项目后，排版工作台会自动载入实际字幕中版面压力较高的条目并持续复检。</div>
           <div class="layout-sample-toolbar" aria-label="测试字幕来源与切换">
@@ -3888,6 +3904,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 <span class="proof-editor-meta"><span id="subInitialSourceBadge" class="badge">初始来源 —</span><span id="subCharCounter" class="small muted">0 字</span></span>
               </div>
               <textarea id="subFinalEditor" class="sub-textarea" placeholder="官方中文存在时以官方中文为初始字幕；否则使用补译结果。"></textarea>
+              <div id="subRevisionWarning" class="notice warn" hidden role="status">
+                <strong>官方原文版本发生变化</strong>
+                <p class="small">先前人工中文字幕未自动沿用，旧校对文本仍保存在项目中。请对照新版原文重新核对，再明确保存。</p>
+                <div class="small muted">旧版人工中文字幕（只读供对照）：</div>
+                <div id="subPreviousTranslation" class="sub-ref-content" style="white-space:pre-wrap"></div>
+              </div>
               <div class="sub-nav-bar proofreading-nav-actions">
                 <button type="button" id="subPrevBtn" aria-label="上一条字幕 (Alt+Up)" title="上一条字幕 (Alt+Up)">上一条</button>
                 <button type="button" id="subNextBtn" aria-label="下一条字幕 (Alt+Down)" title="下一条字幕 (Alt+Down)">下一条</button>
@@ -3959,6 +3981,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
       </div>
       <div id="updateResult" class="small muted" role="status" aria-live="polite">尚未检查。</div>
+      <details id="updateRevisionRecovery" style="margin-top:10px">
+        <summary>增量更新版本与受控回退</summary>
+        <p class="small muted">仅在新语音尚未重新构建、项目配置及 Manifest 未改变、旧来源仍存在时可回退。不会删除已下载音频，遇到版本变化或中断需重新检查。</p>
+        <div class="actions"><button type="button" id="refreshUpdateRevisionsBtn">核查增量发布记录</button></div>
+        <div id="updateRevisionStatus" class="small muted" role="status" aria-live="polite">尚未检查发布记录。</div>
+        <div id="updateRevisionRows" style="display:grid;gap:8px;margin-top:8px"></div>
+      </details>
 
       <div id="updateStats" class="stats update-stats">
         <button type="button" class="stat existing update-filter" data-update-filter="exact_existing"><b id="uExisting">—</b><span>已存在</span></button>
@@ -3976,9 +4005,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
         <div class="actions">
           <button type="button" id="updateOnlyActionableBtn">只看需处理</button>
+          <button type="button" id="updateSelectVisibleBtn">选中当前可见新增</button>
+          <button type="button" id="updateClearVisibleBtn">取消当前可见新增</button>
           <button type="button" id="updateCopySummaryBtn">复制摘要</button>
         </div>
       </div>
+      <div id="updateSelectionStatus" class="small muted" role="status" aria-live="polite">远程检查后可选择本次应用的新增语音。</div>
       <div class="update-review-tools">
         <div>
           <label for="updateSearchQuery">搜索变化</label>
@@ -4699,7 +4731,11 @@ function renderProjectOverview(p){
   document.getElementById('overviewAttention').innerHTML=attention.map(([label,value,cls])=>'<div class="overview-line"><span>'+label+'</span><span class="'+cls+'">'+value+'</span></div>').join('');
 }
 
+let archiveAuditOwner='';
 function fillProject(p){
+  const nextOwner=p?(p.root||p.name||''):'';
+  const archiveProjectChanged=nextOwner!==archiveAuditOwner;
+  archiveAuditOwner=nextOwner;
   currentProject=p;
   for(const button of workspaceButtons){
     if(['review','export','update'].includes(button.dataset.workspaceTarget))button.disabled=!p;
@@ -4744,6 +4780,15 @@ function fillProject(p){
   hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
+  if(archiveProjectChanged){
+    const archiveAuditSummary=document.getElementById('archiveAuditSummary');
+    if(archiveAuditSummary)archiveAuditSummary.textContent='按需检查 Manifest 结构，不重写语音档案。';
+    document.getElementById('archiveAuditGroups')?.replaceChildren();
+    document.getElementById('archiveAuditIssues')?.replaceChildren();
+    const verifySummary=document.getElementById('archiveVerifySummary');
+    if(verifySummary)verifySummary.textContent='深度核验为按需任务，可耗时较长；不会覆盖 Manifest 或字幕。';
+    document.getElementById('archiveVerifyIssues')?.replaceChildren();
+  }
   const usage=[];
   if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
   if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
@@ -4782,7 +4827,7 @@ function fillProject(p){
     const a=p.recovery?.automatic||{};
     if(a.valid_backup){
       const when=a.last_backup?new Date(a.last_backup).toLocaleString():'时间未知';
-      autoBox.textContent='自动恢复保护：已校验 · '+when+' · '+n(a.translation_records)+' 条翻译 · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知')+(a.previous_valid?' · 上一代恢复包可用':'');
+      autoBox.textContent='自动恢复保护：已校验 · '+when+' · '+n(a.translation_records)+' 条翻译检查点记录（恢复包亦可包含人工字幕历史） · '+bytes(a.size_bytes)+' · 原因 '+(a.reason||'未知')+(a.previous_valid?' · 上一代恢复包可用':'');
       autoBox.className='notice '+(a.healthy?'ok':'warn');
     }else if(a.previous_valid){
       autoBox.textContent='自动恢复保护：latest 校验失败，但上一代恢复包仍可用。'+(a.error?' · '+a.error:'');
@@ -4791,7 +4836,7 @@ function fillProject(p){
       autoBox.textContent='自动恢复保护：最近一次保存失败 · '+a.error;
       autoBox.className='notice warn';
     }else{
-      autoBox.textContent='自动恢复保护：尚无 API 翻译检查点；产生翻译后会自动创建外置恢复包。';
+      autoBox.textContent='自动恢复保护：当前暂无已验证的恢复包；产生翻译检查点或人工字幕修订记录后可创建外置恢复包。';
       autoBox.className='notice';
     }
   }
@@ -4806,7 +4851,109 @@ function fillProject(p){
     if(p)fetchSubtitles();
   }
 }
+async function loadArchiveAudit(){
+  const summary=document.getElementById('archiveAuditSummary');
+  const groups=document.getElementById('archiveAuditGroups');
+  const issues=document.getElementById('archiveAuditIssues');
+  const button=document.getElementById('archiveAuditBtn');
+  if(!currentProject||!summary||!groups||!issues)return;
+  const owner=currentProject.root||currentProject.name;
+  if(button)button.disabled=true;
+  summary.textContent='正在检查章节、台词覆盖和来源身份…';
+  groups.replaceChildren();
+  issues.replaceChildren();
+  try{
+    const response=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/archive/audit');
+    if(owner!==(currentProject?.root||currentProject?.name))return;
+    const audit=response.audit||{},info=audit.summary||{};
+    summary.textContent='条目 '+Number(info.entries||0)+' · 章节 '+Number(info.groups||0)+' · 原文 '+Number(info.source_text_present||0)+' · 目标文本 '+Number(info.target_text_present||0)+' · WAV 哈希 '+Number(info.audio_hash_present||0)+' · 待核对 '+Number(info.issues||0)+'。本检查不重新读取 WAV 字节。';
+    const table=document.createElement('table');
+    const header=document.createElement('thead');
+    header.innerHTML='<tr><th>章节 / 分组</th><th>条目</th><th>原文</th><th>目标文本</th></tr>';
+    table.appendChild(header);
+    const body=document.createElement('tbody');
+    for(const group of audit.groups||[]){
+      const tr=document.createElement('tr');
+      for(const value of [group.name,group.entries,group.source_text_present,group.target_text_present]){
+        const cell=document.createElement('td');
+        cell.textContent=String(value);
+        tr.appendChild(cell);
+      }
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    groups.appendChild(table);
+    if((audit.issues||[]).length){
+      const title=document.createElement('p');
+      title.className='small status-warn';
+      title.textContent='需要核对 '+Number(info.issues||0)+' 项（仅显示前 '+audit.issues.length+' 项）';
+      issues.appendChild(title);
+      const list=document.createElement('ul');
+      for(const issue of audit.issues){
+        const item=document.createElement('li');
+        item.className='small';
+        item.textContent='#'+String(issue.id||'?')+' · '+String(issue.code||'issue')+' · '+String(issue.detail||'');
+        list.appendChild(item);
+      }
+      issues.appendChild(list);
+    }
+  }catch(err){
+    if(owner===(currentProject?.root||currentProject?.name)){
+      summary.textContent='档案核查失败：'+shortError(err);
+    }
+  }finally{
+    if(button)button.disabled=false;
+  }
+}
+document.getElementById('archiveAuditBtn')?.addEventListener('click',loadArchiveAudit);
+
+function renderArchiveSourceVerification(result){
+  const summary=document.getElementById('archiveVerifySummary');
+  const container=document.getElementById('archiveVerifyIssues');
+  if(!summary||!container)return;
+  const s=result?.summary||{};
+  summary.textContent='原始 WAV 字节核验：'+Number(s.verified||0)+'/'+Number(s.total||0)
+    +' 匹配 · 哈希不同 '+Number(s.mismatch||0)
+    +' · 缺失 '+Number(s.missing||0)
+    +' · 身份歧义 '+Number(s.ambiguous||0)
+    +' · 无法验证 '+Number(s.unverifiable||0)
+    +' · 扫描中变更 '+Number(s.changed_during_verify||0)
+    +' · PCM 规范化待核实 '+Number(s.normalization_ambiguous||0)
+    +'。'+(s.trusted_complete?'所有条目的原始 WAV 字节与 Manifest 匹配。':'存在待核对结果；请勿视为完整性通过。');
+  summary.className='small '+(s.trusted_complete?'status-ok':'status-warn');
+  container.replaceChildren();
+  const findings=result?.findings||[];
+  if(findings.length){
+    const list=document.createElement('ul');
+    for(const item of findings){
+      const li=document.createElement('li');
+      li.className='small';
+      li.textContent='#'+String(item.id||'?')+' · '+String(item.group||'')
+        +' · '+String(item.code||'')+' · '+String(item.detail||'');
+      list.appendChild(li);
+    }
+    container.appendChild(list);
+  }
+}
+
+async function startArchiveSourceVerification(){
+  const button=document.getElementById('archiveVerifyBtn');
+  const status=document.getElementById('archiveVerifySummary');
+  if(!currentProject)return;
+  if(button)button.disabled=true;
+  if(status){status.textContent='正在启动原始 WAV 流式核验任务…';status.className='small muted';}
+  try{
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/archive/verify-sources',{method:'POST'});
+    watchJob(result.job);
+  }catch(err){
+    if(status){status.textContent='原始 WAV 核验启动失败：'+shortError(err);status.className='small status-bad';}
+    if(button)button.disabled=false;
+  }
+}
+document.getElementById('archiveVerifyBtn')?.addEventListener('click',startArchiveSourceVerification);
+
 let currentUpdatePlan=null;
+let selectedRemoteAdditions=new Set();
 let currentUpdateFilter='all';
 let updateOnlyActionable=false;
 let updateSearchQuery='';
@@ -4835,6 +4982,27 @@ function updatePlanEntries(plan){
     for(const item of (plan?.[key]||[]))rows.push({category:key,item});
   }
   return rows;
+}
+function currentUpdateVisibleRows(){
+  let rows=updatePlanEntries(currentUpdatePlan);
+  if(currentUpdateFilter!=='all')rows=rows.filter(row=>row.category===currentUpdateFilter);
+  if(updateOnlyActionable)rows=rows.filter(row=>['new_logical','changed_existing','ambiguous','variant_of_existing'].includes(row.category));
+  const query=updateSearchQuery.trim().toLocaleLowerCase();
+  if(query)rows=rows.filter(row=>updateRowSearchText(row).includes(query));
+  return rows;
+}
+function updateSelectionDisplay(){
+  const isRemote=currentUpdatePlan?.remote_rows!==undefined;
+  const total=(currentUpdatePlan?.new_logical||[]).length;
+  const status=document.getElementById('updateSelectionStatus');
+  if(status)status.textContent=isRemote
+    ? '本次选中新增语音 '+selectedRemoteAdditions.size+' / '+total+'；只下载选中项，已有变化和身份歧义不会自动覆盖。'
+    : '远程检查后可选择本次应用的新增语音；本地候选扫描不会触发下载。';
+  const button=document.getElementById('applyRemoteBtn');
+  if(button){
+    button.disabled=!isRemote||!selectedRemoteAdditions.size||!!currentUpdatePlan?.applied;
+    button.textContent='下载并应用选中新增语音 ('+selectedRemoteAdditions.size+')';
+  }
 }
 function updateRowSearchText(row){
   const item=row.item,md=updateItemMetadata(item);
@@ -4867,7 +5035,7 @@ function buildUpdateChange(row){
   card.open=category!=='exact_existing';
   const badges=['<span class="badge">'+escapeHtml(updateCategoryLabel(category))+'</span>'];
   if(category==='changed_existing'&&Array.isArray(item?.changes)){
-    for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'文本变化':change==='audio_sha256'?'音频变化':change)+'</span>');
+    for(const change of item.changes)badges.push('<span class="badge">'+escapeHtml(change==='source_text'?'原文索引差异（只读）':change==='audio_sha256'?'音频版本差异':change)+'</span>');
   }
   const metaBits=[];
   if(md.character)metaBits.push('角色 '+md.character);
@@ -4877,7 +5045,7 @@ function buildUpdateChange(row){
   if(category==='changed_existing'){
     const oldText=String(item?.previous?.source_text||'');
     const newText=String(md.english||'');
-    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div>';
+    body='<div class="update-change-diff"><div class="update-diff-side"><div class="update-diff-label">CURRENT · 档案原文 · 只读</div><div class="update-diff-text">'+escapeHtml(oldText||'—')+'</div></div><div class="update-diff-side"><div class="update-diff-label">REMOTE · 远端索引记录 · 待核实</div><div class="update-diff-text">'+escapeHtml(newText||'—')+'</div></div></div><div class="update-change-detail">仅展示来源版本差异；不提供原文编辑，也不自动替换档案原文。</div>';
     if(item?.changes?.includes('audio_sha256'))body+='<div class="update-change-detail">音频 SHA-256 与当前档案不同；不会被“应用新增”静默覆盖。</div>';
   }else if(category==='variant_of_existing'){
     const existing=Array.isArray(item?.existing)?item.existing.join('、'):'—';
@@ -4886,7 +5054,12 @@ function buildUpdateChange(row){
   }else if(category==='ambiguous'){
     body='<div class="update-change-detail">无法安全确定身份：'+escapeHtml(item?.reason||'unknown')+'。不会自动下载或归入现有条目。</div>';
   }else if(category==='new_logical'){
-    body='<div class="update-change-detail">远程索引首次出现的逻辑语音；应用更新时将尝试精确定位并下载。</div>';
+    const isRemote=currentUpdatePlan?.remote_rows!==undefined;
+    if(isRemote){
+      body='<label class="small"><input type="checkbox" class="update-select-file" '
+        +(selectedRemoteAdditions.has(filename)?'checked':'')+'> 本次下载此条新增语音</label>';
+    }
+    body+='<div class="update-change-detail">远程索引首次出现的逻辑语音；仅选中后才会尝试精确定位并下载。</div>';
     if(md.english)body+='<div class="update-diff-side"><div class="update-diff-label">REMOTE TEXT</div><div class="update-diff-text">'+escapeHtml(md.english)+'</div></div>';
   }else{
     body='<div class="update-change-detail">当前档案中已存在同一条目，远程元数据没有可比较的变化。</div>';
@@ -4895,6 +5068,12 @@ function buildUpdateChange(row){
     '<summary class="update-change-summary"><span class="update-change-title">'+escapeHtml(filename)+'</span><span class="update-change-badges">'+badges.join('')+'</span></summary>'+
     (metaBits.length?'<div class="update-change-meta">'+metaBits.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+
     '<div class="update-change-body">'+body+'</div>';
+  const select=card.querySelector('.update-select-file');
+  if(select)select.addEventListener('change',()=>{
+    if(select.checked)selectedRemoteAdditions.add(filename);
+    else selectedRemoteAdditions.delete(filename);
+    updateSelectionDisplay();
+  });
   return card;
 }
 function renderUpdateReview(){
@@ -4904,11 +5083,8 @@ function renderUpdateReview(){
     list.innerHTML='<div class="update-empty">尚未加载更新计划。</div>';
     title.textContent='全部变化';meta.textContent='运行检查后显示逐项详情。';return;
   }
-  let rows=updatePlanEntries(currentUpdatePlan);
-  if(currentUpdateFilter!=='all')rows=rows.filter(row=>row.category===currentUpdateFilter);
-  if(updateOnlyActionable)rows=rows.filter(row=>['new_logical','changed_existing','ambiguous','variant_of_existing'].includes(row.category));
+  let rows=currentUpdateVisibleRows();
   const query=updateSearchQuery.trim().toLocaleLowerCase();
-  if(query)rows=rows.filter(row=>updateRowSearchText(row).includes(query));
 
   title.textContent=currentUpdateFilter==='all'?'全部变化':updateCategoryLabel(currentUpdateFilter);
   const groupHint=updateGroupBy==='none'?'不分组':' · '+document.getElementById('updateGroupBy')?.selectedOptions?.[0]?.textContent;
@@ -4958,6 +5134,9 @@ function updatePlanSummaryText(plan){
 
 function showPlan(plan){
   currentUpdatePlan=plan;
+  // An explicitly reviewed incremental selection begins empty. Inspect
+  // candidates before opting into downloads; never silently check all.
+  selectedRemoteAdditions=new Set();
   const c=plan.counts||{};
   const state=document.getElementById('updatePlanState');
   if(state)state.textContent=plan.applied?'已应用':'检查完成';
@@ -4976,8 +5155,8 @@ function showPlan(plan){
       result.textContent='本地候选清单已扫描；新增成员 '+n(c.new_logical)+' 条，待确认 '+n(c.ambiguous)+' 条。';
     }
   }
-  const additions=Number(c.new_logical||0),button=document.getElementById('applyRemoteBtn');
-  button.disabled=additions<1||!!plan.applied;
+  const additions=Number(c.new_logical||0);
+  updateSelectionDisplay();
   setRunReport(plan.applied?'增量更新已应用':additions>0?'检查到新增语音':Number(c.changed_existing||0)+Number(c.ambiguous||0)>0?'检查到待处理变化':'没有新增语音',result?.textContent||'',false);
   renderUpdateReview();
   setLog(plan);
@@ -5235,7 +5414,7 @@ function renderJobs(jobs){
     setBuildButtonsDisabled(latest?.state==='awaiting_input');
   }
   const box=document.getElementById('jobs');
-  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','ass-export':'生成 ASS 字幕','black-video-export':'生成黑屏 MKV'};
+  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','ass-export':'生成 ASS 字幕','black-video-export':'生成黑屏 MKV','archive-verify':'原始 WAV 字节核验'};
   const states={queued:'等待',running:'运行中',succeeded:'完成',failed:'失败',interrupted:'已中断',awaiting_input:'等待人工修订'};
   const row=j=>{
     const when=j.finished_at||j.started_at||j.created_at||'';
@@ -5303,6 +5482,15 @@ async function watchJob(id){
             if(status)status.textContent='黑屏 MKV 已生成。';
             setRunReport('黑屏 MKV 已生成',completedReport(x.job),false);
             setLog(x.job.result||x.job);
+          }else if(x.job.kind==='archive-verify'){
+            const owner=x.job.project_root||'';
+            await refresh();
+            if(owner&&(currentProject?.root||'')===owner){
+              renderArchiveSourceVerification(x.job.result||{});
+              const verifyBtn=document.getElementById('archiveVerifyBtn');
+              if(verifyBtn)verifyBtn.disabled=false;
+            }
+            setRunReport('原始 WAV 字节核验完成',completedReport(x.job),!(x.job.result?.summary?.trusted_complete));
           }else if(x.job.kind==='word-align'){
             const r=x.job.result||{};
             const status=document.getElementById('wordAlignmentStatus');
@@ -5325,6 +5513,15 @@ async function watchJob(id){
           if(['ass-export','black-video-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
+          }
+          if(x.job.kind==='archive-verify'){
+            const status=document.getElementById('archiveVerifySummary');
+            if(status&&(currentProject?.root||'')===x.job.project_root){
+              status.textContent='原始 WAV 核验失败：'+shortError(x.job.error||x.job);
+              status.className='small status-bad';
+              const verifyBtn=document.getElementById('archiveVerifyBtn');
+              if(verifyBtn)verifyBtn.disabled=false;
+            }
           }
           if(x.job.kind==='word-align'){
             const status=document.getElementById('wordAlignmentStatus');
@@ -5378,6 +5575,17 @@ document.getElementById('updateOnlyActionableBtn').onclick=()=>{
   document.getElementById('updateOnlyActionableBtn').textContent=updateOnlyActionable?'显示全部':'只看需处理';
   renderUpdateReview();
 };
+for(const [buttonId,checked] of [['updateSelectVisibleBtn',true],['updateClearVisibleBtn',false]]){
+  document.getElementById(buttonId)?.addEventListener('click',()=>{
+    for(const row of currentUpdateVisibleRows().filter(row=>row.category==='new_logical')){
+      const filename=updateItemFilename(row.item);
+      if(checked)selectedRemoteAdditions.add(filename);
+      else selectedRemoteAdditions.delete(filename);
+    }
+    renderUpdateReview();
+    updateSelectionDisplay();
+  });
+}
 document.getElementById('updateCopySummaryBtn').onclick=()=>{
   if(!currentUpdatePlan){setLog('尚未加载更新计划。');return}
   copyTextValue(updatePlanSummaryText(currentUpdatePlan)).then(()=>{
@@ -5446,7 +5654,75 @@ document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
-document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
+async function refreshUpdateRevisions(){
+  const box=document.getElementById('updateRevisionRows');
+  const message=document.getElementById('updateRevisionStatus');
+  box.replaceChildren();
+  if(!currentProject){message.textContent='请先打开项目。';return;}
+  const expectedRoot=String(currentProject.root||'');
+  message.textContent='正在比较发布记录和实际项目配置…';
+  try{
+    const data=await api('/api/update/revisions',{cache:'no-store'});
+    if(String(currentProject?.root||'')!==expectedRoot)throw new Error('项目已切换，请重新检查');
+    const records=data.revisions||[];
+    for(const record of records){
+      const line=document.createElement('div');
+      line.style.cssText='border:1px solid var(--line);border-radius:7px;padding:10px';
+      const summary=document.createElement('div');
+      summary.style.whiteSpace='pre-wrap';
+      const labels={
+        active:'当前活动版本',applied_unfinalized:'配置已切换，提交记录未完成',
+        rolled_back:'已回退',not_applied:'准备中断，尚未生效',
+        superseded_or_modified:'后续项目状态已变化',invalid_journal:'发布记录无效'
+      };
+      summary.textContent=(labels[record.state]||record.state)+' · '+
+        String(record.revision_id||'').slice(0,12)+' · '+
+        (record.created_at||'')+'\n'+
+        '语音：'+(record.selected_filenames||[]).join('、')+
+        (record.prior_index_unchanged===false?'\n原有索引内容已变化，禁止自动回退':'')+
+        (record.new_index_unchanged===false?'\n新增索引内容已变化，禁止自动回退':'')+
+        (record.new_audio_unchanged===false?'\n新增语音的 WAV 字节与发布时不一致；请停止使用该版本并核对或安全回退':'')+
+        (record.new_audio_unchanged===null?'\n历史发布记录没有 WAV 字节指纹；无法证明音频完整性，建议人工核验':'')+
+        (record.manifest_unchanged===false?'\n归档 Manifest 已变化，禁止自动回退':'')+
+        (record.prior_resources_exist===false?'\n旧来源资源缺失，禁止自动回退':'');
+      line.append(summary);
+      const rollback=document.createElement('button');
+      rollback.type='button';
+      rollback.textContent='回退到应用前的音频和索引';
+      rollback.disabled=!record.can_rollback;
+      rollback.style.marginTop='8px';
+      rollback.onclick=async()=>{
+        if(!record.can_rollback||!currentProject||
+           String(currentProject.root||'')!==expectedRoot)return;
+        if(!window.confirm('确认只回退当前项目的音频来源和索引配置？旧版与新版文件都保留；若已构建新成品，请先不要执行。'))return;
+        rollback.disabled=true;
+        try{
+          const form=new FormData();
+          form.set('revision_id',record.revision_id);
+          form.set('expected_project_sha256',record.current_project_sha256);
+          const result=await api('/api/update/rollback',{method:'POST',body:form});
+          message.textContent='已创建受控回退任务；正在等待最终状态…';
+          watchJob(result.job);
+        }catch(err){message.textContent='回退拒绝：'+shortError(err);setLog(String(err));
+          await refreshUpdateRevisions();}
+      };
+      line.append(rollback);box.append(line);
+    }
+    message.textContent=records.length?
+      '已核验 '+records.length+' 条发布记录。仅当前未被修改且原 Manifest 未变化的版本可回退。':
+      '暂无本项目的增量发布记录。';
+  }catch(err){message.textContent='发布记录核查失败：'+shortError(err);setLog(String(err))}
+}
+document.getElementById('refreshUpdateRevisionsBtn').onclick=refreshUpdateRevisions;
+document.getElementById('applyRemoteBtn').onclick=async()=>{try{
+  if(!selectedRemoteAdditions.size)throw new Error('至少选择一条新增语音');
+  document.getElementById('applyRemoteBtn').disabled=true;
+  const form=new FormData();
+  form.set('selected_filenames',JSON.stringify([...selectedRemoteAdditions]));
+  const j=await api('/api/update/apply-remote',{method:'POST',body:form});
+  setLog('选中语音应用任务已启动：'+j.job);
+  watchJob(j.job);
+}catch(x){updateSelectionDisplay();setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
 async function exportTranslationRecovery(){
@@ -5474,11 +5750,111 @@ async function importTranslationRecovery(){
     fillProject(j.project);
     const x=j.result||{};
     const extra=x.checkpoint_conflict?'；当前项目已有不同翻译路线的检查点，未覆盖':'';
-    if(s)s.textContent='包内翻译 '+n(x.package_records)+' 条；当前输入完全匹配 '+n(x.matching_now)+' 条；输入已变化 '+n(x.changed_now)+' 条；当前项目不存在 '+n(x.not_present_now)+' 条；已恢复/合并 '+n(x.imported_records)+' 条'+extra+'。';
+    if(s)s.textContent=Array.isArray(x.human_subtitle_files_preserved)
+      ? '人工中文字幕恢复包已校验并保存；未自动覆盖当前字幕。请使用下方「预览人工中文字幕恢复」逐条核对来源并手动选择。'
+      : '包内翻译 '+n(x.package_records)+' 条；当前输入完全匹配 '+n(x.matching_now)+' 条；输入已变化 '+n(x.changed_now)+' 条；当前项目不存在 '+n(x.not_present_now)+' 条；已恢复/合并 '+n(x.imported_records)+' 条'+extra+'。';
     setLog(j.result||j);
   }catch(x){if(s)s.textContent='导入失败：'+shortError(x);setLog(String(x))}
   finally{if(button)button.disabled=false}
 }
+let humanRestorePreview=null;
+let humanRestoreText='';
+function clearHumanRestorePreview(){
+  humanRestorePreview=null;humanRestoreText='';
+  const items=document.getElementById('humanRecoveryCandidates');
+  if(items)items.replaceChildren();
+  const apply=document.getElementById('applyHumanRestoreBtn');
+  if(apply)apply.disabled=true;
+  const status=document.getElementById('humanRecoveryStatus');
+  if(status)status.textContent='请选择恢复包后预览。';
+}
+document.getElementById('importRecoveryFile').addEventListener('change',clearHumanRestorePreview);
+function chosenHumanRestoreMembers(){
+  const candidates=document.getElementById('humanRecoveryCandidates');
+  return Array.from(candidates.querySelectorAll('input[type="checkbox"]:checked'))
+    .map(node=>node.value);
+}
+function updateHumanRestoreButton(){
+  const button=document.getElementById('applyHumanRestoreBtn');
+  if(button)button.disabled=!humanRestorePreview||chosenHumanRestoreMembers().length===0;
+}
+async function previewHumanSubtitleRestore(){
+  const input=document.getElementById('importRecoveryFile');
+  const status=document.getElementById('humanRecoveryStatus');
+  const button=document.getElementById('previewHumanRestoreBtn');
+  clearHumanRestorePreview();
+  try{
+    if(!input.files?.[0])throw new Error('请先选择 .hsrbackup 文件');
+    if(button)button.disabled=true;
+    if(status)status.textContent='正在核验备份、语音来源和原文版本…';
+    const raw=await input.files[0].text();
+    const data=new FormData();data.set('recovery_text',raw);
+    const result=await api('/api/recovery/human/preview',{method:'POST',body:data});
+    const preview=result.result||{};
+    if(!currentProject||String(currentProject.root||'')!==String(preview.project_root||'')){
+      throw new Error('预览期间项目已切换，请重新预览');
+    }
+    humanRestorePreview=preview;humanRestoreText=raw;
+    const panel=document.getElementById('humanRecoveryCandidates');
+    const messages={
+      available:'可选择恢复',
+      source_missing_or_ambiguous:'来源路径缺失或重复',
+      empty_translation:'旧译文为空',
+      legacy_provenance:'历史版本证据不足',
+      source_text_changed:'原文版本不同',
+      source_audio_changed:'音频版本不同',
+      missing_audio_provenance:'缺少音频来源指纹',
+      current_edit_exists:'当前已有人工校对',
+      already_base:'与当前基础译文相同'
+    };
+    for(const row of preview.rows||[]){
+      const label=document.createElement('label');
+      label.style.cssText='display:flex;gap:9px;align-items:flex-start;padding:8px;border:1px solid var(--line);border-radius:6px;margin:0';
+      const checkbox=document.createElement('input');
+      checkbox.type='checkbox';checkbox.value=String(row.source_member_id||'');
+      checkbox.disabled=!row.restorable;checkbox.checked=false;
+      checkbox.style.cssText='width:auto;min-height:unset;margin-top:4px';
+      checkbox.addEventListener('change',updateHumanRestoreButton);
+      const copy=document.createElement('span');
+      copy.style.whiteSpace='pre-wrap';copy.style.minWidth='0';
+      copy.textContent=(row.restorable?'可恢复':'仅供检查')+' · '+
+        (messages[row.status]||row.status)+' · '+(row.source_member_id||'缺少路径')+
+        '\n'+String(row.saved_chinese||'');
+      label.append(checkbox,copy);panel.append(label);
+    }
+    if(status)status.textContent='包内 '+Number(preview.total||0)+' 条；严格来源匹配可恢复 '+
+      Number(preview.restorable||0)+' 条。请手动勾选，未选择项不会写入。';
+  }catch(err){clearHumanRestorePreview();if(status)status.textContent='预览失败：'+shortError(err)}
+  finally{if(button)button.disabled=false}
+}
+async function applyHumanSubtitleRestore(){
+  const status=document.getElementById('humanRecoveryStatus');
+  const button=document.getElementById('applyHumanRestoreBtn');
+  try{
+    if(!humanRestorePreview||!humanRestoreText)throw new Error('请先预览恢复包');
+    const selected=chosenHumanRestoreMembers();
+    if(!selected.length)throw new Error('请先勾选需要恢复的中文字幕');
+    if(!currentProject||String(currentProject.root||'')!==humanRestorePreview.project_root)
+      throw new Error('项目已切换，请重新预览');
+    if(!window.confirm('确认恢复 '+selected.length+' 条人工中文字幕？不会修改原文、覆盖已有人工译文或自动恢复旧版已校对标记。'))return;
+    button.disabled=true;if(status)status.textContent='正在恢复已选择的中文字幕并刷新字幕…';
+    const data=new FormData();
+    data.set('recovery_text',humanRestoreText);
+    data.set('selected_source_members',JSON.stringify(selected));
+    data.set('expected_backup_sha256',humanRestorePreview.backup_sha256);
+    data.set('expected_manifest_sha256',humanRestorePreview.manifest_sha256);
+    data.set('expected_project_root',humanRestorePreview.project_root);
+    const response=await api('/api/recovery/human/apply',{method:'POST',body:data});
+    const result=response.result||{};
+    clearHumanRestorePreview();
+    if(status)status.textContent='已恢复 '+Number(result.restored_count||0)+' 条中文字幕；备份已保留。'+
+      (result.artifact_error?' 字幕导出仍需处理：'+result.artifact_error:'');
+    if(typeof refresh==='function')await refresh();
+  }catch(err){if(status)status.textContent='恢复失败：'+shortError(err);setLog(String(err));updateHumanRestoreButton()}
+  finally{if(button&&!humanRestorePreview)button.disabled=true}
+}
+document.getElementById('previewHumanRestoreBtn').onclick=previewHumanSubtitleRestore;
+document.getElementById('applyHumanRestoreBtn').onclick=applyHumanSubtitleRestore;
 document.getElementById('exportRecoveryBtn').onclick=exportTranslationRecovery;
 document.getElementById('importRecoveryBtn').onclick=importTranslationRecovery;
 document.getElementById('downloadReviewBtn').onclick=async()=>{const s=document.getElementById('reviewStatus');try{const r=await fetch('/api/review/file',{headers:headers()});if(!r.ok)throw new Error('HTTP '+r.status);const blob=await r.blob(),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download='semantic_review_required.txt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);s.textContent='待修订 TXT 已下载。';}catch(x){s.textContent='下载失败：'+shortError(x);setLog(String(x))}};
@@ -5804,6 +6180,8 @@ function renderSubtitleList(){
       : sub._dirty
         ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">未保存</span>'
         : sub.modified?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">已修</span>':'';
+    const staleTag=sub.translation_override_stale
+      ? '<span class="badge" style="color:var(--warn);padding:2px 5px;font-size:10px">原文变化·需复核</span>' : '';
     const srcTag=sub.official_chs?'<span class="badge" style="color:var(--blue);padding:2px 5px;font-size:10px">官方</span>':sub.api_chs?'<span class="badge" style="color:var(--purple);padding:2px 5px;font-size:10px">API</span>':'';
     const refEmotion=sub.reference_emotion&&sub.reference_emotion!=='unmarked'?sub.reference_emotion:'';
     const refTag=sub.reference_selected?'<span class="badge" style="color:var(--ok);padding:2px 5px;font-size:10px">Ref'+(refEmotion?' · '+escapeHtml(refEmotion):'')+'</span>':'';
@@ -5816,7 +6194,7 @@ function renderSubtitleList(){
         '<span style="font-size:11px;color:var(--muted)">'+timeStr+'</span>'+
       '</div>'+
       '<div class="sub-item-preview">'+highlightedPreview+'</div>'+
-      '<div class="sub-item-tags">'+editTag+srcTag+refTag+'</div>'+
+      '<div class="sub-item-tags">'+editTag+staleTag+srcTag+refTag+'</div>'+
     '</button>';
   }).join('');
 }
@@ -5855,6 +6233,9 @@ function renderSubtitleEditState(){
   else if(sub._dirty)parts.push('<span class="badge" style="color:var(--warn)">未保存</span>');
   else if(sub.modified)parts.push('<span class="badge" style="color:var(--ok)">已人工修改</span>');
   else parts.push('<span class="badge" style="color:var(--muted)">未修改</span>');
+  if(sub.translation_override_stale){
+    parts.push('<span class="badge" style="color:var(--warn)">旧校对待复核</span>');
+  }
   badge.innerHTML=parts.join(' ');
 }
 
@@ -5878,6 +6259,8 @@ function renderActiveSubtitle(){
     document.getElementById('subSourceFileMeta').textContent='源文件：—';
     document.getElementById('subFinalEditor').value='';
     document.getElementById('subFinalEditor').disabled=true;
+    const revisionNote=document.getElementById('subRevisionWarning');
+    if(revisionNote)revisionNote.hidden=true;
     document.getElementById('subPrevBtn').disabled=true;
     document.getElementById('subNextBtn').disabled=true;
     document.getElementById('subCharCounter').textContent='0 字';
@@ -5900,6 +6283,10 @@ function renderActiveSubtitle(){
   document.getElementById('subSourceLangBadge').textContent=(sub.source_language||'EN').toUpperCase();
   document.getElementById('subSourceFileMeta').textContent='源文件：'+(sub.source_member_id||sub.filename||'未记录');
 
+  const revisionNote=document.getElementById('subRevisionWarning');
+  if(revisionNote)revisionNote.hidden=!sub.translation_override_stale;
+  const oldTranslation=document.getElementById('subPreviousTranslation');
+  if(oldTranslation)oldTranslation.textContent=String(sub.translation_override_previous_chs||'');
   const editor=document.getElementById('subFinalEditor');
   const initialText=subtitleInitialText(sub);
   const displayText=String(sub.final_chs||initialText);
@@ -5953,7 +6340,14 @@ async function saveSubtitleItemInBackground(targetSub){
       const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
+        body:JSON.stringify({subtitles:[{
+          id:sentId,final_chs:sentText,
+          expected_final_chs:String(targetSub._savedFinal??''),
+          expected_source_member_id:String(targetSub.source_member_id||''),
+          ...(targetSub.source_text_sha256?{
+            expected_source_text_sha256:String(targetSub.source_text_sha256)
+          }:{})
+        }]})
       });
       if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
       const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
@@ -7322,7 +7716,10 @@ async function saveLayoutCueText(){
       method:'POST',headers:{'Content-Type':'application/json'},
       body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{
         id,final_chs:submitted,expected_final_chs:state.saved,
-        expected_source_member_id:String(sub.source_member_id||'')
+        expected_source_member_id:String(sub.source_member_id||''),
+        ...(sub.source_text_sha256?{
+          expected_source_text_sha256:String(sub.source_text_sha256)
+        }:{})
       }]})
     });
     if(!currentProject||layoutActiveProjectKey()!==key)return false;

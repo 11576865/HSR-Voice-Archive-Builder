@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 import shutil
 import tempfile
+import uuid
 import csv
 from pathlib import Path
 
@@ -24,6 +25,7 @@ from .jobs import assert_no_active_build, assert_project_idle, create_job, delet
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
+from .archive_audit import audit_archive, verify_archive_source_audio
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
 from .reference_workbench import (
     decorate_subtitles,
@@ -34,6 +36,7 @@ from .reference_workbench import (
 from .pipeline import build_project_v02
 from .preflight import dependency_status
 from .recovery import auto_recovery_status, build_text_recovery, import_text_recovery, try_write_auto_text_recovery
+from .subtitle_recovery import preview_human_subtitle_recovery, apply_human_subtitle_recovery
 from .quick import (
     create_quick_project,
     discover_source_candidates,
@@ -56,6 +59,8 @@ from .project import (
 )
 from .version import runtime_version
 from .remote_index import exclude_applied_updates, exclude_indexed_updates, remote_update_plan
+from .remote_update_guard import choose_remote_additions, verify_combined_source_no_collisions, verified_completed_new_wavs
+from .remote_update_publish import capture_update_boundary, publish_remote_revision, list_remote_revisions, rollback_remote_revision
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
@@ -260,6 +265,46 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
+
+
+@app.post("/api/project/{project_id}/archive/verify-sources")
+def api_verify_project_archive_sources(project_id: str):
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        output_dir = _project_paths(config).get("output")
+        if output_dir is None or not (output_dir / "manifest.json").is_file():
+            raise FileNotFoundError("请先完成档案构建")
+
+        def run(report_progress):
+            return verify_archive_source_audio(
+                config, output_dir, report_progress=report_progress,
+            )
+
+        job = create_job(
+            "archive-verify", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
+
+
+@app.get("/api/project/{project_id}/archive/audit")
+def api_get_project_archive_audit(project_id: str):
+    try:
+        config = _resolve_project(project_id)
+        output_dir = _project_paths(config).get("output")
+        if output_dir is None:
+            raise ValueError("Project output directory is not configured")
+        return {"ok": True, "audit": audit_archive(output_dir)}
+    except FileNotFoundError as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=404)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.get("/api/project/{project_id}/subtitles")
@@ -1307,7 +1352,7 @@ def api_update_check_remote(
 
 
 @app.post("/api/update/apply-remote")
-def api_update_apply_remote():
+def api_update_apply_remote(selected_filenames: str = Form("")):
     """Download reliably resolved additions, adopt a combined source, and leave rebuild explicit."""
     try:
         config = _active_config()
@@ -1323,15 +1368,15 @@ def api_update_apply_remote():
         if not update_plan_path.is_file():
             raise FileNotFoundError("Check the remote index before downloading additions")
         remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
-        targets = []
-        for item in remote_plan.get("new_logical", []):
-            if isinstance(item, dict):
-                metadata = dict(item.get("metadata") or {})
-                metadata.setdefault("filename", item.get("filename", ""))
-                if metadata.get("filename"):
-                    targets.append(metadata)
-        if not targets:
-            raise ValueError("The latest check contains no new voice records")
+        try:
+            requested = json.loads(selected_filenames) if selected_filenames.strip() else None
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Invalid selected_filenames JSON") from exc
+        targets = choose_remote_additions(
+            remote_plan, output / "manifest.json", index,
+            selected_filenames=requested,
+        )
+        update_boundary = capture_update_boundary(config, output / "manifest.json")
         project_root = Path(config.root).resolve()
 
         def run(report_progress):
@@ -1349,7 +1394,10 @@ def api_update_apply_remote():
             atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
             if not resolved["targets"]:
                 raise RuntimeError("新增条目均无法可靠映射到 Hugging Face 音频；未修改项目")
-            incoming = generated / "incremental_audio"
+            # A fresh per-job directory is required: the provider downloader
+            # otherwise treats a matching cached stem as a completed remote WAV.
+            download_session = generated / "incremental_download_sessions" / f"session-{uuid.uuid4().hex}"
+            incoming = download_session / "source"
             downloaded = download_resolved_audio(
                 resolved,
                 incoming,
@@ -1358,7 +1406,7 @@ def api_update_apply_remote():
             )
             if downloaded["failed"]:
                 atomic_write_text(state / "incremental_download.json", json.dumps(downloaded, ensure_ascii=False, indent=2))
-            successful = {Path(row["filename"]).name for row in downloaded["completed"]}
+            successful = verified_completed_new_wavs(targets, downloaded, incoming)
             if not successful:
                 raise RuntimeError("没有新增音频下载成功；未修改项目")
             reference_plan = {
@@ -1372,7 +1420,7 @@ def api_update_apply_remote():
             if reference_plan["targets"]:
                 reference_download = download_resolved_audio(
                     reference_plan,
-                    generated / "incremental_reference_audio_zh-CN",
+                    download_session / "chinese-reference",
                     lambda current, total, name: report_progress(
                         "reference", f"正在同步下载中文对照语音：{current}/{total} · {name}", current, total
                     ),
@@ -1384,13 +1432,22 @@ def api_update_apply_remote():
                 )
             confirmed_references = confirmed_reference_metadata(reference_plan, reference_download)
             reference_successful = set(confirmed_references)
+            # Download resolution may take minutes. Recheck the live archive
+            # immediately before touching persistent source/index state.
+            choose_remote_additions(
+                remote_plan, output / "manifest.json", index,
+                selected_filenames=[str(x["filename"]) for x in targets],
+            )
             report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
 
             generated.mkdir(parents=True, exist_ok=True)
             temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-            combined = generated / "combined_audio"
+            version = uuid.uuid4().hex
+            combined = generated / "combined_audio_versions" / f"combined-{version}"
+            combined.parent.mkdir(parents=True, exist_ok=True)
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
+                verify_combined_source_no_collisions(extracted, incoming, successful_filenames=successful)
                 staging = temporary_root / "combined"
                 staging.mkdir()
                 # Preserve package-relative member paths so same-basename WAVs
@@ -1402,13 +1459,12 @@ def api_update_apply_remote():
                     shutil.copy2(wav, target)
                 if extracted.parent == temporary_root and extracted != temporary_root:
                     shutil.rmtree(extracted)
-                for audio in incoming.iterdir():
-                    if audio.is_file() and not audio.name.endswith(".part"):
-                        staging_target = staging / audio.name
-                        staging_target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(audio, staging_target)
-                if combined.exists():
-                    shutil.rmtree(combined)
+                for filename in sorted(successful):
+                    audio = incoming / filename
+                    staging_target = staging / filename
+                    shutil.copy2(audio, staging_target)
+                # Publish into an immutable, unique path. Never delete the
+                # audio directory referenced by the prior project revision.
                 staging.replace(combined)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
@@ -1470,12 +1526,17 @@ def api_update_apply_remote():
                     ),
                     "sha256": "",
                 })
-            updated_index = generated / "quick_index_incremental.csv"
+            updated_index = generated / f"quick_index_incremental_{version}.csv"
             with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
                 writer.writerows(existing_rows)
-            update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
+            published = publish_remote_revision(
+                config, manifest_path=output / "manifest.json",
+                expected_boundary=update_boundary, combined=combined,
+                updated_index=updated_index, revision_id=version,
+                selected_filenames=sorted(successful),
+            )
             report = {
                 "resolved": len(resolved["targets"]),
                 "unresolved": resolved["unresolved"],
@@ -1489,15 +1550,56 @@ def api_update_apply_remote():
                 "unreferenced_api_translation": len(successful - reference_successful),
                 "api_translation_required": len(successful - reference_successful),
                 "project_updated": True,
+                "revision_id": version,
+                "revision_state": published["state"],
                 "rebuild_required": True,
                 "applied_filenames": sorted(successful),
             }
             atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
+            # The published immutable combined version now owns the WAV bytes.
+            # A failed/incomplete job intentionally retains its isolated download
+            # session for diagnosis; never let another job reuse those files.
+            shutil.rmtree(download_session, ignore_errors=True)
             report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
             return report
 
         job = create_job(
             "remote-update-apply", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/update/revisions")
+def api_update_revisions():
+    try:
+        config = _active_config()
+        return {"ok": True, "revisions": list_remote_revisions(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/rollback")
+def api_update_rollback(revision_id: str = Form(...), expected_project_sha256: str = Form(...)):
+    try:
+        config = _active_config()
+        status = next(
+            (item for item in list_remote_revisions(config)
+             if item.get("revision_id") == revision_id),
+            None,
+        )
+        if not status or not status.get("can_rollback"):
+            raise ValueError("Selected revision is not safely rollback-eligible")
+        if status.get("current_project_sha256") != expected_project_sha256:
+            raise ValueError("Project changed since rollback preview; refresh first")
+        job = create_job(
+            "remote-update-rollback",
+            lambda: rollback_remote_revision(
+                config, revision_id,
+                expected_project_sha256=expected_project_sha256,
+            ),
             project_root=config.root, project_name=config.name,
         )
         return {"ok": True, "job": job.id}
@@ -1537,6 +1639,39 @@ def api_recovery_import(recovery_text: str = Form(...)):
     try:
         config = _active_config()
         result = import_text_recovery(config, recovery_text)
+        return {"ok": True, "result": result, "project": project_summary(config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/human/preview")
+def api_human_subtitle_recovery_preview(recovery_text: str = Form(...)):
+    try:
+        config = _active_config()
+        result = preview_human_subtitle_recovery(config, recovery_text)
+        return {"ok": True, "result": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/human/apply")
+def api_human_subtitle_recovery_apply(
+    recovery_text: str = Form(...),
+    selected_source_members: str = Form(...),
+    expected_backup_sha256: str = Form(...),
+    expected_manifest_sha256: str = Form(...),
+    expected_project_root: str = Form(...),
+):
+    try:
+        config = _active_config()
+        selected = json.loads(selected_source_members)
+        result = apply_human_subtitle_recovery(
+            config, recovery_text,
+            selected_source_members=selected,
+            expected_backup_sha256=expected_backup_sha256,
+            expected_manifest_sha256=expected_manifest_sha256,
+            expected_project_root=expected_project_root,
+        )
         return {"ok": True, "result": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)

@@ -107,6 +107,39 @@ def _validated_word_alignments(
     return [(word, duration) for word, _start, _end, duration in details]
 
 
+def _alignments_relative_to_event(
+    word_alignments: list[object] | None,
+    pre_roll_seconds: float,
+) -> list[object] | None:
+    """Translate original-WAV word times to an earlier ASS event start.
+
+    Kinetic/audio-aware entry fades may begin before the actual source WAV.
+    Word alignments are measured relative to the WAV, not that pre-roll.
+    Leave the original cache and immutable source text untouched.
+    """
+    if not word_alignments or pre_roll_seconds <= 0:
+        return word_alignments
+    shifted: list[object] = []
+    for item in word_alignments:
+        if isinstance(item, dict):
+            copy = dict(item)
+        elif hasattr(item, "word") and hasattr(item, "start") and hasattr(item, "end"):
+            copy = {
+                "word": getattr(item, "word"),
+                "start": getattr(item, "start"),
+                "end": getattr(item, "end"),
+            }
+        else:
+            return None
+        try:
+            copy["start"] = float(copy["start"]) + pre_roll_seconds
+            copy["end"] = float(copy["end"]) + pre_roll_seconds
+        except (TypeError, ValueError, KeyError):
+            return None
+        shifted.append(copy)
+    return shifted
+
+
 def format_karaoke_text(
     text: str,
     duration_sec: float,
@@ -115,14 +148,21 @@ def format_karaoke_text(
     mode: str = "k",
 ) -> str:
     """Apply ASS karaoke tags only for complete, monotonic word-level timing."""
-    validated = _validated_word_alignments(text, duration_sec, word_alignments)
+    validated = _validated_word_alignment_details(text, duration_sec, word_alignments)
     if not validated:
         return text
     tag = "kf" if str(mode).lower() == "kf" else "k"
-    return "".join(
-        f"{{\\{tag}{max(1, round(duration * 100))}}}{word}"
-        for word, duration in validated
-    )
+    # The \kt tag preserves real onset after initial silence or word gaps.
+    # Absolute centisecond anchors avoid cumulative duration rounding drift.
+    parts: list[str] = []
+    previous_end_cs = 0
+    for word, start, end, _duration in validated:
+        start_cs = max(0, round(start * 100))
+        end_cs = max(start_cs + 1, round(end * 100))
+        absolute_start = f"\\kt{start_cs}" if start_cs != previous_end_cs else ""
+        parts.append(f"{{{absolute_start}\\{tag}{end_cs - start_cs}}}{word}")
+        previous_end_cs = end_cs
+    return "".join(parts)
 
 
 def generate_clip_karaoke_overlay(
@@ -304,16 +344,60 @@ def format_multiline_karaoke(
     """Apply karaoke only when timings can be mapped without inventing timing."""
     if not lines:
         return ""
-    plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in lines)
-    if not word_alignments or len(lines) != 1:
+    line_texts = [getattr(pos, "text", str(pos)) for pos in lines]
+    plain = "\\N".join(line_texts)
+    if not word_alignments:
         return plain
-    return format_karaoke_text(
-        getattr(lines[0], "text", str(lines[0])),
-        duration_sec,
-        word_alignments,
-        is_cjk=is_cjk,
-        mode=mode,
+    if len(lines) == 1:
+        return format_karaoke_text(
+            line_texts[0], duration_sec, word_alignments,
+            is_cjk=is_cjk, mode=mode,
+        )
+
+    # A line break inserted by the layout solver may fall *between* verified
+    # words. Match each complete alignment token to the actual display text;
+    # never split a timed word, invent a syllable boundary, or reorder text.
+    details = _validated_word_alignment_details(
+        " ".join(line_texts), duration_sec, word_alignments,
     )
+    if not details:
+        return plain
+    rendered_lines: list[str] = []
+    word_index = 0
+    for line_text in line_texts:
+        cursor = 0
+        line_words: list[dict[str, object]] = []
+        while cursor < len(line_text):
+            if not line_text[cursor:].strip():
+                if line_words:
+                    line_words[-1]["word"] = str(line_words[-1]["word"]) + line_text[cursor:]
+                    cursor = len(line_text)
+                    break
+                return plain
+            if word_index >= len(details):
+                return plain
+            original_word, start, end, _duration = details[word_index]
+            expected = _normalized_alignment_text(original_word)
+            if not expected:
+                return plain
+            stop = cursor
+            while (stop < len(line_text) and
+                   len(_normalized_alignment_text(line_text[cursor:stop])) < len(expected)):
+                stop += 1
+            display_word = line_text[cursor:stop]
+            if _normalized_alignment_text(display_word) != expected:
+                return plain
+            line_words.append({"word": display_word, "start": start, "end": end})
+            cursor = stop
+            word_index += 1
+        if not line_words:
+            return plain
+        rendered_lines.append(format_karaoke_text(
+            line_text, duration_sec, line_words, is_cjk=is_cjk, mode=mode,
+        ))
+    if word_index != len(details):
+        return plain
+    return "\\N".join(rendered_lines)
 
 
 def render_ass(
@@ -525,7 +609,16 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"Dialogue: 0,{start_time},{end_time},Primary,,0,0,0,,{out_text}"
                 )
 
-            pri_alignments = word_alignments if not source_language.startswith("zh") else None
+            # Karaoke is restricted to the original voiced-language line.
+            # The pre-roll belongs to the ASS event, not to the source WAV,
+            # so the original word offsets need to be shifted forward.
+            pri_alignments = (
+                _alignments_relative_to_event(
+                    word_alignments, start_sec - actual_start_sec,
+                )
+                if not str(source_language or "").lower().startswith("zh")
+                else None
+            )
             if use_karaoke and karaoke_mode in {"k", "kf"}:
                 pri_text = format_multiline_karaoke(
                     layout.primary_lines,
@@ -595,38 +688,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
 
-            chs_alignments = word_alignments if source_language.startswith("zh") else None
-            if use_karaoke and karaoke_mode in {"k", "kf"}:
-                chs_text = format_multiline_karaoke(
-                    layout.chs_lines,
-                    duration_sec,
-                    word_alignments=chs_alignments,
-                    is_cjk=True,
-                    mode=karaoke_mode,
-                )
-            else:
-                chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
+            # Target Chinese is translated editorial text, not a phonetic
+            # transcription of the source-language WAV. Never apply any
+            # source-word karaoke timing to this subtitle layer.
+            chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
-            if use_karaoke and karaoke_mode == "clip" and len(layout.chs_lines) == 1:
-                clip_tags = generate_clip_karaoke_overlay(
-                    layout.chs_lines[0],
-                    duration_sec,
-                    chs_alignments,
-                    font_path=chs_font_path,
-                )
-                if clip_tags:
-                    clip_text = getattr(layout.chs_lines[0], "text", str(layout.chs_lines[0]))
-                    overlay = (
-                        f"{pos_prefix}\\fs{pos0.font_size}\\1c&H00E8FF&"
-                        f"\\bord0\\shad0{clip_tags}}}{clip_text}"
-                    )
-                    dialogues.append(
-                        f"Dialogue: 4,{start_time},{end_time},CHS,,0,0,0,,{overlay}"
-                    )
-
     if overflow_report_path is not None:
         _atomic_write(
             overflow_report_path,
