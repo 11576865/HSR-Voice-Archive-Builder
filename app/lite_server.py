@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -666,6 +666,35 @@ class Handler(BaseHTTPRequestHandler):
                 png,
                 "image/png",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
+            )
+            return
+
+
+        if path == "/api/subtitle-layout/render-preview-video":
+            config = preview_config_from_payload(data)
+            words = None
+            raw_words = data.get("word_alignments", "")
+            if raw_words:
+                try:
+                    parsed = json.loads(raw_words) if isinstance(raw_words, str) else raw_words
+                    if isinstance(parsed, list):
+                        words = parsed
+                except (TypeError, ValueError):
+                    words = None
+            fmt = str(data.get("preview_format") or "mp4").lower()
+            video = render_ass_preview_video(
+                english_text=data.get("english_text", ""),
+                chinese_text=data.get("chinese_text", ""),
+                source_language=data.get("source_language", "en") or "en",
+                target_language=data.get("target_language", "zh-CN") or "zh-CN",
+                config=config,
+                word_alignments=words,
+                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                container_format=fmt,
+            )
+            self._send_bytes(
+                200, video, "video/webm" if fmt == "webm" else "video/mp4",
+                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt + "-black"},
             )
             return
 

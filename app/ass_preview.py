@@ -135,3 +135,77 @@ def render_ass_preview_png(
             detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
             raise RuntimeError(f"FFmpeg/libass 预览失败: {detail[:1200]}")
         return png_path.read_bytes()
+
+def render_ass_preview_video(
+    *,
+    english_text: str,
+    chinese_text: str,
+    source_language: str,
+    target_language: str,
+    config: SubtitleRenderConfig,
+    word_alignments: list[object] | None = None,
+    duration_seconds: float = 3.0,
+    container_format: str = "mp4",
+) -> bytes:
+    """Create actual playable MP4/WebM clips with animated ASS rendered by libass.
+
+    The background is intentionally black: this is an effect-motion proof, not
+    a claim that subtitles were composited over a user-provided movie.
+    """
+    import math
+
+    duration = float(duration_seconds)
+    if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
+        raise ValueError("Dynamic preview duration must be between 0.5 and 8 seconds")
+    fmt = str(container_format).lower()
+    if fmt not in {"mp4", "webm"}:
+        raise ValueError("Unsupported preview container: use mp4 or webm")
+    ffmpeg = shutil.which("ffmpeg")
+    if not ffmpeg:
+        raise RuntimeError("动态视频预览需要 FFmpeg")
+    entry = PreviewEntry(
+        english=str(english_text or ""),
+        chinese=str(chinese_text or ""),
+        display_end_seconds=duration,
+        word_alignments=word_alignments,
+    )
+    with tempfile.TemporaryDirectory(prefix="hsr-effect-video-") as td:
+        root = Path(td)
+        ass_path = root / "preview.ass"
+        video_path = root / ("effect-preview." + fmt)
+        write_ass(
+            [entry],
+            ass_path,
+            source_language=source_language or "en",
+            target_language=target_language or "zh-CN",
+            config=config,
+            overflow_report_path=root / "overflow.json",
+        )
+        escaped_ass = _escape_subtitles_filter_path(ass_path)
+        command = [
+            ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i",
+            f"color=c=black:s=960x540:r=24:d={duration:.3f}",
+            "-vf", f"subtitles='{escaped_ass}':original_size=1920x1080,format=yuv420p",
+            "-an",
+        ]
+        if fmt == "webm":
+            # VP8 is decodable by Chromium/Firefox builds without proprietary H.264.
+            command += ["-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8", "-b:v", "1200k"]
+        else:
+            command += ["-c:v", "libx264", "-preset", "ultrafast",
+                        "-crf", "22", "-movflags", "+faststart"]
+        command += ["-t", f"{duration:.3f}", str(video_path)]
+        try:
+            completed = subprocess.run(
+                command, capture_output=True, text=True, timeout=50, check=False
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("FFmpeg/libass 动态预览超时") from exc
+        if (completed.returncode != 0 or not video_path.is_file()
+                or video_path.stat().st_size == 0):
+            detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
+            raise RuntimeError(f"FFmpeg/libass 动态预览失败: {detail[:1200]}")
+        if video_path.stat().st_size > 16 * 1024 * 1024:
+            raise RuntimeError("动态预览文件超过 16 MiB 上限")
+        return video_path.read_bytes()

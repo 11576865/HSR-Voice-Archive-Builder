@@ -10,6 +10,8 @@ import argparse
 import json
 import math
 import os
+import subprocess
+import tempfile
 from pathlib import Path
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -96,12 +98,30 @@ def geometry(payload: dict) -> dict:
     }
 
 
-def make_router(rows: list[dict], writes: list[dict]):
+def real_browser_video_fixture() -> bytes:
+    """Real decodable MP4 bytes, kept separate from backend libass proof."""
+    with tempfile.TemporaryDirectory(prefix="hsr-browser-video-") as td:
+        path = Path(td) / "motion.webm"
+        subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=1.5",
+              "-an", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
+             "-pix_fmt", "yuv420p", str(path)],
+            capture_output=True, text=True, timeout=40, check=True,
+        )
+        return path.read_bytes()
+
+
+def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None = None):
     def handler(route):
         request = route.request
         url = request.url
         path = url.split("?", 1)[0]
         body = request.post_data_json if request.method == "POST" and request.post_data else {}
+        if path.endswith("/api/subtitle-layout/render-preview-video") and video_bytes:
+            assert body.get("preview_format") == "webm", "Chromium must negotiate VP8"
+            route.fulfill(status=200, content_type="video/webm", body=video_bytes)
+            return
         if path.endswith("/api/status"):
             payload = {
                 "ok": True, "version": "visual-fixture", "project": None,
@@ -181,6 +201,15 @@ def load_studio(page):
     }""")
     page.wait_for_function("document.querySelectorAll('[data-timeline-cue]').length >= 3", timeout=12000)
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
+    # A separate effects workbench owns timing, Karaoke and playable preview.
+    # The style view intentionally hides those controls.
+    ensure(page.locator("#studioStyleTab").is_visible(), "Style mode missing")
+    ensure(page.locator("#studioEffectsTab").is_visible(), "Effects mode missing")
+    ensure(not page.locator("#layoutTimelineViewport").is_visible(), "Style shows effect timeline")
+    page.locator("#studioEffectsTab").click()
+    ensure(page.locator("#layoutTimelineViewport").is_visible(), "Effects timeline hidden")
+    ensure(page.locator("#previewVideoBtn").is_visible(), "Playable effect preview action hidden")
+    ensure(not page.locator("#layoutCueFinalText").is_editable(), "Duplicate final text editor is writable")
     page.evaluate("() => window.scrollTo(0, 0)")
 
 
@@ -194,9 +223,38 @@ def desktop_check(browser, base_url, output, report):
     writes = []
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.route("**/api/**", make_router(rows, writes))
+    page.route("**/api/**", make_router(rows, writes, real_browser_video_fixture()))
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
+    # This is a real Chromium decoded-video interaction, but the API response
+    # is a deterministic MP4 fixture. Backend libass video is checked separately.
+    page.locator("#previewVideoBtn").click()
+    try:
+        page.wait_for_function("""() => {
+          const video=document.getElementById('libassVideoPreview');
+          return video && video.readyState>=2 &&
+            document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video';
+        }""", timeout=20000)
+    except Exception:
+        details=page.evaluate("""() => {
+          const v=document.getElementById('libassVideoPreview');
+          return {readyState:v.readyState,networkState:v.networkState,error:v.error?.message,
+            src:v.currentSrc,duration:v.duration,
+            studio:document.getElementById('subtitleLayoutPreviewCard').dataset.studioMode,
+            evidence:document.querySelector('.layout-preview-evidence').dataset.previewEvidence,
+            status:document.getElementById('videoPreviewStatus').textContent,
+            buttonDisabled:document.getElementById('previewVideoBtn').disabled,
+            presentation:document.getElementById('libassVideoPreview').className};
+        }""")
+        print("CHROMIUM VIDEO DIAGNOSTIC",json.dumps(details,ensure_ascii=False),flush=True)
+        raise
+    ensure(page.locator("#libassVideoPreview").is_visible(), "Decoded video not visible")
+    page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
+    page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
+    screenshot(page, output, "desktop_effect_video_playback")
+    page.locator("#studioStyleTab").click()
+    ensure(page.locator("#libassVideoPreview").is_hidden(), "Style mode retained stale video")
+    page.locator("#studioEffectsTab").click()
     rail = rect(page, ".preview-workbench .layout-corpus-rail")
     stage = rect(page, ".preview-workbench .layout-preview-region")
     inspector = rect(page, ".preview-workbench .preview-inspector")
