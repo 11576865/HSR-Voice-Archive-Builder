@@ -45,8 +45,46 @@ _JOBS: dict[str, Job] = {}
 _CANCEL_EVENTS: dict[str, threading.Event] = {}
 
 
+def _prune_finished_locked() -> None:
+    """Bound in-memory job history without ever discarding live tasks.
+
+    A long exported-ASS window pass may launch thousands of successive
+    evidence jobs. The persistent journal is already bounded; the in-memory
+    table must not grow indefinitely or slow project exclusion scans.
+    """
+    if len(_JOBS) <= MAX_PERSISTED_JOBS:
+        return
+    # Prefer preserving interrupted work (important after an app restart)
+    # and tasks requiring human input over routine completed history.
+    # If even protected terminal records exceed the history budget,
+    # retire their oldest entries in a second pass, never live tasks.
+    for protected in (
+        {"queued", "running", "interrupted", "awaiting_input"},
+        {"queued", "running"},
+    ):
+        for job_id, job in list(_JOBS.items()):
+            if len(_JOBS) <= MAX_PERSISTED_JOBS:
+                break
+            if job.state not in protected:
+                _JOBS.pop(job_id, None)
+                _CANCEL_EVENTS.pop(job_id, None)
+        if len(_JOBS) <= MAX_PERSISTED_JOBS:
+            break
+
+
 def _persist_locked() -> None:
-    values = list(_JOBS.values())[-MAX_PERSISTED_JOBS:]
+    _prune_finished_locked()
+    values = list(_JOBS.values())
+    # Never silently drop a live operation from the crash-recovery journal
+    # when concurrent jobs temporarily exceed the normal history limit.
+    if len(values) > MAX_PERSISTED_JOBS:
+        live_ids = {
+            j.id for j in values if j.state in {"queued", "running"}
+        }
+        slots = max(0, MAX_PERSISTED_JOBS - len(live_ids))
+        recent_finished = [j.id for j in values if j.id not in live_ids]
+        keep = live_ids | (set(recent_finished[-slots:]) if slots else set())
+        values = [j for j in values if j.id in keep]
     atomic_write_json(JOBS_FILE, [asdict(job) for job in values])
 
 
@@ -57,8 +95,11 @@ def _load_previous() -> None:
         raw = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
         if not isinstance(raw, list):
             return
-        for item in raw[-MAX_PERSISTED_JOBS:]:
+        normal_history_from = max(0, len(raw) - MAX_PERSISTED_JOBS)
+        for index, item in enumerate(raw):
             if not isinstance(item, dict):
+                continue
+            if index < normal_history_from and item.get("state") not in {"queued", "running"}:
                 continue
             job = Job(**item)
             if job.state in {"queued", "running"}:

@@ -15,7 +15,7 @@ on:
       - "app/ass_export_sampling.py"
       - "tests/test_ass_export_sampling_scale.py"
       - "app/jobs.py"
-      - "tests/test_jobs_cancel_commit_boundary.py"
+      - "tests/test_jobs_history_pruning.py"
       - "tests/test_export_ass_infrastructure.py"
       - "tests/browser_visual_evidence.py"
       - "tests/test_subtitle_integrated_export.py"
@@ -78,7 +78,7 @@ jobs:
           python -m unittest tests.test_rendered_ink_interval -v
           python -m unittest tests.test_export_ass_infrastructure -v
           python -m unittest tests.test_ass_coverage_batches -v
-          python -m unittest tests.test_jobs_cancel_commit_boundary -v
+          python -m unittest tests.test_jobs_history_pruning -v
           python -m unittest tests.test_ass_export_sampling_scale -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
