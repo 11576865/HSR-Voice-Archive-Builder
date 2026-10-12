@@ -343,6 +343,73 @@ class CoverageBatchTests(unittest.TestCase):
         self.assertFalse((self.output / RECEIPTS_DIR /
                           f"{first['run_id']}-batch-000003.json").exists())
 
+    def test_many_completed_batches_only_reaudit_once_per_writer(self):
+        from app import ass_coverage_batches as coverage
+        # 32 real ASS Dialogue windows, rendered with the existing deterministic
+        # fake frame provider. This tracks the number of strict chain scans,
+        # not FFmpeg wall time or an asserted machine-specific duration.
+        prefix = ASS_FIXTURE.split("Dialogue:")[0]
+        body = "".join(
+            f"Dialogue: 0,0:00:{i:02d}.00,0:00:{i+1:02d}.00,"
+            "Default,,0,0,0,,sample\n"
+            for i in range(32)
+        )
+        (self.output / ASS_NAME).write_text(prefix + body, encoding="utf-8")
+        self.refresh_receipt()
+        original = coverage._audit_committed_batches
+        with patch.object(coverage, "_audit_committed_batches", wraps=original) as audits:
+            for cursor in range(0, 32, 2):
+                result = self.run_mock(cursor=cursor, sample_limit=2)
+                self.assertEqual(result["next_cursor"], cursor + 2)
+            # First batch has no history; subsequent 15 writer callbacks
+            # must perform exactly one strict scan immediately before commit.
+            self.assertEqual(audits.call_count, 15)
+        verified = read_exported_ass_coverage(self.output, self.config)
+        self.assertTrue(verified["verified"])
+        self.assertEqual(verified["state"], "window_pass_complete")
+        self.assertFalse(verified["coverage"]["full_interval_verified"])
+
+    def test_failed_frame_render_does_not_scan_old_chain_before_failure(self):
+        from app import ass_coverage_batches as coverage
+        original = coverage._audit_committed_batches
+        first = self.run_mock()
+        before = (self.output / COVERAGE_FILE).read_bytes()
+        with (patch("app.ass_coverage_batches.shutil.which",
+                    return_value="/usr/bin/ffmpeg"),
+              patch("app.ass_coverage_batches._render_raw_rgb",
+                    side_effect=RuntimeError("synthetic libass failure")),
+              patch.object(coverage, "_audit_committed_batches",
+                           wraps=original) as audits):
+            with self.assertRaisesRegex(RuntimeError, "synthetic libass failure"):
+                inspect_next_exported_ass_batch(
+                    self.config, self.output, expected_cursor=2,
+                    sample_limit=2,
+                )
+            self.assertEqual(audits.call_count, 0)
+        self.assertEqual((self.output / COVERAGE_FILE).read_bytes(), before)
+        self.assertEqual(read_exported_ass_coverage(
+            self.output, self.config)["next_cursor"], first["next_cursor"])
+
+    def test_damaged_latest_receipt_rejected_in_cheap_preflight(self):
+        from app import ass_coverage_batches as coverage
+        first = self.run_mock()
+        recent = (self.output / RECEIPTS_DIR /
+                  f"{first['run_id']}-batch-000001.json")
+        recent.write_text("{}", encoding="utf-8")
+        with (patch("app.ass_coverage_batches.shutil.which",
+                    return_value="/usr/bin/ffmpeg"),
+              patch("app.ass_coverage_batches._render_raw_rgb") as renderer,
+              patch.object(coverage, "_audit_committed_batches") as audits):
+            with self.assertRaisesRegex(ValueError, "stale"):
+                inspect_next_exported_ass_batch(
+                    self.config, self.output, expected_cursor=2,
+                    sample_limit=2,
+                )
+            renderer.assert_not_called()
+            audits.assert_not_called()
+        self.assertEqual(read_exported_ass_coverage(
+            self.output, self.config)["state"], "stale")
+
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
         with self.assertRaisesRegex(ValueError, "cursor changed"):

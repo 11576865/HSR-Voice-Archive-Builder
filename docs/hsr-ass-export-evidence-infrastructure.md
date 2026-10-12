@@ -124,3 +124,10 @@ A single window batch previously ran a strict chain scan both **before** and **a
 This removes one O(history) scan per user-started batch while keeping the external status contract and final pre-commit integrity boundary intact. The optimization trades earlier failure detection for fewer full scans; a damaged *old* receipt may allow unneeded FFmpeg frames before the final validation rejects the attempted batch. UI status queries still perform their own strict audits, so repeated polling or many batches retain O(batch-count) per verified status read and potentially O(N²) aggregate work; the underlying asymptotic problem is **not** solved.
 
 `tests/test_ass_coverage_batches.py` explicitly verifies the writer candidate is never certified, only one full historical scan occurs on resume, and old-receipt mutations before and during rendering cannot advance the checkpoint. `tests/test_ass_coverage_audit_scale.py` constructs a synthetic 256-batch receipt chain and records strict/provisional latency and `tracemalloc` peak in CI; it then damages the oldest receipt and asserts the strict audit fails closed. The benchmark performs **no FFmpeg rendering**, and cannot establish real-game or target-device performance.
+ 
+
+### Additional cumulative-work guard (2026-10-12)
+
+A deterministic regression now performs **16 successive committed two-window batches** using the repository's mock RGB renderer and asserts **15 strict historical-chain audits inside the writer**, exactly one for each batch after genesis. An injected FFmpeg error must cause **zero strict history audits and zero cursor advancement**; a modified latest receipt must be rejected by the bounded lightweight checksum check **before** any rendering. The public status read remains strictly audited. These are operation-count tests rather than machine-sensitive timing assertions, and they cover 32 synthetic windows, not real long-game subtitle processing.
+
+This only removes redundant **pre-render** history traversals; rendering latency and the remaining across-batch O(N²) sum are unchanged in asymptotic complexity.
