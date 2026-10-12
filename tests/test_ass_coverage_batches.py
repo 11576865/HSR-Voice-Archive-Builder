@@ -317,20 +317,31 @@ class CoverageBatchTests(unittest.TestCase):
                           f"{first['run_id']}-batch-000002.json").exists())
 
     def test_corrupted_history_preexisting_writer_fails_closed_at_commit(self):
+        # Use three batches so the corrupted *first* receipt is not the
+        # last receipt. Latest-receipt preflight should succeed; the strict
+        # pre-commit historical audit must catch the earlier corruption.
+        extra = chr(10).join((
+            "Dialogue: 0,0:00:08.50,0:00:09.50,Default,,0,0,0,,fourth",
+            "Dialogue: 0,0:00:10.00,0:00:11.00,Default,,0,0,0,,fifth",
+        )) + chr(10)
+        (self.output / ASS_NAME).write_text(
+            ASS_FIXTURE + extra, encoding="utf-8"
+        )
+        self.refresh_receipt()
         first = self.run_mock()
+        second = self.run_mock(cursor=2)
+        self.assertEqual(second["next_cursor"], 4)
         old = (self.output / RECEIPTS_DIR /
                f"{first['run_id']}-batch-000001.json")
         old.write_text("{}", encoding="utf-8")
         checkpoint = (self.output / COVERAGE_FILE).read_bytes()
-        # Provisional parsing may plan from the stored cursor, but the
-        # mandatory post-render strict audit must forbid a new receipt.
         with self.assertRaisesRegex(
             RuntimeError, "Another process advanced the coverage ledger"
         ):
-            self.run_mock(cursor=2)
+            self.run_mock(cursor=4)
         self.assertEqual((self.output / COVERAGE_FILE).read_bytes(), checkpoint)
         self.assertFalse((self.output / RECEIPTS_DIR /
-                          f"{first['run_id']}-batch-000002.json").exists())
+                          f"{first['run_id']}-batch-000003.json").exists())
 
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
