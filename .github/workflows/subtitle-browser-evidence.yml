@@ -29,6 +29,8 @@ jobs:
           python-version: "3.12"
       - name: Install Chromium automation
         run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
           python -m pip install "playwright==1.55.0"
           python -m playwright install --with-deps chromium
       - name: Render responsive workbench and exercise real drag interactions
