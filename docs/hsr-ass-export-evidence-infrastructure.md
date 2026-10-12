@@ -37,3 +37,8 @@ The exported-ASS evidence planner previously chose only the *midpoint* of up to 
 Evidence includes \`dynamic_window_count\`, \`targeted_dynamic_window_count\`, \`unexamined_dynamic_windows\`, \`effect_candidates_truncated_windows\`, \`candidate_count\`, \`omitted_candidate_count\`, \`candidate_count_scope=window_midpoints_plus_targeted_effect_candidates\`, and \`max_sample_gap_seconds\`. Candidate counts explicitly omit expansion of unselected dynamic windows. Each real sampled frame reports \`active_dialogue_count\` and \`compositing_scope=all_active_ass_dialogues\`: a bounding box is for the **composited libass frame**, not exclusive attribution to the targeted Dialogue.
 
 The \`full_interval_verified=false\` contract is unchanged. Unrecognized or malformed effect variants can still cause missed transitions; the planner is a deterministic heuristic, not formal temporal extrema analysis or a certified exhaustive render. A final MKV self-contained-font playback proof also remains separate.
+
+
+## Evidence schema migration
+
+The previous midpoint-only verifier used evidence schema v1. Risk-aware exported animation sampling changes the meaning of coverage and the evidence metadata, so new reports use `schema_version=2` and `sampling_algorithm=exported-ass-events-v2`. Readers explicitly reject earlier v1 sidecars as stale rather than silently displaying old midpoint-only results as though animation events had been sampled. Re-run the opt-in exported-ASS inspection to migrate the evidence; the existing ASS/SRT exports themselves are unchanged.

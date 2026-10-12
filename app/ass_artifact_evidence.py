@@ -29,6 +29,8 @@ from subtitle_layout.rendered_ink import visible_ink_bbox
 from subtitle_layout.safe_area import SafeArea
 
 PROOF_NAME = "ass_render_evidence.json"
+PROOF_SCHEMA_VERSION = 2
+EXPORT_SAMPLER_VERSION = "exported-ass-events-v2"
 MAX_ASS_BYTES = 64 * 1024 * 1024
 MAX_ASS_DIALOGUES = 200000
 MAX_EXPORT_SAMPLES = 12
@@ -85,8 +87,9 @@ def read_exported_ass_evidence(
         return {"state": "unverified", "verified": False}
     try:
         record = json.loads(path.read_text(encoding="utf-8"))
-        if (not isinstance(record, dict) or record.get("schema_version") != 1
+        if (not isinstance(record, dict) or record.get("schema_version") != PROOF_SCHEMA_VERSION
                 or record.get("scope") != "bounded_exported_ass_samples"
+                or record.get("sampling_algorithm") != EXPORT_SAMPLER_VERSION
                 or record.get("full_interval_verified") is not False):
             raise ValueError("Unknown rendered evidence schema")
         current = _export_identity(output_dir, config)
@@ -178,7 +181,8 @@ def verify_exported_ass(
               "no_visible_evidence" if invisible == len(checked)
               else "sampled_no_violation")
     evidence = {
-        "schema_version": 1,
+        "schema_version": PROOF_SCHEMA_VERSION,
+        "sampling_algorithm": EXPORT_SAMPLER_VERSION,
         "scope": "bounded_exported_ass_samples",
         "full_interval_verified": False,
         "renderer": "ffmpeg-libass",
