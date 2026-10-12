@@ -6336,7 +6336,7 @@ function clearVideoPreview(){
   const button=document.getElementById('previewVideoBtn');
   if(button){button.disabled=false;button.setAttribute('aria-pressed','false');}
 }
-window.addEventListener('beforeunload',clearVideoPreview);
+if(typeof window!=='undefined')window.addEventListener('beforeunload',clearVideoPreview);
 
 function setPreviewEvidence(mode, detail = '') {
   const root=document.querySelector('.layout-preview-evidence');
@@ -7268,7 +7268,7 @@ function renderLayoutCueEditor(){
   if(editor){
     editor.disabled=!selected;
     editor.readOnly=true; // Single owner: text mutations belong to the Review workspace.
-    if(!selected||document.activeElement!==editor)editor.value=selected?state.saved:'';
+    if(!selected||document.activeElement!==editor)editor.value=selected?state.draft:'';
   }
   const jump=document.getElementById('layoutOpenProofreadingBtn');
   if(jump)jump.disabled=!selected;
@@ -8385,7 +8385,7 @@ applyPreviewBackground();
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
 // Review owns subtitle text editing. The previous Layout editor is read-only.
-document.getElementById('layoutCueFinalText')?.addEventListener('input',event=>{ if(!event.target.readOnly)layoutCueUpdateDraft(event.target.value); });
+document.getElementById('layoutCueFinalText')?.addEventListener('input',event=>layoutCueUpdateDraft(event.target.value));
 document.getElementById('layoutCueFinalText')?.addEventListener('keydown',event=>{
   if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){
     event.preventDefault();
