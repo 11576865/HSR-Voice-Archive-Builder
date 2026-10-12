@@ -189,17 +189,20 @@ def create_job(
                       else fn(cancel_event) if with_cancel
                       else fn(report_progress) if with_progress else fn())
             with _LOCK:
-                if cancel_event is not None and cancel_event.is_set():
-                    job.state = "canceled"
-                    job.message = "已取消"
-                    job.result = None
-                    job.finished_at = now()
-                    _persist_locked()
-                    return
+                # A returned successful result is the durable completion
+                # boundary for cancellable ASS proof jobs: the writer has
+                # already persisted its receipt/checkpoint before returning.
+                # Cancel-after-commit must not say "canceled" while the
+                # committed evidence and cursor are visible on disk.
+                late_cancel = cancel_event is not None and cancel_event.is_set()
                 job.result = result
                 job.state = "succeeded"
                 job.phase = "done"
-                job.message = "构建完成" if kind in BUILD_KINDS else "完成"
+                job.message = (
+                    "已完成；取消请求抵达时结果已提交"
+                    if late_cancel else
+                    "构建完成" if kind in BUILD_KINDS else "完成"
+                )
                 if kind in BUILD_KINDS:
                     job.progress_current = max(job.progress_total, 1)
                     job.progress_total = max(job.progress_total, 1)

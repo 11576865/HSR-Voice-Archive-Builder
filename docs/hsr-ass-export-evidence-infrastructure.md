@@ -79,3 +79,10 @@ Limits: one batch is capped at 120 seconds, with per-frame process timeout and c
 **Concurrent workbench actions.** Global exported ASS smoke verification and the resumable batch coverage verification share the same project-scoped job kind. Both UI start handlers now claim a synchronous in-flight guard before awaiting network responses; the other control is disabled until the job finishes. Server-side project-scoped exclusion still enforces authority.
 
 Regression tests cover modified earlier receipt, missing intermediate receipt, falsified previous hash despite recomputed last-receipt hash, forged checkpoint counters, unsupported Karaoke timing, and the existing real-FFmpeg smoke render. No whole-timeline or per-segment effect editing claim follows.
+
+
+## Cancellation after artifact commit: authoritative success boundary (2026-10-12)
+
+A race existed in `app.jobs`: a cancellable ASS job could finish its durable proof/checkpoint write, then receive a cancel request immediately before returning its success result. The previous runner discarded that valid result and journaled `state=canceled`, although the checkpoint had visibly advanced. This misled the workbench and could encourage a needless restart or an assumption that prior progress was rolled back. Successful function return from these opt-in writer operations is now the **committed-result boundary**. If a late cancel request is present when the callback returns successfully, the job reports `succeeded` and retains `cancel_requested=true` with an explicit late-cancel message. A cooperative cancellation *before* commit still raises and reports `canceled` without publishing evidence.
+
+The deterministic race test in `tests/test_jobs_cancel_commit_boundary.py` suspends a worker after writing a checkpoint but before return, requests cancellation, then verifies the succeeded/committed result. Another test cancels before write and proves no evidence appears. This fix does not make the whole ASS rendering window atomic against unsynchronized filesystem mutations and does not certify unsampled video frames.
