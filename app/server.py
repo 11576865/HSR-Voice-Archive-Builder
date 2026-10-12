@@ -747,6 +747,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         words = data.get("word_alignments")
         if not isinstance(words, list):
             words = None
+        fmt = str(data.get("preview_format") or "mp4").lower()
         video = await run_in_threadpool(
             render_ass_preview_video,
             english_text=str(data.get("english_text") or ""),
@@ -756,10 +757,11 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             config=config,
             word_alignments=words,
             duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
+            container_format=fmt,
         )
         return Response(
-            content=video, media_type="video/mp4",
-            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-h264-black"},
+            content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
+            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt + "-black"},
         )
     except Exception as exc:
         return JSONResponse(
