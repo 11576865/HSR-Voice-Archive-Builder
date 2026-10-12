@@ -191,8 +191,15 @@ def read_exported_ass_coverage(
         # Do not return verified=true for a snapshot that has already changed
         # while its potentially long historical receipt-chain audit ran.
         # This also catches a concurrent writer advancing the checkpoint.
+        try:
+            current_identity = _export_identity(output_dir, config)
+        except (OSError, ValueError):
+            # It can become unavailable because ASS/export receipt/style was
+            # replaced in the middle of the scan. This is stale evidence,
+            # not a malformed historical receipt.
+            current_identity = None
         if (checkpoint.is_symlink() or _sha256(checkpoint) != checkpoint_sha256
-                or _export_identity(output_dir, config) != identity):
+                or current_identity != identity):
             return {
                 "state": "stale", "verified": False, "next_cursor": 0,
                 "reason": "ASS export identity or coverage checkpoint changed during audit",
