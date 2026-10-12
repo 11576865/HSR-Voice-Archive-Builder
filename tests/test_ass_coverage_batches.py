@@ -246,6 +246,20 @@ class CoverageBatchTests(unittest.TestCase):
         self.assertEqual(result["state"], "stale")
         self.assertFalse(result["verified"])
 
+    def test_another_process_output_lock_rejects_batch_without_changing_cursor(self):
+        from app.ass_coverage_lock import exclusive_coverage_writer
+        with exclusive_coverage_writer(self.output):
+            with self.assertRaisesRegex(RuntimeError, "another process"):
+                self.run_mock()
+            self.assertEqual(
+                read_exported_ass_coverage(self.output, self.config)["state"],
+                "unverified",
+            )
+        first = self.run_mock()
+        self.assertEqual(first["next_cursor"], 2)
+        self.assertEqual(read_exported_ass_coverage(
+            self.output, self.config)["state"], "partial")
+
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
         with self.assertRaisesRegex(ValueError, "cursor changed"):

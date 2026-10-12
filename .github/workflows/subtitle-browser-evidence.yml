@@ -11,6 +11,8 @@ on:
       - "tests/test_rendered_ink_interval.py"
       - "app/ass_artifact_evidence.py"
       - "app/ass_coverage_batches.py"
+      - "app/ass_coverage_lock.py"
+      - "tests/test_ass_coverage_writer_lock.py"
       - "tests/test_ass_coverage_batches.py"
       - "app/ass_export_sampling.py"
       - "tests/test_ass_export_sampling_scale.py"
@@ -79,6 +81,7 @@ jobs:
           python -m unittest tests.test_rendered_ink_interval -v
           python -m unittest tests.test_export_ass_infrastructure -v
           python -m unittest tests.test_ass_coverage_batches -v
+          python -m unittest tests.test_ass_coverage_writer_lock -v
           python -m unittest tests.test_jobs_history_pruning -v
           python -m unittest tests.test_jobs_cancel_commit_boundary -v
           python -m unittest tests.test_ass_export_sampling_scale -v

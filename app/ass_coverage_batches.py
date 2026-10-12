@@ -21,6 +21,7 @@ from subtitle_layout.rendered_ink import visible_ink_bbox
 from subtitle_layout.safe_area import SafeArea
 
 from .ass_export_sampling import plan_export_ass_window_batch
+from .ass_coverage_lock import exclusive_coverage_writer
 from .ass_preview import _render_raw_rgb
 from .ass_artifact_evidence import ASS_NAME, _export_identity
 from .builder import atomic_write_text
@@ -216,6 +217,21 @@ def read_exported_ass_coverage(
 
 
 def inspect_next_exported_ass_batch(
+    config: ProjectConfig, output_dir: Path, *,
+    sample_limit: int = 8, expected_cursor: int = 0, restart: bool = False,
+    cancel_event: threading.Event | None = None,
+    report_progress: Callable[[str, str, int, int], None] | None = None,
+) -> dict[str, Any]:
+    """The entire read-render-commit sequence owns one output-scoped OS lock."""
+    with exclusive_coverage_writer(output_dir, cancel_event=cancel_event):
+        return _inspect_next_exported_ass_batch_locked(
+            config, output_dir, sample_limit=sample_limit,
+            expected_cursor=expected_cursor, restart=restart,
+            cancel_event=cancel_event, report_progress=report_progress,
+        )
+
+
+def _inspect_next_exported_ass_batch_locked(
     config: ProjectConfig, output_dir: Path, *,
     sample_limit: int = 8, expected_cursor: int = 0, restart: bool = False,
     cancel_event: threading.Event | None = None,
