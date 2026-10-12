@@ -61,6 +61,8 @@ def _receipt_path(output_dir: Path, run_id: str, batch_id: int) -> Path:
 
 def _audit_committed_batches(
     output_dir: Path, checkpoint: dict[str, Any], identity: dict[str, str],
+    *, cancel_event: threading.Event | None = None,
+    deadline: float | None = None,
 ) -> None:
     """Fail closed if ANY historical receipt or aggregate is altered.
 
@@ -80,6 +82,13 @@ def _audit_committed_batches(
     }
     newest_samples = None
     for batch_id in range(checkpoint["batch_count"], 0, -1):
+        # A normal continuation performs a potentially long *strict*
+        # historical scan after rendering. Cancel or deadline exhaustion
+        # must never allow the scan to finish and publish new progress.
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("ASS receipt audit canceled before commit")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("ASS receipt audit exceeded batch deadline")
         path = _receipt_path(output_dir, run_id, batch_id)
         if path.is_symlink() or not path.is_file():
             raise ValueError("Committed ASS batch chain has a missing receipt")
@@ -146,6 +155,10 @@ def _audit_committed_batches(
             raise ValueError("Committed ASS receipt chain link invalid")
         expected_sha = prev
         expected_cursor = cursor
+    if cancel_event is not None and cancel_event.is_set():
+        raise InterruptedError("ASS receipt audit canceled before commit")
+    if deadline is not None and time.monotonic() >= deadline:
+        raise TimeoutError("ASS receipt audit exceeded batch deadline")
     if expected_cursor != 0 or expected_sha != "":
         raise ValueError("Committed ASS receipt chain does not reach genesis")
     if any(checkpoint.get(k) != value for k, value in cumulative.items()):
@@ -163,6 +176,8 @@ def _audit_committed_batches(
 def read_exported_ass_coverage(
     output_dir: Path | None, config: ProjectConfig | None = None, *,
     _defer_history_audit: bool = False,
+    _audit_cancel_event: threading.Event | None = None,
+    _audit_deadline: float | None = None,
 ) -> dict[str, Any]:
     """Strict public read; writer-only provisional read never returns verified.
 
@@ -228,7 +243,15 @@ def read_exported_ass_coverage(
                     record.get("last_batch_receipt_sha256")):
                 raise ValueError("Latest ASS coverage receipt checksum mismatch")
         else:
-            _audit_committed_batches(output_dir, record, identity)
+            if _audit_cancel_event is None and _audit_deadline is None:
+                # Keep the ordinary strict public status API behavior and
+                # existing audit instrumentation unchanged.
+                _audit_committed_batches(output_dir, record, identity)
+            else:
+                _audit_committed_batches(
+                    output_dir, record, identity,
+                    cancel_event=_audit_cancel_event, deadline=_audit_deadline,
+                )
         # Do not return verified=true for a snapshot that has already changed
         # while its potentially long historical receipt-chain audit ran.
         # This also catches a concurrent writer advancing the checkpoint.
@@ -253,6 +276,10 @@ def read_exported_ass_coverage(
             "coverage": record,
             **({"history_audit": "deferred"} if _defer_history_audit else {}),
         }
+    except (InterruptedError, TimeoutError):
+        # A writer uses these as task control signals. Turning them into a
+        # generic stale result would misclassify user cancellation/timeout.
+        raise
     except (OSError, ValueError, UnicodeError, TypeError, KeyError) as exc:
         return {"state": "stale", "verified": False, "next_cursor": 0,
                 "reason": "Unreadable or incompatible coverage: " + type(exc).__name__}
@@ -388,7 +415,14 @@ def _inspect_next_exported_ass_batch_locked(
     else:
         # Ordinary resume MUST validate the complete history at the commit
         # boundary; no provisional cursor can become verified implicitly.
-        current = read_exported_ass_coverage(output_dir, latest)
+        if cancel_event.is_set():
+            raise InterruptedError("ASS batch canceled before final history audit")
+        if time.monotonic() >= deadline:
+            raise TimeoutError("ASS batch exceeded deadline before final history audit")
+        current = read_exported_ass_coverage(
+            output_dir, latest,
+            _audit_cancel_event=cancel_event, _audit_deadline=deadline,
+        )
         if (
             (previous is None and current["state"] != "unverified") or
             (previous is not None and (
@@ -398,6 +432,10 @@ def _inspect_next_exported_ass_batch_locked(
             ))
         ):
             raise RuntimeError("Another process advanced the coverage ledger")
+    if cancel_event.is_set():
+        raise InterruptedError("ASS batch canceled before receipt commit")
+    if time.monotonic() >= deadline:
+        raise TimeoutError("ASS batch exceeded deadline before receipt commit")
     violations = sum(s["status"] == "outside_safe_area" for s in samples)
     invisible = sum(s["status"] == "no_visible_ink" for s in samples)
     receipt = {
@@ -453,6 +491,8 @@ def _inspect_next_exported_ass_batch_locked(
     }
     if cancel_event.is_set():
         raise InterruptedError("ASS batch canceled before persistence")
+    if time.monotonic() >= deadline:
+        raise TimeoutError("ASS batch exceeded deadline before persistence")
     target = _receipt_path(output_dir, run_id, batch_id)
     target.parent.mkdir(parents=True, exist_ok=True)
     if target.parent.is_symlink() or target.is_symlink():
@@ -461,6 +501,8 @@ def _inspect_next_exported_ass_batch_locked(
     checkpoint["last_batch_receipt_sha256"] = _sha256(target)
     if cancel_event.is_set():
         raise InterruptedError("ASS batch canceled before checkpoint commit")
+    if time.monotonic() >= deadline:
+        raise TimeoutError("ASS batch exceeded deadline before checkpoint commit")
     atomic_write_text(
         output_dir / COVERAGE_FILE, json.dumps(checkpoint, indent=2, ensure_ascii=False)
     )

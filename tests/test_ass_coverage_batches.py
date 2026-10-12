@@ -480,6 +480,75 @@ class CoverageBatchTests(unittest.TestCase):
             (self.output / RECEIPTS_DIR).glob(f"{old['run_id']}-*.json")
         )), 1)
 
+    def test_cancel_during_historical_audit_never_advances_checkpoint(self):
+        from app import ass_coverage_batches as coverage
+        first = self.run_mock()
+        before = (self.output / COVERAGE_FILE).read_bytes()
+        second_receipt = (self.output / RECEIPTS_DIR /
+                          f"{first['run_id']}-batch-000002.json")
+        event = threading.Event()
+        reads = [0]
+        original_read = Path.read_bytes
+
+        def cancel_during_second_receipt_read(path):
+            data = original_read(path)
+            if path.parent.name == RECEIPTS_DIR:
+                reads[0] += 1
+                if reads[0] == 2:
+                    event.set()  # after strict-audit read, not preflight
+            return data
+
+        with patch.object(Path, "read_bytes", cancel_during_second_receipt_read):
+            with self.assertRaisesRegex(InterruptedError, "audit canceled"):
+                self.run_mock(cursor=2, event=event)
+        self.assertEqual(reads[0], 2)
+        self.assertEqual((self.output / COVERAGE_FILE).read_bytes(), before)
+        self.assertFalse(second_receipt.exists())
+        self.assertTrue(read_exported_ass_coverage(
+            self.output, self.config)["verified"])
+
+    def test_deadline_expires_during_historical_audit_without_commit(self):
+        import time
+        first = self.run_mock()
+        before = (self.output / COVERAGE_FILE).read_bytes()
+        second_receipt = (self.output / RECEIPTS_DIR /
+                          f"{first['run_id']}-batch-000002.json")
+        read_count = [0]
+        expired = [False]
+        raw_read = Path.read_bytes
+        real_clock = time.monotonic
+
+        def record_receipt_read(path):
+            data = raw_read(path)
+            if path.parent.name == RECEIPTS_DIR:
+                read_count[0] += 1
+                if read_count[0] == 2:
+                    expired[0] = True
+            return data
+
+        def advancing_clock():
+            return real_clock() + (1000 if expired[0] else 0)
+
+        with (patch.object(Path, "read_bytes", record_receipt_read),
+              patch("app.ass_coverage_batches.time.monotonic",
+                    side_effect=advancing_clock)):
+            with self.assertRaisesRegex(TimeoutError, "audit exceeded"):
+                self.run_mock(cursor=2)
+        self.assertEqual(read_count[0], 2)
+        self.assertEqual((self.output / COVERAGE_FILE).read_bytes(), before)
+        self.assertFalse(second_receipt.exists())
+        self.assertEqual(read_exported_ass_coverage(
+            self.output, self.config)["next_cursor"], 2)
+
+    def test_public_coverage_audit_is_not_limited_by_writer_deadline(self):
+        self.run_mock()
+        from app import ass_coverage_batches as coverage
+        with patch.object(coverage.time, "monotonic",
+                          return_value=float("inf")):
+            status = read_exported_ass_coverage(self.output, self.config)
+        self.assertTrue(status["verified"])
+        self.assertNotIn("history_audit", status)
+
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
         with self.assertRaisesRegex(ValueError, "cursor changed"):
