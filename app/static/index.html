@@ -6329,7 +6329,7 @@ function clearVideoPreview(){
   if(player){
     if(typeof player.pause==='function')player.pause();
     player.classList.add('hidden');
-    player.removeAttribute('src');
+    if(typeof player.removeAttribute==='function')player.removeAttribute('src');
     if(typeof player.load==='function')player.load();
   }
   if(videoPreviewObjectUrl){URL.revokeObjectURL(videoPreviewObjectUrl);videoPreviewObjectUrl=null;}
