@@ -681,6 +681,7 @@ class Handler(BaseHTTPRequestHandler):
                         words = parsed
                 except (TypeError, ValueError):
                     words = None
+            fmt = str(data.get("preview_format") or "mp4").lower()
             video = render_ass_preview_video(
                 english_text=data.get("english_text", ""),
                 chinese_text=data.get("chinese_text", ""),
@@ -689,10 +690,11 @@ class Handler(BaseHTTPRequestHandler):
                 config=config,
                 word_alignments=words,
                 duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                container_format=fmt,
             )
             self._send_bytes(
-                200, video, "video/mp4",
-                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-h264-black"},
+                200, video, "video/webm" if fmt == "webm" else "video/mp4",
+                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt + "-black"},
             )
             return
 
