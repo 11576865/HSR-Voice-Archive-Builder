@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any, Callable
 
 from .ass_preview import _render_raw_rgb
+from .ass_export_sampling import plan_export_ass_samples, MAX_ASS_DIALOGUES, MAX_EXPORT_SAMPLES
 from .builder import atomic_write_text
 from .project import ProjectConfig, load_project, resolve_project_path
 from .subtitle_export_status import (
@@ -43,64 +44,6 @@ def style_policy_sha256(config: ProjectConfig) -> str:
     canonical = json.dumps(relevant, ensure_ascii=False, sort_keys=True,
                            separators=(",", ":"), allow_nan=False)
     return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
-
-
-def _parse_time(value: str) -> float:
-    parts = value.strip().split(":")
-    if len(parts) != 3:
-        raise ValueError("Malformed ASS cue time")
-    hours, minutes, seconds = int(parts[0]), int(parts[1]), float(parts[2])
-    if hours < 0 or not 0 <= minutes < 60 or not 0 <= seconds < 60:
-        raise ValueError("ASS cue time outside expected bounds")
-    total = hours * 3600 + minutes * 60 + seconds
-    if not math.isfinite(total):
-        raise ValueError("Nonfinite ASS cue time")
-    return total
-
-
-def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, Any]:
-    if type(sample_limit) is not int or not 1 <= sample_limit <= MAX_EXPORT_SAMPLES:
-        raise ValueError("ASS sample limit must be an integer from 1 to 12")
-    rows: list[tuple[float, float]] = []
-    in_events = False
-    for line in ass_text.splitlines():
-        value = line.strip()
-        if value.startswith("[") and value.endswith("]"):
-            in_events = value.lower() == "[events]"
-            continue
-        if not in_events or not value.startswith("Dialogue:"):
-            continue
-        parts = value[len("Dialogue:"):].strip().split(",", 9)
-        if len(parts) < 10:
-            raise ValueError("Malformed ASS dialogue record")
-        start, end = _parse_time(parts[1]), _parse_time(parts[2])
-        if end <= start:
-            raise ValueError("Non-positive ASS dialogue duration")
-        rows.append((start, end))
-        if len(rows) > MAX_ASS_DIALOGUES:
-            raise ValueError("ASS subtitle cue count exceeds bounded evidence limit")
-    if not rows:
-        raise ValueError("ASS has no dialogue events to verify")
-    unique = sorted(set(rows))
-    count = min(len(unique), sample_limit)
-    indices = sorted({round(i * (len(unique) - 1) / (count - 1))
-                      for i in range(count)}) if count > 1 else [len(unique) // 2]
-    chosen = []
-    for index in indices:
-        start, end = unique[index]
-        chosen.append({
-            "dialogue_start_seconds": round(start, 3),
-            "dialogue_end_seconds": round(end, 3),
-            "timestamp_seconds": round(start + (end - start) * 0.5, 3),
-        })
-    return {
-        "dialogue_count": len(rows),
-        "unique_window_count": len(unique),
-        "sample_limit": sample_limit,
-        "sample_count": len(chosen),
-        "unexamined_unique_windows": len(unique) - len(chosen),
-        "samples": chosen,
-    }
 
 
 def _export_identity(output_dir: Path, config: ProjectConfig) -> dict[str, str]:
@@ -246,6 +189,15 @@ def verify_exported_ass(
         "dialogue_count": plan["dialogue_count"],
         "unique_window_count": plan["unique_window_count"],
         "unexamined_unique_windows": plan["unexamined_unique_windows"],
+        "dynamic_window_count": plan["dynamic_window_count"],
+        "targeted_dynamic_window_count": plan["targeted_dynamic_window_count"],
+        "unexamined_dynamic_windows": plan["unexamined_dynamic_windows"],
+        "effect_candidates_truncated_windows": plan["effect_candidates_truncated_windows"],
+        "candidate_count": plan["candidate_count"],
+        "candidate_count_scope": plan["candidate_count_scope"],
+        "omitted_candidate_count": plan["omitted_candidate_count"],
+        "max_sample_gap_seconds": plan["max_sample_gap_seconds"],
+        "compositing_scope": "all_active_ass_dialogues",
         "sample_limit": plan["sample_limit"],
         "sample_count": len(checked),
         "violation_count": violation,

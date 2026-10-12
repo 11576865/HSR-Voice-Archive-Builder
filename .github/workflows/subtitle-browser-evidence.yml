@@ -10,6 +10,7 @@ on:
       - "tests/test_rendered_ink_boundary.py"
       - "tests/test_rendered_ink_interval.py"
       - "app/ass_artifact_evidence.py"
+      - "app/ass_export_sampling.py"
       - "app/jobs.py"
       - "tests/test_export_ass_infrastructure.py"
       - "tests/browser_visual_evidence.py"

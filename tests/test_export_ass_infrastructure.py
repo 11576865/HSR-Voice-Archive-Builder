@@ -67,6 +67,76 @@ class ExportedAssInfraTests(unittest.TestCase):
         self.assertEqual(plan["unexamined_unique_windows"], 1)
         self.assertEqual([x["timestamp_seconds"] for x in plan["samples"]], [1, 6.75])
 
+    def test_motion_and_karaoke_select_real_dynamic_boundaries(self):
+        dynamic = ASS_FIXTURE.replace(
+            "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,first",
+            r"Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\move(20,850,960,850,0,2000)}first",
+        ).replace(
+            "Dialogue: 0,0:00:02.50,0:00:05.50,Default,,0,0,0,,second",
+            r"Dialogue: 0,0:00:02.50,0:00:05.50,Default,,0,0,0,,{\k40}A{\kf60}B{\k50}C",
+        )
+        plan = plan_export_ass_samples(dynamic, sample_limit=8)
+        self.assertEqual(plan["dynamic_window_count"], 2)
+        self.assertEqual(plan["unexamined_dynamic_windows"], 0)
+        self.assertGreater(plan["candidate_count"], plan["unique_window_count"])
+        self.assertLessEqual(plan["sample_count"], 8)
+        self.assertTrue(any("motion_transition" in sample["reasons"]
+                            or "animated_entry" in sample["reasons"]
+                            for sample in plan["samples"]))
+        self.assertTrue(any(any(reason.startswith("karaoke_") for reason in sample["reasons"])
+                            for sample in plan["samples"]))
+        self.assertEqual(plan["candidate_count_scope"],
+                         "window_midpoints_plus_targeted_effect_candidates")
+
+    def test_motion_extrema_are_not_mistaken_for_static_midpoint(self):
+        dynamic = ASS_FIXTURE.replace(
+            "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,first",
+            r"Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\move(0,850,960,850)}first",
+        )
+        plan = plan_export_ass_samples(dynamic, sample_limit=6)
+        timestamps = [s["timestamp_seconds"] for s in plan["samples"]]
+        self.assertTrue(any(0 <= t < .1 for t in timestamps))
+        self.assertTrue(any(.9 <= t <= 1.1 for t in timestamps))
+        self.assertTrue(all(s["compositing_scope"] == "all_active_ass_dialogues"
+                            for s in plan["samples"]))
+
+    def test_overlapping_dialogues_report_composited_frame_not_cue_ownership(self):
+        content = ASS_FIXTURE.replace(
+            "Dialogue: 0,0:00:02.50,0:00:05.50,Default,,0,0,0,,second",
+            "Dialogue: 0,0:00:01.00,0:00:05.50,Default,,0,0,0,,second",
+        )
+        plan = plan_export_ass_samples(content, sample_limit=3)
+        self.assertTrue(any(p["active_dialogue_count"] >= 2 for p in plan["samples"]))
+        self.assertTrue(all(p["compositing_scope"] == "all_active_ass_dialogues"
+                            for p in plan["samples"]))
+
+    def test_dynamic_tag_limit_is_bounded_and_explicitly_reported(self):
+        many_tags = "".join(r"{\k1}A" for _ in range(250))
+        content = ASS_FIXTURE.replace(",,first", ",," + many_tags)
+        plan = plan_export_ass_samples(content, sample_limit=8)
+        self.assertGreater(plan["effect_candidates_truncated_windows"], 0)
+        self.assertLessEqual(plan["sample_count"], 8)
+        self.assertEqual(plan["dynamic_window_count"], 1)
+
+    def test_export_parser_respects_reordered_ass_events_format(self):
+        modified = ASS_FIXTURE.replace(
+            "Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+            "Format: Layer, End, Start, Style, Name, MarginL, MarginR, MarginV, Effect, Text",
+        ).replace("0,0:00:00.00,0:00:02.00,Default",
+                  "0,0:00:02.00,0:00:00.00,Default")
+        with self.assertRaisesRegex(ValueError, "Non-positive"):
+            plan_export_ass_samples(modified)
+        corrected = modified.replace("0,0:00:02.00,0:00:00.00,Default",
+                                     "0,0:00:02.00,0:00:00.00,Default")
+        # First Dialogue is now valid under the declared reversed column mapping.
+        # Remaining rows use old values and must also be re-ordered explicitly.
+        corrected = corrected.replace("0,0:00:02.50,0:00:05.50,Default",
+                                      "0,0:00:05.50,0:00:02.50,Default").replace(
+                                      "0,0:00:05.50,0:00:08.00,Default",
+                                      "0,0:00:08.00,0:00:05.50,Default")
+        plan = plan_export_ass_samples(corrected)
+        self.assertEqual(plan["dialogue_count"], 3)
+
     def test_plan_invalid_inputs_fail_closed(self):
         with self.assertRaises(ValueError):
             plan_export_ass_samples("not ASS")
@@ -98,6 +168,9 @@ class ExportedAssInfraTests(unittest.TestCase):
         self.assertEqual(proof["status"], "sampled_violation")
         self.assertIs(proof["full_interval_verified"], False)
         self.assertEqual(proof["violation_count"], 1)
+        self.assertEqual(proof["dynamic_window_count"], 0)
+        self.assertEqual(proof["compositing_scope"], "all_active_ass_dialogues")
+        self.assertIn("max_sample_gap_seconds", proof)
         self.assertEqual(frame.call_count, 4)
         self.assertEqual(read_exported_ass_evidence(self.output, self.config)["state"], "sampled_violation")
         self.assertTrue((self.output / PROOF_NAME).exists())
@@ -161,6 +234,35 @@ class ExportedAssInfraTests(unittest.TestCase):
         self.assertEqual(evidence["sample_count"], 1)
         self.assertEqual(read_exported_ass_evidence(self.output, self.config)["state"],
                          evidence["status"])
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "FFmpeg not installed")
+    @patch("app.ass_artifact_evidence.load_project")
+    def test_real_exported_motion_detects_boundary_violation(self, load):
+        load.return_value = self.config
+        # Motion begins outside the saved SafeArea and ends well inside it.
+        # A midpoint-only inspector can miss the entrance overshoot.
+        moving = ASS_FIXTURE.replace(
+            "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,first",
+            r"Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\move(5,900,960,900,0,2000)}first",
+        )
+        (self.output / ASS_NAME).write_text(moving, encoding="utf-8")
+        self.config.subtitle_margin_horizontal_percent = .06
+        record_subtitle_export(
+            self.output, state="current", ass_required=True,
+            render_policy_sha256=export_render_policy_sha256(
+                subtitle_render_config(self.config), "en", "zh-CN",
+            ),
+        )
+        evidence = verify_exported_ass(self.config, self.output, sample_limit=5)
+        self.assertEqual(evidence["dynamic_window_count"], 1)
+        self.assertGreater(evidence["sample_count"], 3)
+        self.assertTrue(any(
+            "motion_transition" in row["reasons"] or "animated_entry" in row["reasons"]
+            for row in evidence["samples"]
+        ))
+        self.assertEqual(evidence["status"], "sampled_violation")
+        self.assertGreater(evidence["violation_count"], 0)
+        self.assertIs(evidence["full_interval_verified"], False)
 
     def test_fastapi_evidence_route_requires_matching_project(self):
         from app.project import save_project
