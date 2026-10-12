@@ -119,3 +119,58 @@ class HsrEffectVideoBackendTests(unittest.TestCase):
         self.assertEqual(response.status_code, 200, response.text)
         self.assertEqual(response.headers["content-type"], "video/mp4")
         self.assertEqual(response.content, b"video-payload")
+
+
+    def test_real_ffmpeg_video_can_be_decoded_and_contains_motion(self):
+        import json
+        import shutil
+
+        ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
+        if not ffmpeg or not ffprobe:
+            self.skipTest("Real FFmpeg / FFprobe unavailable")
+        capabilities = subprocess.run(
+            [ffmpeg, "-hide_banner", "-encoders"], capture_output=True, text=True,
+            timeout=8, check=False,
+        ).stdout
+        filters = subprocess.run(
+            [ffmpeg, "-hide_banner", "-filters"], capture_output=True, text=True,
+            timeout=8, check=False,
+        ).stdout
+        if "libx264" not in capabilities or "subtitles" not in filters:
+            self.skipTest("This FFmpeg lacks H.264/libass")
+        data = self.call_renderer(
+            english_text="HSR effect timing test",
+            chinese_text="HSR preview",
+            config=SubtitleRenderConfig(
+                primary_font="DejaVu Sans", chs_font="DejaVu Sans",
+                fade_in_ms=500, fade_out_ms=100,
+            ),
+            duration_seconds=1.5,
+        )
+        self.assertGreater(len(data), 512)
+        with tempfile.TemporaryDirectory() as td:
+            path = Path(td) / "real.mp4"
+            path.write_bytes(data)
+            probe = subprocess.run(
+                [ffprobe, "-v", "error", "-select_streams", "v:0",
+                 "-show_entries", "stream=codec_name,nb_frames",
+                 "-of", "json", str(path)],
+                capture_output=True, text=True, timeout=10, check=True,
+            )
+            stream = json.loads(probe.stdout)["streams"][0]
+            self.assertEqual(stream["codec_name"], "h264")
+            self.assertGreaterEqual(int(stream["nb_frames"]), 25)
+
+            def sample(timestamp):
+                result = subprocess.run(
+                    [ffmpeg, "-hide_banner", "-loglevel", "error",
+                     "-ss", str(timestamp), "-i", str(path),
+                     "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "-"],
+                    capture_output=True, timeout=15, check=True,
+                )
+                return result.stdout
+
+            early = sample(0.04)
+            mid = sample(0.6)
+            self.assertTrue(early and mid)
+            self.assertNotEqual(early, mid, "Real decoded frames did not show animated change")
