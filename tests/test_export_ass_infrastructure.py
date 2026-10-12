@@ -179,10 +179,6 @@ class ExportedAssInfraTests(unittest.TestCase):
         (self.output / ASS_NAME).write_text(ASS_FIXTURE+"\n; altered", encoding="utf-8")
         self.assertEqual(read_exported_ass_evidence(self.output, self.config)["state"], "stale")
 
-    @patch("app.ass_artifact_evidence.load_project")
-    @patch("app.ass_artifact_evidence.visible_ink_bbox", return_value=(100, 100, 200, 200))
-    @patch("app.ass_artifact_evidence._render_raw_rgb", return_value=b"fake")
-    @patch("app.ass_artifact_evidence.shutil.which", return_value="/usr/bin/ffmpeg")
     def test_legacy_midpoint_only_proof_is_not_reinterpreted_as_dynamic_checked(self):
         legacy = {
             "schema_version": 1, "scope": "bounded_exported_ass_samples",
@@ -193,6 +189,10 @@ class ExportedAssInfraTests(unittest.TestCase):
         self.assertFalse(result["verified"])
         self.assertEqual(result["state"], "stale")
 
+    @patch("app.ass_artifact_evidence.load_project")
+    @patch("app.ass_artifact_evidence.visible_ink_bbox", return_value=(100, 100, 200, 200))
+    @patch("app.ass_artifact_evidence._render_raw_rgb", return_value=b"fake")
+    @patch("app.ass_artifact_evidence.shutil.which", return_value="/usr/bin/ffmpeg")
     def test_policy_change_invalidates_previous_evidence(self, ffmpeg, frame, bbox, load):
         load.return_value = self.config
         verify_exported_ass(self.config, self.output, sample_limit=1)
