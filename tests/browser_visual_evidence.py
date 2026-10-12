@@ -101,12 +101,12 @@ def geometry(payload: dict) -> dict:
 def real_browser_video_fixture() -> bytes:
     """Real decodable MP4 bytes, kept separate from backend libass proof."""
     with tempfile.TemporaryDirectory(prefix="hsr-browser-video-") as td:
-        path = Path(td) / "motion.mp4"
+        path = Path(td) / "motion.webm"
         subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
              "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=1.5",
-             "-an", "-c:v", "libx264", "-preset", "ultrafast",
-             "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(path)],
+              "-an", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
+             "-pix_fmt", "yuv420p", str(path)],
             capture_output=True, text=True, timeout=40, check=True,
         )
         return path.read_bytes()
@@ -119,7 +119,8 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
         path = url.split("?", 1)[0]
         body = request.post_data_json if request.method == "POST" and request.post_data else {}
         if path.endswith("/api/subtitle-layout/render-preview-video") and video_bytes:
-            route.fulfill(status=200, content_type="video/mp4", body=video_bytes)
+            assert body.get("preview_format") == "webm", "Chromium must negotiate VP8"
+            route.fulfill(status=200, content_type="video/webm", body=video_bytes)
             return
         if path.endswith("/api/status"):
             payload = {
