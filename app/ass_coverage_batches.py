@@ -5,6 +5,7 @@ instants. Each batch commits atomically only after all its frames render.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import uuid
@@ -30,6 +31,8 @@ COVERAGE_FILE = "ass_render_coverage_checkpoint.json"
 RECEIPTS_DIR = "ass_render_coverage_batches"
 VERSION = 1
 ALGORITHM = "sequential-ass-window-pass-v1"
+MAX_BATCH_RECEIPT_BYTES = 256 * 1024
+MAX_CHECKPOINT_BYTES = 1024 * 1024
 
 
 def _receipt_path(output_dir: Path, run_id: str, batch_id: int) -> Path:
@@ -60,9 +63,18 @@ def _audit_committed_batches(
     newest_samples = None
     for batch_id in range(checkpoint["batch_count"], 0, -1):
         path = _receipt_path(output_dir, run_id, batch_id)
-        if path.is_symlink() or not path.is_file() or _sha256(path) != expected_sha:
-            raise ValueError("Committed ASS batch chain has a missing or changed receipt")
-        item = json.loads(path.read_text(encoding="utf-8"))
+        if path.is_symlink() or not path.is_file():
+            raise ValueError("Committed ASS batch chain has a missing receipt")
+        # The old verifier first re-opened the file to hash it and then
+        # re-opened it again to parse JSON. That doubled the I/O and allowed
+        # a between-read swap to pass the checksum while parsing new bytes.
+        if path.stat().st_size > MAX_BATCH_RECEIPT_BYTES:
+            raise ValueError("ASS batch receipt exceeds safe size bound")
+        raw = path.read_bytes()
+        if (len(raw) > MAX_BATCH_RECEIPT_BYTES or
+                hashlib.sha256(raw).hexdigest() != expected_sha):
+            raise ValueError("Committed ASS batch chain has changed bytes")
+        item = json.loads(raw)
         if (not isinstance(item, dict)
                 or item.get("schema_version") != VERSION
                 or item.get("sampling_algorithm") != ALGORITHM
@@ -141,7 +153,13 @@ def read_exported_ass_coverage(
     try:
         if checkpoint.is_symlink():
             raise ValueError("Coverage checkpoint symlink")
-        record = json.loads(checkpoint.read_text(encoding="utf-8"))
+        if checkpoint.stat().st_size > MAX_CHECKPOINT_BYTES:
+            raise ValueError("Coverage checkpoint exceeds safe size bound")
+        checkpoint_bytes = checkpoint.read_bytes()
+        if len(checkpoint_bytes) > MAX_CHECKPOINT_BYTES:
+            raise ValueError("Coverage checkpoint exceeds safe size bound")
+        checkpoint_sha256 = hashlib.sha256(checkpoint_bytes).hexdigest()
+        record = json.loads(checkpoint_bytes)
         if (not isinstance(record, dict) or record.get("schema_version") != VERSION
                 or record.get("sampling_algorithm") != ALGORITHM
                 or record.get("scope") != "bounded_sequential_window_pass"
@@ -170,13 +188,22 @@ def read_exported_ass_coverage(
             return {"state": "stale", "verified": False, "next_cursor": 0,
                     "reason": "Exported ASS, export receipt or style policy changed"}
         _audit_committed_batches(output_dir, record, identity)
+        # Do not return verified=true for a snapshot that has already changed
+        # while its potentially long historical receipt-chain audit ran.
+        # This also catches a concurrent writer advancing the checkpoint.
+        if (checkpoint.is_symlink() or _sha256(checkpoint) != checkpoint_sha256
+                or _export_identity(output_dir, config) != identity):
+            return {
+                "state": "stale", "verified": False, "next_cursor": 0,
+                "reason": "ASS export identity or coverage checkpoint changed during audit",
+            }
         return {
             "state": ("window_pass_complete" if record["next_cursor"] ==
                       record["unique_window_count"] else "partial"),
             "verified": True, "next_cursor": record["next_cursor"],
             "coverage": record,
         }
-    except (OSError, ValueError, TypeError, KeyError) as exc:
+    except (OSError, ValueError, UnicodeError, TypeError, KeyError) as exc:
         return {"state": "stale", "verified": False, "next_cursor": 0,
                 "reason": "Unreadable or incompatible coverage: " + type(exc).__name__}
 

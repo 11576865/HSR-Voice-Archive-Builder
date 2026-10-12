@@ -182,6 +182,70 @@ class CoverageBatchTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "stale"):
             self.run_mock(cursor=2)
 
+    def test_ass_change_during_full_history_audit_fails_closed(self):
+        from app import ass_coverage_batches as coverage
+        self.run_mock()
+        original = coverage._audit_committed_batches
+
+        def mutate_after_auditing(*args):
+            original(*args)
+            (self.output / ASS_NAME).write_text(
+                ASS_FIXTURE + "\\n;changed-during-audit", encoding="utf-8"
+            )
+
+        with patch.object(coverage, "_audit_committed_batches",
+                          side_effect=mutate_after_auditing):
+            status = read_exported_ass_coverage(self.output, self.config)
+        self.assertEqual(status["state"], "stale")
+        self.assertFalse(status["verified"])
+        self.assertIn("during audit", status["reason"])
+
+    def test_concurrent_checkpoint_advance_during_audit_is_not_reported_verified(self):
+        from app import ass_coverage_batches as coverage
+        self.run_mock()
+        checkpoint = self.output / COVERAGE_FILE
+        original = coverage._audit_committed_batches
+
+        def overwrite_checkpoint(*args):
+            original(*args)
+            record = json.loads(checkpoint.read_text(encoding="utf-8"))
+            record["captured_at"] = "changed-by-concurrent-process"
+            checkpoint.write_text(json.dumps(record), encoding="utf-8")
+
+        with patch.object(coverage, "_audit_committed_batches",
+                          side_effect=overwrite_checkpoint):
+            status = read_exported_ass_coverage(self.output, self.config)
+        self.assertEqual(status["state"], "stale")
+        self.assertFalse(status["verified"])
+        self.assertIn("during audit", status["reason"])
+
+    def test_receipt_audit_reads_each_hashed_json_blob_once(self):
+        first = self.run_mock()
+        self.run_mock(cursor=2)
+        original_read = Path.read_bytes
+        reads = []
+
+        def recording_read(path):
+            if path.parent.name == RECEIPTS_DIR:
+                reads.append(path.name)
+            return original_read(path)
+
+        with patch.object(Path, "read_bytes", recording_read):
+            status = read_exported_ass_coverage(self.output, self.config)
+        self.assertEqual(status["state"], "window_pass_complete")
+        self.assertEqual(len(reads), 2)
+        self.assertEqual(len(set(reads)), 2)
+
+    def test_oversized_historical_receipt_is_rejected_before_json_decode(self):
+        from app.ass_coverage_batches import MAX_BATCH_RECEIPT_BYTES
+        record = self.run_mock()
+        path = (self.output / RECEIPTS_DIR /
+                f"{record['run_id']}-batch-000001.json")
+        path.write_bytes(b" " * (MAX_BATCH_RECEIPT_BYTES + 1))
+        result = read_exported_ass_coverage(self.output, self.config)
+        self.assertEqual(result["state"], "stale")
+        self.assertFalse(result["verified"])
+
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
         with self.assertRaisesRegex(ValueError, "cursor changed"):
