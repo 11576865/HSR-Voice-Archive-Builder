@@ -181,6 +181,15 @@ def load_studio(page):
     }""")
     page.wait_for_function("document.querySelectorAll('[data-timeline-cue]').length >= 3", timeout=12000)
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
+    # A separate effects workbench owns timing, Karaoke and playable preview.
+    # The style view intentionally hides those controls.
+    ensure(page.locator("#studioStyleTab").is_visible(), "Style mode missing")
+    ensure(page.locator("#studioEffectsTab").is_visible(), "Effects mode missing")
+    ensure(not page.locator("#layoutTimelineViewport").is_visible(), "Style shows effect timeline")
+    page.locator("#studioEffectsTab").click()
+    ensure(page.locator("#layoutTimelineViewport").is_visible(), "Effects timeline hidden")
+    ensure(page.locator("#previewVideoBtn").is_visible(), "Playable effect preview action hidden")
+    ensure(not page.locator("#layoutCueFinalText").is_editable(), "Duplicate final text editor is writable")
     page.evaluate("() => window.scrollTo(0, 0)")
 
 
