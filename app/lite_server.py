@@ -16,6 +16,7 @@ from urllib.parse import parse_qs, urlsplit
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
 from .ass_artifact_evidence import verify_exported_ass, read_exported_ass_evidence
+from .ass_coverage_batches import read_exported_ass_coverage, inspect_next_exported_ass_batch
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -309,6 +310,11 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/subtitle-layout/exported-coverage":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            self._json({"ok": True, **read_exported_ass_coverage(output, config)})
+            return
         if path == "/api/subtitle-layout/exported-evidence":
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
@@ -550,6 +556,37 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/subtitle-layout/exported-coverage/start":
+            config = _active_config()
+            if data.get("expected_project_root") != config.root:
+                raise ValueError("Active project changed; refusing coverage for another project")
+            raw_limit = data.get("sample_limit", "8")
+            raw_cursor = data.get("expected_cursor", "0")
+            raw_restart = data.get("restart", "false")
+            if not raw_limit.isdigit() or not 2 <= int(raw_limit) <= 12:
+                raise ValueError("sample_limit must be an integer from 2 to 12")
+            if not raw_cursor.isdigit():
+                raise ValueError("expected_cursor must be a nonnegative integer")
+            if raw_restart not in {"true", "false"}:
+                raise ValueError("restart must be true or false")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is unavailable")
+            from .ass_artifact_evidence import _export_identity
+            _export_identity(output, config)
+            def run(cancel_event, report_progress):
+                return inspect_next_exported_ass_batch(
+                    config, output, sample_limit=int(raw_limit),
+                    expected_cursor=int(raw_cursor), restart=(raw_restart == "true"),
+                    cancel_event=cancel_event, report_progress=report_progress,
+                )
+            job = create_job(
+                "ass-artifact-evidence", run, with_cancel=True, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id,
+                        "scope": "bounded_sequential_window_pass"})
+            return
         if path == "/api/subtitle-layout/exported-evidence/start":
             config = _active_config()
             if not data.get("expected_project_root") or data["expected_project_root"] != config.root:

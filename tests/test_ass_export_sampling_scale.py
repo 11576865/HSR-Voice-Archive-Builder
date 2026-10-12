@@ -58,6 +58,22 @@ class AssExportSamplingScaleTests(unittest.TestCase):
         self.assertTrue(all("texts" not in window for window in windows))
         self.assertTrue(all(window["dynamic_tags"] for window in windows))
 
+    def test_long_corpus_sequential_cursor_is_bounded_and_can_resume(self):
+        from app.ass_export_sampling import plan_export_ass_window_batch
+
+        source = synthetic_long_ass(12000)
+        initial = plan_export_ass_window_batch(source, cursor=0, sample_limit=8)
+        self.assertEqual(initial["unique_window_count"], 12000)
+        self.assertGreater(initial["next_cursor"], 0)
+        self.assertLessEqual(initial["sample_count"], 8)
+        following = plan_export_ass_window_batch(
+            source, cursor=initial["next_cursor"], sample_limit=8,
+        )
+        self.assertEqual(following["cursor"], initial["next_cursor"])
+        self.assertGreater(following["next_cursor"], initial["next_cursor"])
+        self.assertTrue(all(item["compositing_scope"] == "all_active_ass_dialogues"
+                            for item in following["samples"]))
+
     def test_twenty_four_thousand_dialogue_stress_budget(self):
         source = synthetic_long_ass(12000)
         tracemalloc.start()

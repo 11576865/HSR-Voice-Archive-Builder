@@ -393,3 +393,89 @@ def plan_export_ass_samples(
         "sample_count": len(samples),
         "samples": samples,
     }
+
+
+def plan_export_ass_window_batch(
+    ass_text: str, *, cursor: int = 0, sample_limit: int = 8,
+    cancel_event: threading.Event | None = None, deadline: float | None = None,
+) -> dict[str, Any]:
+    """Advance through exported unique Dialogue windows in a bounded batch.
+
+    A static window costs one midpoint; a dynamic window costs a midpoint
+    and one parsed animation candidate. No whole-timeline claim is implied.
+    """
+    if type(sample_limit) is not int or not 2 <= sample_limit <= MAX_EXPORT_SAMPLES:
+        raise ValueError("Batch frame limit must be an integer from 2 to 12")
+    windows, starts, ends = _parse_windows(
+        ass_text, cancel_event=cancel_event, deadline=deadline,
+    )
+    total = len(windows)
+    if type(cursor) is not int or not 0 <= cursor < total:
+        raise ValueError("Batch cursor out of range or window pass complete")
+    selected = {
+        (windows[i]["start"], windows[i]["end"]): i
+        for i in range(cursor, min(total, cursor + sample_limit))
+        if windows[i]["dynamic_tags"]
+    }
+    selected_texts = _selected_dynamic_texts(
+        ass_text, selected, cancel_event=cancel_event, deadline=deadline,
+    )
+    index, examined_dynamic, examined_effect, truncated = cursor, 0, 0, 0
+    samples: list[dict[str, Any]] = []
+    while index < total and len(samples) < sample_limit:
+        if cancel_event is not None and cancel_event.is_set():
+            raise InterruptedError("Exported ASS batch planning canceled")
+        if deadline is not None and time.monotonic() >= deadline:
+            raise TimeoutError("Exported ASS batch planning exceeded deadline")
+        window = windows[index]
+        start, end = window["start"], window["end"]
+        midpoint = round((start + end) / 2, 3)
+        dynamic = bool(window["dynamic_tags"])
+        if dynamic and len(samples) + 2 > sample_limit:
+            break
+        points: list[tuple[float, list[str]]] = [(midpoint, ["dialogue_midpoint"])]
+        if dynamic:
+            examined_dynamic += 1
+            candidates, clipped = _effect_candidates({
+                **window, "texts": selected_texts[index],
+            })
+            truncated += int(clipped)
+            choices = [(t, kinds) for t, kinds in candidates.items() if t != midpoint]
+            choices.sort(key=lambda pair: (
+                not any(kind not in {"animated_entry", "animated_exit"} for kind in pair[1]),
+                abs(pair[0] - midpoint), pair[0],
+            ))
+            if choices:
+                t, reasons = choices[0]
+                points.append((t, sorted(reasons)))
+                examined_effect += 1
+            else:
+                truncated += int(not clipped)
+        for stamp, reasons in points:
+            samples.append({
+                "window_index": index, "timestamp_seconds": stamp,
+                "dialogue_start_seconds": start,
+                "dialogue_end_seconds": end, "reasons": reasons,
+                "active_dialogue_count": (
+                    bisect_right(starts, stamp) - bisect_right(ends, stamp)
+                ),
+                "compositing_scope": "all_active_ass_dialogues",
+            })
+        index += 1
+    if not samples or index <= cursor:
+        raise RuntimeError("ASS window-batch sampler made no progress")
+    return {
+        "scope": "bounded_exported_ass_window_batch",
+        "full_interval_verified": False,
+        "cursor": cursor, "next_cursor": index,
+        "window_count": index - cursor,
+        "sample_count": len(samples),
+        "dialogue_count": len(starts),
+        "unique_window_count": total,
+        "dynamic_window_count": sum(bool(w["dynamic_tags"]) for w in windows),
+        "dynamic_examined_window_count": examined_dynamic,
+        "dynamic_event_examined_window_count": examined_effect,
+        "effect_candidates_truncated_windows": truncated,
+        "pass_complete": index == total,
+        "sample_limit": sample_limit, "samples": samples,
+    }

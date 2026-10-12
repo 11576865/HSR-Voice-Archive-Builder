@@ -14,6 +14,7 @@ from fastapi.staticfiles import StaticFiles
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
 from .ass_artifact_evidence import verify_exported_ass, read_exported_ass_evidence
+from .ass_coverage_batches import read_exported_ass_coverage, inspect_next_exported_ass_batch
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -1705,6 +1706,60 @@ def api_human_subtitle_recovery_apply(
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
+
+
+
+@app.get("/api/subtitle-layout/exported-coverage")
+def api_subtitle_export_coverage():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        return {"ok": True, **read_exported_ass_coverage(output, config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/exported-coverage/start")
+async def api_subtitle_export_coverage_start(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Window-pass payload must be an object")
+        config = _active_config()
+        if data.get("expected_project_root") != config.root:
+            raise ValueError("Active project changed; refusing coverage for another project")
+        limit = data.get("sample_limit", 8)
+        cursor = data.get("expected_cursor", 0)
+        restart = data.get("restart", False)
+        if type(limit) is not int or not 2 <= limit <= 12:
+            raise ValueError("sample_limit must be an integer from 2 to 12")
+        if type(cursor) is not int or cursor < 0:
+            raise ValueError("expected_cursor must be a nonnegative integer")
+        if type(restart) is not bool:
+            raise ValueError("restart must be a boolean")
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is unavailable")
+        from .ass_artifact_evidence import _export_identity
+        _export_identity(output, config)
+
+        def run(cancel_event, report_progress):
+            return inspect_next_exported_ass_batch(
+                config, output, sample_limit=limit, expected_cursor=cursor,
+                restart=restart, cancel_event=cancel_event,
+                report_progress=report_progress,
+            )
+
+        job = create_job(
+            "ass-artifact-evidence", run, with_cancel=True, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id,
+                "scope": "bounded_sequential_window_pass"}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400
+        )
 
 
 @app.get("/api/subtitle-layout/exported-evidence")

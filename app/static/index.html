@@ -3571,7 +3571,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 <div class="layout-export-evidence" role="group" aria-label="已导出 ASS 的渲染证据">
                   <button type="button" class="secondary" id="exportAssEvidenceStartBtn">验证已导出 ASS（抽样）</button>
                   <button type="button" class="secondary" id="exportAssEvidenceCancelBtn" disabled>取消验证</button>
+                  <button type="button" class="secondary" id="exportAssCoverageStartBtn">继续覆盖检查（下一批）</button>
+                  <button type="button" class="secondary" id="exportAssCoverageRestartBtn">重新开始覆盖（清除旧进度）</button>
                   <div id="exportAssEvidenceStatus" role="status" aria-live="polite" class="small muted">未检查当前导出文件。验证将绑定 ASS、导出回执及当前样式策略；不代表全时段无越界。</div>
+                  <div id="exportAssCoverageStatus" role="status" aria-live="polite" class="small muted">覆盖检查尚未开始。每批最多检查 8 个真实时间点；完成全部字幕时窗的批次仍不代表逐帧验证。</div>
                 </div>
 
         <div class="preview-controls">
@@ -6870,7 +6873,7 @@ function syncExportedEvidenceProject(){
   if(key===exportedEvidenceProjectKey)return;
   exportedEvidenceProjectKey=key;
   resetExportedEvidenceUi();
-  if(key)loadExportedAssEvidence();
+  if(key){loadExportedAssEvidence();loadExportedAssCoverage();}
 }
 
 
@@ -6883,6 +6886,12 @@ function resetExportedEvidenceUi(){
   if(cancel)cancel.disabled=true;
   const status=document.getElementById('exportAssEvidenceStatus');
   if(status){status.textContent='项目或样式已切换，必须重新核对已导出 ASS 的证据身份。';status.className='small muted';}
+  exportedCoverageCursor=0;exportedCoverageState='unverified';
+  const coverage=document.getElementById('exportAssCoverageStatus');
+  if(coverage){coverage.textContent='项目或设置已变化，请重新读取覆盖检查状态。';coverage.className='small muted';}
+  for(const id of ['exportAssCoverageStartBtn','exportAssCoverageRestartBtn']){
+    const btn=document.getElementById(id);if(btn)btn.disabled=false;
+  }
 }
 
 async function loadExportedAssEvidence(){
@@ -6913,6 +6922,115 @@ async function loadExportedAssEvidence(){
   }catch(err){
     if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
     status.textContent='导出证据读取失败：'+shortError(err);status.className='small status-bad';
+  }
+}
+
+
+let exportedCoverageCursor=0;
+let exportedCoverageState='unverified';
+
+async function loadExportedAssCoverage(){
+  const key=layoutActiveProjectKey();
+  const generation=exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssCoverageStatus');
+  if(!key||!status)return;
+  const next=document.getElementById('exportAssCoverageStartBtn');
+  const restart=document.getElementById('exportAssCoverageRestartBtn');
+  try{
+    const response=await fetch('/api/subtitle-layout/exported-coverage',{
+      headers:headers(),cache:'no-store'
+    });
+    const data=await response.json();
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    if(!response.ok||!data.ok)throw new Error(data.error||'覆盖进度不可读取');
+    exportedCoverageState=data.state;
+    exportedCoverageCursor=Number(data.next_cursor||0);
+    if(data.verified&&data.coverage?.full_interval_verified===false){
+      const e=data.coverage;
+      const seen=Number(e.next_cursor||0),total=Number(e.unique_window_count||0);
+      const bad=Number(e.violation_count||0),missing=Number(e.no_visible_ink_count||0);
+      const effect=Number(e.dynamic_event_examined_window_count||0);
+      status.textContent='按时窗推进 '+seen+'/'+total+'（'+(total?100*seen/total:0).toFixed(1)+'%）；'
+        +'累计 '+e.batch_count+' 批、'+e.sample_count+' 帧；越界 '+bad+'，无可见像素 '+missing
+        +'；'+e.dynamic_window_count+' 个动态时窗中 '+effect+' 个已有事件时间点抽样。'
+        +(data.state==='window_pass_complete'?'已完成时窗检查遍历；':'')
+        +'其余帧与中间时刻未验证。';
+      status.className='small '+(bad?'status-bad':'status-warn');
+    }else{
+      status.textContent=data.state==='stale'
+        ?'覆盖进度已过期：'+(data.reason||'导出文件或样式发生变化')+'。需明确重新开始。'
+        :'尚未开始该导出 ASS 的分批覆盖检查。';
+      status.className='small '+(data.state==='stale'?'status-warn':'muted');
+    }
+    if(next)next.disabled=data.state==='stale'||data.state==='window_pass_complete'||!!exportedEvidenceJobId;
+    if(restart)restart.disabled=!!exportedEvidenceJobId;
+  }catch(err){
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    status.textContent='覆盖状态查询失败：'+shortError(err);
+    status.className='small status-bad';
+    if(next)next.disabled=true;
+  }
+}
+
+async function startExportedAssCoverage(restart=false){
+  const key=layoutActiveProjectKey();
+  const root=currentProject?.root||'';
+  if(!key||!root||exportedEvidenceJobId)return;
+  const generation=++exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssCoverageStatus');
+  const cancel=document.getElementById('exportAssEvidenceCancelBtn');
+  const evidence=document.getElementById('exportAssEvidenceStartBtn');
+  const next=document.getElementById('exportAssCoverageStartBtn');
+  const reset=document.getElementById('exportAssCoverageRestartBtn');
+  for(const btn of [next,reset,evidence])if(btn)btn.disabled=true;
+  try{
+    if(status){status.textContent=restart?'重新开始分批覆盖检查…':'启动下一批 ASS 时窗检查…';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/exported-coverage/start',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify({
+        expected_project_root:root,expected_cursor:restart?0:exportedCoverageCursor,
+        sample_limit:8,restart:!!restart
+      })
+    });
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'无法启动覆盖批次');
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    exportedEvidenceJobId=data.job;
+    if(cancel)cancel.disabled=false;
+    while(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()){
+      const jobResponse=await fetch('/api/jobs/'+encodeURIComponent(data.job),{
+        headers:headers(),cache:'no-store'
+      });
+      const result=await jobResponse.json();
+      if(!jobResponse.ok||!result.ok)throw new Error(result.error||'覆盖任务状态丢失');
+      if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+      const job=result.job;
+      if(['succeeded','failed','canceled','interrupted'].includes(job.state)){
+        exportedEvidenceJobId=null;
+        await loadExportedAssCoverage();
+        if(job.state!=='succeeded'&&status){
+          const prior=status.textContent;
+          status.textContent=(job.state==='canceled'?'本批已取消；':'本批未完成：'+shortError(job.error||job.message)+'；')
+            +'先前已提交的批次仍可恢复。'+prior;
+          status.className='small '+(job.state==='canceled'?'status-warn':'status-bad');
+        }
+        break;
+      }
+      if(status){status.textContent=(job.message||'正在检测')+'（'+job.progress_current+'/'+job.progress_total+' 帧）';status.className='small muted';}
+      await new Promise(resolve=>setTimeout(resolve,750));
+    }
+  }catch(err){
+    if(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()&&status){
+      status.textContent='覆盖批次启动或执行失败：'+shortError(err)+'。可重新读取进度。';
+      status.className='small status-bad';
+    }
+  }finally{
+    if(generation===exportedEvidenceGeneration){
+      exportedEvidenceJobId=null;
+      if(evidence)evidence.disabled=false;
+      if(cancel)cancel.disabled=true;
+      await loadExportedAssCoverage();
+    }
   }
 }
 
@@ -7400,6 +7518,7 @@ async function saveSubtitleLayoutSettings(){
     savedSubtitleSettings=submittedIdentity;
     markSubtitleSettingsDirty();
     if(typeof loadExportedAssEvidence==='function')loadExportedAssEvidence();
+    if(typeof loadExportedAssCoverage==='function')loadExportedAssCoverage();
     if(newerDraft){
       if(status){status.textContent='保存期间又调整了样式：之前提交的设置已保存，新试调值仍未保存。请再次保存后再生成 ASS。';status.className='small status-warn';}
       return false; // Do not export the older settings as though they were this draft.
@@ -9155,6 +9274,8 @@ document.getElementById('previewInkCheckBtn')?.addEventListener('click',inspectR
 document.getElementById('previewInkSpanBtn')?.addEventListener('click',inspectRenderedInkInterval);
 document.getElementById('exportAssEvidenceStartBtn')?.addEventListener('click',startExportedAssEvidence);
 document.getElementById('exportAssEvidenceCancelBtn')?.addEventListener('click',cancelExportedAssEvidence);
+document.getElementById('exportAssCoverageStartBtn')?.addEventListener('click',()=>startExportedAssCoverage(false));
+document.getElementById('exportAssCoverageRestartBtn')?.addEventListener('click',()=>startExportedAssCoverage(true));
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();
