@@ -2960,6 +2960,16 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #subtitleLayoutPreviewCard .layout-cue-audio[hidden],
 #subtitleLayoutPreviewCard .layout-cue-scrub[hidden],
 #subtitleLayoutPreviewCard #layoutCueTextConflict[hidden]{display:none!important}
+/* Two scoped studio projections; a single preview and project data authority. */
+.hsr-studio-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
+.hsr-studio-tabs button{flex:1;min-width:125px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-primary);color:var(--text);font-weight:650;cursor:pointer}
+.hsr-studio-tabs button[aria-pressed="true"]{border-color:var(--blue);background:var(--surface-secondary);box-shadow:inset 0 -2px var(--blue)}
+#subtitleLayoutPreviewCard[data-studio-mode="style"] [data-studio-scope="effects"],
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] [data-studio-scope="style"],
+#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel,
+#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutCueEditorPanel,
+#subtitleLayoutPreviewCard .layout-workflow-strip{display:none!important}
+@media(max-width:759px){.hsr-studio-tabs button{min-height:44px}}
 </style>
 </head>
 <body>
@@ -3333,10 +3343,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
     </section>
 
     <!-- Subtitle Layout Workbench -->
-    <section class="card" id="subtitleLayoutPreviewCard">
+    <section class="card" id="subtitleLayoutPreviewCard" data-studio-mode="style">
       <div class="topline">
         <div>
-          <div class="layout-workbench-kicker">SUBTITLE STYLE WORKBENCH</div><h2 style="margin-bottom:4px">字幕样式工作台</h2>
+          <div class="layout-workbench-kicker">SUBTITLE STYLE WORKBENCH</div><h2 id="hsrStudioTitle" style="margin-bottom:4px">字幕样式工作台</h2>
           <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
@@ -3541,7 +3551,11 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           </div>
         </div>
 
-        <div class="preview-actions">
+        <nav class="hsr-studio-tabs" aria-label="字幕制作工作台">
+<button type="button" id="studioStyleTab" aria-pressed="true">排版 · 字体与位置</button>
+<button type="button" id="studioEffectsTab" aria-pressed="false">特效 · 动画与同步</button>
+</nav>
+<div class="preview-actions">
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
@@ -3557,7 +3571,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
 
         <div class="preview-controls">
-          <details class="layout-inspector-section layout-section-primary" open>
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>文字与字体</span><small>Font & type</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3586,7 +3600,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-primary" open>
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>位置与安全区</span><small>Position</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3609,7 +3623,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-compact" open>
+          <details class="layout-inspector-section layout-section-compact" open data-studio-scope="style">
             <summary><span>预设</span><small>Presets</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3622,7 +3636,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-primary" open>
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>外观与可读性</span><small>Readability</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3653,7 +3667,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
             <summary><span>动效</span><small>Motion</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3690,7 +3704,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
             <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3719,7 +3733,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
             <summary><span>档案增强</span><small>Archive HUD</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3741,7 +3755,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
 
 
-        <details class="preview-advanced">
+        <details class="preview-advanced" data-studio-scope="style">
           <summary>画布与诊断</summary>
           <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
@@ -8219,6 +8233,24 @@ function renderCanvasSubtitleOverlay(data) {
     ctx.restore();
   });
 }
+
+// Separate workbench projections sharing a single authoritative project/style state.
+function setHsrStudioMode(mode){
+  const root=document.getElementById('subtitleLayoutPreviewCard');
+  if(!root)return;
+  const next=mode==='effects'?'effects':'style';
+  root.dataset.studioMode=next;
+  const heading=document.getElementById('hsrStudioTitle');
+  if(heading)heading.textContent=next==='effects'?'字幕特效工作台':'字幕样式工作台';
+  document.getElementById('studioStyleTab')?.setAttribute('aria-pressed',next==='style'?'true':'false');
+  document.getElementById('studioEffectsTab')?.setAttribute('aria-pressed',next==='effects'?'true':'false');
+  root.querySelectorAll('.layout-inspector-section[data-studio-scope]').forEach(section=>{
+    if(section.dataset.studioScope===next)section.open=true;
+  });
+  invalidateLibassPreview();
+}
+document.getElementById('studioStyleTab')?.addEventListener('click',()=>setHsrStudioMode('style'));
+document.getElementById('studioEffectsTab')?.addEventListener('click',()=>setHsrStudioMode('effects'));
 
 // Workbench event wiring
 for(const button of document.querySelectorAll('.font-browse-btn')){
