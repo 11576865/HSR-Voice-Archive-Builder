@@ -2959,7 +2959,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #subtitleLayoutPreviewCard .layout-cue-actions[hidden],
 #subtitleLayoutPreviewCard .layout-cue-audio[hidden],
 #subtitleLayoutPreviewCard .layout-cue-scrub[hidden],
-#subtitleLayoutPreviewCard #layoutCueTextConflict[hidden]{display:none!important}
+#subtitleLayoutPreviewCard #layoutCueTextConflict{display:none!important}\n#subtitleLayoutPreviewCard .layout-cue-actions[hidden]{display:none!important}
 /* Two scoped studio projections; a single preview and project data authority. */
 .hsr-studio-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
 .hsr-studio-tabs button{flex:1;min-width:125px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-primary);color:var(--text);font-weight:650;cursor:pointer}
@@ -3764,9 +3764,9 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         <details class="preview-advanced" data-studio-scope="style">
           <summary>画布与诊断</summary>
           <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea"> 安全区域</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文本包围盒</label>
           </div>
           <div class="preview-background-controls">
             <div>
