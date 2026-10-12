@@ -52,6 +52,19 @@ class HsrThreePassUiTests(unittest.TestCase):
         self.assertIn("clearVideoPreview()", html)
         self.assertIn("黑底无声", html)
 
+    def test_explicit_bilingual_style_does_not_apply_second_safe_margins(self):
+        from subtitle_layout.ass_writer import render_ass
+        from app.ass_preview import PreviewEntry
+        content = render_ass(
+            [PreviewEntry(english="HSR", chinese="HSR", display_end_seconds=2)],
+            config=SubtitleRenderConfig(margin_horizontal_percent=0.10, margin_vertical_percent=0.10),
+        )
+        for style in ("CHS", "Primary"):
+            line = next(row for row in content.splitlines() if row.startswith("Style: " + style + ","))
+            self.assertEqual(line.split(",")[-4:-1], ["0", "0", "0"])
+        hud = next(row for row in content.splitlines() if row.startswith("Style: Archive,"))
+        self.assertNotEqual(hud.split(",")[-4:-1], ["0", "0", "0"])
+
     def test_both_server_surfaces_offer_video_path(self):
         for file in ("app/server.py", "app/lite_server.py"):
             self.assertIn(
