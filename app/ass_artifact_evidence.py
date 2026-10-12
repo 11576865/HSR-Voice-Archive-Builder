@@ -125,7 +125,10 @@ def verify_exported_ass(
         shutil.copyfile(original, snap)
         if _sha256(snap) != identity["ass_sha256"]:
             raise RuntimeError("Exported ASS changed while acquiring the verification snapshot")
-        plan = plan_export_ass_samples(snap.read_text(encoding="utf-8-sig"), sample_limit)
+        plan = plan_export_ass_samples(
+            snap.read_text(encoding="utf-8-sig"), sample_limit,
+            cancel_event=cancel_event, deadline=deadline,
+        )
         safe = SafeArea(
             margin_left_percent=config.subtitle_margin_horizontal_percent,
             margin_right_percent=config.subtitle_margin_horizontal_percent,
@@ -196,6 +199,9 @@ def verify_exported_ass(
         "dynamic_window_count": plan["dynamic_window_count"],
         "targeted_dynamic_window_count": plan["targeted_dynamic_window_count"],
         "unexamined_dynamic_windows": plan["unexamined_dynamic_windows"],
+        "effect_sample_count": plan["effect_sample_count"],
+        "dynamic_effect_sampled_window_count": plan["dynamic_effect_sampled_window_count"],
+        "unexamined_dynamic_effect_windows": plan["unexamined_dynamic_effect_windows"],
         "effect_candidates_truncated_windows": plan["effect_candidates_truncated_windows"],
         "candidate_count": plan["candidate_count"],
         "candidate_count_scope": plan["candidate_count_scope"],

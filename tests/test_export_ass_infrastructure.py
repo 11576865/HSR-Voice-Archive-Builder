@@ -78,6 +78,8 @@ class ExportedAssInfraTests(unittest.TestCase):
         plan = plan_export_ass_samples(dynamic, sample_limit=8)
         self.assertEqual(plan["dynamic_window_count"], 2)
         self.assertEqual(plan["unexamined_dynamic_windows"], 0)
+        self.assertGreaterEqual(plan["dynamic_effect_sampled_window_count"], 1)
+        self.assertGreater(plan["effect_sample_count"], 0)
         self.assertGreater(plan["candidate_count"], plan["unique_window_count"])
         self.assertLessEqual(plan["sample_count"], 8)
         self.assertTrue(any("motion_transition" in sample["reasons"]
@@ -136,6 +138,19 @@ class ExportedAssInfraTests(unittest.TestCase):
                                       "0,0:00:08.00,0:00:05.50,Default")
         plan = plan_export_ass_samples(corrected)
         self.assertEqual(plan["dialogue_count"], 3)
+
+    def test_long_corpus_planning_is_cancelable_and_deadline_bounded(self):
+        import time
+        event = threading.Event()
+        event.set()
+        with self.assertRaisesRegex(InterruptedError, "planning canceled"):
+            plan_export_ass_samples(
+                ASS_FIXTURE, cancel_event=event,
+            )
+        with self.assertRaisesRegex(TimeoutError, "planning exceeded"):
+            plan_export_ass_samples(
+                ASS_FIXTURE, deadline=time.monotonic() - 1,
+            )
 
     def test_plan_invalid_inputs_fail_closed(self):
         with self.assertRaises(ValueError):

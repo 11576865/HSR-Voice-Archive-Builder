@@ -6900,7 +6900,8 @@ async function loadExportedAssEvidence(){
       const prefix=value.state==='sampled_violation'?'抽样发现越界':value.state==='sampled_no_violation'?'抽样未发现越界':'无足够可见像素';
       const dynamicTotal=Number(e.dynamic_window_count||0);
       const dynamicMissed=Number(e.unexamined_dynamic_windows||0);
-      const animated=dynamicTotal?'；动态字幕时窗 '+dynamicTotal+' 个，尚未针对性抽样 '+dynamicMissed+' 个':'';
+      const effectCovered=Number(e.dynamic_effect_sampled_window_count||0);
+      const animated=dynamicTotal?'；动态字幕时窗 '+dynamicTotal+' 个，已选中 '+(dynamicTotal-dynamicMissed)+' 个，动态事件实际抽样 '+effectCovered+' 个时窗':'';
       const truncated=Number(e.effect_candidates_truncated_windows||0)?'；'+e.effect_candidates_truncated_windows+' 个时窗的特效候选超出预算':'';
       const overlapping=(e.samples||[]).some(s=>Number(s.active_dialogue_count||0)>1);
       status.textContent=prefix+'；已核对 ASS + 回执 + 样式 SHA-256；检测 '+e.sample_count+' 帧，尚未针对性抽样 '+e.unexamined_unique_windows+' 个独立字幕时窗'+animated+truncated+'。'+(overlapping?'检测帧含重叠字幕；越界不能独立归因。':'')+'全时段未验证。';

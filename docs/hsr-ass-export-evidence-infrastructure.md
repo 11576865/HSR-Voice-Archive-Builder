@@ -42,3 +42,19 @@ The \`full_interval_verified=false\` contract is unchanged. Unrecognized or malf
 ## Evidence schema migration
 
 The previous midpoint-only verifier used evidence schema v1. Risk-aware exported animation sampling changes the meaning of coverage and the evidence metadata, so new reports use `schema_version=2` and `sampling_algorithm=exported-ass-events-v2`. Readers explicitly reject earlier v1 sidecars as stale rather than silently displaying old midpoint-only results as though animation events had been sampled. Re-run the opt-in exported-ASS inspection to migrate the evidence; the existing ASS/SRT exports themselves are unchanged.
+
+ 
+## Parser ownership, abort propagation, and coverage precision (2026-10-12)
+
+The parser's first pass preserves time-window identities, count and tag classification but **not** full per-Dialogue source text. A second pass collects exact override text only for selected dynamic time windows; both passes share the same declared Events Format grammar. The underlying corpus string remains in memory during planning, and all time windows still have compact metadata. The overlap counter uses sorted start/end arrays with half-open interval rules, rather than rechecking every raw Dialogue for each sampled frame.
+
+Cancellation and the global 120-second job deadline are now checked within long-corpus parsing at least once per 256 input lines in both passes. This is cooperative cancellation for parsing; expensive operations within one single line and Python sorting cannot be interrupted at every instruction.
+
+The evidence also distinguishes a dynamic window that happened to be selected at a midpoint (`targeted_dynamic_window_count`) from a dynamic window for which an actual effect candidate timestamp was sampled (`dynamic_effect_sampled_window_count`). `effect_sample_count` and `unexamined_dynamic_effect_windows` expose remaining risk; neither proves the full effect range is safe.
+
+ 
+## Large synthetic archive: bounded planner performance evidence (2026-10-12)
+
+A repeatable 12,000-window / 24,000-Dialogue **synthetic** corpus mixes duplicate time windows, dual-language layers, motion, fades, and Karaoke. `tests/test_ass_export_sampling_scale.py` measures plan-only elapsed seconds and Python `tracemalloc` allocation peak and writes a machine-readable JSON artifact during the CI libass job. Explicitly validates that skipped dynamic windows remain reported. Synthetic planner timing is environment-specific; it measures neither FFmpeg rendering cost nor real game voice corpus acceptance, and is not a throughput guarantee.
+
+The independently exercised real FFmpeg/libass move-from-outside-SafeArea fixture remains in `tests/test_export_ass_infrastructure.py`. Device memory, real large-corpus rendering latency and end-to-end mux/video verification remain pending field work. `full_interval_verified=false` remains unconditional.

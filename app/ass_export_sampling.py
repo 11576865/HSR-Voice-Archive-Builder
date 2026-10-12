@@ -7,6 +7,9 @@ from __future__ import annotations
 
 import math
 import re
+import threading
+import time
+from bisect import bisect_right
 from typing import Any
 
 MAX_ASS_DIALOGUES = 200000
@@ -59,12 +62,19 @@ def _distributed(items: list[int], count: int) -> list[int]:
             for i in range(count)]
 
 
-def _parse_windows(ass_text: str) -> tuple[list[dict[str, Any]], list[tuple[float, float]]]:
-    windows: dict[tuple[float, float], dict[str, Any]] = {}
-    raw_ranges: list[tuple[float, float]] = []
+def _dialogues(
+    ass_text: str, *, cancel_event: threading.Event | None = None,
+    deadline: float | None = None,
+):
+    """Parse ASS Dialogue fields from the real Events Format in either pass."""
     in_events = False
     fields: dict[str, int] | None = None
-    for line in ass_text.splitlines():
+    for row, line in enumerate(ass_text.splitlines()):
+        if row % 256 == 0:
+            if cancel_event is not None and cancel_event.is_set():
+                raise InterruptedError("Exported ASS planning canceled")
+            if deadline is not None and time.monotonic() >= deadline:
+                raise TimeoutError("Exported ASS planning exceeded its deadline")
         stripped = line.strip()
         if stripped.startswith("[") and stripped.endswith("]"):
             in_events = stripped.lower() == "[events]"
@@ -80,7 +90,6 @@ def _parse_windows(ass_text: str) -> tuple[list[dict[str, Any]], list[tuple[floa
             if len(names) != len(set(names)) or not {"start", "end", "text"}.issubset(names):
                 raise ValueError("Invalid ASS Events Format fields")
             if names[-1] != "text":
-                # ASS requires Text last so its commas can remain unescaped.
                 raise ValueError("ASS Events Text must be the final field")
             fields = {name: i for i, name in enumerate(names)}
             continue
@@ -94,19 +103,52 @@ def _parse_windows(ass_text: str) -> tuple[list[dict[str, Any]], list[tuple[floa
         start, end = _time(parts[fields["start"]]), _time(parts[fields["end"]])
         if end <= start:
             raise ValueError("Non-positive ASS dialogue duration")
-        raw_ranges.append((start, end))
-        if len(raw_ranges) > MAX_ASS_DIALOGUES:
+        yield start, end, parts[fields["text"]]
+
+
+def _parse_windows(
+    ass_text: str, *, cancel_event: threading.Event | None = None,
+    deadline: float | None = None,
+) -> tuple[list[dict[str, Any]], list[float], list[float]]:
+    """Keep compact window facts, not duplicate copies of all Dialogue text."""
+    windows: dict[tuple[float, float], dict[str, Any]] = {}
+    starts: list[float] = []
+    ends: list[float] = []
+    for start, end, text in _dialogues(
+        ass_text, cancel_event=cancel_event, deadline=deadline
+    ):
+        starts.append(start)
+        ends.append(end)
+        if len(starts) > MAX_ASS_DIALOGUES:
             raise ValueError("ASS subtitle cue count exceeds bounded evidence limit")
         key = (start, end)
         if key not in windows:
-            windows[key] = {"start": start, "end": end, "texts": [],
-                            "dynamic_tags": set()}
-        text = parts[fields["text"]]
-        windows[key]["texts"].append(text)
+            windows[key] = {"start": start, "end": end, "dynamic_tags": set()}
         windows[key]["dynamic_tags"].update(_reasons(text))
-    if not raw_ranges:
+    if not starts:
         raise ValueError("ASS has no dialogue events to verify")
-    return [windows[k] for k in sorted(windows)], raw_ranges
+    # Active count is start <= timestamp < end: one upper-bound lookup each,
+    # rather than rescanning every subtitle for each rendered frame.
+    starts.sort()
+    ends.sort()
+    return [windows[k] for k in sorted(windows)], starts, ends
+
+
+def _selected_dynamic_texts(
+    ass_text: str, selected: dict[tuple[float, float], int], *,
+    cancel_event: threading.Event | None = None, deadline: float | None = None,
+) -> dict[int, list[str]]:
+    """Second parse retains only actual texts for chosen dynamic windows."""
+    result: dict[int, list[str]] = {idx: [] for idx in selected.values()}
+    if not selected:
+        return result
+    for start, end, text in _dialogues(
+        ass_text, cancel_event=cancel_event, deadline=deadline
+    ):
+        index = selected.get((start, end))
+        if index is not None:
+            result[index].append(text)
+    return result
 
 
 def _effect_candidates(window: dict[str, Any]) -> tuple[dict[float, set[str]], bool]:
@@ -204,7 +246,11 @@ def _effect_candidates(window: dict[str, Any]) -> tuple[dict[float, set[str]], b
     return results, truncated
 
 
-def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, Any]:
+def plan_export_ass_samples(
+    ass_text: str, sample_limit: int = 8, *,
+    cancel_event: threading.Event | None = None,
+    deadline: float | None = None,
+) -> dict[str, Any]:
     """Spread limited frames over distinct cues and exported animation events.
 
     Candidate count comprises one midpoint per unique time window plus decoded
@@ -213,7 +259,9 @@ def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, A
     """
     if type(sample_limit) is not int or not 1 <= sample_limit <= MAX_EXPORT_SAMPLES:
         raise ValueError("ASS sample limit must be an integer from 1 to 12")
-    windows, raw_ranges = _parse_windows(ass_text)
+    windows, range_starts, range_ends = _parse_windows(
+        ass_text, cancel_event=cancel_event, deadline=deadline
+    )
     n = len(windows)
     dynamic = [i for i, w in enumerate(windows) if w["dynamic_tags"]]
     anchors = _distributed(list(range(n)), min(n, sample_limit) if not dynamic
@@ -239,6 +287,13 @@ def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, A
         stamp = round((w["start"] + w["end"]) / 2, 3)
         register(stamp, {"dialogue_midpoint"}, index)
 
+    dynamic_selected = {
+        (windows[i]["start"], windows[i]["end"]): i
+        for i in targeted if windows[i]["dynamic_tags"]
+    }
+    selected_texts = _selected_dynamic_texts(
+        ass_text, dynamic_selected, cancel_event=cancel_event, deadline=deadline
+    )
     effect_candidates: dict[float, set[str]] = {}
     effect_owners: dict[float, set[int]] = {}
     truncated_windows = 0
@@ -246,7 +301,8 @@ def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, A
         w = windows[index]
         if not w["dynamic_tags"]:
             continue
-        extra, truncated = _effect_candidates(w)
+        # The full corpus text is never copied into every stored window.
+        extra, truncated = _effect_candidates({**w, "texts": selected_texts[index]})
         truncated_windows += bool(truncated)
         for stamp, reasons in extra.items():
             effect_candidates.setdefault(stamp, set()).update(reasons)
@@ -299,7 +355,7 @@ def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, A
         selected_target_indices.update(target_indices)
         # A rendered FFmpeg frame composites ALL simultaneous Dialogue layers.
         # These are informational counts, never exclusive attribution.
-        active_count = sum(start <= stamp < end for start, end in raw_ranges)
+        active_count = bisect_right(range_starts, stamp) - bisect_right(range_ends, stamp)
         samples.append({
             "timestamp_seconds": stamp,
             "dialogue_start_seconds": min(windows[i]["start"] for i in target_indices),
@@ -310,13 +366,23 @@ def plan_export_ass_samples(ass_text: str, sample_limit: int = 8) -> dict[str, A
         })
     candidate_count = len(reasons_by_time)
     covered_dynamic = sum(i in selected_target_indices for i in dynamic)
+    # An event-midpoint visit is NOT proof that a motion/Karaoke transition
+    # for that window was sampled. Keep separate risk metrics.
+    effect_sampled_indices = {
+        i for stamp in selected for i in effect_owners.get(stamp, ())
+    }
+    effect_sample_count = sum(stamp in effect_candidates for stamp in selected)
+    effect_covered_dynamic = sum(i in effect_sampled_indices for i in dynamic)
     return {
-        "dialogue_count": len(raw_ranges),
+        "dialogue_count": len(range_starts),
         "unique_window_count": n,
         "unexamined_unique_windows": n - len(selected_target_indices),
         "dynamic_window_count": len(dynamic),
         "targeted_dynamic_window_count": covered_dynamic,
         "unexamined_dynamic_windows": len(dynamic) - covered_dynamic,
+        "effect_sample_count": effect_sample_count,
+        "dynamic_effect_sampled_window_count": effect_covered_dynamic,
+        "unexamined_dynamic_effect_windows": len(dynamic) - effect_covered_dynamic,
         "effect_candidate_window_count": sum(windows[i]["dynamic_tags"] != set() for i in targeted),
         "effect_candidates_truncated_windows": truncated_windows,
         "candidate_count": candidate_count,
