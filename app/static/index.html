@@ -2970,6 +2970,9 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutCueEditorPanel,
 #subtitleLayoutPreviewCard .layout-workflow-strip{display:none!important}
 @media(max-width:759px){.hsr-studio-tabs button{min-height:44px}}
+#subtitleLayoutPreviewCard #libassVideoPreview:not(.hidden){display:block!important}
+#subtitleLayoutPreviewCard #libassVideoPreview.hidden{display:none!important}
+#subtitleLayoutPreviewCard #previewVideoBtn[data-studio-scope="effects"]{white-space:normal}
 </style>
 </head>
 <body>
@@ -3402,7 +3405,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
           <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
           <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
-          <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
+          <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="真实 FFmpeg/libass 动态特效视频预览（黑底，无用户影片素材）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
+<img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
           <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
             <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
             <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
@@ -3559,7 +3563,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
-                    <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
+                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="渲染并播放当前效果的短 MP4；使用黑色背景，不是用户视频合成">播放动态特效</button>
+<button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
                     <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
                   </div>
                   <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
@@ -3569,6 +3574,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">动态预览通过 FFmpeg/libass 生成可播放的黑底 MP4（最长 8 秒、无音频）；非用户视频画面合成。</div>
 
         <div class="preview-controls">
           <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
@@ -6312,6 +6318,25 @@ let libassPreviewGeneration = 0;
 let geometryPreviewGeneration = 0;
 let libassPreviewController = null;
 let geometryPreviewController = null;
+let videoPreviewObjectUrl = null;
+let videoPreviewGeneration = 0;
+let videoPreviewController = null;
+
+function clearVideoPreview(){
+  videoPreviewGeneration++;
+  if(videoPreviewController){videoPreviewController.abort();videoPreviewController=null;}
+  const player=document.getElementById('libassVideoPreview');
+  if(player){
+    if(typeof player.pause==='function')player.pause();
+    player.classList.add('hidden');
+    player.removeAttribute('src');
+    if(typeof player.load==='function')player.load();
+  }
+  if(videoPreviewObjectUrl){URL.revokeObjectURL(videoPreviewObjectUrl);videoPreviewObjectUrl=null;}
+  const button=document.getElementById('previewVideoBtn');
+  if(button){button.disabled=false;button.setAttribute('aria-pressed','false');}
+}
+window.addEventListener('beforeunload',clearVideoPreview);
 
 function setPreviewEvidence(mode, detail = '') {
   const root=document.querySelector('.layout-preview-evidence');
@@ -6323,6 +6348,7 @@ function setPreviewEvidence(mode, detail = '') {
     geometry:['浏览器几何预览','显示排版求解器的布局与安全区；不是实际 ASS 字形渲染。','尚未进行真实渲染','几何求解 · 非真实渲染'],
     rendering:['实际 ASS 渲染中','正在请求 FFmpeg/libass；画布暂时显示浏览器几何结果。','正在验证','几何求解 · 渲染进行中'],
     libass:['FFmpeg/libass 实际渲染','当前可见帧由真实渲染路径根据本次试调值生成；尚不代表已保存或完成导出。','真实渲染帧','实际 ASS 渲染'],
+    video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时黑底视频；没有用户视频画面和音轨。','可播放 MP4 · 非正式导出','真实动态特效 · 黑底视频'],
     stale:['真实渲染结果已过期','参数、字幕样本或时间点变化；当前已退回浏览器几何预览。','请重新渲染','几何求解 · 结果已过期'],
     failed:['真实渲染失败','真实渲染未完成；画布只显示浏览器几何结果。','渲染未验证','几何求解 · 渲染失败']
   };
@@ -6334,9 +6360,11 @@ function setPreviewEvidence(mode, detail = '') {
   if(modeLabel)modeLabel.textContent=current[3];
   document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',mode==='libass'?'false':'true');
   document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
+  document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'?'true':'false');
 }
 
 function invalidateLibassPreview(){
+  clearVideoPreview();
   libassPreviewGeneration++;
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   const renderButton=document.getElementById('previewLibassBtn');
@@ -6354,6 +6382,7 @@ function invalidateLibassPreview(){
 }
 
 function showGeometryPreview(){
+  clearVideoPreview();
   libassPreviewGeneration++; // Explicit user choice wins over any in-flight render.
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   const renderButton=document.getElementById('previewLibassBtn');
@@ -6384,6 +6413,7 @@ function currentLibassPreviewIdentity(){
 }
 
 async function renderLibassPreview(){
+  clearVideoPreview();
   const button=document.getElementById('previewLibassBtn');
   const status=document.getElementById('libassPreviewStatus');
   const generation=++libassPreviewGeneration;
@@ -8252,6 +8282,75 @@ function setHsrStudioMode(mode){
 document.getElementById('studioStyleTab')?.addEventListener('click',()=>setHsrStudioMode('style'));
 document.getElementById('studioEffectsTab')?.addEventListener('click',()=>setHsrStudioMode('effects'));
 
+
+async function renderHsrEffectVideo(){
+  const button=document.getElementById('previewVideoBtn');
+  const status=document.getElementById('videoPreviewStatus');
+  clearVideoPreview();
+  // A new video request takes presentation ownership from stale still frames.
+  libassPreviewGeneration++;
+  if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
+  document.getElementById('libassPreviewImage')?.classList.add('hidden');
+  const payload=libassPreviewPayload();
+  const originalDuration=Number(payload.preview_duration_seconds||3);
+  payload.preview_duration_seconds=Math.min(8,Math.max(0.5,originalDuration));
+  if(originalDuration>8)payload.word_alignments=null; // do not misapply out-of-clip timing
+  const identity=currentLibassPreviewIdentity();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  videoPreviewController=controller;
+  const generation=videoPreviewGeneration;
+  const stillCurrent=()=>generation===videoPreviewGeneration&&identity===currentLibassPreviewIdentity()&&
+    document.getElementById('subtitleLayoutPreviewCard')?.dataset.studioMode==='effects';
+  try{
+    if(button)button.disabled=true;
+    setPreviewEvidence('rendering','正在渲染真实连续 MP4，单帧图片不作为本操作的成功结果。');
+    if(status)status.textContent='FFmpeg/libass 正在合成短时黑底动态字幕视频…';
+    const response=await fetch('/api/subtitle-layout/render-preview-video',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
+    });
+    if(!stillCurrent())return;
+    if(!response.ok){
+      let message='HTTP '+response.status;
+      try{const body=await response.json();message=body.error||message}catch(_){}
+      throw new Error(message);
+    }
+    const blob=await response.blob();
+    if(!stillCurrent())return;
+    if(!blob.size||blob.type!=='video/mp4')throw new Error('返回内容不是可播放的 MP4 视频');
+    const video=document.getElementById('libassVideoPreview');
+    if(!video)throw new Error('动态视频播放控件不存在');
+    videoPreviewObjectUrl=URL.createObjectURL(blob);
+    // loadeddata means the browser decoded a usable frame, not just HTTP success.
+    await new Promise((resolve,reject)=>{
+      let timer=null;
+      const cleanup=()=>{if(timer!==null)clearTimeout(timer);video.removeEventListener('loadeddata',ready);video.removeEventListener('error',failed);};
+      const ready=()=>{cleanup();resolve();};
+      const failed=()=>{cleanup();reject(new Error('浏览器不能解码当前 MP4'));};
+      video.addEventListener('loadeddata',ready);
+      video.addEventListener('error',failed);
+      timer=setTimeout(()=>{cleanup();reject(new Error('视频解码等待超时'))},15000);
+      video.src=videoPreviewObjectUrl;
+      if(typeof video.load==='function')video.load();
+    });
+    if(!stillCurrent())return;
+    video.classList.remove('hidden');
+    setPreviewEvidence('video');
+    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · 黑底无声 · 播放/暂停/拖动进度可检查运动。';
+    if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
+  }catch(error){
+    if(!stillCurrent()||error?.name==='AbortError')return;
+    clearVideoPreview();
+    setPreviewEvidence('failed','动态视频生成或解码失败；不以几何截图代替视频结果。');
+    if(status)status.textContent='动态视频预览失败：'+String(error.message||error);
+  }finally{
+    if(stillCurrent()){
+      videoPreviewController=null;
+      if(button)button.disabled=false;
+    }
+  }
+}
+
 // Workbench event wiring
 for(const button of document.querySelectorAll('.font-browse-btn')){
   button.addEventListener('click',()=>openFontBrowser(button.dataset.fontTarget||'prevChsFont'));
@@ -8552,6 +8651,7 @@ document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>apply
 
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
+document.getElementById('previewVideoBtn')?.addEventListener('click',renderHsrEffectVideo);
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();
