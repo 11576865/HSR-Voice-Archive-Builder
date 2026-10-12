@@ -12,7 +12,9 @@ from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
+from .ass_artifact_evidence import verify_exported_ass, read_exported_ass_evidence
+from .ass_coverage_batches import read_exported_ass_coverage, inspect_next_exported_ass_batch
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -21,7 +23,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, cancel_job
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -658,6 +660,9 @@ async def api_subtitle_layout_settings(request: Request):
             subtitle_min_central_gap=max(
                 0.0, min(200.0, float(data.get("min_central_gap", config.subtitle_min_central_gap)))
             ),
+            subtitle_primary_region_ratio=max(
+                0.20, min(0.80, float(data.get("primary_region_ratio", config.subtitle_primary_region_ratio)))
+            ),
             subtitle_enable_karaoke=as_bool("enable_karaoke", config.subtitle_enable_karaoke),
             subtitle_karaoke_mode=(str(data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").lower() if str(data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").lower() in {"k", "kf", "clip"} else "k"),
             subtitle_enable_translucent_card=as_bool(
@@ -736,6 +741,7 @@ async def api_subtitle_layout_preview(request: Request):
             margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.03),
             margin_top_percent=float(data.get("margin_top_percent") if data.get("margin_top_percent") is not None else 0.05),
             min_central_gap=float(data.get("min_central_gap") if data.get("min_central_gap") is not None else 20.0),
+            primary_region_ratio=float(data.get("primary_region_ratio") if data.get("primary_region_ratio") is not None else 0.60),
             chs_font=str(data.get("chs_font") or "汉仪旗黑"),
             primary_font=str(data.get("primary_font") or "Noto Sans"),
         )
@@ -766,7 +772,7 @@ async def api_subtitle_layout_render_preview(request: Request):
             config=config,
             word_alignments=word_alignments,
             duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
-            timestamp=float(data.get("preview_timestamp") or 1.0),
+            timestamp=float(data.get("preview_timestamp") if data.get("preview_timestamp") is not None else 1.0),
         )
         return Response(
             content=png,
@@ -779,6 +785,30 @@ async def api_subtitle_layout_render_preview(request: Request):
             status_code=400,
         )
 
+
+
+@app.post("/api/subtitle-layout/inspect-rendered-interval")
+async def api_subtitle_layout_inspect_rendered_interval(request: Request):
+    try:
+        from starlette.concurrency import run_in_threadpool
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Rendered interval inspection payload must be an object")
+        alignments = data.get("word_alignments")
+        result = await run_in_threadpool(
+            inspect_rendered_ink_interval,
+            english_text=str(data.get("english_text") or ""),
+            chinese_text=str(data.get("chinese_text") or ""),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            config=preview_config_from_payload(data),
+            word_alignments=alignments if isinstance(alignments, list) else None,
+            duration_seconds=float(data.get("preview_duration_seconds") if data.get("preview_duration_seconds") is not None else 3.0),
+            sample_limit=data.get("sample_limit", 8),
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 @app.get("/api/status")
 def api_status():
@@ -1677,6 +1707,116 @@ def api_human_subtitle_recovery_apply(
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
+
+
+@app.get("/api/subtitle-layout/exported-coverage")
+def api_subtitle_export_coverage():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        return {"ok": True, **read_exported_ass_coverage(output, config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/exported-coverage/start")
+async def api_subtitle_export_coverage_start(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Window-pass payload must be an object")
+        config = _active_config()
+        if data.get("expected_project_root") != config.root:
+            raise ValueError("Active project changed; refusing coverage for another project")
+        limit = data.get("sample_limit", 8)
+        cursor = data.get("expected_cursor", 0)
+        restart = data.get("restart", False)
+        if type(limit) is not int or not 2 <= limit <= 12:
+            raise ValueError("sample_limit must be an integer from 2 to 12")
+        if type(cursor) is not int or cursor < 0:
+            raise ValueError("expected_cursor must be a nonnegative integer")
+        if type(restart) is not bool:
+            raise ValueError("restart must be a boolean")
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is unavailable")
+        from .ass_artifact_evidence import _export_identity
+        _export_identity(output, config)
+
+        def run(cancel_event, report_progress):
+            return inspect_next_exported_ass_batch(
+                config, output, sample_limit=limit, expected_cursor=cursor,
+                restart=restart, cancel_event=cancel_event,
+                report_progress=report_progress,
+            )
+
+        job = create_job(
+            "ass-artifact-evidence", run, with_cancel=True, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id,
+                "scope": "bounded_sequential_window_pass"}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400
+        )
+
+
+@app.get("/api/subtitle-layout/exported-evidence")
+def api_subtitle_export_evidence():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        return {"ok": True, **read_exported_ass_evidence(output, config)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/exported-evidence/start")
+async def api_subtitle_export_evidence_start(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("ASS evidence payload must be a JSON object")
+        config = _active_config()
+        if not data.get("expected_project_root") or data["expected_project_root"] != config.root:
+            raise ValueError("Active project changed; refusing to verify another project's ASS")
+        limit = data.get("sample_limit", 8)
+        if type(limit) is not int or not 1 <= limit <= 12:
+            raise ValueError("sample_limit must be an integer between 1 and 12")
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is not configured")
+        from .ass_artifact_evidence import _export_identity
+        _export_identity(output, config)
+
+        def verify(cancel_event, report_progress):
+            return verify_exported_ass(
+                config, output, cancel_event=cancel_event,
+                report_progress=report_progress, sample_limit=limit,
+            )
+
+        job = create_job(
+            "ass-artifact-evidence", verify, with_cancel=True, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id, "scope": "bounded_exported_ass_samples"}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/exported-evidence/cancel")
+async def api_subtitle_export_evidence_cancel(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict) or not str(data.get("job") or ""):
+            raise ValueError("Evidence job id is required")
+        config = _active_config()
+        return {"ok": True, "job": cancel_job(str(data["job"]), project_root=config.root)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.get("/api/jobs")
 def api_jobs():
     return {"ok": True, "jobs": recent_jobs(20)}
@@ -1801,3 +1941,29 @@ def legacy_build(
         return JSONResponse({"ok": True, "report": report})
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/inspect-rendered-ink")
+async def api_subtitle_layout_inspect_rendered_ink(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Rendered ink inspection payload must be an object")
+        alignments = data.get("word_alignments")
+        result = inspect_rendered_ink_frame(
+            english_text=str(data.get("english_text") or ""),
+            chinese_text=str(data.get("chinese_text") or ""),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            config=preview_config_from_payload(data),
+            word_alignments=alignments if isinstance(alignments, list) else None,
+            duration_seconds=float(data.get("preview_duration_seconds") if data.get("preview_duration_seconds") is not None else 3.0),
+            timestamp=float(data.get("preview_timestamp") if data.get("preview_timestamp") is not None else 1.0),
+        )
+        return JSONResponse(result)
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
+

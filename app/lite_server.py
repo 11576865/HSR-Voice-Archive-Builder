@@ -14,7 +14,9 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, inspect_rendered_ink_frame, inspect_rendered_ink_interval
+from .ass_artifact_evidence import verify_exported_ass, read_exported_ass_evidence
+from .ass_coverage_batches import read_exported_ass_coverage, inspect_next_exported_ass_batch
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -23,7 +25,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, cancel_job
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -308,6 +310,16 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/subtitle-layout/exported-coverage":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            self._json({"ok": True, **read_exported_ass_coverage(output, config)})
+            return
+        if path == "/api/subtitle-layout/exported-evidence":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            self._json({"ok": True, **read_exported_ass_evidence(output, config)})
+            return
         if path == "/api/subtitle-layout/fonts":
             query = parse_qs(urlsplit(self.path).query)
             q = (query.get("q") or [""])[-1]
@@ -544,6 +556,64 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/subtitle-layout/exported-coverage/start":
+            config = _active_config()
+            if data.get("expected_project_root") != config.root:
+                raise ValueError("Active project changed; refusing coverage for another project")
+            raw_limit = data.get("sample_limit", "8")
+            raw_cursor = data.get("expected_cursor", "0")
+            raw_restart = data.get("restart", "false")
+            if not raw_limit.isdigit() or not 2 <= int(raw_limit) <= 12:
+                raise ValueError("sample_limit must be an integer from 2 to 12")
+            if not raw_cursor.isdigit():
+                raise ValueError("expected_cursor must be a nonnegative integer")
+            if raw_restart not in {"true", "false"}:
+                raise ValueError("restart must be true or false")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is unavailable")
+            from .ass_artifact_evidence import _export_identity
+            _export_identity(output, config)
+            def run(cancel_event, report_progress):
+                return inspect_next_exported_ass_batch(
+                    config, output, sample_limit=int(raw_limit),
+                    expected_cursor=int(raw_cursor), restart=(raw_restart == "true"),
+                    cancel_event=cancel_event, report_progress=report_progress,
+                )
+            job = create_job(
+                "ass-artifact-evidence", run, with_cancel=True, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id,
+                        "scope": "bounded_sequential_window_pass"})
+            return
+        if path == "/api/subtitle-layout/exported-evidence/start":
+            config = _active_config()
+            if not data.get("expected_project_root") or data["expected_project_root"] != config.root:
+                raise ValueError("Active project changed; refusing to verify another project's ASS")
+            raw_limit = data.get("sample_limit", "8")
+            if not raw_limit.isdigit() or not 1 <= int(raw_limit) <= 12:
+                raise ValueError("sample_limit must be an integer between 1 and 12")
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Output directory is not configured")
+            from .ass_artifact_evidence import _export_identity
+            _export_identity(output, config)
+            def run(cancel_event, report_progress):
+                return verify_exported_ass(
+                    config, output, cancel_event=cancel_event,
+                    report_progress=report_progress, sample_limit=int(raw_limit),
+                )
+            job = create_job(
+                "ass-artifact-evidence", run, with_cancel=True, with_progress=True,
+                project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id, "scope": "bounded_exported_ass_samples"})
+            return
+        if path == "/api/subtitle-layout/exported-evidence/cancel":
+            config = _active_config()
+            self._json({"ok": True, "job": cancel_job(data.get("job", ""), project_root=config.root)})
+            return
         if path.startswith("/api/project/") and path.endswith("/archive/verify-sources"):
             config = _active_config()
             assert_project_idle(config.root)
@@ -624,6 +694,9 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_min_central_gap=max(
                     0.0, min(200.0, _float(data.get("min_central_gap"), config.subtitle_min_central_gap))
                 ),
+                subtitle_primary_region_ratio=max(
+                    0.20, min(0.80, _float(data.get("primary_region_ratio"), config.subtitle_primary_region_ratio))
+                ),
                 subtitle_enable_karaoke=_bool(data.get("enable_karaoke", str(config.subtitle_enable_karaoke))),
                 subtitle_karaoke_mode=((data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() if (data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() in {"k", "kf", "clip"} else "k"),
                 subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
@@ -657,6 +730,7 @@ class Handler(BaseHTTPRequestHandler):
             margin_left_percent = _float(data.get("margin_left_percent"), 0.03)
             margin_top_percent = _float(data.get("margin_top_percent"), 0.05)
             min_central_gap = _float(data.get("min_central_gap"), 20.0)
+            primary_region_ratio = _float(data.get("primary_region_ratio"), 0.60)
 
             result = preview_subtitle_layout(
                 english_text=english_text,
@@ -668,6 +742,7 @@ class Handler(BaseHTTPRequestHandler):
                 margin_left_percent=margin_left_percent,
                 margin_top_percent=margin_top_percent,
                 min_central_gap=min_central_gap,
+                primary_region_ratio=primary_region_ratio,
                 chs_font=data.get("chs_font") or "汉仪旗黑",
                 primary_font=data.get("primary_font") or "Noto Sans",
             )
@@ -701,6 +776,53 @@ class Handler(BaseHTTPRequestHandler):
                 "image/png",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
             )
+            return
+
+        if path == "/api/subtitle-layout/inspect-rendered-ink":
+            config = preview_config_from_payload(data)
+            word_alignments = None
+            raw = data.get("word_alignments", "")
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        word_alignments = parsed
+                except (TypeError, ValueError):
+                    word_alignments = None
+            result = inspect_rendered_ink_frame(
+                english_text=data.get("english_text", ""),
+                chinese_text=data.get("chinese_text", ""),
+                source_language=data.get("source_language", "en") or "en",
+                target_language=data.get("target_language", "zh-CN") or "zh-CN",
+                config=config, word_alignments=word_alignments,
+                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                timestamp=_float(data.get("preview_timestamp"), 1.0),
+            )
+            self._json(result)
+            return
+
+
+        if path == "/api/subtitle-layout/inspect-rendered-interval":
+            raw = data.get("word_alignments", "")
+            word_alignments = None
+            if raw:
+                try:
+                    parsed = json.loads(raw)
+                    if isinstance(parsed, list):
+                        word_alignments = parsed
+                except (TypeError, ValueError):
+                    word_alignments = None
+            result = inspect_rendered_ink_interval(
+                english_text=data.get("english_text", ""),
+                chinese_text=data.get("chinese_text", ""),
+                source_language=data.get("source_language", "en") or "en",
+                target_language=data.get("target_language", "zh-CN") or "zh-CN",
+                config=preview_config_from_payload(data),
+                word_alignments=word_alignments,
+                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                sample_limit=_int(data.get("sample_limit"), 8),
+            )
+            self._json(result)
             return
 
         if path == "/api/update/rollback":

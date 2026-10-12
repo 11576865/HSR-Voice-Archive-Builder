@@ -45,16 +45,18 @@ def solve_subtitle_layout(
     min_central_gap: float = 20.0,
     chs_font_path: str | None = None,
     primary_font_path: str | None = None,
+    primary_region_ratio: float = 0.60,
 ) -> SolvedLayout:
     same_chinese = source_language == target_language == "zh-CN"
     center_x = safe_area.canvas_width // 2
 
     # Central boundary coordinates.
     # After reserving the central gap, allocate the remaining safe-area height
-    # 60% to the primary/source subtitle region above the gap and 40% to the
-    # Chinese target subtitle region below it.
+    # This is a configurable allocation of the safe-area height after the gap,
+    # not another safe margin or a ratio of the full video frame.
     available_height = max(0.0, safe_area.max_printable_height - min_central_gap)
-    primary_region_height = available_height * 0.60
+    primary_region_ratio = max(0.20, min(0.80, float(primary_region_ratio)))
+    primary_region_height = available_height * primary_region_ratio
     y_center_top = round(safe_area.y_min + primary_region_height)
     y_center_bottom = round(y_center_top + min_central_gap)
 
@@ -126,7 +128,8 @@ def solve_subtitle_layout(
         )
 
         has_collision, failure_condition = check_bilingual_collision_with_reason(
-            chs_block, pri_block, safe_area=safe_area, min_central_gap=min_central_gap
+            chs_block, pri_block, safe_area=safe_area, min_central_gap=min_central_gap,
+            chs_font_path=chs_font_path, primary_font_path=primary_font_path,
         )
 
         pri_positions: list[SubtitleLinePos] = [

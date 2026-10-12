@@ -3497,7 +3497,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </section>
             <div class="layout-cue-scrub">
               <label for="layoutCueScrubber">片段内预览位置 <output id="layoutCueScrubberTime">—</output></label>
-              <input type="range" id="layoutCueScrubber" min="5" max="95" step="5" value="50" disabled aria-describedby="layoutCueTimeNote" />
+              <input type="range" id="layoutCueScrubber" min="0" max="100" step="1" value="50" disabled aria-describedby="layoutCueTimeNote" />
               <p id="layoutCueTimeNote">滑块控制当前片段的 ASS 效果预览时间，不保存时间修改；上方时间输入另行保存至字幕显示时间覆写层。</p>
             </div>
             <div class="layout-cue-grid">
@@ -3555,6 +3555,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
+                    <button type="button" class="secondary" id="previewInkCheckBtn" title="按需在当前时间点用真实 FFmpeg/libass 的黑白背景差分检查可见像素，不代表整段字幕均安全">检测当前帧边界</button>
+                    <button type="button" class="secondary" id="previewInkSpanBtn" title="抽取字幕起止、词级变化、淡入淡出和中间时间点；只对抽样帧提供证据">检测动态区间（抽样）</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
                     <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
                   </div>
@@ -3565,6 +3567,15 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+                <div id="previewInkCheckStatus" role="status" aria-live="polite" class="small muted">真实像素边界尚未检查。仅按需检查当前时间点，不能替代完整动态时间轴验收。</div>
+                <div class="layout-export-evidence" role="group" aria-label="已导出 ASS 的渲染证据">
+                  <button type="button" class="secondary" id="exportAssEvidenceStartBtn">验证已导出 ASS（抽样）</button>
+                  <button type="button" class="secondary" id="exportAssEvidenceCancelBtn" disabled>取消验证</button>
+                  <button type="button" class="secondary" id="exportAssCoverageStartBtn">继续覆盖检查（下一批）</button>
+                  <button type="button" class="secondary" id="exportAssCoverageRestartBtn">重新开始覆盖（清除旧进度）</button>
+                  <div id="exportAssEvidenceStatus" role="status" aria-live="polite" class="small muted">未检查当前导出文件。验证将绑定 ASS、导出回执及当前样式策略；不代表全时段无越界。</div>
+                  <div id="exportAssCoverageStatus" role="status" aria-live="polite" class="small muted">覆盖检查尚未开始。每批最多检查 8 个真实时间点；完成全部字幕时窗的批次仍不代表逐帧验证。</div>
+                </div>
 
         <div class="preview-controls">
           <details class="layout-inspector-section layout-section-primary" open>
@@ -3600,6 +3611,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <summary><span>位置与安全区</span><small>Position</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
+            <div style="display:flex;justify-content:space-between;margin-top:8px">
+              <label for="prevPrimaryRatio" style="margin:0">原文 / 译文空间分配</label>
+              <span id="prevPrimaryRatioVal" class="small muted">60% / 40%</span>
+            </div>
+            <input type="range" id="prevPrimaryRatio" min="20" max="80" value="60" step="1" aria-describedby="prevPrimaryRatioHint">
+            <div id="prevPrimaryRatioHint" class="small muted inspector-help">默认 60/40，可调整；分配的是安全区内扣除中央间隔后的空间，不是两组字体的缩放比例。</div>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevCentralGap" style="margin:0">中央间隔</label>
               <span id="prevCentralGapVal" class="small muted">20 px</span>
@@ -3715,7 +3732,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <label for="prevKaraokePreviewTime" style="margin:0">实际预览时间点</label>
               <span id="prevKaraokePreviewTimeVal" class="small muted">50%</span>
             </div>
-            <input type="range" id="prevKaraokePreviewTime" min="5" max="95" value="50" step="5">
+            <input type="range" id="prevKaraokePreviewTime" min="0" max="100" value="50" step="1">
+            <p class="small muted">拖动定位时间，松手后生成对应时刻的 FFmpeg/libass 真实帧。这不是连续视频播放。</p>
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
@@ -3755,9 +3773,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <summary>画布与诊断</summary>
           <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea" checked> 安全区域</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap" checked> 中央间隔</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox" checked> 文本包围盒</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔（布局辅助）</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文字布局估算框（非实际字形边界）</label>
           </div>
+          <p class="small muted">只存在一个输出安全区。布局框仅用于辅助诊断，不另施加安全边距；字形、描边、阴影与动态特效仍需真实 ASS 渲染确认。</p>
           <div class="preview-background-controls">
             <div>
               <label for="previewBackgroundMode">工作台背景</label>
@@ -4737,6 +4756,7 @@ function fillProject(p){
   const archiveProjectChanged=nextOwner!==archiveAuditOwner;
   archiveAuditOwner=nextOwner;
   currentProject=p;
+  if(archiveProjectChanged)syncExportedEvidenceProject();
   for(const button of workspaceButtons){
     if(['review','export','update'].includes(button.dataset.workspaceTarget))button.disabled=!p;
   }
@@ -6683,6 +6703,8 @@ let savedSubtitleSettings = null;
 let subtitleSettingsSavePending = false;
 let libassPreviewObjectUrl = null;
 let libassPreviewGeneration = 0;
+let renderedInkGeneration = 0;
+let renderedInkController = null;
 let geometryPreviewGeneration = 0;
 let libassPreviewController = null;
 let geometryPreviewController = null;
@@ -6711,6 +6733,7 @@ function setPreviewEvidence(mode, detail = '') {
 }
 
 function invalidateLibassPreview(){
+  invalidateRenderedInkCheck();
   libassPreviewGeneration++;
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   const renderButton=document.getElementById('previewLibassBtn');
@@ -6739,7 +6762,7 @@ function showGeometryPreview(){
 }
 
 function libassPreviewPayload(){
-  const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
+  const previewPercent=Math.max(0,Math.min(100,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
   const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
   return {
     ...subtitleSettingsPayload(),
@@ -6749,7 +6772,7 @@ function libassPreviewPayload(){
     target_language:currentProject?.config?.target_language||'zh-CN',
     word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
     preview_duration_seconds:previewDuration,
-    preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
+    preview_timestamp:Math.max(0,Math.min(previewDuration-0.01,previewDuration*previewPercent))
   };
 }
 
@@ -6835,6 +6858,362 @@ async function renderLibassPreview(){
   }finally{
     if(libassPreviewController===controller)libassPreviewController=null;
     if(button&&generation===libassPreviewGeneration)button.disabled=false;
+  }
+}
+
+
+
+
+let exportedEvidenceJobId=null;
+let exportedEvidenceGeneration=0;
+let exportedEvidenceStarting=false;
+let exportedEvidenceProjectKey=null;
+
+function syncExportedEvidenceProject(){
+  const key=layoutActiveProjectKey();
+  if(key===exportedEvidenceProjectKey)return;
+  exportedEvidenceProjectKey=key;
+  resetExportedEvidenceUi();
+  if(key){loadExportedAssEvidence();loadExportedAssCoverage();}
+}
+
+
+function resetExportedEvidenceUi(){
+  exportedEvidenceGeneration++;
+  exportedEvidenceJobId=null;
+  exportedEvidenceStarting=false;
+  const start=document.getElementById('exportAssEvidenceStartBtn');
+  const cancel=document.getElementById('exportAssEvidenceCancelBtn');
+  if(start)start.disabled=false;
+  if(cancel)cancel.disabled=true;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  if(status){status.textContent='项目或样式已切换，必须重新核对已导出 ASS 的证据身份。';status.className='small muted';}
+  exportedCoverageCursor=0;exportedCoverageState='unverified';
+  const coverage=document.getElementById('exportAssCoverageStatus');
+  if(coverage){coverage.textContent='项目或设置已变化，请重新读取覆盖检查状态。';coverage.className='small muted';}
+  for(const id of ['exportAssCoverageStartBtn','exportAssCoverageRestartBtn']){
+    const btn=document.getElementById(id);if(btn)btn.disabled=false;
+  }
+}
+
+async function loadExportedAssEvidence(){
+  const key=layoutActiveProjectKey();
+  const generation=exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  if(!key||!status)return;
+  try{
+    const response=await fetch('/api/subtitle-layout/exported-evidence',{headers:headers(),cache:'no-store'});
+    const value=await response.json();
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    if(!response.ok||!value.ok)throw new Error(value.error||'读取已导出 ASS 证据失败');
+    if(value.verified&&value.evidence?.full_interval_verified===false){
+      const e=value.evidence;
+      const prefix=value.state==='sampled_violation'?'抽样发现越界':value.state==='sampled_no_violation'?'抽样未发现越界':'无足够可见像素';
+      const dynamicTotal=Number(e.dynamic_window_count||0);
+      const dynamicMissed=Number(e.unexamined_dynamic_windows||0);
+      const effectCovered=Number(e.dynamic_effect_sampled_window_count||0);
+      const animated=dynamicTotal?'；动态字幕时窗 '+dynamicTotal+' 个，已选中 '+(dynamicTotal-dynamicMissed)+' 个，动态事件实际抽样 '+effectCovered+' 个时窗':'';
+      const truncated=Number(e.effect_candidates_truncated_windows||0)?'；'+e.effect_candidates_truncated_windows+' 个时窗的特效候选超出预算':'';
+      const overlapping=(e.samples||[]).some(s=>Number(s.active_dialogue_count||0)>1);
+      status.textContent=prefix+'；已核对 ASS + 回执 + 样式 SHA-256；检测 '+e.sample_count+' 帧，尚未针对性抽样 '+e.unexamined_unique_windows+' 个独立字幕时窗'+animated+truncated+'。'+(overlapping?'检测帧含重叠字幕；越界不能独立归因。':'')+'全时段未验证。';
+      status.className='small '+(value.state==='sampled_violation'?'status-bad':'status-warn');
+    }else{
+      status.textContent=value.state==='stale'?'已导出 ASS 证据过期：'+(value.reason||'文件或样式已变化'):'当前项目尚无经过确认的导出 ASS 抽样证据。';
+      status.className='small muted';
+    }
+  }catch(err){
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    status.textContent='导出证据读取失败：'+shortError(err);status.className='small status-bad';
+  }
+}
+
+
+let exportedCoverageCursor=0;
+let exportedCoverageState='unverified';
+
+async function loadExportedAssCoverage(){
+  const key=layoutActiveProjectKey();
+  const generation=exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssCoverageStatus');
+  if(!key||!status)return;
+  const next=document.getElementById('exportAssCoverageStartBtn');
+  const restart=document.getElementById('exportAssCoverageRestartBtn');
+  try{
+    const response=await fetch('/api/subtitle-layout/exported-coverage',{
+      headers:headers(),cache:'no-store'
+    });
+    const data=await response.json();
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    if(!response.ok||!data.ok)throw new Error(data.error||'覆盖进度不可读取');
+    exportedCoverageState=data.state;
+    exportedCoverageCursor=Number(data.next_cursor||0);
+    if(data.verified&&data.coverage?.full_interval_verified===false){
+      const e=data.coverage;
+      const seen=Number(e.next_cursor||0),total=Number(e.unique_window_count||0);
+      const bad=Number(e.violation_count||0),missing=Number(e.no_visible_ink_count||0);
+      const effect=Number(e.dynamic_event_examined_window_count||0);
+      status.textContent='按时窗推进 '+seen+'/'+total+'（'+(total?100*seen/total:0).toFixed(1)+'%）；'
+        +'累计 '+e.batch_count+' 批、'+e.sample_count+' 帧；越界 '+bad+'，无可见像素 '+missing
+        +'；'+e.dynamic_window_count+' 个动态时窗中 '+effect+' 个已有事件时间点抽样。'
+        +(data.state==='window_pass_complete'?'已完成时窗检查遍历；':'')
+        +'其余帧与中间时刻未验证。';
+      status.className='small '+(bad?'status-bad':'status-warn');
+    }else{
+      status.textContent=data.state==='stale'
+        ?'覆盖进度已过期：'+(data.reason||'导出文件或样式发生变化')+'。需明确重新开始。'
+        :'尚未开始该导出 ASS 的分批覆盖检查。';
+      status.className='small '+(data.state==='stale'?'status-warn':'muted');
+    }
+    if(next)next.disabled=data.state==='stale'||data.state==='window_pass_complete'||!!exportedEvidenceJobId;
+    if(restart)restart.disabled=!!exportedEvidenceJobId;
+  }catch(err){
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    status.textContent='覆盖状态查询失败：'+shortError(err);
+    status.className='small status-bad';
+    if(next)next.disabled=true;
+  }
+}
+
+async function startExportedAssCoverage(restart=false){
+  const key=layoutActiveProjectKey();
+  const root=currentProject?.root||'';
+  if(!key||!root||exportedEvidenceJobId||exportedEvidenceStarting)return;
+  exportedEvidenceStarting=true;
+  const generation=++exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssCoverageStatus');
+  const cancel=document.getElementById('exportAssEvidenceCancelBtn');
+  const evidence=document.getElementById('exportAssEvidenceStartBtn');
+  const next=document.getElementById('exportAssCoverageStartBtn');
+  const reset=document.getElementById('exportAssCoverageRestartBtn');
+  for(const btn of [next,reset,evidence])if(btn)btn.disabled=true;
+  try{
+    if(status){status.textContent=restart?'重新开始分批覆盖检查…':'启动下一批 ASS 时窗检查…';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/exported-coverage/start',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify({
+        expected_project_root:root,expected_cursor:restart?0:exportedCoverageCursor,
+        sample_limit:8,restart:!!restart
+      })
+    });
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'无法启动覆盖批次');
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    exportedEvidenceJobId=data.job;
+    if(cancel)cancel.disabled=false;
+    while(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()){
+      const jobResponse=await fetch('/api/jobs/'+encodeURIComponent(data.job),{
+        headers:headers(),cache:'no-store'
+      });
+      const result=await jobResponse.json();
+      if(!jobResponse.ok||!result.ok)throw new Error(result.error||'覆盖任务状态丢失');
+      if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+      const job=result.job;
+      if(['succeeded','failed','canceled','interrupted'].includes(job.state)){
+        exportedEvidenceJobId=null;
+        await loadExportedAssCoverage();
+        if(job.state!=='succeeded'&&status){
+          const prior=status.textContent;
+          status.textContent=(job.state==='canceled'?'本批已取消；':'本批未完成：'+shortError(job.error||job.message)+'；')
+            +'先前已提交的批次仍可恢复。'+prior;
+          status.className='small '+(job.state==='canceled'?'status-warn':'status-bad');
+        }
+        break;
+      }
+      if(status){status.textContent=(job.message||'正在检测')+'（'+job.progress_current+'/'+job.progress_total+' 帧）';status.className='small muted';}
+      await new Promise(resolve=>setTimeout(resolve,750));
+    }
+  }catch(err){
+    if(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()&&status){
+      status.textContent='覆盖批次启动或执行失败：'+shortError(err)+'。可重新读取进度。';
+      status.className='small status-bad';
+    }
+  }finally{
+    if(generation===exportedEvidenceGeneration){
+      exportedEvidenceJobId=null;
+      exportedEvidenceStarting=false;
+      if(evidence)evidence.disabled=false;
+      if(cancel)cancel.disabled=true;
+      await loadExportedAssCoverage();
+    }
+  }
+}
+
+async function startExportedAssEvidence(){
+  const key=layoutActiveProjectKey();
+  const root=currentProject?.root||'';
+  if(!key||!root||exportedEvidenceJobId||exportedEvidenceStarting)return;
+  exportedEvidenceStarting=true;
+  const coverageStart=document.getElementById('exportAssCoverageStartBtn');
+  const coverageRestart=document.getElementById('exportAssCoverageRestartBtn');
+  if(coverageStart)coverageStart.disabled=true;
+  if(coverageRestart)coverageRestart.disabled=true;
+  const generation=++exportedEvidenceGeneration;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  const start=document.getElementById('exportAssEvidenceStartBtn');
+  const cancel=document.getElementById('exportAssEvidenceCancelBtn');
+  if(start)start.disabled=true;
+  try{
+    if(status){status.textContent='正在创建已导出 ASS 的后台抽样任务…';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/exported-evidence/start',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify({expected_project_root:root,sample_limit:8})
+    });
+    const result=await response.json();
+    if(!response.ok||!result.ok)throw new Error(result.error||'启动失败');
+    if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+    exportedEvidenceJobId=result.job;
+    if(cancel)cancel.disabled=false;
+    while(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()){
+      const jobResponse=await fetch('/api/jobs/'+encodeURIComponent(result.job),{headers:headers(),cache:'no-store'});
+      const jobData=await jobResponse.json();
+      if(!jobResponse.ok||!jobData.ok)throw new Error(jobData.error||'任务状态不可用');
+      if(generation!==exportedEvidenceGeneration||key!==layoutActiveProjectKey())return;
+      const job=jobData.job;
+      if(['succeeded','failed','canceled','interrupted'].includes(job.state)){
+        if(job.state==='succeeded'){
+          status.textContent='已导出 ASS 的后台抽样完成；正在核对持久化证据…';
+          exportedEvidenceJobId=null;
+          await loadExportedAssEvidence();
+        }else{
+          status.textContent=job.state==='canceled'?'已取消，未完成的验证不构成证据':'已导出 ASS 验证失败：'+shortError(job.error||job.message);
+          status.className='small '+(job.state==='canceled'?'muted':'status-bad');
+        }
+        break;
+      }
+      if(status){status.textContent=(job.message||'抽样检查中')+' ('+Number(job.progress_current||0)+'/'+Number(job.progress_total||8)+')';status.className='small muted';}
+      await new Promise(resolve=>setTimeout(resolve,750));
+    }
+  }catch(err){
+    if(generation===exportedEvidenceGeneration&&key===layoutActiveProjectKey()&&status){
+      status.textContent='已导出 ASS 检查失败：'+shortError(err);status.className='small status-bad';
+    }
+  }finally{
+    if(generation===exportedEvidenceGeneration){
+      exportedEvidenceJobId=null;
+      if(start)start.disabled=false;
+      if(cancel)cancel.disabled=true;
+      exportedEvidenceStarting=false;
+      await loadExportedAssCoverage();
+    }
+  }
+}
+
+async function cancelExportedAssEvidence(){
+  const job=exportedEvidenceJobId;
+  if(!job)return;
+  const status=document.getElementById('exportAssEvidenceStatus');
+  try{
+    const response=await fetch('/api/subtitle-layout/exported-evidence/cancel',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify({job})
+    });
+    const data=await response.json();
+    if(!response.ok||!data.ok)throw new Error(data.error||'取消请求被拒绝');
+    if(status)status.textContent='正在等待 FFmpeg 停止并清理任务…';
+  }catch(err){
+    if(status){status.textContent='无法取消检查：'+shortError(err);status.className='small status-bad';}
+  }
+}
+
+async function inspectRenderedInkInterval(){
+  const status=document.getElementById('previewInkCheckStatus');
+  const generation=++renderedInkGeneration;
+  const payload={...libassPreviewPayload(),sample_limit:8};
+  const identity=currentLibassPreviewIdentity();
+  const current=()=>generation===renderedInkGeneration&&identity===currentLibassPreviewIdentity();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  if(renderedInkController)renderedInkController.abort();
+  renderedInkController=controller;
+  for(const id of ['previewInkCheckBtn','previewInkSpanBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=true;
+  }
+  try{
+    if(status){status.textContent='正在按需抽样至多 8 个真实 libass 时间点；结果不代表未取样时间。';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/inspect-rendered-interval',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
+    });
+    if(!current())return;
+    const result=await response.json();
+    if(!response.ok||result.ok!==true)throw new Error(result.error||'动态抽样失败');
+    if(result.scope!=='bounded_sampled_timestamps_only'||result.full_interval_verified!==false)throw new Error('抽样证据声明不符合预期');
+    const total=Number(result.sample_count||0);
+    const gap=Number(result.max_unsampled_gap_seconds||0).toFixed(2);
+    const omitted=Number(result.omitted_candidate_count||0);
+    const cover='已检测 '+total+' 个时间点，最大相邻采样间隔 '+gap+' s；'+omitted+' 个候选点未抽样，未验证中间连续时间。';
+    if(result.status==='sampled_violation'){
+      const bad=(result.samples||[]).filter(row=>row.status==='outside_safe_area').map(row=>Number(row.timestamp_seconds).toFixed(2)+'s');
+      status.textContent='检测到 '+result.violation_count+' 个越界帧（'+bad.slice(0,6).join('、')+'）。'+cover;
+      status.className='small status-bad';
+    }else if(result.status==='no_visible_evidence'){
+      status.textContent='未检测到任何可见字幕像素，不能判定安全。'+cover;
+      status.className='small status-warn';
+    }else if(result.status==='sampled_no_violation'){
+      status.textContent='已抽样帧未发现越界（其中 '+result.no_visible_ink_count+' 帧无可见像素）；'+cover;
+      status.className='small status-warn';
+    }else throw new Error('未识别的抽样结果');
+    if(result.word_alignment_input_truncated)status.textContent+=' 词级输入超过 500 条，候选事件已截断。';
+  }catch(err){
+    if(!current())return;
+    if(status){status.textContent='动态帧抽样失败：'+shortError(err)+'；未知安全状态。';status.className='small status-bad';}
+  }finally{
+    if(renderedInkController===controller)renderedInkController=null;
+    if(generation===renderedInkGeneration){
+      for(const id of ['previewInkCheckBtn','previewInkSpanBtn']){
+        const button=document.getElementById(id);if(button)button.disabled=false;
+      }
+    }
+  }
+}
+
+function invalidateRenderedInkCheck(){
+  renderedInkGeneration++;
+  if(renderedInkController){renderedInkController.abort();renderedInkController=null;}
+  for(const id of ['previewInkCheckBtn','previewInkSpanBtn']){
+    const button=document.getElementById(id);if(button)button.disabled=false;
+  }
+  const status=document.getElementById('previewInkCheckStatus');
+  if(status){status.textContent='当前参数或时间点尚未进行真实像素边界检查。';status.className='small muted';}
+}
+
+async function inspectRenderedInkAtCurrentTime(){
+  const status=document.getElementById('previewInkCheckStatus');
+  const button=document.getElementById('previewInkCheckBtn');
+  const generation=++renderedInkGeneration;
+  const payload=libassPreviewPayload();
+  const identity=currentLibassPreviewIdentity();
+  const stillCurrent=()=>generation===renderedInkGeneration&&identity===currentLibassPreviewIdentity();
+  const controller=typeof AbortController==='function'?new AbortController():null;
+  if(renderedInkController)renderedInkController.abort();
+  renderedInkController=controller;
+  try{
+    if(button)button.disabled=true;
+    if(status){status.textContent='正在用 FFmpeg/libass 在黑白背景上分别渲染当前帧并检查像素…';status.className='small muted';}
+    const response=await fetch('/api/subtitle-layout/inspect-rendered-ink',{
+      method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+      body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
+    });
+    if(!stillCurrent())return;
+    const result=await response.json();
+    if(!response.ok||result.ok!==true)throw new Error(result.error||'实际像素检查失败');
+    if(result.renderer!=='ffmpeg-libass'||result.scope!=='single_timestamp_only')throw new Error('像素检查缺少预期的渲染证据');
+    const point=Number(result.timestamp_seconds).toFixed(2)+' s';
+    if(result.status==='no_visible_ink'){
+      status.textContent='当前 '+point+' 未检测到可见字幕像素，不能据此判定整段安全。';
+      status.className='small status-warn';
+    }else if(result.status==='inside_safe_area'){
+      status.textContent='当前 '+point+' 真实可见像素处于唯一安全区内；仅检查这一帧，其他时间点尚未验证。';
+      status.className='small status-ok';
+    }else if(result.status==='outside_safe_area'){
+      status.textContent='当前 '+point+' 检测到实际像素超出安全区：'+result.bbox.join(' / ')+'；请调整布局或样式。';
+      status.className='small status-bad';
+    }else throw new Error('未识别的像素边界结果');
+  }catch(err){
+    if(!stillCurrent())return;
+    if(status){status.textContent='当前帧像素检查失败：'+shortError(err)+'；安全状态未知。';status.className='small status-bad';}
+  }finally{
+    if(renderedInkController===controller)renderedInkController=null;
+    if(button&&generation===renderedInkGeneration)button.disabled=false;
   }
 }
 
@@ -6955,7 +7334,7 @@ async function importWordAlignmentFile(file){
 
 
 const layoutStyleControlIds=[
-  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV',
+  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevPrimaryRatio','prevCentralGap','prevMarginH','prevMarginV',
   'prevEnableKaraoke','prevKaraokeMode','prevEnableCard','prevEnableOutline',
   'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
@@ -7028,6 +7407,7 @@ function subtitleSettingsPayload(){
     margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '3') / 100,
     margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
     min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
+    primary_region_ratio: parseFloat(document.getElementById('prevPrimaryRatio')?.value || '60') / 100,
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
     karaoke_mode: document.getElementById('prevKaraokeMode')?.value || 'k',
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
@@ -7067,6 +7447,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.03)*100);
   set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
   set('prevCentralGap',config.subtitle_min_central_gap??20);
+  set('prevPrimaryRatio',Number(config.subtitle_primary_region_ratio??0.60)*100);
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
   set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
   check('prevEnableCard',config.subtitle_enable_translucent_card);
@@ -7147,6 +7528,8 @@ async function saveSubtitleLayoutSettings(){
     }
     savedSubtitleSettings=submittedIdentity;
     markSubtitleSettingsDirty();
+    if(typeof loadExportedAssEvidence==='function')loadExportedAssEvidence();
+    if(typeof loadExportedAssCoverage==='function')loadExportedAssCoverage();
     if(newerDraft){
       if(status){status.textContent='保存期间又调整了样式：之前提交的设置已保存，新试调值仍未保存。请再次保存后再生成 ASS。';status.className='small status-warn';}
       return false; // Do not export the older settings as though they were this draft.
@@ -7591,7 +7974,7 @@ function layoutCueTimePreview(){
   if(!slider||!output)return;
   if(!sub){slider.disabled=true;output.textContent='—';return;}
   slider.disabled=false;
-  const percent=Math.max(5,Math.min(95,Number(slider.value||50)));
+  const percent=Math.max(0,Math.min(100,Number(slider.value||50)));
   const state=layoutTimingState(sub);
   const start=Number(state?.start??sub.start??0);
   const span=Math.max(0,Number(state?.end??sub.end??0)-start);
@@ -8363,6 +8746,7 @@ async function updateLayoutPreview() {
   const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '48', 10);
   const priSize = parseInt(document.getElementById('prevPriSize')?.value || '42', 10);
   const centralGap = parseFloat(document.getElementById('prevCentralGap')?.value || '20');
+  const primaryRatio = parseFloat(document.getElementById('prevPrimaryRatio')?.value || '60') / 100;
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
@@ -8373,6 +8757,7 @@ async function updateLayoutPreview() {
   if (document.getElementById('prevChsSizeVal')) document.getElementById('prevChsSizeVal').textContent = chsSize + ' px';
   if (document.getElementById('prevPriSizeVal')) document.getElementById('prevPriSizeVal').textContent = priSize + ' px';
   if (document.getElementById('prevCentralGapVal')) document.getElementById('prevCentralGapVal').textContent = centralGap + ' px';
+  if (document.getElementById('prevPrimaryRatioVal')) document.getElementById('prevPrimaryRatioVal').textContent = Math.round(primaryRatio*100) + '% / ' + Math.round((1-primaryRatio)*100) + '%';
   if (document.getElementById('prevMarginHVal')) {
     const pxH = Math.round(1920 * (marginH / 100));
     document.getElementById('prevMarginHVal').textContent = marginH + ' % (' + pxH + 'px)';
@@ -8415,6 +8800,7 @@ async function updateLayoutPreview() {
         margin_left_percent: marginH / 100.0,
         margin_top_percent: marginV / 100.0,
         min_central_gap: centralGap,
+        primary_region_ratio: primaryRatio,
         chs_font: chsFont,
         primary_font: priFont,
         source_language: currentProject?.config?.source_text_language || 'en',
@@ -8429,13 +8815,13 @@ async function updateLayoutPreview() {
     if(corpusStatus&&layoutStressSample){
       const layout=res?.layout||{};
       if(layout.failed){
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 在当前设置下仍无法安全显示：'+(layout.failed_condition||'OVERFLOW')+'。请调整字号、边距或中央间隔。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的几何布局超出安全区：'+(layout.failed_condition||'OVERFLOW')+'。请调整字号、边距或中央间隔。';
         corpusStatus.className='small status-bad layout-corpus-status';
       }else if(Number(layout.scale_percent||100)<100){
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 需要由排版求解器缩放到 '+layout.scale_percent+'% 才能安全显示。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的布局度量需要缩放到 '+layout.scale_percent+'%；请用实际 ASS 渲染核对字形。';
         corpusStatus.className='small status-warn layout-corpus-status';
       }else{
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 在当前设置下可安全显示（100%）。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的布局度量在安全区内（100%）；尚未验证可见字形。';
         corpusStatus.className='small status-ok layout-corpus-status';
       }
     }
@@ -8485,7 +8871,7 @@ function renderPreviewCanvasSvg(data, options) {
     if (reasonEl) reasonEl.textContent = layout.failed_condition || 'OVERFLOW';
   } else {
     if (statusBadge) {
-      statusBadge.textContent = '✓ 正常 OK';
+      statusBadge.textContent = '✓ 几何估算通过 · 像素待验证';
       statusBadge.style.color = 'var(--ok)';
     }
     if (banner) banner.classList.add('hidden');
@@ -8500,7 +8886,7 @@ function renderPreviewCanvasSvg(data, options) {
   if (options.showSafeArea) {
     const strokeColor = layout.failed && (layout.failed_condition === 'HORIZONTAL_OVERFLOW' || layout.failed_condition === 'TOP_OVERFLOW' || layout.failed_condition === 'BOTTOM_OVERFLOW') ? '#ef6b73' : '#38b46b';
     elements.push(`<rect x="${sa.x_min}" y="${sa.y_min}" width="${sa.max_printable_width}" height="${sa.max_printable_height}" fill="rgba(56,180,107,0.02)" stroke="${strokeColor}" stroke-width="2" stroke-dasharray="8 6" />`);
-    elements.push(`<text x="${sa.x_min + 8}" y="${sa.y_min + 20}" font-size="14" fill="${strokeColor}" font-weight="600" opacity="0.85">Safe Area (${sa.max_printable_width}×${sa.max_printable_height})</text>`);
+    elements.push(`<text x="${sa.x_min + 8}" y="${sa.y_min + 20}" font-size="14" fill="${strokeColor}" font-weight="600" opacity="0.85">唯一安全区（布局估算 ${sa.max_printable_width}×${sa.max_printable_height}）</text>`);
   }
 
   // Central Gap Area
@@ -8512,7 +8898,7 @@ function renderPreviewCanvasSvg(data, options) {
   }
 
   // Parallax Baseline Region Guides
-  if (parallax) {
+  if (parallax && options.showBBox) {
     const pX = sa.x_min - 35;
     if (pX > 20) {
       // Primary displacement indicator (growing upward from y_top)
@@ -8789,7 +9175,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 });
 
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevPrimaryRatio','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -8824,6 +9210,8 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',updateLayoutPreview);
 });
+document.getElementById('prevKaraokePreviewTime')?.addEventListener('change',()=>renderLibassPreview());
+document.getElementById('layoutCueScrubber')?.addEventListener('change',()=>renderLibassPreview());
 document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>{
   const label=document.getElementById('prevKaraokePreviewTimeVal');
   const input=document.getElementById('prevKaraokePreviewTime');
@@ -8843,6 +9231,7 @@ function applySubtitlePreset(name){
     document.getElementById('prevChsSize').value=48;
     document.getElementById('prevPriSize').value=42;
     document.getElementById('prevCentralGap').value=20;
+    document.getElementById('prevPrimaryRatio').value=60;
     document.getElementById('prevMarginH').value=3;
     document.getElementById('prevMarginV').value=5;
     document.getElementById('prevEnableKinetic').checked=true;
@@ -8892,6 +9281,12 @@ document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>apply
 
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
+document.getElementById('previewInkCheckBtn')?.addEventListener('click',inspectRenderedInkAtCurrentTime);
+document.getElementById('previewInkSpanBtn')?.addEventListener('click',inspectRenderedInkInterval);
+document.getElementById('exportAssEvidenceStartBtn')?.addEventListener('click',startExportedAssEvidence);
+document.getElementById('exportAssEvidenceCancelBtn')?.addEventListener('click',cancelExportedAssEvidence);
+document.getElementById('exportAssCoverageStartBtn')?.addEventListener('click',()=>startExportedAssCoverage(false));
+document.getElementById('exportAssCoverageRestartBtn')?.addEventListener('click',()=>startExportedAssCoverage(true));
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();

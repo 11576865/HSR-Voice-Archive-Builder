@@ -4,6 +4,23 @@ on:
   pull_request:
     paths:
       - "app/static/index.html"
+      - "app/ass_preview.py"
+      - "subtitle_layout/rendered_ink.py"
+      - "subtitle_layout/temporal_samples.py"
+      - "tests/test_rendered_ink_boundary.py"
+      - "tests/test_rendered_ink_interval.py"
+      - "app/ass_artifact_evidence.py"
+      - "app/ass_coverage_batches.py"
+      - "app/ass_coverage_lock.py"
+      - "tests/test_ass_coverage_writer_lock.py"
+      - "tests/test_ass_coverage_audit_scale.py"
+      - "tests/test_ass_coverage_batches.py"
+      - "app/ass_export_sampling.py"
+      - "tests/test_ass_export_sampling_scale.py"
+      - "app/jobs.py"
+      - "tests/test_jobs_history_pruning.py"
+      - "tests/test_jobs_cancel_commit_boundary.py"
+      - "tests/test_export_ass_infrastructure.py"
       - "tests/browser_visual_evidence.py"
       - "tests/test_subtitle_integrated_export.py"
       - "app/subtitles.py"
@@ -58,7 +75,18 @@ jobs:
       - name: Prove generated ASS displays only inside saved time window
         env:
           HSR_LIBASS_EVIDENCE_DIR: artifacts/subtitle-libass
-        run: python -m unittest tests.test_subtitle_integrated_export -v
+          HSR_ASS_SAMPLER_BENCHMARK_DIR: artifacts/subtitle-libass
+        run: |
+          python -m unittest tests.test_subtitle_integrated_export -v
+          python -m unittest tests.test_rendered_ink_boundary -v
+          python -m unittest tests.test_rendered_ink_interval -v
+          python -m unittest tests.test_export_ass_infrastructure -v
+          python -m unittest tests.test_ass_coverage_batches -v
+          python -m unittest tests.test_ass_coverage_writer_lock -v
+          python -m unittest tests.test_ass_coverage_audit_scale -v
+          python -m unittest tests.test_jobs_history_pruning -v
+          python -m unittest tests.test_jobs_cancel_commit_boundary -v
+          python -m unittest tests.test_ass_export_sampling_scale -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
         uses: actions/upload-artifact@v4
