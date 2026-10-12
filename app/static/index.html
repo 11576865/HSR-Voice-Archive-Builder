@@ -3574,7 +3574,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
-<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">动态预览通过 FFmpeg/libass 生成可播放的黑底 MP4（最长 8 秒、无音频）；非用户视频画面合成。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">动态预览通过 FFmpeg/libass 生成可播放的黑底 WebM/MP4（最长 8 秒、无音频）；非用户视频画面合成。</div>
 
         <div class="preview-controls">
           <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
@@ -8314,6 +8314,8 @@ async function renderHsrEffectVideo(){
     if(button)button.disabled=true;
     setPreviewEvidence('rendering','正在渲染真实连续 MP4，单帧图片不作为本操作的成功结果。');
     if(status)status.textContent='FFmpeg/libass 正在合成短时黑底动态字幕视频…';
+    const player=document.getElementById('libassVideoPreview');
+    payload.preview_format=player?.canPlayType?.('video/webm; codecs="vp8"')?'webm':'mp4';
     const response=await fetch('/api/subtitle-layout/render-preview-video',{
       method:'POST',headers:{...headers(),'Content-Type':'application/json'},
       body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
@@ -8326,7 +8328,8 @@ async function renderHsrEffectVideo(){
     }
     const blob=await response.blob();
     if(!stillCurrent())return;
-    if(!blob.size||blob.type!=='video/mp4')throw new Error('返回内容不是可播放的 MP4 视频');
+    const expectedType=payload.preview_format==='webm'?'video/webm':'video/mp4';
+    if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
     const video=document.getElementById('libassVideoPreview');
     if(!video)throw new Error('动态视频播放控件不存在');
     videoPreviewObjectUrl=URL.createObjectURL(blob);
@@ -8345,7 +8348,7 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent())return;
     video.classList.remove('hidden');
     setPreviewEvidence('video');
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · 黑底无声 · 播放/暂停/拖动进度可检查运动。';
+    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · 黑底无声 · 播放/暂停/拖动进度可检查运动。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
