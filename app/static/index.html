@@ -4324,6 +4324,7 @@ if(archivePanel)panelAttentionObserver.observe(archivePanel,{attributes:true,att
 
 function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(!['project','review','layout','export','update'].includes(name))name='project';
+  const previousWorkspace=document.body.dataset.workspace;
   if(!preservePanelPin)autoPinnedPanelKey=null;
   document.body.dataset.workspace=name;
   for(const button of workspaceButtons){
@@ -4333,9 +4334,17 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   updatePanelTiers(name);
   if(panelCollapseMode==='auto')requestAnimationFrame(()=>applyAutoPanelState(name));
   if(name==='layout'&&typeof updateLayoutPreview==='function'){
-    requestAnimationFrame(()=>{
-      if(typeof loadLayoutStressSample==='function')loadLayoutStressSample().catch(error=>setLog(String(error)));
-      else updateLayoutPreview();
+    requestAnimationFrame(async()=>{
+      try{
+        if(typeof loadLayoutStressSample!=='function'){updateLayoutPreview();return;}
+        const fromReview=previousWorkspace==='review'&&typeof currentSubtitle==='function';
+        const selected=fromReview?currentSubtitle()?.id??null:null;
+        if(fromReview&&currentSubtitle()?._dirty){
+          const saved=await saveCurrentSubtitle({quiet:true});
+          if(!saved){setLog('校对正文仍未保存，已阻止以旧内容预览');return;}
+        }
+        await loadLayoutStressSample(fromReview?{refresh:true,selectId:selected}:{});
+      }catch(error){setLog(String(error));}
     });
   }
   if(scroll)window.scrollTo({top:0,behavior:'instant'});
