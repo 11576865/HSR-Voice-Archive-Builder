@@ -8,6 +8,10 @@ on:
       - "tests/test_subtitle_integrated_export.py"
       - "app/subtitles.py"
       - "app/subtitle_timing.py"
+      - "app/ass_preview.py"
+      - "app/server.py"
+      - "app/lite_server.py"
+      - "tests/test_hsr_three_pass_scope.py"
       - ".github/workflows/subtitle-browser-evidence.yml"
   workflow_dispatch:
 
@@ -59,6 +63,8 @@ jobs:
         env:
           HSR_LIBASS_EVIDENCE_DIR: artifacts/subtitle-libass
         run: python -m unittest tests.test_subtitle_integrated_export -v
+      - name: Verify real H.264 subtitle motion preview and API
+        run: python -m unittest tests.test_hsr_three_pass_scope -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
         uses: actions/upload-artifact@v4
