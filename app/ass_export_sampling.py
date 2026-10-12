@@ -440,11 +440,16 @@ def plan_export_ass_window_batch(
                 **window, "texts": selected_texts[index],
             })
             truncated += int(clipped)
-            choices = [(t, kinds) for t, kinds in candidates.items() if t != midpoint]
-            choices.sort(key=lambda pair: (
-                not any(kind not in {"animated_entry", "animated_exit"} for kind in pair[1]),
-                abs(pair[0] - midpoint), pair[0],
-            ))
+            # Animated entry/exit are generic probes added to *every*
+            # dynamic window; they do not prove that a recognized override
+            # transition itself was sampled. Count only decoded effect events.
+            generic = {"animated_entry", "animated_exit"}
+            choices = [
+                (t, kinds - generic)
+                for t, kinds in candidates.items()
+                if t != midpoint and kinds - generic
+            ]
+            choices.sort(key=lambda pair: (abs(pair[0] - midpoint), pair[0]))
             if choices:
                 t, reasons = choices[0]
                 points.append((t, sorted(reasons)))

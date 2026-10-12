@@ -6866,6 +6866,7 @@ async function renderLibassPreview(){
 
 let exportedEvidenceJobId=null;
 let exportedEvidenceGeneration=0;
+let exportedEvidenceStarting=false;
 let exportedEvidenceProjectKey=null;
 
 function syncExportedEvidenceProject(){
@@ -6880,6 +6881,7 @@ function syncExportedEvidenceProject(){
 function resetExportedEvidenceUi(){
   exportedEvidenceGeneration++;
   exportedEvidenceJobId=null;
+  exportedEvidenceStarting=false;
   const start=document.getElementById('exportAssEvidenceStartBtn');
   const cancel=document.getElementById('exportAssEvidenceCancelBtn');
   if(start)start.disabled=false;
@@ -6975,7 +6977,8 @@ async function loadExportedAssCoverage(){
 async function startExportedAssCoverage(restart=false){
   const key=layoutActiveProjectKey();
   const root=currentProject?.root||'';
-  if(!key||!root||exportedEvidenceJobId)return;
+  if(!key||!root||exportedEvidenceJobId||exportedEvidenceStarting)return;
+  exportedEvidenceStarting=true;
   const generation=++exportedEvidenceGeneration;
   const status=document.getElementById('exportAssCoverageStatus');
   const cancel=document.getElementById('exportAssEvidenceCancelBtn');
@@ -7027,6 +7030,7 @@ async function startExportedAssCoverage(restart=false){
   }finally{
     if(generation===exportedEvidenceGeneration){
       exportedEvidenceJobId=null;
+      exportedEvidenceStarting=false;
       if(evidence)evidence.disabled=false;
       if(cancel)cancel.disabled=true;
       await loadExportedAssCoverage();
@@ -7037,7 +7041,12 @@ async function startExportedAssCoverage(restart=false){
 async function startExportedAssEvidence(){
   const key=layoutActiveProjectKey();
   const root=currentProject?.root||'';
-  if(!key||!root)return;
+  if(!key||!root||exportedEvidenceJobId||exportedEvidenceStarting)return;
+  exportedEvidenceStarting=true;
+  const coverageStart=document.getElementById('exportAssCoverageStartBtn');
+  const coverageRestart=document.getElementById('exportAssCoverageRestartBtn');
+  if(coverageStart)coverageStart.disabled=true;
+  if(coverageRestart)coverageRestart.disabled=true;
   const generation=++exportedEvidenceGeneration;
   const status=document.getElementById('exportAssEvidenceStatus');
   const start=document.getElementById('exportAssEvidenceStartBtn');
@@ -7083,6 +7092,8 @@ async function startExportedAssEvidence(){
       exportedEvidenceJobId=null;
       if(start)start.disabled=false;
       if(cancel)cancel.disabled=true;
+      exportedEvidenceStarting=false;
+      await loadExportedAssCoverage();
     }
   }
 }

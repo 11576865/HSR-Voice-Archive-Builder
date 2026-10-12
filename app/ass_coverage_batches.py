@@ -38,6 +38,98 @@ def _receipt_path(output_dir: Path, run_id: str, batch_id: int) -> Path:
     return output_dir / RECEIPTS_DIR / f"{run_id}-batch-{batch_id:06d}.json"
 
 
+def _audit_committed_batches(
+    output_dir: Path, checkpoint: dict[str, Any], identity: dict[str, str],
+) -> None:
+    """Fail closed if ANY historical receipt or aggregate is altered.
+
+    Receipt hashes form a backwards-linked chain. Reading just the latest
+    hash cannot establish that earlier frame evidence remains intact.
+    """
+    run_id = checkpoint["run_id"]
+    expected_sha = checkpoint["last_batch_receipt_sha256"]
+    expected_cursor = checkpoint["next_cursor"]
+    cumulative = {
+        "sample_count": 0,
+        "dynamic_examined_window_count": 0,
+        "dynamic_event_examined_window_count": 0,
+        "effect_candidates_truncated_windows": 0,
+        "violation_count": 0,
+        "no_visible_ink_count": 0,
+    }
+    newest_samples = None
+    for batch_id in range(checkpoint["batch_count"], 0, -1):
+        path = _receipt_path(output_dir, run_id, batch_id)
+        if path.is_symlink() or not path.is_file() or _sha256(path) != expected_sha:
+            raise ValueError("Committed ASS batch chain has a missing or changed receipt")
+        item = json.loads(path.read_text(encoding="utf-8"))
+        if (not isinstance(item, dict)
+                or item.get("schema_version") != VERSION
+                or item.get("sampling_algorithm") != ALGORITHM
+                or item.get("scope") != "bounded_sequential_window_batch"
+                or item.get("full_interval_verified") is not False
+                or item.get("run_id") != run_id
+                or item.get("batch_id") != batch_id
+                or item.get("next_cursor") != expected_cursor
+                or any(item.get(k) != v for k, v in identity.items())
+                or item.get("safe_area") != checkpoint.get("safe_area")):
+            raise ValueError("Committed ASS batch provenance mismatch")
+        cursor = item.get("cursor")
+        count = item.get("window_count")
+        samples = item.get("samples")
+        if (type(cursor) is not int or type(count) is not int
+                or cursor < 0 or count < 1 or cursor + count != expected_cursor
+                or not isinstance(samples, list) or not 1 <= len(samples) <= 12):
+            raise ValueError("Committed ASS batch cursor or sample count invalid")
+        for key in ("dynamic_examined_window_count",
+                    "dynamic_event_examined_window_count",
+                    "effect_candidates_truncated_windows",
+                    "violation_count", "no_visible_ink_count"):
+            if type(item.get(key)) is not int or item[key] < 0:
+                raise ValueError("Committed ASS batch has invalid counters")
+        if (item["dynamic_event_examined_window_count"] >
+                item["dynamic_examined_window_count"] or
+                item["dynamic_examined_window_count"] > count):
+            raise ValueError("Committed ASS batch dynamic counts are inconsistent")
+        if any(
+            not isinstance(row, dict)
+            or type(row.get("window_index")) is not int
+            or not cursor <= row["window_index"] < expected_cursor
+            or row.get("status") not in {
+                "inside_safe_area", "outside_safe_area", "no_visible_ink"
+            }
+            for row in samples
+        ):
+            raise ValueError("Committed ASS sample identity or status invalid")
+        bad = sum(row["status"] == "outside_safe_area" for row in samples)
+        missing = sum(row["status"] == "no_visible_ink" for row in samples)
+        if item["violation_count"] != bad or item["no_visible_ink_count"] != missing:
+            raise ValueError("Committed ASS batch sample totals do not match receipts")
+        if newest_samples is None:
+            newest_samples = samples
+        cumulative["sample_count"] += len(samples)
+        for key in cumulative:
+            if key != "sample_count":
+                cumulative[key] += item[key]
+        prev = item.get("previous_batch_receipt_sha256")
+        if not isinstance(prev, str):
+            raise ValueError("Committed ASS receipt chain link invalid")
+        expected_sha = prev
+        expected_cursor = cursor
+    if expected_cursor != 0 or expected_sha != "":
+        raise ValueError("Committed ASS receipt chain does not reach genesis")
+    if any(checkpoint.get(k) != value for k, value in cumulative.items()):
+        raise ValueError("Committed ASS checkpoint counters disagree with historical receipts")
+    if checkpoint.get("last_batch_samples") != newest_samples:
+        raise ValueError("Committed ASS last batch samples differ from checkpoint")
+    if (checkpoint.get("unexamined_unique_windows") !=
+            checkpoint["unique_window_count"] - checkpoint["next_cursor"]
+            or checkpoint.get("pass_complete") is not (
+                checkpoint["next_cursor"] == checkpoint["unique_window_count"]
+            )):
+        raise ValueError("Committed ASS checkpoint claims invalid coverage")
+
+
 def read_exported_ass_coverage(
     output_dir: Path | None, config: ProjectConfig | None = None,
 ) -> dict[str, Any]:
@@ -58,7 +150,8 @@ def read_exported_ass_coverage(
         for field in ("batch_count", "next_cursor", "unique_window_count",
                       "sample_count", "dynamic_window_count",
                       "dynamic_examined_window_count", "dynamic_event_examined_window_count",
-                      "violation_count", "no_visible_ink_count"):
+                      "violation_count", "no_visible_ink_count",
+                      "effect_candidates_truncated_windows", "unexamined_unique_windows"):
             if type(record.get(field)) is not int or record[field] < 0:
                 raise ValueError("Invalid coverage checkpoint counters")
         if (not 0 < record["batch_count"] <= 200000
@@ -76,18 +169,7 @@ def read_exported_ass_coverage(
         if any(record.get(k) != v for k, v in identity.items()):
             return {"state": "stale", "verified": False, "next_cursor": 0,
                     "reason": "Exported ASS, export receipt or style policy changed"}
-        batch = _receipt_path(output_dir, run_id, record["batch_count"])
-        if batch.is_symlink() or not batch.is_file():
-            raise ValueError("Last batch receipt is absent")
-        if _sha256(batch) != record.get("last_batch_receipt_sha256"):
-            raise ValueError("Last batch receipt checksum mismatch")
-        last = json.loads(batch.read_text(encoding="utf-8"))
-        if (not isinstance(last, dict)
-                or last.get("run_id") != run_id
-                or last.get("batch_id") != record["batch_count"]
-                or last.get("next_cursor") != record["next_cursor"]
-                or any(last.get(k) != v for k, v in identity.items())):
-            raise ValueError("Last batch receipt provenance mismatch")
+        _audit_committed_batches(output_dir, record, identity)
         return {
             "state": ("window_pass_complete" if record["next_cursor"] ==
                       record["unique_window_count"] else "partial"),

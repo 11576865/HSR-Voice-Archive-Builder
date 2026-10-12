@@ -83,6 +83,19 @@ class CoverageBatchTests(unittest.TestCase):
         self.assertEqual(plan["dynamic_event_examined_window_count"], 1)
         self.assertTrue(any(s["reasons"] != ["dialogue_midpoint"] for s in plan["samples"]))
 
+    def test_unsupported_karaoke_absolute_offset_does_not_claim_effect_sample(self):
+        # \kt establishes an absolute karaoke cursor; this parser recognizes
+        # the effect family but deliberately does not decode \kt semantics.
+        text = ASS_FIXTURE.replace(
+            "Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,first",
+            r"Dialogue: 0,0:00:00.00,0:00:02.00,Default,,0,0,0,,{\kt120}first",
+        )
+        plan = plan_export_ass_window_batch(text, cursor=0, sample_limit=2)
+        self.assertEqual(plan["dynamic_examined_window_count"], 1)
+        self.assertEqual(plan["dynamic_event_examined_window_count"], 0)
+        self.assertGreater(plan["effect_candidates_truncated_windows"], 0)
+        self.assertEqual(plan["samples"][0]["reasons"], ["dialogue_midpoint"])
+
     def test_three_static_windows_resume_across_two_durable_batches(self):
         self.assertEqual(read_exported_ass_coverage(self.output, self.config)["state"], "unverified")
         first = self.run_mock()
