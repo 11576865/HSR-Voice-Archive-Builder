@@ -8,10 +8,11 @@ from pathlib import Path
 
 from fastapi import FastAPI, Form, Query, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response
+from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png
+from .ass_preview import preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -727,6 +728,38 @@ async def api_subtitle_layout_render_preview(request: Request):
             content=png,
             media_type="image/png",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
+        )
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
+
+
+
+@app.post("/api/subtitle-layout/render-preview-video")
+async def api_subtitle_layout_render_preview_video(request: Request):
+    try:
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Subtitle preview payload must be an object")
+        config = preview_config_from_payload(data)
+        words = data.get("word_alignments")
+        if not isinstance(words, list):
+            words = None
+        video = await run_in_threadpool(
+            render_ass_preview_video,
+            english_text=str(data.get("english_text") or ""),
+            chinese_text=str(data.get("chinese_text") or ""),
+            source_language=str(data.get("source_language") or "en"),
+            target_language=str(data.get("target_language") or "zh-CN"),
+            config=config,
+            word_alignments=words,
+            duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
+        )
+        return Response(
+            content=video, media_type="video/mp4",
+            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-h264-black"},
         )
     except Exception as exc:
         return JSONResponse(
