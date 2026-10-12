@@ -144,8 +144,16 @@ def _audit_committed_batches(
 
 
 def read_exported_ass_coverage(
-    output_dir: Path | None, config: ProjectConfig | None = None,
+    output_dir: Path | None, config: ProjectConfig | None = None, *,
+    _defer_history_audit: bool = False,
 ) -> dict[str, Any]:
+    """Strict public read; writer-only provisional read never returns verified.
+
+    The writer holds the output OS lock, can plan from a provisional cursor,
+    and MUST run a strict read after rendering and before publishing a batch.
+    This reduces two O(history) scans per batch to one without accepting
+    unreviewed historical evidence as verified.
+    """
     if output_dir is None or config is None:
         return {"state": "not-built", "verified": False, "next_cursor": 0}
     checkpoint = output_dir / COVERAGE_FILE
@@ -188,7 +196,22 @@ def read_exported_ass_coverage(
         if any(record.get(k) != v for k, v in identity.items()):
             return {"state": "stale", "verified": False, "next_cursor": 0,
                     "reason": "Exported ASS, export receipt or style policy changed"}
-        _audit_committed_batches(output_dir, record, identity)
+        if _defer_history_audit:
+            # Cheap preflight only: detect a missing/changed *latest* receipt
+            # before spending FFmpeg time. This is deliberately NOT a claim
+            # that all earlier receipt bytes were validated.
+            last = _receipt_path(output_dir, run_id, record["batch_count"])
+            if last.is_symlink() or not last.is_file():
+                raise ValueError("Latest ASS coverage receipt is missing")
+            if last.stat().st_size > MAX_BATCH_RECEIPT_BYTES:
+                raise ValueError("Latest ASS coverage receipt exceeds limit")
+            latest_bytes = last.read_bytes()
+            if (len(latest_bytes) > MAX_BATCH_RECEIPT_BYTES
+                    or hashlib.sha256(latest_bytes).hexdigest() !=
+                    record.get("last_batch_receipt_sha256")):
+                raise ValueError("Latest ASS coverage receipt checksum mismatch")
+        else:
+            _audit_committed_batches(output_dir, record, identity)
         # Do not return verified=true for a snapshot that has already changed
         # while its potentially long historical receipt-chain audit ran.
         # This also catches a concurrent writer advancing the checkpoint.
@@ -208,8 +231,10 @@ def read_exported_ass_coverage(
         return {
             "state": ("window_pass_complete" if record["next_cursor"] ==
                       record["unique_window_count"] else "partial"),
-            "verified": True, "next_cursor": record["next_cursor"],
+            "verified": not _defer_history_audit,
+            "next_cursor": record["next_cursor"],
             "coverage": record,
+            **({"history_audit": "deferred"} if _defer_history_audit else {}),
         }
     except (OSError, ValueError, UnicodeError, TypeError, KeyError) as exc:
         return {"state": "stale", "verified": False, "next_cursor": 0,
@@ -250,7 +275,12 @@ def _inspect_next_exported_ass_batch_locked(
     if not ffmpeg:
         raise RuntimeError("Sequential coverage requires FFmpeg/libass")
     identity = _export_identity(output_dir, config)
-    existing = read_exported_ass_coverage(output_dir, config)
+    # Pre-render snapshot is provisional: we do not scan the entire old
+    # receipt chain before a long FFmpeg batch. Strict audit occurs after
+    # rendering, before any new receipt or checkpoint is published.
+    existing = read_exported_ass_coverage(
+        output_dir, config, _defer_history_audit=True,
+    )
     if restart:
         if expected_cursor != 0:
             raise ValueError("Explicit restart requires expected_cursor=0")

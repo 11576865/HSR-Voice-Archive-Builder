@@ -260,6 +260,78 @@ class CoverageBatchTests(unittest.TestCase):
         self.assertEqual(read_exported_ass_coverage(
             self.output, self.config)["state"], "partial")
 
+    def test_writer_candidate_progress_is_explicitly_unverified(self):
+        first = self.run_mock()
+        from app.ass_coverage_batches import read_exported_ass_coverage
+        candidate = read_exported_ass_coverage(
+            self.output, self.config, _defer_history_audit=True,
+        )
+        self.assertEqual(candidate["state"], "partial")
+        self.assertEqual(candidate["next_cursor"], first["next_cursor"])
+        self.assertFalse(candidate["verified"])
+        self.assertEqual(candidate["history_audit"], "deferred")
+        # The externally exposed default read still audits the full chain.
+        self.assertTrue(read_exported_ass_coverage(
+            self.output, self.config)["verified"])
+
+    def test_writer_scans_existing_history_only_once_per_resume(self):
+        from app import ass_coverage_batches as coverage
+        self.run_mock()
+        real_audit = coverage._audit_committed_batches
+        with patch.object(coverage, "_audit_committed_batches",
+                          wraps=real_audit) as audit:
+            completed = self.run_mock(cursor=2)
+        self.assertEqual(completed["next_cursor"], 3)
+        self.assertEqual(audit.call_count, 1)
+        self.assertTrue(read_exported_ass_coverage(
+            self.output, self.config)["verified"])
+
+    def test_old_receipt_mutated_while_rendering_prevents_new_checkpoint(self):
+        from app import ass_coverage_batches as coverage
+        first = self.run_mock()
+        before = (self.output / COVERAGE_FILE).read_bytes()
+        original = (self.output / RECEIPTS_DIR /
+                    f"{first['run_id']}-batch-000001.json")
+        def render_and_mutate(*args, **kwargs):
+            original.write_text("{}", encoding="utf-8")
+            return b"fake"
+        with (patch("app.ass_coverage_batches.shutil.which",
+                    return_value="/usr/bin/ffmpeg"),
+              patch("app.ass_coverage_batches.load_project",
+                    return_value=self.config),
+              patch("app.ass_coverage_batches._render_raw_rgb",
+                    side_effect=render_and_mutate),
+              patch("app.ass_coverage_batches.visible_ink_bbox",
+                    return_value=(100, 100, 200, 200))):
+            with self.assertRaisesRegex(
+                RuntimeError, "Another process advanced the coverage ledger"
+            ):
+                inspect_next_exported_ass_batch(
+                    self.config, self.output, expected_cursor=2,
+                    sample_limit=2,
+                )
+        self.assertEqual((self.output / COVERAGE_FILE).read_bytes(), before)
+        self.assertEqual(read_exported_ass_coverage(
+            self.output, self.config)["state"], "stale")
+        self.assertFalse((self.output / RECEIPTS_DIR /
+                          f"{first['run_id']}-batch-000002.json").exists())
+
+    def test_corrupted_history_preexisting_writer_fails_closed_at_commit(self):
+        first = self.run_mock()
+        old = (self.output / RECEIPTS_DIR /
+               f"{first['run_id']}-batch-000001.json")
+        old.write_text("{}", encoding="utf-8")
+        checkpoint = (self.output / COVERAGE_FILE).read_bytes()
+        # Provisional parsing may plan from the stored cursor, but the
+        # mandatory post-render strict audit must forbid a new receipt.
+        with self.assertRaisesRegex(
+            RuntimeError, "Another process advanced the coverage ledger"
+        ):
+            self.run_mock(cursor=2)
+        self.assertEqual((self.output / COVERAGE_FILE).read_bytes(), checkpoint)
+        self.assertFalse((self.output / RECEIPTS_DIR /
+                          f"{first['run_id']}-batch-000002.json").exists())
+
     def test_stale_expected_cursor_rejected(self):
         self.run_mock()
         with self.assertRaisesRegex(ValueError, "cursor changed"):
