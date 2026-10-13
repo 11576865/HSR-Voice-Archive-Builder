@@ -5848,6 +5848,9 @@ async function fetchSubtitles(){
   if(timeRange.start!==null)params.set('start_time',timeRange.start);
   if(timeRange.end!==null)params.set('end_time',timeRange.end);
   if(selector)params.set('selector',selector);
+  const completeSelection=!q&&!timeRangeStr&&selector==='all';
+  // A partial/filtered server query cannot authenticate an older full snapshot.
+  if(!completeSelection)invalidateSharedSubtitleCorpus();
 
   try{
     if(!drafts.size&&status)status.textContent='正在加载字幕数据…';
@@ -5863,7 +5866,7 @@ async function fetchSubtitles(){
        mutationGeneration!==sharedSubtitleCorpusMutationGeneration)return;
     // Only a truly complete, unfiltered and clean Review result can back
     // Layout. Never mistake filtered search results for the full corpus.
-    if(!drafts.size&&!q&&!timeRangeStr&&selector==='all'){
+    if(!drafts.size&&completeSelection){
       rememberReviewSubtitleCorpus(projectKey,j);
     }
     const newSubs=(j.subtitles||[]).map(markServerSubtitle);
