@@ -4343,10 +4343,39 @@ for(const target of [document.getElementById('failureSummary'),document.getEleme
 }
 if(archivePanel)panelAttentionObserver.observe(archivePanel,{attributes:true,attributeFilter:['class']});
 
+let workspaceNavigationGeneration=0;
 function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(!['project','review','layout','effects','export','update'].includes(name))name='project';
+  const navigation=++workspaceNavigationGeneration;
   const previousWorkspace=document.body.dataset.workspace;
   const visibleWorkspace=name==='effects'?'layout':name; // One canvas/state, separate primary task.
+  // Do not show a stale Layout/Effects preview while Review is still saving.
+  // A failed save leaves the user and the editable draft in Review.
+  if(previousWorkspace==='review'&&visibleWorkspace==='layout'&&typeof currentSubtitle==='function'){
+    if(typeof syncEditorToMemory==='function')syncEditorToMemory();
+    const active=currentSubtitle();
+    if(active&&(active._dirty||active._saving)){
+      const projectKey=currentProject?.root||currentProject?.name||null;
+      const cueId=String(active.id);
+      Promise.resolve().then(async()=>{
+        if(active._saving&&subtitleSavePromise)await subtitleSavePromise;
+        let saved=true;
+        if(currentSubtitle()?._dirty)saved=await saveCurrentSubtitle({quiet:true});
+        if(navigation!==workspaceNavigationGeneration)return;
+        if((currentProject?.root||currentProject?.name||null)!==projectKey||
+           String(currentSubtitle()?.id??'')!==cueId)return;
+        if(!saved||currentSubtitle()?._dirty||currentSubtitle()?._saving){
+          setSubtitleSaveUi('error','正文尚未保存，已保留在「校对」；完成保存后再进入排版或特效。');
+          return;
+        }
+        showWorkspace(name,{scroll,preservePanelPin});
+      }).catch(error=>{
+        if(navigation===workspaceNavigationGeneration)
+          setSubtitleSaveUi('error','保存失败，仍留在「校对」：'+shortError(error));
+      });
+      return;
+    }
+  }
   if(!preservePanelPin)autoPinnedPanelKey=null;
   document.body.dataset.workspace=visibleWorkspace;
   document.body.dataset.workspaceTask=name;
@@ -4360,17 +4389,18 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
     setHsrStudioMode(name==='effects'?'effects':'style');
   }
   if(visibleWorkspace==='layout'&&previousWorkspace!=='layout'&&typeof updateLayoutPreview==='function'){
+    const projectKey=currentProject?.root||currentProject?.name||null;
+    const selected=previousWorkspace==='review'&&typeof currentSubtitle==='function'
+      ?currentSubtitle()?.id??null:null;
     requestAnimationFrame(async()=>{
       try{
+        if(navigation!==workspaceNavigationGeneration||
+           (currentProject?.root||currentProject?.name||null)!==projectKey)return;
         if(typeof loadLayoutStressSample!=='function'){updateLayoutPreview();return;}
-        const fromReview=previousWorkspace==='review'&&typeof currentSubtitle==='function';
-        const selected=fromReview?currentSubtitle()?.id??null:null;
-        if(fromReview&&currentSubtitle()?._dirty){
-          const saved=await saveCurrentSubtitle({quiet:true});
-          if(!saved){setLog('校对正文仍未保存，已阻止以旧内容预览');return;}
-        }
-        await loadLayoutStressSample(fromReview?{refresh:true,selectId:selected}:{});
-      }catch(error){setLog(String(error));}
+        await loadLayoutStressSample(selected!==null?{refresh:true,selectId:selected}:{});
+      }catch(error){
+        if(navigation===workspaceNavigationGeneration)setLog(String(error));
+      }
     });
   }
   if(scroll)window.scrollTo({top:0,behavior:'instant'});
@@ -8484,18 +8514,9 @@ applyPreviewBackground();
 });
 document.getElementById('layoutReloadSampleBtn')?.addEventListener('click',()=>loadLayoutStressSample({force:true}));
 
-// Review owns subtitle text editing. The previous Layout editor is read-only.
-document.getElementById('layoutCueFinalText')?.addEventListener('input',event=>layoutCueUpdateDraft(event.target.value));
-document.getElementById('layoutCueFinalText')?.addEventListener('keydown',event=>{
-  if((event.ctrlKey||event.metaKey)&&event.key==='Enter'){
-    event.preventDefault();
-    saveLayoutCueText();
-  }else if(event.altKey&&(event.key==='ArrowUp'||event.key==='ArrowDown')){
-    event.preventDefault();
-    moveLayoutCorpusSelection(event.key==='ArrowUp'?-1:1);
-  }
-});
-document.getElementById('layoutCueSaveBtn')?.addEventListener('click',()=>saveLayoutCueText());
+// Review is the sole user-facing owner of final subtitle text writes.
+// Legacy hidden Layout cue controls are retained for compatibility only; do not
+// attach a second input/save handler to them. Layout owns display timing instead.
 document.getElementById('layoutOpenProofreadingBtn')?.addEventListener('click',async()=>{
   const id=layoutCueActiveId;
   if(id===null||id===undefined)return;
