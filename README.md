@@ -231,10 +231,13 @@ output/
 
 ```text
 HSR_Voice_Archive.ass
-HSR_Voice_Archive_Black.mkv
+HSR_Voice_Archive_Bundle.mkv
+HSR_Voice_Archive_Black.mkv  # 旧版可选黑屏输出
 ```
 
-ASS and black MKV are on-demand finished outputs.
+**成品关系**：`continuous.flac` 是独立的无损音频母版；`HSR_Voice_Archive.srt` 和 `HSR_Voice_Archive.ass` 是基于同一字幕时间轴的独立字幕成品。完整 `HSR_Voice_Archive_Bundle.mkv` 是由当前 FLAC、已验证 ASS、可选字体和背景派生的单文件播放封装，**不会替代或覆盖 FLAC、SRT、ASS**。FLAC/ASS 或相关字幕来源一旦更新，旧完整 MKV 被标记为过期，但原文件保留到新 MKV 通过验证后安全替换。旧版黑屏 MKV 是单独的兼容输出，不是与完整 MKV 等价的成品。
+
+完整 MKV 支持纯色、线性／径向／柔和渐变和用户上传 PNG/JPEG/WebP 背景、720p／1080p，以及标准／高画质编码。**上传背景图上限为 16 MiB**（Base64 JSON 请求总量不超过 24 MiB），并保留原有单边分辨率与最大解码像素安全检查。该上传限制不是成品视频大小限制。
 
 内部 checkpoint、翻译使用量、QA、恢复状态等保存在项目 `.state/`，不会和面向用户的成品混在一起。
 
