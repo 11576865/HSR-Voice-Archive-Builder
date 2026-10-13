@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from .project_fonts import font_asset_directory, list_project_fonts
+from .subtitle_export_status import read_subtitle_export_health
 
 ProgressCallback = Callable[[int, int, str], None]
 MAX_BACKGROUND_BYTES = 4 * 1024 * 1024
@@ -53,6 +54,21 @@ def image_extension(raw: bytes) -> str:
     raise ValueError("Background image must be PNG, JPEG or WebP")
 
 
+def require_current_bundle_subtitles(output_dir: Path) -> None:
+    """Reject stale/unverified ASS before creating or publishing an archive.
+
+    Existence of an ASS file is not evidence that it contains the latest text,
+    timing overrides and layout for the selected project.
+    """
+    health = read_subtitle_export_health(output_dir)
+    if health.get("state") != "current" or not health.get("artifacts_current") or not health.get("ass_required"):
+        detail = str(health.get("artifact_error") or health.get("state") or "unverified")
+        raise ValueError(
+            "ASS 字幕未通过当前项目的导出一致性校验，请先重新生成 ASS/SRT 后再封装 MKV："
+            + detail
+        )
+
+
 class ArchiveBundleExporter:
     """Create and independently ffprobe-verify one Matroska archival artifact."""
 
@@ -77,10 +93,13 @@ class ArchiveBundleExporter:
         background_color: str = "#000000",
         background_image: bytes | None = None,
         progress: ProgressCallback | None = None,
+        require_current_ass: bool = False,
     ) -> dict[str, object]:
         audio, subtitles, target = Path(flac), Path(ass), Path(output)
         if not audio.is_file() or not subtitles.is_file():
             raise FileNotFoundError("需先生成 continuous.flac 与 HSR_Voice_Archive.ass")
+        if require_current_ass:
+            require_current_bundle_subtitles(target.parent)
         if audio.stat().st_size == 0 or subtitles.stat().st_size == 0:
             raise ValueError("连续 FLAC 或 ASS 为空，拒绝生成不完整 MKV")
         if not COLOR.fullmatch(str(background_color)):
@@ -102,8 +121,8 @@ class ArchiveBundleExporter:
         if include_fonts and fonts_dir is not None:
             root = Path(fonts_dir)
             # Restrict to importer-validated files in the project's own directory.
-            if root.name != "subtitle_fonts":
-                raise ValueError("Only project-owned subtitle_fonts can be attached")
+            if root.name != "subtitle_fonts" or root.is_symlink():
+                raise ValueError("字体附件必须来自真实项目目录 subtitle_fonts，不能是符号链接")
             for record in list_project_fonts(root.parent):
                 font = font_asset_directory(root.parent) / str(record["filename"])
                 if font.is_symlink() or not font.is_file():
@@ -171,7 +190,15 @@ class ArchiveBundleExporter:
             stderr = proc.stderr.read() if proc.stderr is not None else ""
             if proc.wait() != 0:
                 raise RuntimeError("完整 MKV 封装失败：" + stderr.strip()[-1500:])
-            self.validate(temporary, expected_fonts=len(fonts), expected_duration=duration)
+            self.validate(
+                temporary, expected_fonts=len(fonts), expected_duration=duration,
+                expected_font_names={font.name for font, _ in fonts},
+            )
+            # A user may change the authoritative subtitle text during a long
+            # mux. Reject the now-stale temporary MKV rather than replacing the
+            # last successfully validated archive.
+            if require_current_ass:
+                require_current_bundle_subtitles(target.parent)
             temporary.replace(target)
         if progress:
             progress(total_ms, total_ms, "完整 MKV 已通过音频／视频／软字幕／字体附件验收")
@@ -183,12 +210,20 @@ class ArchiveBundleExporter:
             "background": "image" if background_image is not None else background_color,
         }
 
-    def validate(self, output: Path, *, expected_fonts: int, expected_duration: float) -> None:
+    def validate(
+        self, output: Path, *, expected_fonts: int, expected_duration: float,
+        expected_font_names: set[str] | None = None,
+    ) -> None:
         probe = self._probe(output)
         rows = probe.get("streams", [])
         types = [str(row.get("codec_type")) for row in rows]
         if types.count("video") != 1 or types.count("audio") != 1 or types.count("subtitle") != 1:
             raise RuntimeError("MKV 校验失败：应恰好包含一个视频、FLAC 音频及 ASS 软字幕轨")
+        video = next(row for row in rows if row.get("codec_type") == "video")
+        if (video.get("codec_name") != "h264"
+                or int(video.get("width") or 0) != self.width
+                or int(video.get("height") or 0) != self.height):
+            raise RuntimeError("MKV 校验失败：H.264 背景视频轨的编码或尺寸不匹配")
         audio = next(row for row in rows if row.get("codec_type") == "audio")
         subtitle = next(row for row in rows if row.get("codec_type") == "subtitle")
         if audio.get("codec_name") != "flac" or subtitle.get("codec_name") != "ass":
@@ -196,9 +231,18 @@ class ArchiveBundleExporter:
         attachments = [row for row in rows if row.get("codec_type") == "attachment"]
         if len(attachments) != expected_fonts or types.count("attachment") != expected_fonts:
             raise RuntimeError("MKV 校验失败：字体附件数量不一致")
+        attached_names: set[str] = set()
         for row in attachments:
-            if not (row.get("tags") or {}).get("mimetype"):
-                raise RuntimeError("MKV 字体附件缺少 MIME 类型")
+            tags = row.get("tags") or {}
+            name = str(tags.get("filename") or "")
+            mime = str(tags.get("mimetype") or "")
+            if not name or not mime or ATTACHMENT_MIME.get(Path(name).suffix.lower()) != mime:
+                raise RuntimeError("MKV 字体附件名称或 MIME 类型不匹配")
+            if name in attached_names:
+                raise RuntimeError("MKV 字体附件名称重复")
+            attached_names.add(name)
+        if expected_font_names is not None and attached_names != expected_font_names:
+            raise RuntimeError("MKV 校验失败：内嵌字体名称与实际项目字体不一致")
         duration = float(probe.get("format", {}).get("duration") or 0)
         if not math.isfinite(duration) or abs(duration - expected_duration) > 1.0:
             raise RuntimeError("MKV 校验失败：媒体时长与连续 FLAC 不一致")
