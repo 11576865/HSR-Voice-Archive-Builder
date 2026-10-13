@@ -640,6 +640,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "HSR_Voice_Archive.ass",
         "HSR_Voice_Archive.srt",
         "HSR_Voice_Archive_Black.mkv",
+        "HSR_Voice_Archive_Bundle.mkv",
         "ass_layout_overflow_report.json",
         "build_report.json",
         "continuous.flac",
@@ -678,6 +679,7 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "HSR_Voice_Archive.srt",
         "HSR_Voice_Archive.ass",
         "HSR_Voice_Archive_Black.mkv",
+        "HSR_Voice_Archive_Bundle.mkv",
         *tuple(
             name
             for name in outputs
