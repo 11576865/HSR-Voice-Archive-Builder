@@ -469,6 +469,68 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     page.close()
 
 
+
+def shared_corpus_request_check(browser, base_url, report):
+    """Production UI reuses clean complete Review rows, not filtered/stale rows."""
+    page = browser.new_page(viewport={"width": 1180, "height": 800})
+    requests = []
+    rows = [dict(row) for row in SUBTITLES]
+    fixture_router = make_router(rows, [])
+    errors = []
+    page.on("pageerror", lambda error: errors.append(str(error)))
+
+    def route_corpus(route):
+        if ("/subtitles?" in route.request.url and
+                route.request.method == "GET"):
+            requests.append(route.request.url)
+        fixture_router(route)
+
+    page.route("**/api/**", route_corpus)
+    page.goto(base_url, wait_until="domcontentloaded")
+    page.wait_for_function("typeof fetchSubtitles === 'function'", timeout=15000)
+    page.evaluate("""() => {
+      currentProject={name:'fixture-project',root:'/qa/fixture',
+                      config:{source_text_language:'en',target_language:'zh-CN'}};
+      document.getElementById('subSelector').value='all';
+      document.getElementById('subSearchQuery').value='';
+      document.getElementById('subTimeRange').value='';
+      showWorkspace('review',{scroll:false});
+    }""")
+    page.evaluate("() => fetchSubtitles()")
+    ensure(len(requests) == 1 and "selector=all" in requests[0],
+           "Clean unfiltered Review should issue exactly one full-list request")
+    page.evaluate("() => showWorkspace('layout',{scroll:false})")
+    page.wait_for_function("""() =>
+      layoutCorpusItems.length===4 && layoutCorpusSelectedId!==null
+    """, timeout=15000)
+    ensure(len(requests) == 1,
+           f"Review -> Layout duplicated the full corpus request: {requests}")
+
+    # A filtered Review request invalidates the shared full-list snapshot.
+    # Layout may not treat the previous unfiltered copy as newly verified.
+    page.evaluate("""() => {
+      showWorkspace('review',{scroll:false});
+      document.getElementById('subSearchQuery').value='stars';
+    }""")
+    page.evaluate("() => fetchSubtitles()")
+    ensure(len(requests) == 2 and "q=stars" in requests[-1],
+           "Filtered Review request was not sent to backend")
+    with page.expect_response(lambda response: (
+        "/subtitles?selector=all" in response.url and response.status == 200
+    ), timeout=15000):
+        page.evaluate("() => showWorkspace('layout',{scroll:false})")
+    ensure(len(requests) == 3,
+           f"Filtered Review must revalidate full Layout corpus; requests={requests}")
+    ensure(not errors, "Shared corpus browser JS errors: " + " | ".join(errors))
+    report["cross_workspace_corpus"] = {
+        "initial_review_full_requests": 1,
+        "after_clean_review_to_layout": 1,
+        "after_filtered_review_and_layout": 3,
+        "js_errors": errors,
+    }
+    page.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("artifacts/subtitle-browser"))
@@ -488,6 +550,7 @@ def main():
             browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             try:
                 desktop_check(browser, url, args.output, report)
+                shared_corpus_request_check(browser, url, report)
                 mobile_check(browser, url, args.output, report, 390, 844, "mobile_390")
                 mobile_check(browser, url, args.output, report, 768, 1024, "tablet_768")
             finally:

@@ -16,7 +16,7 @@ import unittest
 class SubtitleContinuousTimelineTests(unittest.TestCase):
     def test_timeline_zoom_navigation_pointer_drag_and_explicit_save(self):
         html=(Path(__file__).resolve().parents[1]/"app/static/index.html").read_text(encoding="utf-8")
-        start=html.index("let layoutStressSample=null;")
+        start=html.index("// Shared immutable *complete* subtitle snapshot")
         end=html.index("async function updateLayoutPreview()",start)
         source=html[start:end]
         harness=r"""
