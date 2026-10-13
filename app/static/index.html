@@ -2959,7 +2959,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #subtitleLayoutPreviewCard .layout-cue-actions[hidden],
 #subtitleLayoutPreviewCard .layout-cue-audio[hidden],
 #subtitleLayoutPreviewCard .layout-cue-scrub[hidden],
-#subtitleLayoutPreviewCard #layoutCueTextConflict{display:none!important}\n#subtitleLayoutPreviewCard .layout-cue-actions[hidden]{display:none!important}
+#subtitleLayoutPreviewCard #layoutCueTextConflict{display:none!important}
+#subtitleLayoutPreviewCard .layout-cue-actions[hidden]{display:none!important}
 /* Two scoped studio projections; a single preview and project data authority. */
 .hsr-studio-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
 .hsr-studio-tabs button{flex:1;min-width:125px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-primary);color:var(--text);font-weight:650;cursor:pointer}
@@ -2979,6 +2980,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 .hsr-footage-picker>p{grid-column:1/-1;margin:0}
 @media(max-width:759px){.hsr-footage-picker{grid-template-columns:1fr}}
 </style>
+<link rel="stylesheet" href="/static/hsr-ui-convergence.css">
 </head>
 <body>
 <a href="#mainContent" class="skip-link">跳过导航进入主内容</a>
@@ -3363,14 +3365,21 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
       </div>
       <p class="small muted">字幕工作流：快速计算版面 → 用 FFmpeg/libass 核对最终字形 → 保存样式或生成 ASS。几何求解状态不等于渲染验收。</p>
+      <div class="hsr-studio-toolbar" role="group" aria-label="字幕制作方式">
+        <nav class="hsr-studio-tabs" aria-label="排版与特效工作台">
+          <button type="button" id="studioStyleTab" aria-pressed="true">排版 · 字体与位置</button>
+          <button type="button" id="studioEffectsTab" aria-pressed="false">特效 · 动画与视频</button>
+        </nav>
+        <button type="button" id="layoutAuditDrawerToggle" aria-expanded="false" aria-controls="layoutCorpusRail" title="按需打开排版问题筛选；校对字幕请到「校对」工作区">批量排版检查</button>
+      </div>
       <div class="layout-workflow-strip" aria-label="字幕制作工作流">
         <span><b>01</b> 调整样式与几何</span><span><b>02</b> 实际渲染检视</span><span><b>03</b> 保存与生成</span>
       </div>
       <div class="preview-workbench">
 
-        <aside class="layout-corpus-rail" aria-label="项目字幕导航">
+        <aside class="layout-corpus-rail" id="layoutCorpusRail" aria-label="批量排版检查与问题字幕定位" aria-hidden="true" inert>
           <div class="layout-rail-title">
-            <div><span class="layout-eyebrow">SUBTITLE EXPLORER</span><h3>字幕条目</h3></div>
+            <div><span class="layout-eyebrow">BATCH LAYOUT QA</span><h3>排版问题检查</h3></div>
             <div class="layout-rail-head-actions">
               <span id="layoutCorpusCount" class="layout-rail-count">0 / 0</span>
               <button type="button" id="layoutCorpusRefreshBtn" title="重新读取项目字幕；保留本次会话未保存的正文草稿">刷新</button>
@@ -3378,7 +3387,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             </div>
           </div>
           <div class="layout-rail-search">
-            <label for="layoutCorpusSearch">查找台词、编号、章节</label>
+            <label for="layoutCorpusSearch">筛选检查范围：台词、编号、章节</label>
             <input id="layoutCorpusSearch" type="search" autocomplete="off" placeholder="搜索字幕…" />
           </div>
           <div class="layout-rail-filters" aria-label="条目筛选">
@@ -3511,8 +3520,9 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <div class="layout-cue-grid">
               <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
               <div class="layout-cue-translation">
-                <label class="layout-cue-field-label" for="layoutCueFinalText">当前中文字幕 · 只读引用（请在校对中编辑）</label>
-                <textarea id="layoutCueFinalText" rows="3" disabled readonly aria-readonly="true" placeholder="选择真实项目字幕后查看当前正文。"></textarea>
+                <span class="layout-cue-field-label">当前中文字幕 · 来自校对</span>
+                <p id="layoutCueReadOnlyText" class="hsr-cue-readonly">选中字幕后显示当前正文。</p>
+                <textarea id="layoutCueFinalText" rows="3" disabled readonly aria-readonly="true" hidden tabindex="-1" aria-hidden="true" placeholder="选择真实项目字幕后查看当前正文。"></textarea>
               </div>
             </div>
             <div class="layout-cue-actions" hidden aria-hidden="true">
@@ -3543,8 +3553,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
 
         <aside class="preview-inspector" aria-label="字幕样式参数与操作">
-          <div class="layout-inspector-head"><div><span>STYLE INSPECTOR</span><strong>字幕样式</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span></div>
-  <div class="row preview-copy-fields">
+          <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span></div>
+  <details id="layoutTrialTextDetails" class="hsr-preview-trial">
+    <summary>手动试调字幕文本（不会修改项目字幕）</summary>
+    <div class="row preview-copy-fields">
           <div>
             <label for="prevChsText">中文字幕</label>
             <input id="prevChsText" value="愿此行，终抵群星。" placeholder="输入中文字幕…">
@@ -3559,18 +3571,15 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <button type="button" id="layoutReloadSampleBtn" class="secondary" title="明确舍弃当前试调文本，重新从项目选择版面压力样本">重新载入项目样本</button>
           </div>
         </div>
+  </details>
 
-        <nav class="hsr-studio-tabs" aria-label="字幕制作工作台">
-<button type="button" id="studioStyleTab" aria-pressed="true">排版 · 字体与位置</button>
-<button type="button" id="studioEffectsTab" aria-pressed="false">特效 · 动画与同步</button>
-</nav>
-<div class="preview-actions">
+        <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
+                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="使用当前特效生成最长 8 秒视频；选择短视频后叠加到本地素材上，否则使用黑底">播放动态特效</button>
-<button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存设置</button>
-                    <button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button>
+<button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
+                    <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
                   </div>
                   <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
                     <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
@@ -7314,9 +7323,11 @@ function renderLayoutCueEditor(){
   const editor=document.getElementById('layoutCueFinalText');
   if(editor){
     editor.disabled=!selected;
-    editor.readOnly=true; // Single owner: text mutations belong to the Review workspace.
+    editor.readOnly=true; // Review is the only final subtitle text-write authority.
     if(!selected||document.activeElement!==editor)editor.value=selected?state.draft:'';
   }
+  const display=document.getElementById('layoutCueReadOnlyText');
+  if(display)display.textContent=selected?state.draft:'尚未选中字幕。';
   const jump=document.getElementById('layoutOpenProofreadingBtn');
   if(jump)jump.disabled=!selected;
   const chars=document.getElementById('layoutCueCharCount');
@@ -8318,7 +8329,11 @@ function setHsrStudioMode(mode){
   const next=mode==='effects'?'effects':'style';
   root.dataset.studioMode=next;
   const heading=document.getElementById('hsrStudioTitle');
-  if(heading)heading.textContent=next==='effects'?'字幕特效工作台':'字幕样式工作台';
+  if(heading)heading.textContent=next==='effects'?'字幕特效工作台':'字幕排版工作台';
+  const inspectorTitle=document.getElementById('hsrInspectorTitle');
+  if(inspectorTitle)inspectorTitle.textContent=next==='effects'?'特效参数':'排版参数';
+  const inspectorEyebrow=document.getElementById('hsrInspectorEyebrow');
+  if(inspectorEyebrow)inspectorEyebrow.textContent=next==='effects'?'EFFECTS':'LAYOUT';
   document.getElementById('studioStyleTab')?.setAttribute('aria-pressed',next==='style'?'true':'false');
   document.getElementById('studioEffectsTab')?.setAttribute('aria-pressed',next==='effects'?'true':'false');
   root.querySelectorAll('.layout-inspector-section[data-studio-scope]').forEach(section=>{
@@ -8328,6 +8343,23 @@ function setHsrStudioMode(mode){
 }
 document.getElementById('studioStyleTab')?.addEventListener('click',()=>setHsrStudioMode('style'));
 document.getElementById('studioEffectsTab')?.addEventListener('click',()=>setHsrStudioMode('effects'));
+function setHsrAuditDrawer(open){
+  const workbench=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
+  const rail=document.getElementById('layoutCorpusRail');
+  const toggle=document.getElementById('layoutAuditDrawerToggle');
+  if(!workbench||!rail||!toggle)return;
+  if(!open&&rail.contains(document.activeElement))toggle.focus();
+  workbench.classList.toggle('audit-open',!!open);
+  rail.classList.toggle('is-open',!!open);
+  rail.toggleAttribute('inert',!open);
+  rail.setAttribute('aria-hidden',open?'false':'true');
+  toggle.setAttribute('aria-expanded',open?'true':'false');
+  toggle.textContent=open?'收起批量检查':'批量排版检查';
+}
+document.getElementById('layoutAuditDrawerToggle')?.addEventListener('click',()=>{
+  const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
+  setHsrAuditDrawer(!root?.classList.contains('audit-open'));
+});
 
 
 async function renderHsrEffectVideo(){
