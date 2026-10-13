@@ -741,6 +741,76 @@ def touch_safety_check(browser, base_url, report):
     page.close()
 
 
+def gradient_background_check(browser, base_url, output, report):
+    """Real Chromium UI + real FFmpeg preview PNG at desktop and phone width."""
+    import sys
+    sys.path.insert(0, str(ROOT))
+    from app.archive_bundle_backgrounds import normalize_bundle_background, render_background_preview
+
+    evidence = []
+    for width, height in ((1600, 900), (390, 844)):
+        page = browser.new_page(viewport={"width": width, "height": height})
+        errors, requests = [], []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        def preview_route(route):
+            payload = route.request.post_data_json
+            assert payload["expected_project_root"] == "/qa/fixture"
+            spec = normalize_bundle_background(payload.get("background_spec"))
+            assert spec["mode"] in {"linear", "radial", "soft"}
+            requests.append(spec)
+            png = render_background_preview(
+                spec, color=payload.get("background_color") or "#000000"
+            )
+            route.fulfill(
+                status=200, content_type="application/json",
+                body=json.dumps({
+                    "ok": True, "image_base64": base64.b64encode(png).decode("ascii"),
+                    "source": "ffmpeg", "width": 640, "height": 360,
+                }),
+            )
+        page.route("**/api/**", make_router([dict(x) for x in SUBTITLES], []))
+        page.route("**/api/output/archive-bundle/background-preview", preview_route)
+        page.goto(base_url, wait_until="domcontentloaded")
+        page.evaluate("""() => {
+          currentProject={root:'/qa/fixture',name:'Gradient fixture'};
+          syncArchiveBundleProjectState({
+            root:'/qa/fixture',
+            bundle_export:{
+              state:'stale',message:'背景已变化，需要更新 MKV',
+              background_spec:{mode:'linear',first:'#e25a6b',second:'#112941',
+                third:'#313f73',direction:'horizontal',resolution:'1080p',quality:'high'}
+            }
+          });
+          showWorkspace('export',{scroll:false});
+          document.getElementById('archiveBundlePanel').open=true;
+        }""")
+        ensure(page.locator("#bundleBackgroundMode").input_value() == "linear",
+               "Saved gradient background mode not restored")
+        ensure(page.locator("#bundleVideoResolution").input_value() == "1080p",
+               "Saved 1080p resolution not restored")
+        page.locator("#bundleBackgroundMode").select_option("soft")
+        ensure(page.locator("#bundleGradientThird").is_visible(),
+               "Soft mode must reveal third color control")
+        ensure(not page.locator("#bundleGradientDirection").is_visible(),
+               "Radial/soft should not show irrelevant linear direction")
+        page.locator("#bundlePreviewBtn").click()
+        page.wait_for_function("""() => {
+          const img=document.getElementById('bundleBackgroundPreview');
+          return img?.style.display==='block' && img.complete &&
+            img.naturalWidth===640 && img.naturalHeight===360;
+        }""", timeout=30000)
+        ensure(requests and requests[-1]["mode"] == "soft",
+               "Browser submitted wrong soft gradient to FFmpeg")
+        ensure(not errors, "Gradient background browser JS error: " + repr(errors))
+        screenshot(page, output, "gradient_background_" + str(width))
+        evidence.append({"viewport": str(width)+"x"+str(height),
+                         "mode": requests[-1]["mode"],
+                         "preview": "FFmpeg-generated PNG decoded by Chromium",
+                         "selected_resolution": page.locator("#bundleVideoResolution").input_value()})
+        page.close()
+    report["gradient_background"] = evidence
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("artifacts/subtitle-browser"))
@@ -763,6 +833,7 @@ def main():
                 focused_studio_viewport_check(browser, url, args.output, report)
                 touch_safety_check(browser, url, report)
                 shared_corpus_request_check(browser, url, report)
+                gradient_background_check(browser, url, args.output, report)
                 mobile_check(browser, url, args.output, report, 390, 844, "mobile_390")
                 mobile_check(browser, url, args.output, report, 768, 1024, "tablet_768")
             finally:
