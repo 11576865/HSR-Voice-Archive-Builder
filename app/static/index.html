@@ -4865,7 +4865,7 @@ function renderProjectOverview(p){
   const r=p.report||{},source=p.source_status||{},outputs=p.outputs||{},groups=p.output_groups||{},finalProducts=groups.final_products||{};
   const reviewPending=!!outputs['semantic_review_required.txt']?.exists;
   const missingWavs=Number(r.count_unavailable_wavs||0),missingText=Number(r.count_missing_target_text||0);
-  const has=!!p.build_complete,hasGaps=has&&(missingWavs>0||missingText>0);
+  const has=!!(p.delivery_complete??p.build_complete),hasGaps=has&&(missingWavs>0||missingText>0);
   document.getElementById('overviewProjectName').textContent=p.name||'未命名项目';
   document.getElementById('overviewProjectRoute').textContent=(p.config?.source_text_language||'—')+' → '+(p.config?.target_language||'—')+' · '+(p.output_path||'尚无输出路径');
   const status=document.getElementById('overviewStatus');
@@ -4874,6 +4874,7 @@ function renderProjectOverview(p){
   else if(reviewPending){statusText='等待人工复核';statusClass='warn'}
   else if(hasGaps){statusText='完成，存在缺项';statusClass='warn'}
   else if(has){statusText='档案完成';statusClass='ok'}
+  else if(p.build_complete){statusText='基础档案已生成 · MKV 待更新';statusClass='warn'}
   status.textContent=statusText;status.className='project-status '+statusClass;
   document.getElementById('overviewTotal').textContent=n(r.count_total);
   document.getElementById('overviewOfficial').textContent=n(Number(r.count_official_chs_lab||0)+Number(r.count_incremental_official_reference||0));
@@ -4995,14 +4996,14 @@ function fillProject(p){
   syncAdvancedTranslationVisibility();
   document.getElementById('candidatePath').value=c.update_candidates||'';
   document.getElementById('remoteCharacter').value=c.remote_character||'';
-  const r=p.report||{},has=!!p.build_complete;
+  const r=p.report||{},has=!!(p.delivery_complete??p.build_complete);
   const reviewPending=!!p.outputs?.['semantic_review_required.txt']?.exists;
   document.getElementById('reviewPanel').classList.toggle('hidden',!reviewPending);
   const missingWavs=Number(r.count_unavailable_wavs||0),missingText=Number(r.count_missing_target_text||0);
   const hasGaps=has&&(missingWavs>0||missingText>0);
-  document.getElementById('manifestState').textContent=has?(hasGaps?'构建完成，存在缺项':'完整构建已完成'):'尚未完成';
+  document.getElementById('manifestState').textContent=has?(hasGaps?'构建完成，存在缺项':'完整交付已完成'):(p.build_complete?'FLAC／字幕已生成 · MKV 待更新':'尚未完成');
   const hint=document.getElementById('archiveHint');
-  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
+  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':(p.build_complete?'独立文件已生成，但默认完整模式的 MKV 尚未完成或已过期；将在来源校验通过后自动更新。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。');
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
   // Existing products remain inspectable after interrupted rebuilds, with their
   // own freshness labels; never hide the last-known-good MKV merely because
