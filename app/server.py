@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import decode_preview_source_video, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
+from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -827,6 +827,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             words = None
         fmt = str(data.get("preview_format") or "mp4").lower()
         source_bytes = decode_preview_source_video(data.get("source_video_base64"))
+        background_color = normalize_preview_background_color(data.get("preview_background_color"))
         video = await run_in_threadpool(
             render_ass_preview_video,
             english_text=str(data.get("english_text") or ""),
@@ -840,12 +841,13 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             source_video_bytes=source_bytes,
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
             include_source_audio=data.get("include_source_audio", True) is True,
+            background_color=background_color,
             font_dir=_active_preview_font_dir(),
         )
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
-                     "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else "black"},
+                     "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("black" if background_color == "#000000" else "solid-color")},
         )
     except Exception as exc:
         return JSONResponse(
