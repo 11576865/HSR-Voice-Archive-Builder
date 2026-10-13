@@ -27,6 +27,7 @@ class ArchiveBackgroundUiContractTests(unittest.TestCase):
         self.assertIn("'bundleVideoResolution'", source)
         self.assertIn("syncArchiveBundleProjectState(project,force=false)", source)
         self.assertIn("export:new Set(['gptSovitsCard','archiveCard'])", source)
+        self.assertIn('#archiveBundlePanel .hsr-bundle-options label[hidden]{display:none!important}', source)
         self.assertIn('not([data-workspace="export"]) #archiveCard', source)
 
     def test_full_and_lite_use_same_validated_source_preview_and_export(self):
