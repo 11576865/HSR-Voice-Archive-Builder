@@ -14,6 +14,7 @@ from typing import Any
 from .builder import atomic_write_text
 from .project_fonts import font_asset_directory
 from .subtitle_export_status import read_subtitle_export_health
+from .archive_bundle_backgrounds import normalize_bundle_background
 
 RECEIPT = "archive_bundle_receipt.json"
 OUTPUT = "HSR_Voice_Archive_Bundle.mkv"
@@ -97,7 +98,8 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
     if receipt is None:
         return {"known": False, "background_color": "#000000",
                 "background_kind": "color", "image_saved": False,
-                "attach_project_fonts": True}
+                "attach_project_fonts": True,
+                "background_spec": normalize_bundle_background(None)}
     bg = receipt["background"]
     return {
         "known": True,
@@ -105,6 +107,9 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
         "background_kind": "image" if bg.get("kind") == "image" else "color",
         "image_saved": bg.get("kind") == "image",
         "attach_project_fonts": receipt["attach_project_fonts"],
+        "background_spec": normalize_bundle_background(bg.get("spec") or {
+            "mode": bg.get("kind") or "color",
+        }),
     }
 
 
@@ -153,13 +158,19 @@ def record_bundle_publication(
     output: Path, *, background_color: str, background_image: bytes | None,
     image_extension: str | None, include_fonts: bool,
     artifact: Path | None = None,
+    background_spec: dict[str, str] | None = None,
 ) -> None:
     """Persist replayable inputs and provenance after verified atomic MKV publish.
 
     Saved images use content-addressed names; an earlier referenced image is not
     removed until after any future successful publication (and is safe to retain).
     """
-    bg: dict[str, Any] = {"kind": "color", "color": background_color}
+    spec = normalize_bundle_background(background_spec or {
+        "mode": "image" if background_image is not None else "color",
+    })
+    bg: dict[str, Any] = {
+        "kind": spec["mode"], "color": background_color, "spec": spec,
+    }
     if background_image is not None:
         if image_extension not in IMAGE_EXTENSIONS or not 0 < len(background_image) <= MAX_IMAGE_BYTES:
             raise ValueError("Unsupported image snapshot")
@@ -181,7 +192,7 @@ def record_bundle_publication(
                 temp.replace(target)
             finally:
                 temp.unlink(missing_ok=True)
-        bg = {"kind": "image", "color": background_color,
+        bg = {"kind": "image", "color": background_color, "spec": spec,
               "image_name": name, "sha256": digest, "extension": image_extension}
     receipt = {
         "schema_version": 1,
