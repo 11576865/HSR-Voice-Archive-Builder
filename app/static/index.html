@@ -3333,6 +3333,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end" id="previewHeaderBadges">
           <button type="button" id="hsrStudioFocusToggle" aria-pressed="false" title="在独立视口内编辑；可随时返回普通页面">退出专注模式</button>
+          <button type="button" id="hsrFontImportShortcut" title="打开当前项目的字体导入，不依赖系统字体安装">导入字体</button>
           <button id="hsrTouchSliderToggle" type="button" aria-pressed="false" aria-controls="previewControls" title="触屏滚动时锁定所有工作台滑块">解锁滑块调节</button>
           <span id="previewScaleBadge" class="badge">100%</span>
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
@@ -8343,6 +8344,18 @@ function setHsrStudioFocusMode(enabled){
   }
   if(!active&&before)window.scrollTo({top:0,behavior:'instant'});
 }
+document.getElementById('hsrFontImportShortcut')?.addEventListener('click',()=>{
+  // Reuse the same project-owned font importer; Effects does not clone it.
+  if(document.body.dataset.workspaceTask!=='layout')showWorkspace('layout',{scroll:false});
+  const importer=document.getElementById('projectFontImporter');
+  const group=importer?.closest('details.layout-inspector-section');
+  if(group)group.open=true;
+  if(importer)importer.open=true;
+  requestAnimationFrame(()=>{
+    importer?.scrollIntoView({block:'nearest',behavior:'instant'});
+    document.getElementById('projectFontFile')?.focus({preventScroll:true});
+  });
+});
 document.getElementById('hsrStudioFocusToggle')?.addEventListener('click',()=>{
   setHsrStudioFocusMode(document.body.dataset.hsrStudioFocus!=='true');
 });
