@@ -515,11 +515,12 @@ def shared_corpus_request_check(browser, base_url, report):
     page.evaluate("() => fetchSubtitles()")
     ensure(len(requests) == 2 and "q=stars" in requests[-1],
            "Filtered Review request was not sent to backend")
-    with page.expect_request(lambda req: (
-        "/subtitles?selector=all" in req.url), timeout=15000):
+    with page.expect_response(lambda response: (
+        "/subtitles?selector=all" in response.url and response.status == 200
+    ), timeout=15000):
         page.evaluate("() => showWorkspace('layout',{scroll:false})")
     ensure(len(requests) == 3,
-           "Filtered Review response was incorrectly reused as full Layout corpus")
+           f"Filtered Review must revalidate full Layout corpus; requests={requests}")
     ensure(not errors, "Shared corpus browser JS errors: " + " | ".join(errors))
     report["cross_workspace_corpus"] = {
         "initial_review_full_requests": 1,
