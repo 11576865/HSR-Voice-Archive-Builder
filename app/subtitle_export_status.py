@@ -103,8 +103,10 @@ def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
         srt_hash = _sha256(output_dir / SRT_NAME) if certified else None
         ass_hash = _sha256(output_dir / ASS_NAME) if certified and ass_required else None
         srt_current = bool(srt_hash and outputs.get(SRT_NAME) == srt_hash)
-        ass_current = bool(ass_required and srt_current
-                           and ass_hash and outputs.get(ASS_NAME) == ass_hash)
+        # Each exported file has its own provenance. A damaged SRT must not
+        # invalidate a separately unchanged ASS, and conversely.
+        ass_current = bool(ass_required and ass_hash
+                           and outputs.get(ASS_NAME) == ass_hash)
         if not inputs_current:
             state = "stale"
             error = "Subtitle source or human text/time overrides changed after the last export"
