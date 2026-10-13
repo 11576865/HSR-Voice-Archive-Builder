@@ -3507,39 +3507,11 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               </div>
               <p id="layoutCueTimingStatus" role="status" aria-live="polite">调整仅影响导出的字幕显示时间，不移动 WAV 或更改原始音频时间轴。单侧最多偏离 5 秒。</p>
             </section>
-            <div class="layout-cue-scrub" hidden aria-hidden="true">
-              <label for="layoutCueScrubber">片段内预览位置 <output id="layoutCueScrubberTime">—</output></label>
-              <input type="range" id="layoutCueScrubber" min="5" max="95" step="5" value="50" disabled aria-describedby="layoutCueTimeNote" />
-              <p id="layoutCueTimeNote">滑块控制当前片段的 ASS 效果预览时间，不保存时间修改；上方时间输入另行保存至字幕显示时间覆写层。</p>
-            </div>
             <div class="layout-cue-grid">
               <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
               <div class="layout-cue-translation">
                 <span class="layout-cue-field-label">当前中文字幕 · 来自校对</span>
                 <p id="layoutCueReadOnlyText" class="hsr-cue-readonly">选中字幕后显示当前正文。</p>
-                <textarea id="layoutCueFinalText" rows="3" disabled readonly aria-readonly="true" hidden tabindex="-1" aria-hidden="true" placeholder="选择真实项目字幕后查看当前正文。"></textarea>
-              </div>
-            </div>
-            <div class="layout-cue-actions" hidden aria-hidden="true">
-              <button id="layoutCueSaveBtn" type="button" disabled>保存当前字幕</button>
-              <button id="layoutCueRevertBtn" type="button" disabled>放弃未保存修改</button>
-              <span id="layoutCueCharCount">0 字</span>
-            </div>
-            <div id="layoutCueTextConflict" class="layout-cue-text-conflict" role="status" aria-live="polite" hidden aria-hidden="true">
-              <strong>服务器字幕正文已发生变化</strong>
-              <p>本地未保存草稿已经保留。请先比较并明确选择服务器版本或保留本地草稿；不会自动覆盖其他编辑窗口。</p>
-              <div class="layout-cue-text-conflict-actions">
-                <button id="layoutCueUseServerBtn" type="button">采用服务器正文</button>
-                <button id="layoutCueKeepDraftBtn" type="button">确认保留本地草稿</button>
-              </div>
-            </div>
-            <div class="layout-cue-audio" hidden aria-hidden="true">
-              <div class="layout-cue-audio-meta"><strong>原始台词试听</strong><span id="layoutCueAudioStatus">选取条目后按需加载原始 WAV</span></div>
-              <button id="layoutCueAudioLoadBtn" type="button" disabled>加载音频</button>
-              <audio id="layoutCueAudio" controls preload="none" aria-label="当前字幕对应原始音频"></audio>
-              <div class="layout-cue-waveform-wrap">
-                <canvas id="layoutCueWaveform" width="960" height="90" role="slider" tabindex="0" aria-label="原始 WAV 波形试听定位" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" aria-describedby="layoutCueWaveformHelp"></canvas>
-                <span id="layoutCueWaveformHelp">加载音频后点击波形可跳转播放位置；左右方向键微调 0.5 秒。音频波形不是字幕项目时间轴。</span>
               </div>
             </div>
             <button type="button" id="layoutOpenProofreadingBtn" class="secondary">在校对中编辑当前字幕与试听原始语音</button>
@@ -7006,11 +6978,9 @@ function updateLayoutSampleOrigin(){
 }
 
 
-/* Cue editing is a separate transaction from global ASS style settings.
-   It persists ONLY the target subtitle final_chs override; source timing and
-   alignment remain owned by the archive build pipeline. */
+/* Layout / Effects own persisted display timing; final_chs and original WAV are
+   edited and played only by Review. Do not rebuild a second ownership path. */
 let layoutCueProjectKey=null;
-let layoutCueDrafts=new Map();
 let layoutCueTimingDrafts=new Map();
 let layoutCueTimingSaveInFlight=false;
 let layoutCueExportNeedsRetry=false;
@@ -7019,86 +6989,8 @@ let layoutCueExportRetryInFlight=false;
 let layoutCueExportHealthState="unknown";
 let layoutCueExportHealthError="";
 let layoutCueActiveId=null;
-let layoutCueSaveInFlight=false;
-let layoutCueAudioAbort=null;
-let layoutCueAudioObjectUrl=null;
-let layoutCueAudioIdentity=null;
-let layoutCueWaveformPeaks=null;
-
-function drawLayoutCueWaveform(){
-  const canvas=document.getElementById('layoutCueWaveform');
-  if(!canvas||typeof canvas.getContext!=='function')return;
-  const ctx=canvas.getContext('2d');
-  if(!ctx)return;
-  const w=canvas.width,h=canvas.height,mid=h/2;
-  ctx.clearRect(0,0,w,h);
-  ctx.fillStyle='#172433';ctx.fillRect(0,0,w,h);
-  ctx.fillStyle='#536a7d';ctx.fillRect(0,mid,w,1);
-  if(Array.isArray(layoutCueWaveformPeaks)&&layoutCueWaveformPeaks.length){
-    ctx.fillStyle='#70d0c8';
-    const bw=w/layoutCueWaveformPeaks.length;
-    for(let i=0;i<layoutCueWaveformPeaks.length;i++){
-      const height=Math.max(2,layoutCueWaveformPeaks[i]*(h-16));
-      ctx.fillRect(i*bw+1,mid-height/2,Math.max(1,bw-2),height);
-    }
-  }else{
-    ctx.fillStyle='#a2b4c1';ctx.font='13px system-ui,sans-serif';
-    ctx.fillText('加载本条原始 WAV 后显示波形',12,mid-10);
-  }
-  const audio=document.getElementById('layoutCueAudio');
-  const progress=audio&&Number.isFinite(audio.duration)&&audio.duration>0
-    ?Math.min(1,Math.max(0,audio.currentTime/audio.duration)):0;
-  ctx.fillStyle='#f3c579';ctx.fillRect(Math.round(progress*w)-1,0,2,h);
-  canvas.setAttribute('aria-valuenow',String(Math.round(progress*100)));
-}
-async function layoutCuePrepareWaveform(blob,identity){
-  const Ctor=window.AudioContext||window.webkitAudioContext;
-  if(typeof Ctor!=='function'||blob.size>12*1024*1024)return;
-  const ctx=new Ctor();
-  try{
-    const decoded=await ctx.decodeAudioData(await blob.arrayBuffer());
-    const channel=decoded.getChannelData(0);
-    const bins=240;
-    const values=[];
-    for(let bin=0;bin<bins;bin++){
-      const begin=Math.floor(channel.length*bin/bins);
-      const end=Math.floor(channel.length*(bin+1)/bins);
-      const step=Math.max(1,Math.ceil((end-begin)/256));
-      let peak=0;
-      for(let i=begin;i<end;i+=step)peak=Math.max(peak,Math.abs(channel[i]||0));
-      values.push(Math.min(1,peak));
-    }
-    if(layoutCueAudioIdentity!==identity)return;
-    layoutCueWaveformPeaks=values;
-    drawLayoutCueWaveform();
-  }finally{
-    if(typeof ctx.close==='function')ctx.close().catch(()=>{});
-  }
-}
-function layoutCueSeekAudio(fraction){
-  const audio=document.getElementById('layoutCueAudio');
-  if(!audio||!Number.isFinite(audio.duration)||audio.duration<=0)return;
-  audio.currentTime=Math.min(audio.duration,Math.max(0,fraction*audio.duration));
-  drawLayoutCueWaveform();
-}
-
 function layoutCueRow(id){
   return layoutCorpusItems.find(item=>String(item.id)===String(id))||null;
-}
-function layoutCueClearAudio(){
-  if(layoutCueAudioAbort){layoutCueAudioAbort.abort();layoutCueAudioAbort=null;}
-  const player=document.getElementById('layoutCueAudio');
-  if(player){
-    if(typeof player.pause==='function')player.pause();
-    if(typeof player.removeAttribute==='function')player.removeAttribute('src');
-    if(typeof player.load==='function')player.load();
-  }
-  if(layoutCueAudioObjectUrl){URL.revokeObjectURL(layoutCueAudioObjectUrl);layoutCueAudioObjectUrl=null;}
-  layoutCueAudioIdentity=null;
-  layoutCueWaveformPeaks=null;
-  drawLayoutCueWaveform();
-  const label=document.getElementById('layoutCueAudioStatus');
-  if(label)label.textContent='按需加载当前条目的原始 WAV';
 }
 function layoutCueApplyExportHealth(health){
   if(!health||typeof health!=='object')return;
@@ -7124,7 +7016,7 @@ function renderLayoutExportHealthNotice(){
     :'当前 ASS/SRT 不应视为已完成导出：'+(layoutCueExportHealthError||'导出状态缺乏有效证明')+'。可在此重新生成。';
   if(retry){
     retry.hidden=ok;
-    retry.disabled=layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight||layoutCueSaveInFlight||!layoutCorpusPersistable;
+    retry.disabled=layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight||!layoutCorpusPersistable;
     retry.textContent=layoutCueExportRetryInFlight?'正在重新生成…':'重新生成 ASS/SRT';
   }
 }
@@ -7133,7 +7025,6 @@ function layoutCueResetProject(projectKey){
   layoutCueProjectKey=projectKey;
   const note=document.getElementById('layoutCueTimingStatus');
   if(note)note.dataset.committed='';
-  layoutCueDrafts=new Map();
   layoutCueTimingDrafts=new Map();
   layoutCueExportNeedsRetry=false;
   layoutCueExportForceAss=false;
@@ -7142,33 +7033,15 @@ function layoutCueResetProject(projectKey){
   layoutCueExportHealthError="";
   layoutCueActiveId=null;
   renderLayoutExportHealthNotice();
-  layoutCueClearAudio();
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){status.textContent='选择当前项目字幕后可调整显示时间；中文字幕正文请在「校对」中修改。';status.className='layout-cue-save-note';}
 }
 function layoutCueState(sub){
   if(!sub)return null;
-  const id=String(sub.id),saved=String(sub.final_chs??'');
-  if(!layoutCueDrafts.has(id)){
-    layoutCueDrafts.set(id,{saved,draft:saved,revision:0,saving:false,serverChanged:false});
-  }
-  const state=layoutCueDrafts.get(id);
-  if(!state.saving&&state.saved!==saved){
-    const unsaved=state.draft!==state.saved;
-    state.saved=saved;
-    if(unsaved){
-      // Refresh updates the baseline, but never silently adopts the existing
-      // draft as permission to overwrite someone else's newly saved text.
-      state.serverChanged=true;
-    }else{
-      state.draft=saved;
-      state.serverChanged=false;
-    }
-  }
-  return state;
+  const persisted=String(sub.final_chs??'');
+  return {saved:persisted,draft:persisted,saving:false,serverChanged:false};
 }
-
 function layoutTimingState(sub){
   if(!sub)return null;
   const key=String(sub.id);
@@ -7232,11 +7105,11 @@ function renderLayoutCueTiming(){
   const retry=document.getElementById('layoutCueTimingRetryExportBtn');
   if(retry){
     retry.hidden=!layoutCueExportNeedsRetry;
-    retry.disabled=!valid||!layoutCueExportNeedsRetry||layoutCueTimingSaveInFlight||layoutCueSaveInFlight||layoutCueExportRetryInFlight;
+    retry.disabled=!valid||!layoutCueExportNeedsRetry||layoutCueTimingSaveInFlight||layoutCueExportRetryInFlight;
   }
-  if(save)save.disabled=!valid||!dirty||!!problem||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
+  if(save)save.disabled=!valid||!dirty||!!problem||layoutCueTimingSaveInFlight;
   if(revert)revert.disabled=!valid||!dirty||!!state?.saving;
-  if(reset)reset.disabled=!valid||(!state?.conflict&&!changed&&!dirty)||layoutCueTimingSaveInFlight||layoutCueSaveInFlight;
+  if(reset)reset.disabled=!valid||(!state?.conflict&&!changed&&!dirty)||layoutCueTimingSaveInFlight;
   const status=document.getElementById('layoutCueTimingStatus');
   if(status&&(!status.dataset?.committed||dirty||!valid)){
     status.textContent=!sub?'选取项目字幕后，可以调整 SRT/ASS 显示边界。':
@@ -7263,7 +7136,6 @@ function layoutCueUpdateTiming(field,rawValue){
     layoutStressSample.word_alignments=null;
   invalidateLibassPreview();
   renderLayoutCueTiming();
-  layoutCueTimePreview();
   renderLayoutCorpusRail();
 }
 function layoutCueNudgeTiming(field,delta){
@@ -7286,13 +7158,12 @@ function layoutCueRevertTimingDraft(){
   if(editorEnd)editorEnd.value=String(state.end);
   invalidateLibassPreview();
   renderLayoutCueTiming();
-  layoutCueTimePreview();
   renderLayoutCorpusRail();
 }
 async function saveLayoutCueTiming({reset=false}={}){
   const projectKey=layoutActiveProjectKey();
   const sub=layoutCueRow(layoutCueActiveId),state=layoutTimingState(sub);
-  if(!projectKey||!sub||!state||!layoutCorpusPersistable||layoutCueTimingSaveInFlight||layoutCueSaveInFlight)return false;
+  if(!projectKey||!sub||!state||!layoutCorpusPersistable||layoutCueTimingSaveInFlight)return false;
   const desiredStart=reset?state.sourceStart:Number(state.start);
   const desiredEnd=reset?state.sourceEnd:Number(state.end);
   const check=layoutTimingCheck({...state,start:desiredStart,end:desiredEnd,conflict:reset?false:state.conflict});
@@ -7372,7 +7243,7 @@ async function saveLayoutCueTiming({reset=false}={}){
 async function layoutCueRetryArtifactExport(){
   const key=layoutActiveProjectKey();
   if(!key||!layoutCorpusPersistable||!layoutCueExportNeedsRetry||
-     layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight||layoutCueSaveInFlight)return false;
+     layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight)return false;
   layoutCueExportRetryInFlight=true;
   const status=document.getElementById('layoutCueTimingStatus');
   if(status){status.dataset.committed='true';status.textContent='字幕时间已经保存，正在独立重试导出 ASS/SRT…';}
@@ -7410,19 +7281,6 @@ async function layoutCueRetryArtifactExport(){
 }
 
 
-function layoutCueTimePreview(){
-  const sub=layoutCueRow(layoutCueActiveId);
-  const slider=document.getElementById('layoutCueScrubber');
-  const output=document.getElementById('layoutCueScrubberTime');
-  if(!slider||!output)return;
-  if(!sub){slider.disabled=true;output.textContent='—';return;}
-  slider.disabled=false;
-  const percent=Math.max(5,Math.min(95,Number(slider.value||50)));
-  const state=layoutTimingState(sub);
-  const start=Number(state?.start??sub.start??0);
-  const span=Math.max(0,Number(state?.end??sub.end??0)-start);
-  output.textContent=formatClockTime(start+span*percent/100)+' · '+percent+'%';
-}
 function renderLayoutCueEditor(){
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
   const selected=!!sub;
@@ -7434,43 +7292,16 @@ function renderLayoutCueEditor(){
   if(start)start.textContent=selected?formatClockTime(sub.start):'--:--.-';
   if(end)end.textContent=selected?formatClockTime(sub.end):'--:--.-';
   if(duration)duration.textContent=selected?Math.max(0,Number(sub.end||0)-Number(sub.start||0)).toFixed(2)+' s':'--';
-  const editor=document.getElementById('layoutCueFinalText');
-  if(editor){
-    editor.disabled=!selected;
-    editor.readOnly=true; // Review is the only final subtitle text-write authority.
-    if(!selected||document.activeElement!==editor)editor.value=selected?state.draft:'';
-  }
   const display=document.getElementById('layoutCueReadOnlyText');
   if(display)display.textContent=selected?state.draft:'尚未选中字幕。';
   const jump=document.getElementById('layoutOpenProofreadingBtn');
   if(jump)jump.disabled=!selected;
-  const chars=document.getElementById('layoutCueCharCount');
-  if(chars)chars.textContent=(state?.draft.length||0)+' 字';
-  const dirty=selected&&state.draft!==state.saved;
-  const badge=document.getElementById('layoutCueDraftBadge');
-  if(badge){
-    badge.dataset.state=!selected?'idle':!layoutCorpusPersistable?'idle':state.saving?'saving':dirty?'dirty':'saved';
-    badge.textContent=!selected?'请选择字幕':!layoutCorpusPersistable?'仅示例 · 不可保存':state.saving?'保存中':dirty?'未保存的正文':'正文已保存';
-  }
-  const save=document.getElementById('layoutCueSaveBtn'),revert=document.getElementById('layoutCueRevertBtn');
-  if(save)save.disabled=!dirty||!!state?.serverChanged||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||!layoutCorpusPersistable;
-  if(revert)revert.disabled=!dirty||state?.saving;
-  const conflict=document.getElementById('layoutCueTextConflict');
-  if(conflict)conflict.hidden=!state?.serverChanged;
-  const useServer=document.getElementById('layoutCueUseServerBtn');
-  const keepDraft=document.getElementById('layoutCueKeepDraftBtn');
-  if(useServer)useServer.disabled=!state?.serverChanged||state?.saving;
-  if(keepDraft)keepDraft.disabled=!state?.serverChanged||state?.saving;
-  const audio=document.getElementById('layoutCueAudioLoadBtn');
-  if(audio)audio.disabled=!selected;
   renderLayoutCueTiming();
-  layoutCueTimePreview();
 }
 function layoutCueSelect(sub){
   if(!sub){layoutCueActiveId=null;layoutCueClearAudio();renderLayoutCueEditor();return;}
   if(String(layoutCueActiveId)!==String(sub.id)){
-    layoutCueClearAudio();
-    const note=document.getElementById('layoutCueTimingStatus');
+      const note=document.getElementById('layoutCueTimingStatus');
     if(note)note.dataset.committed='';
     layoutTimelineFollowSelected=true;
   }
@@ -7480,8 +7311,6 @@ function layoutCueSelect(sub){
   const startInput=document.getElementById('layoutCueTimingStart'),endInput=document.getElementById('layoutCueTimingEnd');
   if(startInput)startInput.value=String(timing.start);
   if(endInput)endInput.value=String(timing.end);
-  const editor=document.getElementById('layoutCueFinalText');
-  if(editor)editor.value=state.draft; // Cue change must update focused editor too.
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){
@@ -7494,154 +7323,6 @@ function layoutCueSelect(sub){
   }
   return state;
 }
-function layoutCueUpdateDraft(next){
-  const legacyEditor=document.getElementById('layoutCueFinalText');
-  if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return;
-  const sub=layoutCueRow(layoutCueActiveId);
-  if(!sub)return;
-  const state=layoutCueState(sub);
-  if(state.draft===next)return;
-  state.draft=next;
-  state.revision++;
-  // An edited translation must not silently inherit word alignments for old text.
-  if(layoutStressSample&&String(layoutStressSample.id)===String(sub.id))layoutStressSample.word_alignments=null;
-  const preview=document.getElementById('prevChsText');
-  if(preview)preview.value=next;
-  layoutTrialTextRevision++; // Reject late sample requests after typing.
-  invalidateLibassPreview();
-  scheduleLayoutPreviewUpdate();
-  renderLayoutCueEditor();
-  renderLayoutCorpusRail();
-  updateLayoutSampleOrigin();
-  const status=document.getElementById('layoutCueSaveStatus');
-  if(status){status.textContent='正文已修改但尚未保存；切换条目会保留当前会话草稿，刷新页面后未保存部分会丢失。';status.className='layout-cue-save-note status-warn';}
-}
-function layoutCueRevertDraft(){
-  const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
-  if(!state||state.saving)return;
-  state.serverChanged=false;
-  const editor=document.getElementById('layoutCueFinalText');
-  if(editor)editor.value=state.saved;
-  layoutCueUpdateDraft(state.saved);
-  renderLayoutCueEditor();
-}
-function layoutCueKeepLocalDraft(){
-  const state=layoutCueState(layoutCueRow(layoutCueActiveId));
-  if(!state||!state.serverChanged||state.saving||layoutCueSaveInFlight)return;
-  if(!window.confirm('服务器已有更新版本。确认以当前本地草稿作为下一次提交内容吗？请先自行核对差异。'))return;
-  state.serverChanged=false;
-  const status=document.getElementById('layoutCueSaveStatus');
-  if(status){status.textContent='已明确选择保留本地草稿；下一次保存将以当前服务器正文为基线执行并发检查。';status.className='layout-cue-save-note status-warn';}
-  renderLayoutCueEditor();
-}
-async function saveLayoutCueText(){
-  const legacyEditor=document.getElementById('layoutCueFinalText');
-  if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return false;
-  const key=layoutActiveProjectKey();
-  const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
-  if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||state.serverChanged||state.draft===state.saved)return false;
-  layoutCueSaveInFlight=true;
-  state.saving=true;
-  const id=sub.id,submitted=state.draft;
-  const status=document.getElementById('layoutCueSaveStatus');
-  if(status){status.textContent='正在保存条目 #'+id+' 的中文字幕并刷新 SRT/ASS…';status.className='layout-cue-save-note';}
-  renderLayoutCueEditor();
-  try{
-    const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({expected_project_root:currentProject.root||null,subtitles:[{
-        id,final_chs:submitted,expected_final_chs:state.saved,
-        expected_source_member_id:String(sub.source_member_id||'')
-      }]})
-    });
-    if(!currentProject||layoutActiveProjectKey()!==key)return false;
-    if(Number(data.result?.updated_count||0)!==1)throw new Error('后端未确认保存该字幕');
-    const row=layoutCueRow(id);
-    if(row){
-      row.final_chs=submitted;
-      if(Array.isArray(data.result?.modified_ids)){
-        row.modified=data.result.modified_ids.map(String).includes(String(id));
-      }
-    }
-    state.saved=submitted;
-    const currentText=state.draft;
-    if(String(layoutCueActiveId)===String(id)){
-      const preview=document.getElementById('prevChsText');
-      if(preview&&currentText===submitted)preview.value=submitted;
-    }
-    if(status) {
-      const error=String(data.result?.artifact_error||data.result?.ass_error||'');
-      layoutCueApplyExportHealth(data.result?.export_status||{
-        state:(error||data.result?.artifacts_current===false)?'failed':'current',
-        artifact_error:error,ass_required:!!data.result?.ass_error||layoutCueExportForceAss,
-      });
-      status.textContent=layoutCueExportNeedsRetry
-        ? '条目 #'+id+' 正文已保存，但 ASS/SRT 导出未完成：'+(error||'导出状态异常')+'。请使用「重试生成 ASS/SRT」，不要重复提交正文。'
-        : '条目 #'+id+' 正文已保存；SRT 和已有 ASS（如有）由后端同步刷新。'+(currentText!==submitted?' 期间的新改动仍未保存。':'');
-      status.className='layout-cue-save-note '+(layoutCueExportNeedsRetry||currentText!==submitted?'status-warn':'status-ok');
-    }
-    renderLayoutCueEditor();
-    renderLayoutCorpusRail();
-    return currentText===submitted;
-  }catch(err){
-    if(layoutActiveProjectKey()===key&&status){
-      const reason=shortError(err);
-      const conflict=/Subtitle (text|source clip|cue identity) changed|Subtitle cue identity is missing or ambiguous/i.test(reason);
-      status.textContent=conflict
-        ? '字幕已在其他编辑会话或重新构建后发生变化：请点击左侧「刷新」核对服务端版本；本页草稿仍保留，不能静默覆盖。'
-        : '保存字幕失败：'+reason+'；草稿仍保留在本页面。';
-      status.className='layout-cue-save-note status-bad';
-    }
-    return false;
-  }finally{
-    state.saving=false;
-    layoutCueSaveInFlight=false;
-    if(layoutActiveProjectKey()===key)renderLayoutCueEditor();
-  }
-}
-async function layoutCueLoadAudio(){
-  const sub=layoutCueRow(layoutCueActiveId),key=layoutActiveProjectKey();
-  if(!sub||!key)return;
-  layoutCueClearAudio();
-  const identity=key+'|'+String(sub.id);
-  layoutCueAudioIdentity=identity;
-  const controller=new AbortController();
-  layoutCueAudioAbort=controller;
-  const status=document.getElementById('layoutCueAudioStatus');
-  if(status)status.textContent='正在获取原始语音并校验 WAV…';
-  try{
-    const url='/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/'+encodeURIComponent(sub.id)+'/audio';
-    const response=await fetch(url,{headers:headers(),cache:'no-store',signal:controller.signal});
-    if(!response.ok){
-      let error='HTTP '+response.status;
-      try{const payload=await response.json();error=payload.error||error}catch(_){}
-      throw new Error(error);
-    }
-    const wav=await response.blob();
-    if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
-    if(wav.size<12)throw new Error('原始音频文件为空或损坏');
-    const header=new Uint8Array(await wav.slice(0,12).arrayBuffer());
-    const signature=String.fromCharCode(...header);
-    if(!((signature.startsWith('RIFF')||signature.startsWith('RF64'))&&signature.slice(8,12)==='WAVE')){
-      throw new Error('响应不是合法的 WAV 文件');
-    }
-    if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
-    layoutCueAudioObjectUrl=URL.createObjectURL(wav);
-    const audio=document.getElementById('layoutCueAudio');
-    if(audio){audio.src=layoutCueAudioObjectUrl;audio.load();}
-    if(status)status.textContent='原始 WAV 已载入，可试听或点击波形定位。';
-    layoutCuePrepareWaveform(wav,identity).catch(()=>{
-      if(layoutCueAudioIdentity===identity&&status)
-        status.textContent='原始 WAV 可试听；浏览器无法解码波形，跳转可通过音频播放器操作。';
-    });
-  }catch(err){
-    if(controller.signal.aborted||layoutCueAudioIdentity!==identity)return;
-    if(status)status.textContent='音频不可用：'+shortError(err);
-  }finally{
-    if(layoutCueAudioAbort===controller)layoutCueAudioAbort=null;
-  }
-}
-
 function subtitleVisualLength(text){
   let width=0;
   for(const ch of String(text||'')){
@@ -7792,7 +7473,7 @@ function layoutTimelineRender(){
   const selected=layoutCueRow(layoutCueActiveId);
   if(head?.style&&head?.classList&&selected){
     const bounds=layoutTimelineBounds(selected);
-    const seek=Number(document.getElementById('layoutCueScrubber')?.value||50)/100;
+    const seek=Number(document.getElementById('prevKaraokePreviewTime')?.value||50)/100;
     const time=bounds.start+(bounds.end-bounds.start)*seek;
     if(time>=start&&time<=end){
       head.style.left=percent(time).toFixed(4)+'%';
@@ -7929,8 +7610,6 @@ function renderLayoutCorpusRail(){
       const tag=audit?.kind==='failed'?' <em class="layout-audit-failed">溢出</em>':
         audit?.kind==='scaled'?' <em class="layout-audit-scaled">缩小到 '+audit.scale+'%</em>':
         audit?.kind==='error'?' <em class="layout-audit-failed">检查错误</em>':'';
-      const cueDraft=layoutCueDrafts.get(String(sub.id));
-      const unsaved=cueDraft&&cueDraft.draft!==cueDraft.saved?' <em>未保存正文</em>':'';
       const timingBadge=sub.timing_conflict?' <em class="layout-audit-failed">时间轴冲突</em>':sub.timing_modified?' <em>时间已调整</em>':'';
       const timingDraft=layoutCueTimingDrafts.get(String(sub.id));
       const timeDirty=timingDraft&&(Number(timingDraft.start)!==timingDraft.savedStart||Number(timingDraft.end)!==timingDraft.savedEnd)?' <em>时间草稿</em>':'';
@@ -7940,7 +7619,7 @@ function renderLayoutCorpusRail(){
         '<span class="layout-corpus-item-text">'+escapeHtml(source)+'</span>'+
         '<span class="layout-corpus-item-meta">'+(sub.modified?'已修订 · ':'')+
         (sub.word_alignment_ready?'词级时间 · ':'')+
-        escapeHtml(String(sub.group||'项目字幕'))+unsaved+timingBadge+timeDirty+tag+'</span></button>';
+        escapeHtml(String(sub.group||'项目字幕'))+timingBadge+timeDirty+tag+'</span></button>';
     }).join('');
   }
   const index=visible.findIndex(sub=>String(sub.id)===String(layoutCorpusSelectedId));
@@ -8651,41 +8330,6 @@ document.getElementById('layoutCueTimingResetBtn')?.addEventListener('click',()=
   saveLayoutCueTiming({reset:true});
 });
 
-document.getElementById('layoutCueRevertBtn')?.addEventListener('click',layoutCueRevertDraft);
-document.getElementById('layoutCueUseServerBtn')?.addEventListener('click',layoutCueRevertDraft);
-document.getElementById('layoutCueKeepDraftBtn')?.addEventListener('click',layoutCueKeepLocalDraft);
-document.getElementById('layoutCueAudioLoadBtn')?.addEventListener('click',layoutCueLoadAudio);
-document.getElementById('layoutCueAudio')?.addEventListener('timeupdate',drawLayoutCueWaveform);
-document.getElementById('layoutCueAudio')?.addEventListener('loadedmetadata',drawLayoutCueWaveform);
-document.getElementById('layoutCueWaveform')?.addEventListener('click',event=>{
-  const rect=event.currentTarget.getBoundingClientRect();
-  if(rect.width>0)layoutCueSeekAudio((event.clientX-rect.left)/rect.width);
-});
-document.getElementById('layoutCueWaveform')?.addEventListener('keydown',event=>{
-  if(event.key!=='ArrowLeft'&&event.key!=='ArrowRight')return;
-  const audio=document.getElementById('layoutCueAudio');
-  if(!audio||!Number.isFinite(audio.duration)||audio.duration<=0)return;
-  event.preventDefault();
-  layoutCueSeekAudio((audio.currentTime+(event.key==='ArrowRight'?0.5:-0.5))/audio.duration);
-});
-drawLayoutCueWaveform();
-document.getElementById('layoutCueScrubber')?.addEventListener('input',event=>{
-  const other=document.getElementById('prevKaraokePreviewTime');
-  if(other)other.value=event.target.value;
-  const percentLabel=document.getElementById('prevKaraokePreviewTimeVal');
-  if(percentLabel)percentLabel.textContent=Math.round(Number(event.target.value||50))+'%';
-  layoutCueTimePreview();
-  layoutTimelineRender();
-  invalidateLibassPreview();
-});
-window.addEventListener('beforeunload',event=>{
-  if([...layoutCueDrafts.values()].some(state=>state.draft!==state.saved)){
-    event.preventDefault();
-    event.returnValue='';
-  }
-});
-
-
 document.getElementById('layoutCorpusRefreshBtn')?.addEventListener('click',()=>loadLayoutStressSample({refresh:true}).catch(e=>setLog(String(e))));
 document.getElementById('layoutCorpusMobileToggleBtn')?.addEventListener('click',()=>{
   const rail=document.querySelector('.layout-corpus-rail');
@@ -8802,9 +8446,6 @@ document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>
   const label=document.getElementById('prevKaraokePreviewTimeVal');
   const input=document.getElementById('prevKaraokePreviewTime');
   if(label&&input)label.textContent=Math.round(parseFloat(input.value||'50'))+'%';
-  const cueSlider=document.getElementById('layoutCueScrubber');
-  if(cueSlider)cueSlider.value=input?.value||'50';
-  layoutCueTimePreview();
   layoutTimelineRender();
   invalidateLibassPreview();
 });
