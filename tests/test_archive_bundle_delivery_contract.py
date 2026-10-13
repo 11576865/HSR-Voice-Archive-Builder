@@ -1,0 +1,129 @@
+"""Source-product/bundle contract and safe 16 MiB background upload regression."""
+from __future__ import annotations
+
+import base64
+import io
+import json
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+from app.archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, MAX_IMAGE_BYTES
+from app.archive_bundle_exporter import decode_bundle_background
+from app.archive_bundle_lifecycle import (
+    OUTPUT, bundle_export_status, load_previous_bundle_image, record_bundle_publication,
+)
+from app.subtitle_export_status import record_subtitle_export
+from app.lite_server import Handler
+
+
+PNG_HEADER = b"\x89PNG\r\n\x1a\n"
+
+
+class BackgroundUploadBudgetTests(unittest.TestCase):
+    def test_uploaded_image_larger_than_old_4mib_is_accepted_and_replayable(self):
+        data = PNG_HEADER + b"Q" * (5 * 1024 * 1024)
+        self.assertEqual(decode_bundle_background(base64.b64encode(data).decode("ascii")), data)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "continuous.flac").write_bytes(b"flac fixture")
+            (root / "HSR_Voice_Archive.ass").write_bytes(b"ass fixture")
+            (root / "HSR_Voice_Archive.srt").write_bytes(b"srt fixture")
+            (root / "manifest.json").write_text('{"entries":[]}')
+            (root / OUTPUT).write_bytes(b"mkv fixture")
+            record_subtitle_export(root, state="current", ass_required=True)
+            record_bundle_publication(
+                root, background_color="#010203", background_image=data,
+                image_extension=".png", include_fonts=False,
+                background_spec={"mode": "image"},
+            )
+            self.assertEqual(load_previous_bundle_image(root), data)
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            self.assertTrue(bundle_export_status(root)["can_generate"])
+
+    def test_image_limit_boundary_and_rejected_oversized_decode(self):
+        self.assertEqual(MAX_IMAGE_BYTES, 16 * 1024 * 1024)
+        self.assertEqual(MAX_BUNDLE_JSON_BYTES, 24 * 1024 * 1024)
+        valid = PNG_HEADER + b"a" * (MAX_IMAGE_BYTES - len(PNG_HEADER))
+        self.assertEqual(len(decode_bundle_background(base64.b64encode(valid).decode("ascii"))), MAX_IMAGE_BYTES)
+        with self.assertRaisesRegex(ValueError, "16 MiB"):
+            decode_bundle_background(base64.b64encode(valid + b"x").decode("ascii"))
+
+    def test_lite_json_payload_budget_is_endpoint_specific(self):
+        def request(path, payload):
+            fake = SimpleNamespace(
+                path=path,
+                headers={"Content-Length": str(len(payload))},
+                rfile=io.BytesIO(payload),
+            )
+            return Handler._read_body(fake)
+        payload = b"Q" * (8 * 1024 * 1024 + 1)
+        for path in ("/api/output/archive-bundle", "/api/output/archive-bundle/background-preview"):
+            self.assertEqual(len(request(path, payload)), len(payload))
+        with self.assertRaisesRegex(ValueError, "too large"):
+            request("/api/status", payload)
+        too_big = SimpleNamespace(
+            path="/api/output/archive-bundle",
+            headers={"Content-Length": str(MAX_BUNDLE_JSON_BYTES + 1)},
+            rfile=io.BytesIO(b""),
+        )
+        with self.assertRaisesRegex(ValueError, "too large"):
+            Handler._read_body(too_big)
+
+
+class BundleAsDerivedDeliverableTests(unittest.TestCase):
+    def setUp(self):
+        td = tempfile.TemporaryDirectory()
+        self.addCleanup(td.cleanup)
+        self.root = Path(td.name)
+        (self.root / "manifest.json").write_text('{"entries":[]}')
+        (self.root / "continuous.flac").write_bytes(b"flac")
+        (self.root / "HSR_Voice_Archive.ass").write_bytes(b"ass")
+        (self.root / "HSR_Voice_Archive.srt").write_bytes(b"srt")
+        record_subtitle_export(self.root, state="current", ass_required=True)
+        (self.root / OUTPUT).write_bytes(b"mkv")
+        record_bundle_publication(
+            self.root, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False,
+        )
+
+    def test_current_bundle_depends_on_current_flac_and_subtitle(self):
+        info = bundle_export_status(self.root)
+        self.assertTrue(info["can_generate"])
+        self.assertTrue(info["prerequisites"]["subtitles_current"])
+        self.assertIn("continuous.flac", info["depends_on"])
+        self.assertEqual(info["state"], "current")
+
+        (self.root / "continuous.flac").unlink()
+        info = bundle_export_status(self.root)
+        self.assertEqual(info["state"], "stale")
+        self.assertFalse(info["can_generate"])
+        self.assertTrue(info["blockers"])
+        self.assertTrue((self.root / OUTPUT).exists(), "Never delete last successful MKV")
+
+    def test_ass_revision_blocks_repack_but_keeps_old_product(self):
+        (self.root / "HSR_Voice_Archive.ass").write_text("changed content")
+        status = bundle_export_status(self.root)
+        self.assertEqual(status["state"], "stale")
+        self.assertFalse(status["prerequisites"]["subtitles_current"])
+        self.assertFalse(status["can_generate"])
+        self.assertTrue((self.root / OUTPUT).exists())
+
+    def test_legacy_mkv_is_not_the_complete_bundle(self):
+        project = (Path(__file__).resolve().parents[1] / "app/project.py").read_text(encoding="utf-8")
+        self.assertIn('"playback_bundle"', project)
+        self.assertIn('"independent_products"', project)
+        self.assertIn('"legacy_outputs"', project)
+        html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text(encoding="utf-8")
+        self.assertIn("旧文件·已过期", html)
+        self.assertIn("独立于完整 MKV", html)
+        self.assertIn("status:mkvStatus", html)
+        self.assertIn("settings.can_generate===false", html)
+        self.assertIn("16*1024*1024", html)
+        self.assertIn("最多 16 MiB", html)
+        self.assertNotIn("最多 4 MiB", html)
+
+
+if __name__ == "__main__":
+    unittest.main()
