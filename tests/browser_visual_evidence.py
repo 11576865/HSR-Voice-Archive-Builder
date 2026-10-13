@@ -655,6 +655,16 @@ def focused_studio_viewport_check(browser, base_url, output, report):
         ensure(page.locator('[data-hsr-focus-task="layout"]').is_visible() and
                page.locator('[data-hsr-focus-task="effects"]').is_visible(),
                f"{width}: focused task nav is unavailable")
+        # The visible recovery action navigates to the *existing* project font
+        # importer rather than cloning or installing fonts globally.
+        page.locator("#hsrFontImportShortcut").click()
+        ensure(page.evaluate("document.body.dataset.workspaceTask")=="layout",
+               f"{width}: project font shortcut did not navigate to Layout")
+        ensure(page.locator("#projectFontImporter").get_attribute("open") is not None,
+               f"{width}: font importer was not disclosed")
+        ensure(page.locator("#projectFontFile").is_visible(),
+               f"{width}: native font picker remains hidden")
+        page.locator('[data-hsr-focus-task="effects"]').click()
         page.screenshot(path=str(output/f"focused_studio_{width}.png"),full_page=False)
         page.keyboard.press("Escape")
         ensure(page.evaluate("document.body.dataset.hsrStudioFocus")=="false",
