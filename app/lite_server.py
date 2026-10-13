@@ -16,6 +16,7 @@ from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
+from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -145,6 +146,15 @@ def _stringify_json_form(data: dict[str, object]) -> dict[str, str]:
     return result
 
 
+def _active_project_font_dir() -> Path | None:
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        return font_asset_directory(output) if output is not None else None
+    except (ValueError, FileNotFoundError):
+        return None
+
+
 class Handler(BaseHTTPRequestHandler):
     server_version = f"HSRVoiceLite/{APP_VERSION}"
 
@@ -191,7 +201,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def _read_body(self) -> bytes:
         length = _int(self.headers.get("Content-Length", "0"), 0)
-        max_body = (36 if urlsplit(self.path).path == "/api/subtitle-layout/render-preview-video" else 8) * 1024 * 1024
+        endpoint = urlsplit(self.path).path
+        max_body = (36 if endpoint == "/api/subtitle-layout/render-preview-video" else
+                    18 if endpoint == "/api/subtitle-layout/import-font" else 8) * 1024 * 1024
         if length < 0 or length > max_body:
             raise ValueError("Request body too large")
         return self.rfile.read(length)
@@ -304,6 +316,13 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/subtitle-layout/project-fonts":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            self._json({"ok": True, "fonts": list_project_fonts(output)})
+            return
         if path == "/api/subtitle-layout/fonts":
             query = parse_qs(urlsplit(self.path).query)
             q = (query.get("q") or [""])[-1]
@@ -314,7 +333,18 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/subtitle-layout/font-file":
             query = parse_qs(urlsplit(self.path).query)
             family = (query.get("family") or [""])[-1]
-            font_path, media_type = resolve_browser_font_file(family)
+            font_path = None
+            try:
+                config = _active_config()
+                output = resolve_project_path(config, config.output_dir)
+                if output is not None:
+                    font_path = project_font_for_family(output, family)
+            except (ValueError, FileNotFoundError):
+                pass
+            if font_path is None:
+                font_path, media_type = resolve_browser_font_file(family)
+            else:
+                media_type = {".ttf": "font/ttf", ".otf": "font/otf", ".ttc": "font/collection"}[font_path.suffix]
             self._send_bytes(
                 200,
                 font_path.read_bytes(),
@@ -614,6 +644,18 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "project": project_summary(config)})
             return
 
+        if path == "/api/subtitle-layout/import-font":
+            config = _active_config()
+            if data.get("expected_project_root") != str(config.root):
+                raise ValueError("Font project context changed; retry after reopening")
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            font = import_project_font(output, data.get("filename", ""), data.get("font_base64", ""))
+            self._json({"ok": True, "font": font})
+            return
+
         if path == "/api/subtitle-layout/preview":
             english_text = data.get("english_text") if data.get("english_text") is not None else "May this journey lead us starward."
             chinese_text = data.get("chinese_text") if data.get("chinese_text") is not None else "愿此行，终抵群星。"
@@ -661,6 +703,7 @@ class Handler(BaseHTTPRequestHandler):
                 word_alignments=word_alignments,
                 duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
                 timestamp=_float(data.get("preview_timestamp"), 1.0),
+                font_dir=_active_project_font_dir(),
             )
             self._send_bytes(
                 200,
@@ -696,6 +739,7 @@ class Handler(BaseHTTPRequestHandler):
                 source_video_bytes=source_bytes,
                 source_start_seconds=_float(data.get("source_start_seconds"), 0.0),
                 include_source_audio=_bool(data.get("include_source_audio", "true")),
+                font_dir=_active_project_font_dir(),
             )
             self._send_bytes(
                 200, video, "video/webm" if fmt == "webm" else "video/mp4",
