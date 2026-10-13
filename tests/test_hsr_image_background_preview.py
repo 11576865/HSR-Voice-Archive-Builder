@@ -29,12 +29,12 @@ class BackgroundImageTests(unittest.TestCase):
             with self.subTest(data=data[:8]), self.assertRaises(ValueError):
                 decode_preview_background_image(base64.b64encode(data).decode())
         for value in ("invalid-%%%!", "/local/path.png", 123, [],
-                      base64.b64encode(b"\\x89PNG\\r\\n\\x1a\\n" + b"A" * MAX_PREVIEW_IMAGE_BYTES).decode()):
+                      base64.b64encode(b"\x89PNG\r\n\x1a\n" + b"A" * MAX_PREVIEW_IMAGE_BYTES).decode()):
             with self.subTest(value=str(value)[:32]), self.assertRaises(ValueError):
                 decode_preview_background_image(value)
 
     def test_fastapi_provenance_and_image_video_exclusion(self):
-        png_bytes = b"\\x89PNG\\r\\n\\x1a\\n" + b"dummy"
+        png_bytes = b"\x89PNG\r\n\x1a\n" + b"dummy"
         clip = TestClient(app, base_url="http://127.0.0.1:8765")
         body = {"english_text": "", "chinese_text": "",
                 "preview_background_image_base64": base64.b64encode(png_bytes).decode()}
