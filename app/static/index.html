@@ -4377,6 +4377,9 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
     }
   }
   if(!preservePanelPin)autoPinnedPanelKey=null;
+  // Cancel a pending layout corpus response after leaving its owning surface.
+  if(previousWorkspace==='layout'&&visibleWorkspace!=='layout'&&
+     typeof layoutSampleRequestGeneration==='number')layoutSampleRequestGeneration++;
   document.body.dataset.workspace=visibleWorkspace;
   document.body.dataset.workspaceTask=name;
   for(const button of workspaceButtons){
@@ -7414,6 +7417,8 @@ function layoutCueSelect(sub){
   return state;
 }
 function layoutCueUpdateDraft(next){
+  const legacyEditor=document.getElementById('layoutCueFinalText');
+  if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return;
   const sub=layoutCueRow(layoutCueActiveId);
   if(!sub)return;
   const state=layoutCueState(sub);
@@ -7452,6 +7457,8 @@ function layoutCueKeepLocalDraft(){
   renderLayoutCueEditor();
 }
 async function saveLayoutCueText(){
+  const legacyEditor=document.getElementById('layoutCueFinalText');
+  if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return false;
   const key=layoutActiveProjectKey();
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
   if(!key||!sub||!state||!layoutCorpusPersistable||layoutCueSaveInFlight||layoutCueTimingSaveInFlight||state.serverChanged||state.draft===state.saved)return false;
