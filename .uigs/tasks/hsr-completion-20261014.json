@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "task_id": "hsr-completion-20261014",
+  "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
+  "status": "in_progress",
+  "current_bounded_work_unit": "Complete-MKV input consistency: reject concurrent FLAC/ASS/font replacements before publishing or certifying an archive; pushed implementation, two regression cases, and explanatory documentation.",
+  "completed_units": [
+    {
+      "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
+      "commit": "64cab090e8983d9e348e9245f625d6db92e915a8",
+      "evidence": "Python tests / Chromium+libass / Pages completed success on 2026-10-13"
+    },
+    {
+      "summary": "Added source snapshot validation after mux and before final publication; protected previously verified MKV and receipt",
+      "commit": "10b5371ca5ac731e838225f0d4d4e1a63a574b64",
+      "validation": "pending"
+    }
+  ],
+  "next_units": [
+    "Confirm CI results for the exact source-identity protection head; if failing, repair only the direct regression.",
+    "Review open draft PR #150 against current main and either integrate still-unique behaviour with tests or close it as superseded after explicit diff audit.",
+    "Execute Issue #158 on actual Android/Termux hardware with at least two Android players and one desktop player, including gradients and fonts. Record models/player versions and screenshots.",
+    "Measure ≥1-hour and long-duration archive output/runtime/peak RSS on identified hardware, plus encoded H.264 gradient banding at 720p CRF 28 and 1080p CRF 19.",
+    "Only after independent hardware/product evidence, decide final release/version milestones and update product acceptance status."
+  ],
+  "branch": "main",
+  "pr": null,
+  "latest_durable_commit": "10b5371ca5ac731e838225f0d4d4e1a63a574b64",
+  "external_validation": {
+    "previous_head_main_tests": "passed",
+    "previous_head_browser_libass": "passed",
+    "current_head_ci": "pending_external_validation",
+    "physical_android": "unverified",
+    "player_font_subtitle": "unverified",
+    "perceptual_banding": "unverified",
+    "long_archive_performance": "unverified"
+  },
+  "blockers": [
+    "No physical Android device or multi-hour representative voice archive is connected to the current agent runtime; do not mark Issue #158 accepted without actual evidence.",
+    "Draft PR #150 has not been diff-audited for unique changes; do not merge or close it blindly."
+  ],
+  "updated_at": "2026-10-14"
+}
