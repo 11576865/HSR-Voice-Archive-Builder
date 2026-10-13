@@ -155,6 +155,56 @@ class BundleRealFFmpegTests(unittest.TestCase):
                 exporter.export(audio, ass, output, require_current_ass=True)
             self.assertEqual(output.read_bytes(), previous)
 
+    def test_external_flac_replacement_during_mux_preserves_prior_bundle(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            exporter.export(audio, ass, output, require_current_ass=True)
+            from app.archive_bundle_lifecycle import RECEIPT
+            previous_mkv = output.read_bytes()
+            previous_receipt = (root / RECEIPT).read_bytes()
+            original_validate = exporter.validate
+
+            def replace_audio_after_validation(*args, **kwargs):
+                original_validate(*args, **kwargs)
+                replacement = root / "replacement.flac"
+                subprocess.run([
+                    "ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", "sine=frequency=650:sample_rate=44100:duration=1.6",
+                    "-c:a", "flac", str(replacement),
+                ], check=True, capture_output=True, timeout=30)
+                replacement.replace(audio)
+
+            exporter.validate = replace_audio_after_validation
+            with self.assertRaisesRegex(RuntimeError, "源文件在封装期间发生变化"):
+                exporter.export(audio, ass, output, require_current_ass=True)
+            self.assertEqual(output.read_bytes(), previous_mkv)
+            self.assertEqual((root / RECEIPT).read_bytes(), previous_receipt)
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+
+    def test_external_ass_edit_during_unverified_mux_keeps_previous_output(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            output = root / "uncertified.mkv"
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            exporter.export(audio, ass, output)
+            previous_mkv = output.read_bytes()
+            original_validate = exporter.validate
+
+            def edit_ass_after_validation(*args, **kwargs):
+                original_validate(*args, **kwargs)
+                with ass.open("a", encoding="utf-8") as handle:
+                    handle.write("; Changed while FFmpeg was muxing\n")
+
+            exporter.validate = edit_ass_after_validation
+            with self.assertRaisesRegex(RuntimeError, "源文件在封装期间发生变化"):
+                exporter.export(audio, ass, output)
+            self.assertEqual(output.read_bytes(), previous_mkv)
+
     def test_ass_mutation_during_mux_fails_before_atomic_replace(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

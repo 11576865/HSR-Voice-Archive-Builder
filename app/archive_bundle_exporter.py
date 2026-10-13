@@ -138,6 +138,29 @@ class ArchiveBundleExporter:
                 if font.is_symlink() or not font.is_file():
                     raise ValueError("Invalid font attachment")
                 fonts.append((font, ATTACHMENT_MIME[font.suffix.lower()]))
+        # Capture exact input identities before FFmpeg opens them: external
+        # FLAC, ASS, or font changes can overlap even serialized output jobs.
+        source_inputs = (audio, subtitles, *(font for font, _ in fonts))
+
+        def source_snapshot(path: Path) -> tuple[int, int, int, int]:
+            stat = path.stat()
+            return stat.st_size, stat.st_mtime_ns, stat.st_dev, stat.st_ino
+
+        source_before = {path: source_snapshot(path) for path in source_inputs}
+
+        def assert_sources_unchanged() -> None:
+            for path, expected in source_before.items():
+                try:
+                    current = source_snapshot(path)
+                except OSError as exc:
+                    raise RuntimeError(
+                        f"MKV 源文件在封装期间消失，旧成品已保留：{path.name}"
+                    ) from exc
+                if current != expected:
+                    raise RuntimeError(
+                        f"MKV 源文件在封装期间发生变化，旧成品已保留：{path.name}"
+                    )
+
         target.parent.mkdir(parents=True, exist_ok=True)
         total_ms = max(1, round(duration * 1000))
         with tempfile.TemporaryDirectory(prefix=".hsr-mkv-bundle-", dir=target.parent) as tmp:
@@ -237,6 +260,7 @@ class ArchiveBundleExporter:
                 temporary, expected_fonts=len(fonts), expected_duration=duration,
                 expected_font_names={font.name for font, _ in fonts},
             )
+            assert_sources_unchanged()
             # A user may change the authoritative subtitle text during a long
             # mux. Reject the now-stale temporary MKV rather than replacing the
             # last successfully validated archive.
@@ -262,6 +286,7 @@ class ArchiveBundleExporter:
                         background_spec=spec,
                     )
                     require_current_bundle_subtitles(target.parent)
+                    assert_sources_unchanged()
                     temporary.replace(target)
                 except BaseException:
                     if had_receipt:

@@ -52,6 +52,10 @@ HSR 是语音与字幕档案构建器，不承担通用 Matroska Remux。完整 
 
 `project_summary.output_groups.independent_products` 暴露这两个字幕文件的 `current`／`freshness` 与 `used_in_bundle`；连续 FLAC 作为独立无损母版，`ready_for_bundle` 只是非空预检，`freshness=unverified` 不表示已用 FFprobe 独立验证其音频身份。完整 MKV 的 `playback_bundle` 状态继续由来源回执负责，旧黑屏 MKV 不能继承该状态。
 
+## 封装期间源文件变更保护
+
+真实 MKV 的编码可能持续很久。即使本机 Job Registry 已阻止同项目内并发输出，用户仍可能通过外部进程替换连续 FLAC、修改 ASS 或更新项目字体。封装器现在记录输入文件的大小、纳秒级修改时间以及文件身份（device/inode），并在成品逐轨验证后、发布回执写入前再次核对；正式发布前再进行一次核对。检测到变化时保留上一版 MKV 与发布回执，不把基于旧输入生成的视频误认证为当前来源。此保护不等于对不可信操作者的内容加密哈希验证，也不能代替 Android 真机验收。
+
 ## 验收合同
 
 1. `normalize_bundle_background()` 拒绝非法模式、注入型颜色／方向／分辨率／画质。
