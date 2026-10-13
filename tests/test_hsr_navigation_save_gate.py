@@ -111,13 +111,12 @@ const drain=async()=>{const callbacks=state.frames.splice(0);for(const callback 
 
     def test_hidden_legacy_layout_text_writer_is_not_wired_to_ui(self):
         html = (ROOT / "app/static/index.html").read_text(encoding="utf-8")
-        start = html.index("// Review is the sole user-facing owner of final subtitle text writes.")
-        end = html.index("document.getElementById('layoutOpenProofreadingBtn')", start)
-        event_block = html[start:end]
-        self.assertNotIn("addEventListener", event_block)
-        self.assertIn("if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return false;", html)
-        self.assertIn("if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return;", html)
-        self.assertIn('id="layoutCueFinalText" rows="3" disabled readonly', html)
+        self.assertIn("function layoutCueState(sub)", html)
+        self.assertIn("const persisted=String(sub.final_chs??'')", html)
+        self.assertIn('id="layoutCueReadOnlyText"', html)
+        for removed in ("layoutCueFinalText", "saveLayoutCueText",
+                        "layoutCueUpdateDraft", "layoutCueSaveBtn"):
+            self.assertNotIn(removed, html)
 
     def test_review_writer_carries_optimistic_lock_and_fixed_project_identity(self):
         html = (ROOT / "app/static/index.html").read_text(encoding="utf-8")

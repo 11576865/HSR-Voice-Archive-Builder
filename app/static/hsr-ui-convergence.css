@@ -58,7 +58,6 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
  padding:11px 12px;line-height:1.65;font-size:13px;min-height:64px;
  white-space:pre-wrap;overflow-wrap:anywhere;margin:0;
 }
-#subtitleLayoutPreviewCard #layoutCueFinalText[hidden]{display:none!important}
 #subtitleLayoutPreviewCard .hsr-export-advanced{flex:0 1 auto;align-self:center;margin:0}
 #subtitleLayoutPreviewCard .hsr-export-advanced>summary {
  min-height:38px;padding:9px 12px;border:1px solid var(--layout-border);

@@ -67,44 +67,34 @@ vm.runInContext(source,context);
 const run=x=>vm.runInContext(x,context);
 (async()=>{
   await run('loadLayoutStressSample({force:true,selectId:11})');
-  assert.equal(node('layoutCueFinalText').value,'第一条');
-  assert.equal(node('layoutCueFinalText').readOnly,true);
   assert.equal(node('layoutCueReadOnlyText').textContent,'第一条');
-  assert.equal(node('layoutCueSaveBtn').disabled,true);
-  assert.equal(node('layoutCueScrubber').disabled,false);
+  assert.equal(node('layoutCueTimingStart').value,'5');
+  assert.equal(node('layoutCueTimingEnd').value,'9');
+  assert.equal(saves.length,0,'Layout cannot write subtitle final text');
 
-  // The former editable Layout source path must be inert, not a second
-  // independently persisted owner. Review is the only write surface.
-  run("layoutCueUpdateDraft('不得从排版写入')");
-  assert.equal(node('layoutCueFinalText').value,'第一条');
-  assert.equal(node('layoutCueReadOnlyText').textContent,'第一条');
-  assert.equal(await run('saveLayoutCueText()'),false);
-  assert.equal(saves.length,0,'Hidden Layout must never POST a text mutation');
-
-  // Selection, source-time display and project corpus refresh still work.
+  // Selection changes only which persisted row is projected.
   await run('loadLayoutStressSample({force:true,selectId:12})');
-  assert.equal(node('layoutCueFinalText').value,'第二条');
+  assert.equal(node('layoutCueReadOnlyText').textContent,'第二条');
   await run('loadLayoutStressSample({force:true,selectId:11})');
-  assert.equal(node('layoutCueFinalText').value,'第一条');
+  assert.equal(node('layoutCueReadOnlyText').textContent,'第一条');
 
-  // A change made by Review / another session is adopted on refresh.
+  // Review or another session updates the backend; refresh adopts the new text.
   subtitles[0].final_chs='校对已经保存的新正文';
   await run('loadLayoutStressSample({force:true,refresh:true,selectId:11})');
-  assert.equal(node('layoutCueFinalText').value,'校对已经保存的新正文');
   assert.equal(node('layoutCueReadOnlyText').textContent,'校对已经保存的新正文');
-  assert.equal(node('layoutCueSaveBtn').disabled,true);
   assert.equal(saves.length,0);
 
-  node('layoutCueScrubber').value='75';
-  run('layoutCueTimePreview()');
-  assert.equal(node('layoutCueScrubberTime').textContent,'T8.0 · 75%');
+  // The visible Effects preview time slider owns the playhead. Do not mirror
+  // input state to a second hidden per-cue slider.
+  node('prevKaraokePreviewTime').value='75';
+  run('layoutTimelineRender()');
+  assert.equal(node('layoutCueReadOnlyText').textContent,'校对已经保存的新正文');
 
   context.currentProject={root:'/project-beta',name:'beta',config:{}};
   run("layoutCueResetProject('/project-beta')");
-  assert.equal(node('layoutCueFinalText').disabled,true);
-  assert.equal(node('layoutCueSaveBtn').disabled,true);
+  assert.equal(node('layoutCueReadOnlyText').textContent,'尚未选中字幕。');
   assert.ok(previewUpdates>=3);
-  process.stdout.write('layout read-only + cue timing production JS contract: OK\\n');
+  process.stdout.write('read-only Layout cue + timing preview ownership: OK\\n');
 })().catch(e=>{console.error(e);process.exitCode=1});
 """
         script = "const source = " + json.dumps(source, ensure_ascii=False) + ";\n" + harness
