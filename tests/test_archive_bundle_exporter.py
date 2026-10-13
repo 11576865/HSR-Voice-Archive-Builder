@@ -15,6 +15,7 @@ from app.archive_bundle_exporter import (
     ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles,
 )
 from app.subtitle_export_status import record_subtitle_export
+from app.archive_bundle_lifecycle import bundle_export_status, load_previous_bundle_image
 from app import jobs as job_registry
 
 
@@ -233,6 +234,76 @@ class BundleRealFFmpegTests(unittest.TestCase):
                         target, expected_fonts=1, expected_duration=1.6,
                         expected_font_names={"different.ttf"},
                     )
+
+    def test_failed_publication_restores_previous_mkv_and_receipt(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter.export(audio, ass, output, require_current_ass=True)
+            from app.archive_bundle_lifecycle import RECEIPT
+            previous_mkv = output.read_bytes()
+            previous_receipt = (root / RECEIPT).read_bytes()
+            replace = Path.replace
+            def deny_publishing(self, target):
+                if self.name == "bundle.mkv":
+                    raise OSError("simulated atomic publication failure")
+                return replace(self, target)
+            with patch.object(Path, "replace", new=deny_publishing):
+                with self.assertRaisesRegex(OSError, "simulated"):
+                    exporter.export(
+                        audio, ass, output, require_current_ass=True,
+                        background_color="#424242",
+                    )
+            self.assertEqual(previous_mkv, output.read_bytes())
+            self.assertEqual(previous_receipt, (root / RECEIPT).read_bytes())
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+
+    def test_saved_background_is_reused_after_new_flac_and_mkv_atomic_replace(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            image = root / "background.png"
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                "-i", "color=c=red:s=160x90:d=1", "-frames:v", "1", str(image)
+            ], check=True, capture_output=True)
+            original_image = image.read_bytes()
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter.export(
+                audio, ass, output, require_current_ass=True,
+                background_image=original_image, background_color="#162431",
+            )
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            self.assertEqual(load_previous_bundle_image(root), original_image)
+            previous_bytes = output.read_bytes()
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                "-i", "sine=frequency=630:sample_rate=44100:duration=2.2",
+                "-c:a", "flac", str(audio)
+            ], check=True, capture_output=True)
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertEqual(previous_bytes, output.read_bytes())
+            exporter.export(
+                audio, ass, output, require_current_ass=True,
+                background_image=load_previous_bundle_image(root),
+                background_color="#162431",
+            )
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            self.assertNotEqual(previous_bytes, output.read_bytes())
+            self.assertEqual(load_previous_bundle_image(root), original_image)
+            probe = exporter._probe(output)
+            self.assertAlmostEqual(float(probe["format"]["duration"]), 2.2, delta=0.5)
+            frame = subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(output),
+                "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+            ], capture_output=True, check=True, timeout=25).stdout
+            center = (90 * 320 + 160) * 3
+            self.assertGreater(frame[center], frame[center + 1] + 35)
 
     def test_background_picture_is_actual_mkv_video(self):
         with tempfile.TemporaryDirectory() as td:

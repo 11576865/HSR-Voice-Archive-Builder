@@ -17,6 +17,7 @@ from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_re
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
+from .archive_bundle_lifecycle import load_previous_bundle_image
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -1737,6 +1738,8 @@ async def api_output_archive_bundle(request: Request):
         if str(data.get("expected_project_root") or "") != str(config.root):
             raise ValueError("MKV export project context changed")
         image = decode_bundle_background(data.get("background_image_base64"))
+        if image is None and data.get("reuse_saved_background") is True:
+            image = load_previous_bundle_image(output)
         color = str(data.get("background_color") or "#000000")
         include_fonts = data.get("attach_project_fonts") is True
         source = output / "continuous.flac"

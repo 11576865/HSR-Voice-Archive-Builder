@@ -767,10 +767,12 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "healthy": False,
             "error": f"{type(exc).__name__}: {exc}",
         }
+    from .archive_bundle_lifecycle import bundle_export_status
     return {
         "name": config.name,
         "root": config.root,
         "output_path": str(output),
+        "bundle_export": bundle_export_status(output),
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
         "build_complete": not interrupted_build and report_file.is_file() and (
