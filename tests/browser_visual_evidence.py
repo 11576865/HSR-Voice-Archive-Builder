@@ -632,6 +632,60 @@ def touch_safety_check(browser, base_url, report):
     page.close()
 
 
+
+def focused_studio_viewport_check(browser, base_url, output, report):
+    """A fixed, recoverable app-style workspace, not document-length scrolling."""
+    measured = []
+    for width, height, mobile in [(1600, 900, False), (768, 1024, True), (390, 844, True)]:
+        page = browser.new_page(viewport={"width": width, "height": height},
+                                device_scale_factor=1, is_mobile=mobile, has_touch=mobile)
+        errors = []
+        page.on("pageerror", lambda error: errors.append(str(error)))
+        page.route("**/api/**", make_router([dict(row) for row in SUBTITLES], []))
+        page.goto(base_url, wait_until="domcontentloaded")
+        load_studio(page)
+        toggle = page.locator("#hsrStudioFocusToggle")
+        ensure(toggle.is_visible(), f"{width}: missing focus toggle")
+        toggle.click()
+        view = page.evaluate("""() => {
+          const card=document.getElementById('subtitleLayoutPreviewCard');
+          const workbench=card.querySelector('.preview-workbench');
+          const bounds=card.getBoundingClientRect();
+          const inspector=card.querySelector('.preview-inspector');
+          return {
+            bodyOverflow:getComputedStyle(document.body).overflow,
+            position:getComputedStyle(card).position,
+            rect:{top:bounds.top,left:bounds.left,width:bounds.width,height:bounds.height},
+            innerHeight:window.innerHeight,innerWidth:window.innerWidth,
+            focus:document.body.dataset.hsrStudioFocus,
+            workbenchHeight:workbench.clientHeight,
+            workbenchScroll:workbench.scrollHeight,
+            inspectorScroll:inspector.scrollHeight,
+            inspectorHeight:inspector.clientHeight
+          };
+        }""")
+        ensure(view["focus"] == "true" and view["position"] == "fixed",
+               f"{width}: focus must actually isolate studio: {view}")
+        ensure(view["bodyOverflow"] == "hidden",
+               f"{width}: document still scrolls in focus mode: {view}")
+        ensure(abs(view["rect"]["top"]) <= 2 and
+               abs(view["rect"]["height"] - view["innerHeight"]) <= 2 and
+               abs(view["rect"]["width"] - view["innerWidth"]) <= 2,
+               f"{width}: focused studio is not a real viewport: {view}")
+        ensure(view["workbenchHeight"] > 120,
+               f"{width}: no useful task pane left: {view}")
+        page.screenshot(path=str(output / f"focus_{width}.png"), full_page=False)
+        page.keyboard.press("Escape")
+        ensure(page.evaluate("document.body.dataset.hsrStudioFocus") == "false",
+               f"{width}: Esc failed to close focus")
+        ensure(toggle.get_attribute("aria-pressed") == "false",
+               f"{width}: focus toggle accessibility state not restored")
+        ensure(not errors, f"{width}: focus JS exceptions: {errors}")
+        measured.append({"width": width, "height": height, "view": view})
+        page.close()
+    report["focus_viewport"] = measured
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("artifacts/subtitle-browser"))
@@ -651,6 +705,7 @@ def main():
             browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             try:
                 desktop_check(browser, url, args.output, report)
+                focused_studio_viewport_check(browser, url, args.output, report)
                 touch_safety_check(browser, url, report)
                 shared_corpus_request_check(browser, url, report)
                 mobile_check(browser, url, args.output, report, 390, 844, "mobile_390")
