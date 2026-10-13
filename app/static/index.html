@@ -4806,15 +4806,14 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
       path:chapterDir.path,exists:!!chapterDir.exists
     }));
   }
-  // Kept for compatibility, but no longer marketed as an equal/current bundle.
+  // Optional compatibility product; not an alternative "current bundle".
   const old=outputs('HSR_Voice_Archive_Black.mkv');
-  if(old.exists){
-    cards.push(artifactCard({
-      title:'HSR_Voice_Archive_Black.mkv',kind:'video',status:'legacy',
-      desc:'旧版黑屏视频，独立于完整 MKV；不含相同的来源回执，不代表当前 FLAC/ASS 的封装状态。',
-      path:old.path,size:old.size_bytes,exists:true
-    }));
-  }
+  cards.push(artifactCard({
+    title:'HSR_Voice_Archive_Black.mkv',kind:'video',status:old.exists?'legacy':null,
+    desc:'旧版黑屏视频，独立于完整 MKV；不含相同的来源回执，不代表当前 FLAC/ASS 的封装状态。',
+    path:old.path,size:old.size_bytes,exists:!!old.exists,
+    actions:old.exists?[]:[{label:'生成黑屏 MKV',primary:true,action:startBlackVideo}]
+  }));
   for(const card of cards)browser.appendChild(card);
   if(count)count.textContent=cards.filter(x=>x.dataset.current==='true').length+' 项现有文件（过期文件另标）';
 }
