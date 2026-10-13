@@ -223,7 +223,12 @@ def load_studio(page):
     ensure(page.locator("#studioStyleTab").is_visible(), "Style mode missing")
     ensure(page.locator("#studioEffectsTab").is_visible(), "Effects mode missing")
     ensure(not page.locator("#layoutTimelineViewport").is_visible(), "Style shows effect timeline")
+    subtitleRequests = []
+    page.on("request", lambda request: subtitleRequests.append(request.url)
+            if "/subtitles?selector=all" in request.url else None)
     page.locator("#studioEffectsTab").click()
+    page.wait_for_timeout(150)
+    ensure(not subtitleRequests, "Layout -> Effects caused a second subtitle corpus fetch")
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
            "Effects is not a primary destination")
     ensure(page.locator("#studioStyleTab").get_attribute("aria-current") is None,
