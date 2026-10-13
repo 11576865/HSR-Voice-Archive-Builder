@@ -78,9 +78,9 @@ class LargeBackgroundImageAcceptanceTests(unittest.TestCase):
             second_png = render_background_preview(spec, color="#000000", image=reused)
             self.assertEqual(hashlib.sha256(first_png).digest(), hashlib.sha256(second_png).digest())
             streams = exporter._probe(target)["streams"]
-            assert {s["codec_type"]: s["codec_name"] for s in streams} >= {
-                "video": "h264", "audio": "flac", "subtitle": "ass",
-            }
+            stream_codecs = {s["codec_type"]: s["codec_name"] for s in streams}
+            for kind, codec in {"video": "h264", "audio": "flac", "subtitle": "ass"}.items():
+                self.assertEqual(stream_codecs[kind], codec)
 
 
 if __name__ == "__main__":
