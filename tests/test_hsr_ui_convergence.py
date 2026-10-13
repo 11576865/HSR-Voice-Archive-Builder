@@ -70,6 +70,18 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn("max-width:759px", self.css)
         self.assertIn("max-width:1360px", self.css)
 
+    def test_effects_closes_layout_qa_and_nav_identity_is_semantic(self):
+        doc = self.html
+        self.assertIn("if(next==='effects'&&root.querySelector('.preview-workbench.audit-open'))", doc)
+        self.assertIn("setHsrAuditDrawer(false);", doc)
+        self.assertIn("if(hadRailFocus)document.getElementById('studioEffectsTab')?.focus();", doc)
+        self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.css)
+        for task in ("review", "layout", "effects", "export", "update"):
+            self.assertIn(f'.workspace-nav button[data-workspace-target="{task}"]', doc)
+        self.assertNotIn(".workspace-nav button:nth-child", doc)
+        self.assertNotIn(".workspace-nav button:nth-child", self.css)
+        self.assertNotIn(".hsr-studio-tabs button", doc)
+
     def test_production_script_parse(self):
         if not __import__("shutil").which("node"):
             self.skipTest("Node not installed")
