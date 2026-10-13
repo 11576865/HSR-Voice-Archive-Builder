@@ -18,6 +18,7 @@ from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_re
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
+from .auto_delivery import maybe_queue_complete_mkv
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
@@ -867,7 +868,9 @@ def api_status():
     project = None
     if _active_root is not None:
         try:
-            project = project_summary(_active_config())
+            config = _active_config()
+            maybe_queue_complete_mkv(config)
+            project = project_summary(config)
         except Exception:
             project = None
     return {
