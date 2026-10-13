@@ -868,19 +868,17 @@ def gradient_background_check(browser, base_url, output, report):
         }""")
         ensure(states["stale"]["labels"][0] == "旧文件·已过期",
                "Old MKV must not show as a current bundle")
-        ensure("先更新 ASS/SRT" in states["stale"]["pendingAction"],
-               "Stale subtitle prerequisite needs an actionable UI path")
+        ensure("背景／重新封装" in states["stale"]["pendingAction"],
+               "Stale MKV must expose the one authoritative remux/settings action")
         ensure(states["current"]["labels"][0] == "当前有效",
                "Current bundle should show validated source status")
-        ensure(states["stale"]["names"][1:4] == [
-            "continuous.flac", "HSR_Voice_Archive.srt", "HSR_Voice_Archive.ass"],
-            "Independent master/subtitle artifacts must be preserved")
-        ensure(states["stale"]["labels"][2] == "可用",
-               "An independently current SRT must not be marked stale merely because ASS is missing")
-        ensure(states["stale"]["labels"][3] == "旧文件·已过期",
-               "Previous ASS remains stale when it is not the latest certified subtitle export")
-        ensure(states["stale"]["labels"][-1] == "旧版独立输出",
-               "Legacy black MKV must not look like another current MKV")
+        ensure(states["stale"]["names"][0] == "HSR_Voice_Archive_Bundle.mkv",
+               "The complete MKV is the sole default finished media object")
+        ensure(all(name not in states["stale"]["names"] for name in
+                   ("continuous.flac", "HSR_Voice_Archive.srt", "HSR_Voice_Archive.ass")),
+               "Redundant audio/subtitle working sources must not appear as default deliverables")
+        ensure("独立轨道按需导出" in states["stale"]["count"],
+               "UI should distinguish default product from explicit track exports")
         ensure(not errors, "Gradient/background browser JS error: " + repr(errors))
         screenshot(page, output, "gradient_background_" + str(width))
         evidence.append({"viewport": str(width)+"x"+str(height),

@@ -3360,7 +3360,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
             <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
-          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">成功封装时保存背景设置及图片，供下次源文件更新后复用；音轨保留 FLAC 无损编码，ASS/SRT 是两条独立软字幕轨。失败时保留上一版 MKV。</p>
+          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">完整 MKV 校验通过后，工作用 FLAC/SRT/ASS 将从成品目录清理；需要独立文件时点击上方按需导出。失败时保留上一版 MKV。</p>
         </details>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
@@ -4768,88 +4768,85 @@ function artifactCard({title,kind,desc,path,size,exists=true,status=null,actions
   return card;
 }
 
+async function exportIndividualTrack(kind){
+  const status=document.getElementById('optionalOutputStatus');
+  if(!currentProject?.root)return;
+  try{
+    if(status)status.textContent='正在导出独立 '+kind.toUpperCase()+'；默认 MKV 不变…';
+    const body=new FormData();body.set('kind',kind);
+    const response=await api('/api/output/individual',{method:'POST',body});
+    watchJob(response.job);
+    if(status)status.textContent='独立 '+kind.toUpperCase()+' 导出任务已开始，完成后文件保存在 output/exports/。';
+  }catch(error){
+    if(status)status.textContent='独立轨道导出失败：'+shortError(error);
+    setLog(String(error));
+  }
+}
+
 function renderArtifactBrowser(p,finalProducts,outputMap){
   const browser=document.getElementById('artifactBrowser'),count=document.getElementById('artifactCount');
   if(!browser)return;
   browser.innerHTML='';
-  const cards=[], bundleState=p?.bundle_export||{}, prerequisites=bundleState.prerequisites||{};
+  const cards=[],bundleState=p?.bundle_export||{};
   const flacOnly=p?.config?.delivery_mode==='flac_only';
   const outputs=name=>finalProducts[name]||outputMap[name]||{};
-  const bundle=outputs('HSR_Voice_Archive_Bundle.mkv');
-  const master=outputs('continuous.flac'),srt=outputs('HSR_Voice_Archive.srt'),ass=outputs('HSR_Voice_Archive.ass');
-  const srtCurrent=!!prerequisites.srt_current;
-  const assCurrent=!!prerequisites.ass_current;
   const navigateToBundle=()=>{
     showWorkspace('export',{scroll:false});
-    // The Export workspace contains the same project-owned MKV control surface.
     requestAnimationFrame(()=>{
       const panel=document.getElementById('archiveBundlePanel');
       if(panel){panel.open=true;panel.scrollIntoView({block:'center'})}
     });
   };
-  const mkvStatus=bundle.exists?(bundleState.state==='current'?'current':
-    bundleState.state==='unverified'?'unverified':'stale'):null;
-  const bundleDescription='默认完整播放封装：黑色或自定义背景视频 + 一条 FLAC 音轨 + 可切换的 SRT、ASS 双字幕轨 + 可选字体；'+
-    (bundleState.message||'请先生成连续 FLAC 和 ASS/SRT。')+
-    (bundleState.blockers?.length?' 前置条件：'+bundleState.blockers.join('；'):'');
-  if(!flacOnly)cards.push(artifactCard({
-    title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',status:mkvStatus,
-    desc:bundleDescription,path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
-    actions:[bundleState.can_generate===false
-      ? {label:!prerequisites.continuous_flac?'先构建连续 FLAC':'先更新 ASS/SRT',
-         primary:true,action:!prerequisites.continuous_flac
-           ? ()=>showWorkspace('project') : ()=>showWorkspace('layout')}
-      : {label:bundleState.state==='current'?'调整背景／重新封装':
-                 bundle.exists?'更新过期 MKV':'生成完整 MKV',
-         primary:bundleState.state!=='current',action:navigateToBundle}]
-  }));
-  // The sources are independently downloadable deliverables, not copies of MKV.
-  cards.push(artifactCard({
-    title:'continuous.flac',kind:'audio',
-    desc:'无损母版音频；完整 MKV 直接复制此 FLAC 音轨，而不是反向生成音频。',
-    path:master.path,size:master.size_bytes,exists:!!master.exists
-  }));
-  if(!flacOnly)cards.push(artifactCard({
-    title:'HSR_Voice_Archive.srt',kind:'subtitle',
-    status:srt.exists&&!srtCurrent?'stale':null,
-    desc:'独立文本字幕成品；与 ASS 由同一字幕源导出。'+(!srtCurrent?' 当前 SRT 未通过独立字幕回执校验。':''),
-    path:srt.path,size:srt.size_bytes,exists:!!srt.exists,
-    actions:[{label:'字幕校对',action:()=>showWorkspace('review')}]
-  }));
-  if(!flacOnly)cards.push(artifactCard({
-    title:'HSR_Voice_Archive.ass',kind:'subtitle',
-    status:ass.exists&&!assCurrent?'stale':null,
-    desc:'独立样式字幕，也是完整 MKV 的可开关软字幕输入；修改后需重新封装 MKV。',
-    path:ass.path,size:ass.size_bytes,exists:!!ass.exists,
-    actions:ass.exists
-      ? [{label:'排版工作台',action:()=>showWorkspace('layout')}]
-      : [{label:'生成 ASS',primary:true,action:startAssExport},{label:'排版设置',action:()=>showWorkspace('layout')}]
-  }));
-  const chapterFiles=Object.entries(finalProducts).filter(([name,o])=>name.startsWith('chapter_flac/')&&name.endsWith('.flac')&&o?.exists);
-  const chapterDir=outputs('chapter_flac/');
-  if(p?.config?.generate_chapter_flac||chapterDir.exists||chapterFiles.length){
+  if(flacOnly){
+    const audio=outputs('continuous.flac');
     cards.push(artifactCard({
-      title:'章节 / 大组连续 FLAC',kind:'audio',
-      desc:chapterFiles.length?'独立章节音频 '+chapterFiles.length+' 个；不是完整 MKV 的附加轨道。':'已启用章节导出，但没有可用章节文件。',
-      path:chapterDir.path,exists:!!chapterDir.exists
+      title:'continuous.flac',kind:'audio',path:audio.path,
+      size:audio.size_bytes,exists:!!audio.exists,
+      desc:'仅 FLAC 模式的唯一音频成品；不会另外生成或保留重复母版。'
+    }));
+  }else{
+    const mkv=outputs('HSR_Voice_Archive_Bundle.mkv');
+    cards.push(artifactCard({
+      title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',
+      status:mkv.exists?(bundleState.state==='current'?'current':'stale'):null,
+      desc:'完整模式的唯一默认媒体成品：黑色／自定义背景 + 单条 FLAC 音轨 + 可选择的 SRT 和 ASS 软字幕；无需保留独立音频副本。 '+
+           (bundleState.message||'尚未完成完整封装。'),
+      path:mkv.path,size:mkv.size_bytes,exists:!!mkv.exists,
+      actions:[
+        {label:'背景／重新封装',action:navigateToBundle},
+        ...(mkv.exists&&bundleState.state==='current'
+           ? [{label:'单独导出 FLAC',action:()=>exportIndividualTrack('flac')},
+              {label:'单独导出 SRT',action:()=>exportIndividualTrack('srt')},
+              {label:'单独导出 ASS',action:()=>exportIndividualTrack('ass')}]
+           : [])
+      ]
     }));
   }
-  // Legacy black-only MKV remains accessible, not an equal default delivery.
-  const old=outputs('HSR_Voice_Archive_Black.mkv');
-  const legacyCard=artifactCard({
-    title:'HSR_Voice_Archive_Black.mkv',kind:'video',status:old.exists?'legacy':null,
-    desc:'旧版黑屏视频，独立于完整 MKV；不含相同的来源回执，不代表当前 FLAC/ASS 的封装状态。',
-    path:old.path,size:old.size_bytes,exists:!!old.exists,
-    actions:old.exists?[]:[{label:'生成旧版黑屏 MKV',action:startBlackVideo}]
-  });
   for(const card of cards)browser.appendChild(card);
-  const legacyDetails=document.createElement('details');
-  legacyDetails.className='legacy-output-details';
-  const legacySummary=document.createElement('summary');
-  legacySummary.textContent='历史兼容输出 · 不含字幕的旧版黑屏 MKV';
-  legacyDetails.append(legacySummary,legacyCard);
-  browser.appendChild(legacyDetails);
-  if(count)count.textContent=cards.filter(x=>x.dataset.current==='true').length+' 项现有文件（过期文件另标）';
+  const legacy=outputs('HSR_Voice_Archive_Black.mkv');
+  if(legacy.exists){
+    const details=document.createElement('details');
+    details.className='legacy-output-details';
+    const summary=document.createElement('summary');
+    summary.textContent='旧工程遗留黑屏 MKV（历史文件，不是当前默认交付）';
+    details.append(summary,artifactCard({
+      title:'HSR_Voice_Archive_Black.mkv',kind:'video',status:'legacy',
+      desc:'旧版不含字幕的容器；完整构建验收后由新的唯一 MKV 取代。',
+      path:legacy.path,size:legacy.size_bytes,exists:true
+    }));
+    browser.appendChild(details);
+  }
+  const chapterFiles=Object.entries(finalProducts).filter(([name,o])=>
+    name.startsWith('chapter_flac/')&&name.endsWith('.flac')&&o?.exists);
+  if(chapterFiles.length){
+    const details=document.createElement('details');
+    const summary=document.createElement('summary');
+    summary.textContent='另外显式生成的 '+chapterFiles.length+' 个章节音频';
+    details.append(summary);
+    browser.appendChild(details);
+  }
+  if(count)count.textContent=cards.filter(x=>x.dataset.current==='true').length+
+    ' 项默认交付成品（独立轨道按需导出）';
 }
 
 function renderExportWorkspace(p){

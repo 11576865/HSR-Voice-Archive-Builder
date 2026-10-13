@@ -14,6 +14,7 @@ from pathlib import Path
 
 from .archive_bundle_backgrounds import RESOLUTIONS
 from .archive_bundle_exporter import ArchiveBundleExporter
+from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery
 from .archive_bundle_lifecycle import (
     _sources, bundle_export_status, load_previous_bundle_image,
     previous_bundle_settings,
@@ -69,6 +70,12 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
                 output, include_fonts=now["attach_project_fonts"], settings=now,
             ) != snapshot:
                 raise RuntimeError("自动 MKV 更新的输入已变化，等待下一轮任务检查")
+            from .subtitles import subtitle_render_config
+            prepare_complete_sources(
+                output, source_language=config.source_text_language,
+                target_language=config.target_language,
+                render_config=subtitle_render_config(config),
+            )
             spec = now["background_spec"]
             background = (
                 load_previous_bundle_image(output) if spec["mode"] == "image"
@@ -87,6 +94,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
                     "encode", message, done, total,
                 ),
             )
+            seal_complete_delivery(output)
             return result
 
         # Job registry enforces single-writer ownership. If another job is
