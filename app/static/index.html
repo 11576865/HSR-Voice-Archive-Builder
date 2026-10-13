@@ -4750,7 +4750,8 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   const outputs=name=>finalProducts[name]||outputMap[name]||{};
   const bundle=outputs('HSR_Voice_Archive_Bundle.mkv');
   const master=outputs('continuous.flac'),srt=outputs('HSR_Voice_Archive.srt'),ass=outputs('HSR_Voice_Archive.ass');
-  const subtitleReady=!!prerequisites.subtitles_current;
+  const srtCurrent=!!prerequisites.srt_current;
+  const assCurrent=!!prerequisites.ass_current;
   const navigateToBundle=()=>{
     showWorkspace('export',{scroll:false});
     // The Export workspace contains the same project-owned MKV control surface.
@@ -4783,14 +4784,14 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   }));
   cards.push(artifactCard({
     title:'HSR_Voice_Archive.srt',kind:'subtitle',
-    status:srt.exists&&!subtitleReady?'stale':null,
-    desc:'独立文本字幕成品；与 ASS 由同一字幕源导出。'+(!subtitleReady?' 当前字幕待更新。':''),
+    status:srt.exists&&!srtCurrent?'stale':null,
+    desc:'独立文本字幕成品；与 ASS 由同一字幕源导出。'+(!srtCurrent?' 当前 SRT 未通过独立字幕回执校验。':''),
     path:srt.path,size:srt.size_bytes,exists:!!srt.exists,
     actions:[{label:'字幕校对',action:()=>showWorkspace('review')}]
   }));
   cards.push(artifactCard({
     title:'HSR_Voice_Archive.ass',kind:'subtitle',
-    status:ass.exists&&!subtitleReady?'stale':null,
+    status:ass.exists&&!assCurrent?'stale':null,
     desc:'独立样式字幕，也是完整 MKV 的可开关软字幕输入；修改后需重新封装 MKV。',
     path:ass.path,size:ass.size_bytes,exists:!!ass.exists,
     actions:ass.exists
