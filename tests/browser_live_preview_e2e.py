@@ -43,7 +43,7 @@ def make_source(ffmpeg: str, target: Path) -> bytes:
 def probe(ffprobe: str, target: Path) -> dict:
     result = subprocess.run([
         ffprobe, "-v", "error", "-show_entries",
-        "format=duration:stream=codec_type,codec_name,width,height",
+        "format=duration:stream=codec_type,codec_name,width,height,start_time",
         "-of", "json", str(target),
     ], check=True, capture_output=True, text=True, timeout=15)
     return json.loads(result.stdout)
@@ -107,9 +107,11 @@ def run(output: Path) -> None:
                     ) as api_request:
                         page.locator("#previewVideoBtn").click()
                     response = api_request.value
-                    ensure(response.status == 200,
-                           "Live preview rejected: " + str(response.status) + " " +
-                           response.text()[:1200])
+                    if response.status != 200:
+                        raise AssertionError(
+                            "Live preview rejected: " + str(response.status) + " " +
+                            response.text()[:1200]
+                        )
                     ensure(response.headers.get("x-hsr-preview-background") == "local-footage",
                            "Actual API did not confirm local source input")
                     ensure(seen_real and seen_real[0].get("include_source_audio") is True,
@@ -130,6 +132,17 @@ def run(output: Path) -> None:
                            "Live render did not contain source audio as Opus")
                     ensure((video["width"], video["height"]) == (960, 540),
                            "Unexpected composited video dimensions")
+                    start_delta = abs(float(video.get("start_time") or 0.0) -
+                                      float(audio.get("start_time") or 0.0))
+                    ensure(start_delta < 0.18,
+                           "Source audio/video start timestamps drift: " + str(start_delta))
+                    raw_audio = subprocess.run([
+                        ffmpeg, "-v", "error", "-i", str(output_movie),
+                        "-map", "0:a:0", "-t", "1",
+                        "-f", "s16le", "-ac", "1", "-ar", "8000", "-",
+                    ], check=True, capture_output=True, timeout=15).stdout
+                    ensure(len(raw_audio) > 1000 and any(raw_audio),
+                           "The output audio track did not decode to audible samples")
                     page.wait_for_function("""() => {
                         const player=document.getElementById('libassVideoPreview');
                         const proof=document.querySelector('.layout-preview-evidence');
