@@ -53,11 +53,11 @@ class BackgroundColorTests(unittest.TestCase):
             video.write_bytes(clip)
             proc = subprocess.run([
                 ffmpeg, "-hide_banner", "-loglevel", "error", "-i", str(video),
-                "-vf", "crop=1:1:0:0,format=rgb24", "-frames:v", "1",
+                "-vf", "crop=2:2:0:0,format=rgb24", "-frames:v", "1",
                 "-f", "rawvideo", "-"
             ], capture_output=True, check=True, timeout=25)
-        self.assertEqual(len(proc.stdout), 3, "Decoded RGB frame required")
-        rgb = proc.stdout
+        self.assertEqual(len(proc.stdout), 12, "Decoded 2x2 RGB frame required")
+        rgb = proc.stdout[:3]
         for channel, expected in zip(rgb, (0x23, 0x45, 0x67)):
             self.assertLessEqual(abs(channel - expected), 18, (list(rgb), expected))
 
