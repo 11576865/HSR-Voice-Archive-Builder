@@ -674,10 +674,11 @@ header #mode{
   min-height:50px;padding:7px 10px 7px 12px;grid-template-columns:27px 1fr;
   color:var(--muted);border:1px solid transparent;
 }
-.workspace-nav button:nth-child(2){--nav-accent:var(--blue)}
-.workspace-nav button:nth-child(3){--nav-accent:var(--purple)}
-.workspace-nav button:nth-child(4){--nav-accent:var(--ok)}
-.workspace-nav button:nth-child(5){--nav-accent:var(--warn)}
+.workspace-nav button[data-workspace-target="review"]{--nav-accent:var(--blue)}
+.workspace-nav button[data-workspace-target="layout"]{--nav-accent:var(--purple)}
+.workspace-nav button[data-workspace-target="effects"]{--nav-accent:var(--purple)}
+.workspace-nav button[data-workspace-target="export"]{--nav-accent:var(--ok)}
+.workspace-nav button[data-workspace-target="update"]{--nav-accent:var(--warn)}
 .workspace-nav button:hover{background:var(--surface-subtle);color:var(--text-strong);border-color:var(--line)}
 .workspace-nav button[aria-current="page"]{
   background:color-mix(in srgb,var(--nav-accent) 11%,var(--surface-secondary));
@@ -2961,16 +2962,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #subtitleLayoutPreviewCard .layout-cue-scrub[hidden],
 #subtitleLayoutPreviewCard #layoutCueTextConflict{display:none!important}
 #subtitleLayoutPreviewCard .layout-cue-actions[hidden]{display:none!important}
-/* Two scoped studio projections; a single preview and project data authority. */
-.hsr-studio-tabs{display:flex;flex-wrap:wrap;gap:8px;margin:4px 0 12px}
-.hsr-studio-tabs button{flex:1;min-width:125px;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--surface-primary);color:var(--text);font-weight:650;cursor:pointer}
-.hsr-studio-tabs button[aria-pressed="true"]{border-color:var(--blue);background:var(--surface-secondary);box-shadow:inset 0 -2px var(--blue)}
+/* A single primary workspace nav now owns Layout/Effects switching. */
 #subtitleLayoutPreviewCard[data-studio-mode="style"] [data-studio-scope="effects"],
 #subtitleLayoutPreviewCard[data-studio-mode="effects"] [data-studio-scope="style"],
 #subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel,
 #subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutCueEditorPanel,
 #subtitleLayoutPreviewCard .layout-workflow-strip{display:none!important}
-@media(max-width:759px){.hsr-studio-tabs button{min-height:44px}}
 #subtitleLayoutPreviewCard #libassVideoPreview:not(.hidden){display:block!important}
 #subtitleLayoutPreviewCard #libassVideoPreview.hidden{display:none!important}
 #subtitleLayoutPreviewCard #previewVideoBtn[data-studio-scope="effects"]{white-space:normal}
@@ -8449,6 +8446,14 @@ function setHsrStudioMode(mode){
   const root=document.getElementById('subtitleLayoutPreviewCard');
   if(!root)return;
   const next=mode==='effects'?'effects':'style';
+  // QA belongs to Layout. Switching into Effects must collapse the optional
+  // rail, clear inert/ARIA state consistently, and keep keyboard focus visible.
+  if(next==='effects'&&root.querySelector('.preview-workbench.audit-open')){
+    const rail=document.getElementById('layoutCorpusRail');
+    const hadRailFocus=!!rail?.contains(document.activeElement);
+    setHsrAuditDrawer(false);
+    if(hadRailFocus)document.getElementById('studioEffectsTab')?.focus();
+  }
   root.dataset.studioMode=next;
   const heading=document.getElementById('hsrStudioTitle');
   if(heading)heading.textContent=next==='effects'?'字幕特效工作台':'字幕排版工作台';

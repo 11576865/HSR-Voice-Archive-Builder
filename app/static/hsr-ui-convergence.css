@@ -5,9 +5,6 @@
   background:var(--surface-primary);
 }
 /* Primary task ownership lives in the global six-destination workspace nav. */
-.workspace-nav button:nth-child(4){--nav-accent:var(--purple)}
-.workspace-nav button:nth-child(5){--nav-accent:var(--ok)}
-.workspace-nav button:nth-child(6){--nav-accent:var(--warn)}
 .workspace-nav button[data-workspace-target="effects"][aria-current="page"]{
   color:var(--text);
 }
@@ -18,6 +15,9 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
 }
 #layoutAuditDrawerToggle[aria-expanded="true"]{border-color:var(--layout-evidence-accent)}
 #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open) .layout-corpus-rail{display:none!important}
+/* Layout's specialist diagnostics must not remain visible in Effects if a
+   future call path forgets to close the drawer. The JS owns the ARIA state. */
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail{display:none!important}
 @media(min-width:1361px) {
  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open) {
    display:grid;grid-template-columns:minmax(0,1fr) clamp(350px,27vw,460px)!important;

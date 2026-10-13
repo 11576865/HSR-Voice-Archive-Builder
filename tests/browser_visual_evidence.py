@@ -318,6 +318,15 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "false",
            "Batch audit accessibility state incorrect")
     screenshot(page, output, "desktop_optional_batch_qa")
+    # The optional QA explorer is Layout-only, not a permanent third
+    # column in the independent Effects task.
+    rail = rect(page, ".preview-workbench .layout-corpus-rail")
+    stage_with_qa = rect(page, ".preview-workbench .layout-preview-region")
+    qa_inspector = rect(page, ".preview-workbench .preview-inspector")
+    ensure(rail["x"] + rail["width"] <= stage_with_qa["x"] + 8,
+           "Desktop optional QA rail overlaps the Layout stage")
+    ensure(stage_with_qa["x"] + stage_with_qa["width"] <= qa_inspector["x"] + 8,
+           "Desktop QA inspector overlaps the Layout stage")
     page.locator("#studioEffectsTab").click()
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
            "Effects not selected in the primary navigation")
@@ -329,17 +338,35 @@ def desktop_check(browser, base_url, output, report):
            "Effects task identity lost")
     ensure(page.locator("#layoutTimelineViewport").is_visible(),
            "Top-level Effects lost the timeline")
-    ensure(page.locator("#layoutCorpusRail").is_visible(),
-           "Explicitly opened batch QA was silently closed")
-    rail = rect(page, ".preview-workbench .layout-corpus-rail")
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           "Layout QA rail leaks into the Effects task")
+    ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
+           "Hidden QA rail ARIA state stale after switching to Effects")
+    ensure(page.locator("#layoutCorpusRail").get_attribute("inert") is not None,
+           "Hidden QA rail remains keyboard interactive")
+    ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "false",
+           "QA opener did not reset when leaving Layout")
+    # Programmatic task switches must not strand keyboard focus in a newly
+    # inert subtree or on the layout-only (now hidden) drawer opener.
+    page.locator("#studioStyleTab").click()
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           "Old Layout QA drawer unexpectedly reopened on return")
+    page.locator("#layoutAuditDrawerToggle").click()
+    page.locator("#layoutCorpusSearch").focus()
+    page.evaluate("() => showWorkspace('effects',{scroll:false})")
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
+           "Moving from focused QA rail to Effects lost visible keyboard focus")
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           "Focused QA rail did not close when entering Effects")
     stage = rect(page, ".preview-workbench .layout-preview-region")
     inspector = rect(page, ".preview-workbench .preview-inspector")
     timeline = rect(page, "#layoutTimelineViewport")
     canvas = rect(page, ".preview-workbench .preview-stage")
-    ensure(rail["x"] + rail["width"] <= stage["x"] + 8, "Desktop left corpus overlaps stage")
-    ensure(stage["x"] + stage["width"] <= inspector["x"] + 8, "Desktop inspector overlaps stage")
-    ensure(rail["width"] >= 205 and inspector["width"] >= 320, "Desktop panel width below useful minimum")
-    ensure(abs(canvas["width"] / canvas["height"] - 16/9) < 0.1, "Preview stage is not approximately 16:9")
+    ensure(stage["x"] + stage["width"] <= inspector["x"] + 8,
+           "Effects inspector overlaps two-column stage")
+    ensure(inspector["width"] >= 320, "Effects inspector width below useful minimum")
+    ensure(abs(canvas["width"] / canvas["height"] - 16/9) < 0.1,
+           "Preview stage is not approximately 16:9")
     ensure(timeline["width"] > 400, "Desktop timeline has insufficient width")
     ensure(page.locator('[data-timeline-cue="11"]').count() == 1, "Cue 11 not visible")
     ensure(page.locator('[data-timeline-cue="12"]').count() == 1, "Cue 12 not visible")
@@ -430,27 +457,30 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
            f"{label}: Layout batch QA action unavailable")
     page.locator("#layoutAuditDrawerToggle").click()
-    page.locator("#studioEffectsTab").click()
     ensure(page.locator("#layoutCorpusRail").is_visible(),
-           f"{label}: optional batch inspector missing")
+           f"{label}: optional Layout QA explorer is inaccessible")
+    screenshot(page, output, f"{label}_optional_layout_qa")
+    page.locator("#studioEffectsTab").click()
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           f"{label}: layout QA rail leaks into Effects")
+    ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
+           f"{label}: layout QA accessibility state not reset")
+    ensure(page.locator("#layoutCorpusRail").get_attribute("inert") is not None,
+           f"{label}: hidden QA controls remain focusable")
     vp = rect(page, "#layoutTimelineViewport")
     canvas = rect(page, ".preview-workbench .preview-stage")
     cue = rect(page, "#layoutCueEditorPanel")
-    rail = rect(page, ".layout-corpus-rail")
     inspector = rect(page, ".preview-inspector")
+    ensure(canvas["y"] < cue["y"],
+           f"{label}: preview must come before selected subtitle timing")
     if width < 760:
-        ensure(canvas["y"] < cue["y"] < rail["y"] < inspector["y"],
-               f"{label}: invalid mobile task order")
+        ensure(cue["y"] + cue["height"] <= inspector["y"] + 8,
+               f"{label}: effect controls overlay selected subtitle on mobile")
     else:
-        ensure(rail["x"] + rail["width"] <= canvas["x"] + 8,
-               f"{label}: tablet corpus/stage overlap")
-        ensure(inspector["y"] >= min(rail["y"] + rail["height"], cue["y"] + cue["height"]) - 8,
-               f"{label}: tablet inspector overlays timeline/corpus")
-        ensure(inspector["x"] <= rail["x"] + 5
-               and inspector["x"] + inspector["width"] >= canvas["x"] + canvas["width"] - 5,
-               f"{label}: inspector failed to span both tablet workspace columns: {inspector}")
-        ensure(inspector["width"] >= width * 0.85,
-               f"{label}: inspector collapsed into left navigation column")
+        ensure(cue["y"] + cue["height"] <= inspector["y"] + 8,
+               f"{label}: tablet Effects inspector overlaps cue editor")
+        ensure(inspector["width"] >= width * 0.72,
+               f"{label}: tablet inspector too narrow for controls")
     ensure(vp["width"] > width*(0.6 if width < 760 else 0.38), f"{label}: timeline too narrow")
     ensure(page.locator("#layoutCueTimingStart").is_enabled(), f"{label}: timing editor inaccessible")
     # Control headings/content must stay within the horizontal viewport, not
@@ -463,7 +493,7 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     ensure(sizes["html"] <= width + 3, f"{label}: horizontal overflow {sizes}")
     screenshot(page, output, f"{label}_studio")
     report[label] = {"viewport": [width, height], "rectangles": {
-        "stage": canvas, "cue": cue, "rail": rail, "inspector": inspector,
+        "stage": canvas, "cue": cue, "inspector": inspector,
     }, "scroll": sizes, "page_errors": errors}
     ensure(not errors, f"{label}: JS errors: " + " | ".join(errors))
     page.close()
