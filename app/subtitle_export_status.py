@@ -74,11 +74,13 @@ def record_subtitle_export(
 def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
     if output_dir is None or not (output_dir / "manifest.json").is_file():
         return {"state": "not-built", "artifacts_current": False,
+                "srt_current": False, "ass_current": False,
                 "ass_required": False, "artifact_error": ""}
     file = output_dir / EXPORT_RECEIPT_NAME
     if not file.is_file():
         return {
             "state": "unverified", "artifacts_current": False,
+            "srt_current": False, "ass_current": False,
             "ass_required": (output_dir / ASS_NAME).is_file(),
             "artifact_error": "No validated ASS/SRT export receipt exists for this build",
         }
@@ -92,25 +94,30 @@ def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
         ass_required = bool(record.get("ass_required"))
         state = str(record["state"])
         error = str(record.get("artifact_error") or "")
-        if record["inputs"] != _inputs(output_dir):
+        # Independent SRT and ASS may be valid in different combinations.
+        # An ASS-only modification cannot invalidate an unchanged SRT. Keep
+        # aggregate status fail-closed for consumers requiring both products.
+        inputs_current = record["inputs"] == _inputs(output_dir)
+        certified = state == "current" and inputs_current
+        outputs = record["outputs"]
+        srt_hash = _sha256(output_dir / SRT_NAME) if certified else None
+        ass_hash = _sha256(output_dir / ASS_NAME) if certified and ass_required else None
+        srt_current = bool(srt_hash and outputs.get(SRT_NAME) == srt_hash)
+        ass_current = bool(ass_required and srt_current
+                           and ass_hash and outputs.get(ASS_NAME) == ass_hash)
+        if not inputs_current:
             state = "stale"
             error = "Subtitle source or human text/time overrides changed after the last export"
-        elif state == "current":
-            outputs = record["outputs"]
-            current_srt = _sha256(output_dir / SRT_NAME)
-            current_ass = _sha256(output_dir / ASS_NAME) if ass_required else None
-            if (
-                not current_srt or outputs.get(SRT_NAME) != current_srt
-                or ass_required and (not current_ass or outputs.get(ASS_NAME) != current_ass)
-            ):
-                state = "stale"
-                error = "A previously validated subtitle export is missing or changed"
+        elif state == "current" and not (srt_current and (not ass_required or ass_current)):
+            state = "stale"
+            error = "A previously validated subtitle export is missing or changed"
         elif state == "pending":
             error = error or "Subtitle export was started but never certified as complete"
         elif state == "failed":
             error = error or "The last subtitle export failed"
         return {
             "state": state, "artifacts_current": state == "current",
+            "srt_current": srt_current, "ass_current": ass_current,
             "ass_required": ass_required,
             "artifact_error": error,
             "written_at": str(record.get("written_at") or ""),
@@ -118,6 +125,7 @@ def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
     except (OSError, ValueError, TypeError, KeyError) as exc:
         return {
             "state": "unverified", "artifacts_current": False,
+            "srt_current": False, "ass_current": False,
             "ass_required": (output_dir / ASS_NAME).is_file(),
             "artifact_error": f"Invalid or unreadable export receipt: {type(exc).__name__}",
         }
