@@ -31,7 +31,7 @@ const state = {
            {dataset:{workspaceTarget:'effects'},setAttribute(){},removeAttribute(){}}],
 };
 const context = {
-  document:{body:{dataset:state.doc}},
+  document:{body:{dataset:state.doc},querySelectorAll:()=>[]},
   currentProject:state.project,
   currentSubtitle:()=>active,
   syncEditorToMemory:()=>{},
@@ -41,6 +41,7 @@ const context = {
   updatePanelTiers:x=>{state.panel=x},
   requestAnimationFrame:fn=>state.frames.push(fn),
   setHsrStudioMode:x=>{state.mode=x},
+  setHsrStudioFocusMode:()=>{},setHsrTouchSliderLock:()=>{},
   updateLayoutPreview:()=>{},
   loadLayoutStressSample:async options=>{state.loads.push(options)},
   setSubtitleSaveUi:(status,message)=>state.messages.push([status,message]),

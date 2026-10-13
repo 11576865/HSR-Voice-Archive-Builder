@@ -3331,10 +3331,18 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <div class="layout-workbench-kicker" id="hsrStudioEyebrow">SUBTITLE LAYOUT</div><h2 id="hsrStudioTitle" style="margin-bottom:4px">字幕排版工作台</h2>
           <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end" id="previewHeaderBadges">
+          <button type="button" id="hsrStudioFocusToggle" aria-pressed="false" title="在独立视口内编辑；可随时返回普通页面">退出专注模式</button>
+          <button type="button" id="hsrFontImportShortcut" title="打开当前项目的字体导入，不依赖系统字体安装">导入字体</button>
+          <button id="hsrTouchSliderToggle" type="button" aria-pressed="false" aria-controls="previewControls" title="触屏滚动时锁定所有工作台滑块">解锁滑块调节</button>
           <span id="previewScaleBadge" class="badge">100%</span>
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
+      </div>
+      <div class="hsr-focus-task-nav" id="hsrStudioFocusTasks" aria-label="专注模式工作区切换">
+        <button type="button" data-hsr-focus-task="layout">排版</button>
+        <button type="button" data-hsr-focus-task="effects">特效</button>
+        <button type="button" id="hsrFocusReturnToTasks">返回全部工作区</button>
       </div>
       <p class="small muted">字幕工作流：快速计算版面 → 用 FFmpeg/libass 核对最终字形 → 保存样式或生成 ASS。几何求解状态不等于渲染验收。</p>
       <div class="hsr-studio-toolbar" role="group" aria-label="排版问题工具" data-studio-scope="style">
@@ -3397,6 +3405,10 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
             <span>布局失败：</span>
             <span id="previewCollisionReason">CENTRAL_COLLISION</span>
           </div>
+          </div>
+          <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
+            <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
+            <span id="hsrEffectOperationDetail">点击「播放动态特效」生成可播放视频；完成后结果出现在上方画布。</span>
           </div>
           <div class="layout-preview-evidence" role="status" aria-live="polite" aria-atomic="true" data-preview-evidence="geometry">
             <div class="layout-preview-evidence-main">
@@ -3494,8 +3506,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 
         <aside class="preview-inspector" aria-label="字幕样式参数与操作">
           <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span>
-            <button id="hsrTouchSliderToggle" type="button" aria-pressed="false" aria-controls="previewControls" title="触屏滚动时锁定滑块，防止误改参数">解锁滑块调节</button></div>
-            <p id="hsrTouchSliderHint" class="small muted" role="status">触屏模式下滑块默认锁定：上下滑动只滚动参数；需要调节时点「解锁滑块调节」。</p>
+          </div>
+            <p id="hsrTouchSliderHint" class="small muted" role="status">触屏滑块默认锁定：滚动不改参数。需要调整时使用工作台顶部「解锁滑块调节」，每次触摸调整完成会自动重新锁定。</p>
   <details id="layoutTrialTextDetails" class="hsr-preview-trial">
     <summary>手动试调字幕文本（不会修改项目字幕）</summary>
     <div class="row preview-copy-fields">
@@ -3530,6 +3542,19 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
+  <strong>卡拉 OK · 词级时间准备</strong>
+  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
+  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
+            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
+              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
+              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
+            </div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
+</section>
 <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
@@ -3708,14 +3733,6 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <span id="prevKaraokePreviewTimeVal" class="small muted">50%</span>
             </div>
             <input type="range" id="prevKaraokePreviewTime" min="5" max="95" value="50" step="5">
-            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
-            <div class="actions" style="margin-top:6px">
-              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
-              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
-              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
-            </div>
-            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
             <div class="small muted inspector-help">Karaoke 并不需要你从网上寻找某个固定文件：它需要当前项目每条字幕中每个词的开始／结束时间。优先点击「刷新状态」，再使用「本地生成缺失时间」（处理主机需安装 WhisperX）；也可以从其他对齐工具导入 JSON。完成后选择有词级时间的真实字幕，再点击「播放动态特效」。没有时间数据时不会伪造逐词高亮。</div>
             <details id="hsrAlignmentHelp" class="hsr-alignment-help">
               <summary>词级时间 JSON 从哪里来？查看格式与示例</summary>
@@ -4350,6 +4367,12 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
      typeof layoutSampleRequestGeneration==='number')layoutSampleRequestGeneration++;
   document.body.dataset.workspace=visibleWorkspace;
   document.body.dataset.workspaceTask=name;
+  if(visibleWorkspace!=='layout')setHsrStudioFocusMode(false);
+  setHsrTouchSliderLock(true);
+  document.querySelectorAll('[data-hsr-focus-task]').forEach(button=>{
+    if(button.dataset.hsrFocusTask===name)button.setAttribute('aria-current','page');
+    else button.removeAttribute('aria-current');
+  });
   for(const button of workspaceButtons){
     if(button.dataset.workspaceTarget===name)button.setAttribute('aria-current','page');
     else button.removeAttribute('aria-current');
@@ -4358,6 +4381,8 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(panelCollapseMode==='auto')requestAnimationFrame(()=>applyAutoPanelState(visibleWorkspace));
   if(visibleWorkspace==='layout'){
     setHsrStudioMode(name==='effects'?'effects':'style');
+    // The editor opens as a task viewport, not another long browser page.
+    setHsrStudioFocusMode(true);
   }
   if(visibleWorkspace==='layout'&&previousWorkspace!=='layout'&&typeof updateLayoutPreview==='function'){
     const projectKey=currentProject?.root||currentProject?.name||null;
@@ -6562,6 +6587,10 @@ async function effectFootageAsBase64(file){
 
 
 function clearVideoPreview(){
+  const operation=document.getElementById('hsrEffectOperationStatus');
+  if(operation&&['preparing','encoding','decoding','ready'].includes(operation.dataset.phase)){
+    setHsrEffectOperation('stale','参数或背景已变化，请重新点击「播放动态特效」。');
+  }
   videoPreviewGeneration++;
   if(videoPreviewController){videoPreviewController.abort();videoPreviewController=null;}
   const player=document.getElementById('libassVideoPreview');
@@ -6577,6 +6606,17 @@ function clearVideoPreview(){
 }
 if(typeof window!=='undefined')window.addEventListener('beforeunload',clearVideoPreview);
 
+function setHsrEffectOperation(phase, detail=''){
+  const root=document.getElementById('hsrEffectOperationStatus');
+  const title=document.getElementById('hsrEffectOperationTitle');
+  const text=document.getElementById('hsrEffectOperationDetail');
+  const button=document.getElementById('previewVideoBtn');
+  const label={idle:'尚未开始动态预览',preparing:'正在准备素材',encoding:'FFmpeg/libass 合成中',decoding:'浏览器正在解码',ready:'动态特效可播放',stale:'预览已过期',failed:'动态特效生成失败'};
+  if(root)root.dataset.phase=phase;
+  if(title)title.textContent=label[phase]||label.idle;
+  if(text)text.textContent=detail;
+  if(button)button.textContent=['preparing','encoding','decoding'].includes(phase)?'正在生成动态特效…':'播放动态特效';
+}
 function setPreviewEvidence(mode, detail = '') {
   const root=document.querySelector('.layout-preview-evidence');
   const title=document.getElementById('previewEvidenceTitle');
@@ -6734,16 +6774,24 @@ async function renderLibassPreview(){
   }
 }
 
+function setHsrKaraokeReadiness(detail,level='neutral'){
+  const view=document.getElementById('hsrKaraokeReadinessDetail');
+  if(!view)return;
+  view.textContent=detail;
+  view.dataset.level=level;
+}
 async function loadWordAlignmentDiagnostics(){
   const status=document.getElementById('wordAlignmentStatus');
   if(!status)return;
   if(!currentProject){
+    setHsrKaraokeReadiness('请先打开项目，再生成或导入逐词时间。');
     status.textContent='打开项目后检查词级时间数据。';
     status.className='small muted layout-corpus-status';
     return null;
   }
   try{
     status.textContent='正在检查词级时间数据…';
+    setHsrKaraokeReadiness('正在读取当前项目的词级时间与本地对齐器状态。');
     status.className='small muted layout-corpus-status';
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments');
     const d=data.diagnostics||{};
@@ -6767,17 +6815,25 @@ async function loadWordAlignmentDiagnostics(){
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
     if(total<=0){
+      setHsrKaraokeReadiness('尚无可诊断的项目字幕。先构建项目并选择真实语音。','warning');
       status.textContent='当前项目没有可诊断的字幕条目。';
       status.className='small muted layout-corpus-status';
     }else if(usable<=0){
+      setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
+        ?'可以直接点击「本地生成缺失时间」。'
+        :'处理主机缺少 WhisperX；可在主机安装，或导入由其他工具生成的匹配 JSON。'),'warning');
       status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
     }else{
+      setHsrKaraokeReadiness('有效逐词时间 '+usable+' / '+total+' 条。'+(usable<total
+        ?'剩余条目仍需生成或导入，不能将现有时间用于其他字幕。'
+        :'当前全部字幕均有有效词级时间。'),usable<total?'warning':'ready');
       status.textContent='词级时间可用 '+usable+' / '+total+'（'+Number(d.usable_percent||0).toFixed(1)+'%）；缺失 '+missing+'，无效 '+invalid+'。';
       status.className='small '+(invalid?'status-warn':'status-ok')+' layout-corpus-status';
     }
     return d;
   }catch(err){
+    setHsrKaraokeReadiness('无法获取词级时间：'+shortError(err)+'。可以重试状态检查。','failed');
     status.textContent='词级时间诊断失败：'+shortError(err);
     status.className='small status-bad layout-corpus-status';
     return null;
@@ -6799,12 +6855,14 @@ async function generateLocalWordAlignments(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({force:false})
     });
+    setHsrKaraokeReadiness('已提交词级时间生成任务；请在任务中心确认完成，再刷新状态。');
     if(status){
       status.textContent='本地词级对齐任务已启动；进度请查看任务中心。';
       status.className='small status-ok layout-corpus-status';
     }
     watchJob(result.job);
   }catch(err){
+    setHsrKaraokeReadiness('启动本地生成失败：'+shortError(err),'failed');
     if(status){
       status.textContent='本地词级对齐启动失败：'+shortError(err);
       status.className='small status-bad layout-corpus-status';
@@ -8262,7 +8320,12 @@ function setHsrStudioMode(mode){
     if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);
     // Both the rail and its top-level opener become hidden in Effects.
     // Move focus before the layout-only toolbar disappears.
-    if(hadQaFocus)document.getElementById('studioEffectsTab')?.focus();
+    if(hadQaFocus){
+      const target=document.body.dataset.hsrStudioFocus==='true'
+        ?document.querySelector('[data-hsr-focus-task="effects"]')
+        :document.getElementById('studioEffectsTab');
+      target?.focus();
+    }
   }
   root.dataset.studioMode=next;
   const heading=document.getElementById('hsrStudioTitle');
@@ -8305,18 +8368,76 @@ function setHsrAuditDrawer(open){
   toggle.setAttribute('aria-expanded',open?'true':'false');
   toggle.textContent=open?'收起批量检查':'批量排版检查';
 }
-document.getElementById('hsrTouchSliderToggle')?.addEventListener('click',()=>{
-  const inspector=document.querySelector('#subtitleLayoutPreviewCard .preview-inspector');
+/* A single focus workspace; task navigation reuses showWorkspace and does
+   not create a second source of subtitle data or renderer state. */
+function setHsrStudioFocusMode(enabled){
+  const root=document.getElementById('subtitleLayoutPreviewCard');
+  const button=document.getElementById('hsrStudioFocusToggle');
+  if(!root||!button)return;
+  const active=!!enabled&&document.body.dataset.workspace==='layout';
+  const before=document.body.dataset.hsrStudioFocus==='true';
+  document.body.dataset.hsrStudioFocus=active?'true':'false';
+  root.classList.toggle('hsr-focus-active',active);
+  button.setAttribute('aria-pressed',active?'true':'false');
+  button.textContent=active?'退出专注模式':'进入专注模式';
+  if(active&&!before){
+    const view=root.querySelector('.preview-workbench');
+    if(view)view.scrollTop=0;
+  }
+  if(!active&&before)window.scrollTo({top:0,behavior:'instant'});
+}
+document.getElementById('hsrFontImportShortcut')?.addEventListener('click',()=>{
+  // Reuse the same project-owned font importer; Effects does not clone it.
+  if(document.body.dataset.workspaceTask!=='layout')showWorkspace('layout',{scroll:false});
+  const importer=document.getElementById('projectFontImporter');
+  const group=importer?.closest('details.layout-inspector-section');
+  if(group)group.open=true;
+  if(importer)importer.open=true;
+  requestAnimationFrame(()=>{
+    importer?.scrollIntoView({block:'nearest',behavior:'instant'});
+    document.getElementById('projectFontFile')?.focus({preventScroll:true});
+  });
+});
+document.getElementById('hsrStudioFocusToggle')?.addEventListener('click',()=>{
+  setHsrStudioFocusMode(document.body.dataset.hsrStudioFocus!=='true');
+});
+document.getElementById('hsrFocusReturnToTasks')?.addEventListener('click',()=>setHsrStudioFocusMode(false));
+document.querySelectorAll('[data-hsr-focus-task]').forEach(button=>
+  button.addEventListener('click',()=>showWorkspace(button.dataset.hsrFocusTask,{scroll:false})));
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&document.body.dataset.hsrStudioFocus==='true'){
+    setHsrStudioFocusMode(false);
+    document.getElementById('hsrStudioFocusToggle')?.focus({preventScroll:true});
+  }
+});
+/* Touch ranges must be explicitly armed. One completed touch gesture
+   automatically returns the entire workbench to scroll-safe mode. */
+function setHsrTouchSliderLock(locked){
+  const root=document.getElementById('subtitleLayoutPreviewCard');
+  const inspector=root?.querySelector('.preview-inspector');
   const toggle=document.getElementById('hsrTouchSliderToggle');
   const help=document.getElementById('hsrTouchSliderHint');
-  if(!inspector||!toggle)return;
-  const unlocked=inspector.classList.toggle('hsr-touch-sliders-unlocked');
+  if(!root||!inspector||!toggle)return;
+  const unlocked=!locked;
+  root.classList.toggle('hsr-touch-sliders-unlocked',unlocked);
+  inspector.classList.toggle('hsr-touch-sliders-unlocked',unlocked);
   toggle.setAttribute('aria-pressed',unlocked?'true':'false');
   toggle.textContent=unlocked?'锁定滑块（防误触）':'解锁滑块调节';
   if(help)help.textContent=unlocked
-    ?'滑块现在可触控调节。完成后锁定，以免上下滚动时修改参数。'
-    :'滑块已锁定：可上下滚动，不会意外修改滑块值；键盘仍可使用。';
+    ?'可调整一项滑块；触摸手势结束后会自动锁定。'
+    :'滑块已锁定：上下滚动不会改动数值。键盘仍可调整。';
+}
+document.getElementById('hsrTouchSliderToggle')?.addEventListener('click',()=>{
+  const root=document.getElementById('subtitleLayoutPreviewCard');
+  setHsrTouchSliderLock(!!root?.classList.contains('hsr-touch-sliders-unlocked'));
 });
+for(const eventName of ['pointerup','pointercancel']){
+  document.getElementById('subtitleLayoutPreviewCard')?.addEventListener(eventName,event=>{
+    if(event.pointerType!=='touch')return;
+    if(event.target?.closest?.('input[type="range"]'))setHsrTouchSliderLock(true);
+  });
+}
+
 document.getElementById('layoutAuditDrawerToggle')?.addEventListener('click',()=>{
   const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
   setHsrAuditDrawer(!root?.classList.contains('audit-open'));
@@ -8327,6 +8448,7 @@ async function renderHsrEffectVideo(){
   const button=document.getElementById('previewVideoBtn');
   const status=document.getElementById('videoPreviewStatus');
   clearVideoPreview();
+  setHsrEffectOperation('preparing','正在核对字幕、背景与输出格式；真实视频生成后将显示在画布。');
   // A new video request takes presentation ownership from stale still frames.
   libassPreviewGeneration++;
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
@@ -8368,6 +8490,7 @@ async function renderHsrEffectVideo(){
       payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
     }
     if(!stillCurrent())return;
+    setHsrEffectOperation('encoding','预览素材已准备，正在等待 FFmpeg/libass 合成视频。');
     const response=await fetch('/api/subtitle-layout/render-preview-video',{
       method:'POST',headers:{...headers(),'Content-Type':'application/json'},
       body:JSON.stringify(payload),cache:'no-store',signal:controller?.signal
@@ -8382,6 +8505,7 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent())return;
     const expectedType=payload.preview_format==='webm'?'video/webm':'video/mp4';
     if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
+    setHsrEffectOperation('decoding','处理主机已返回视频，正在等待浏览器解码第一帧。');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
     if(actualBackground && actualBackground!==(footage?'local-footage':backgroundImage?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
       throw new Error('服务器响应的背景来源与当前选择不一致');
@@ -8404,6 +8528,7 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent())return;
     video.classList.remove('hidden');
     setPreviewEvidence(footage?'video-footage':'video');
+    setHsrEffectOperation('ready','视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
     // The render trigger lives in the Inspector, but playback lives on stage.
     // Reveal the successful result so the action is not perceived as inert.
     if(typeof video.scrollIntoView==='function'){
@@ -8415,6 +8540,7 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent()||error?.name==='AbortError')return;
     clearVideoPreview();
     setPreviewEvidence('failed','动态视频生成或解码失败；不以几何截图代替视频结果。');
+    setHsrEffectOperation('failed',String(error.message||error)+'。请检查 FFmpeg、视频编码、字体和逐词时间。');
     if(status){
       status.textContent='动态视频预览失败：'+String(error.message||error)+'。请检查处理主机 FFmpeg、源素材编码与已安装字体；如启用 Karaoke，还需有效词级时间。';
       status.className='small status-bad';

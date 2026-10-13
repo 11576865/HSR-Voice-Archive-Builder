@@ -20,16 +20,22 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("overscroll-behavior-y:contain", self.css)
         self.assertIn("max-height:min(70dvh,720px)", self.css)
         self.assertIn("grid-template-columns", self.css)
+        self.assertIn('setHsrStudioFocusMode(true);',self.html)
+        self.assertIn('position:fixed!important;inset:0!important',self.css)
 
     def test_touch_slider_is_explicitly_armed_and_accessible(self):
         html, css = self.html, self.css
         self.assertIn('id="hsrTouchSliderToggle" type="button" aria-pressed="false"', html)
-        self.assertIn("inspector.classList.toggle('hsr-touch-sliders-unlocked')", html)
+        self.assertIn("inspector.classList.toggle('hsr-touch-sliders-unlocked',unlocked)", html)
+        self.assertIn("root.classList.toggle('hsr-touch-sliders-unlocked',unlocked)", html)
+        self.assertIn("if(event.pointerType!=='touch')return", html)
         self.assertIn("toggle.setAttribute('aria-pressed'", html)
         self.assertIn(".preview-inspector:not(.hsr-touch-sliders-unlocked) input[type=\"range\"]", css)
         self.assertIn("pointer-events:none!important", css)
         self.assertIn("@media (pointer:coarse)", css)
         self.assertIn("touch-action:pan-y", css)
+        self.assertIn('#subtitleLayoutPreviewCard:not(.hsr-touch-sliders-unlocked) .layout-timeline-navigation input[type="range"]',css)
+        self.assertLess(html.index('id="hsrTouchSliderToggle"'), html.index('class="preview-inspector"'))
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
@@ -42,6 +48,27 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("本地生成缺失时间", self.html)
         self.assertIn("WhisperX", self.html)
         self.assertIn("不能直接导入任意项目", self.html)
+
+    def test_karaoke_and_effect_feedback_have_visible_primary_entrypoints(self):
+        html, css = self.html, self.css
+        for name in ("wordAlignmentStatus", "refreshWordAlignmentBtn",
+                     "generateWordAlignmentBtn", "importWordAlignmentBtn",
+                     "wordAlignmentFile", "wordAlignmentProviderStatus",
+                     "hsrEffectOperationStatus", "hsrEffectOperationTitle",
+                     "hsrEffectOperationDetail", "hsrKaraokeReadiness"):
+            self.assertEqual(html.count('id="' + name + '"'), 1, name)
+        self.assertLess(html.index('id="hsrKaraokeReadiness"'),
+                        html.index('class="hsr-footage-picker"'))
+        self.assertLess(html.index('id="hsrEffectOperationStatus"'),
+                        html.index('class="layout-preview-evidence"'))
+        self.assertIn("function setHsrEffectOperation(phase, detail='')", html)
+        self.assertIn("setHsrEffectOperation('encoding'", html)
+        self.assertIn("setHsrEffectOperation('decoding'", html)
+        self.assertIn("setHsrEffectOperation('ready'", html)
+        self.assertIn("setHsrEffectOperation('failed'", html)
+        self.assertIn("setHsrKaraokeReadiness('0 / '", html)
+        self.assertIn(".hsr-karaoke-readiness",css)
+        self.assertIn(".hsr-effect-operation-status",css)
 
     def test_playback_is_revealed_after_decode_not_before(self):
         a = self.html.index("async function renderHsrEffectVideo()")

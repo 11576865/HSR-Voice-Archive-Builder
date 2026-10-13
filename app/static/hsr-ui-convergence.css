@@ -213,3 +213,159 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
   #archiveBundlePanel .hsr-bundle-options{grid-template-columns:minmax(0,1fr)}
   #archiveBundlePanel .hsr-bundle-options .check{grid-column:auto}
 }
+
+/* Optional focus viewport: the browser document stops being the editor's
+   infinite scroll surface. Only the active task panels scroll. */
+#subtitleLayoutPreviewCard #hsrStudioFocusToggle{
+  min-height:40px;min-width:110px;padding:7px 10px;
+  border:1px solid var(--layout-border);border-radius:7px;
+  color:var(--layout-text);background:var(--layout-section);
+  font-size:12px;font-weight:700;
+}
+#subtitleLayoutPreviewCard #hsrStudioFocusToggle[aria-pressed="true"]{
+  border-color:var(--layout-evidence-accent);
+}
+body[data-hsr-studio-focus="true"]{
+  overflow:hidden!important;overscroll-behavior:none;
+}
+body[data-workspace="layout"][data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active{
+  position:fixed!important;inset:0!important;z-index:990!important;
+  display:flex!important;flex-direction:column!important;
+  height:100dvh!important;max-height:100dvh!important;
+  width:100dvw!important;max-width:100dvw!important;
+  margin:0!important;padding:0!important;border-radius:0!important;
+  overflow:hidden!important;
+}
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline{
+  flex:0 0 auto;min-height:0!important;
+}
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>p.small.muted,
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.layout-workflow-strip{
+  display:none!important;
+}
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.hsr-studio-toolbar,
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.layout-export-health{
+  flex:0 0 auto;max-height:20dvh;overflow-y:auto;
+}
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench{
+  flex:1 1 0%!important;min-height:0!important;max-height:none!important;
+  height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;
+  overscroll-behavior:contain;scrollbar-gutter:stable;
+}
+@media(min-width:1100px) and (pointer:fine){
+  body[data-workspace="layout"][data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench:not(.audit-open){
+    display:grid!important;
+    grid-template-columns:minmax(0,1fr) clamp(350px,27vw,460px)!important;
+    align-items:stretch!important;
+  }
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench:not(.audit-open)>.layout-preview-region,
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench:not(.audit-open)>.preview-inspector{
+    position:relative!important;top:auto!important;
+    height:100%!important;max-height:100%!important;min-height:0!important;
+    overflow-y:auto!important;overflow-x:hidden!important;
+    overscroll-behavior:contain;
+  }
+}
+@media(max-width:1099px), (pointer:coarse){
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench{
+    display:block!important;
+  }
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench>.layout-preview-region,
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench>.preview-inspector{
+    position:relative!important;top:auto!important;
+    width:100%!important;max-height:none!important;height:auto!important;
+    overflow:visible!important;
+  }
+}
+
+
+/* Touch scroll ownership extends to every range in the shared studio, not
+   only the Inspector: the timeline corpus scrollbar is a range as well.
+   A deliberately armed edit is auto-disarmed after one touch gesture. */
+@media (pointer:coarse){
+  #subtitleLayoutPreviewCard:not(.hsr-touch-sliders-unlocked) .layout-timeline-navigation input[type="range"]{
+    pointer-events:none!important;touch-action:pan-y;
+  }
+  #subtitleLayoutPreviewCard.hsr-touch-sliders-unlocked .layout-timeline-navigation input[type="range"]{
+    pointer-events:auto!important;touch-action:none;
+  }
+}
+/* Toolbar control remains reachable without scrolling deep inside Inspector. */
+#subtitleLayoutPreviewCard .hsr-touch-control{
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;
+}
+
+
+/* The focused editor exposes in-place Layout/Effects task switching without
+   hiding the only navigation behind the fullscreen card. */
+#subtitleLayoutPreviewCard .hsr-focus-task-nav{display:none}
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav{
+  display:flex!important;flex:0 0 auto;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 12px;border-bottom:1px solid var(--layout-border);
+  background:var(--surface-secondary);
+}
+#subtitleLayoutPreviewCard .hsr-focus-task-nav button{
+  min-height:40px;padding:7px 12px;border-radius:6px;
+  border:1px solid var(--layout-border);font-size:12px;
+}
+#subtitleLayoutPreviewCard .hsr-focus-task-nav button[aria-current="page"]{
+  border-color:var(--layout-evidence-accent);font-weight:750;
+}
+@media(max-width:759px){
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline{
+    padding:7px 10px!important;
+  }
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline h2{
+    font-size:16px!important;
+  }
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav{
+    padding:4px 8px;gap:6px;
+  }
+}
+/* Focus and touch contexts must maintain keyboard focus and visible controls. */
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav :focus-visible,
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrStudioFocusToggle:focus-visible,
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrTouchSliderToggle:focus-visible{
+  outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
+}
+
+/* Font recovery is a first-class action, not buried behind Inspector scrolling. */
+#subtitleLayoutPreviewCard #hsrFontImportShortcut{
+  min-height:40px;padding:7px 10px;border:1px solid var(--layout-border);
+  border-radius:6px;background:var(--layout-section);color:var(--layout-text);
+  font-size:12px;font-weight:700;
+}
+#subtitleLayoutPreviewCard #hsrFontImportShortcut:focus-visible{
+  outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
+}
+
+/* Effects results and alignment prerequisites are immediately visible in the
+   shared workbench. These reuse existing actions and never invent media state. */
+#subtitleLayoutPreviewCard .hsr-effect-operation-status{
+  display:flex;align-items:flex-start;gap:6px 12px;flex-wrap:wrap;
+  margin:6px 12px 10px;padding:10px 12px;
+  border:1px solid var(--layout-border);border-radius:7px;
+  color:var(--layout-text);font-size:12px;line-height:1.5;
+}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status strong{flex:0 0 auto;font-weight:750}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status span{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status[data-phase="failed"]{
+  border-color:var(--bad);
+}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status[data-phase="ready"]{
+  border-color:var(--layout-evidence-accent);
+}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness{
+  margin:10px 12px;padding:12px 13px;
+  border:1px solid var(--layout-border);border-radius:7px;
+  background:var(--layout-section);min-width:0;
+}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness>strong{display:block;font-size:13px;margin-bottom:6px}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness>p{line-height:1.55;margin:5px 0;overflow-wrap:anywhere}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness .actions{display:flex;gap:6px;flex-wrap:wrap}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness button{min-height:42px}
+@media(max-width:759px){
+  #subtitleLayoutPreviewCard .hsr-effect-operation-status{margin:5px 8px 8px;padding:8px}
+  #subtitleLayoutPreviewCard .hsr-karaoke-readiness{margin:8px;padding:10px}
+  #subtitleLayoutPreviewCard .hsr-karaoke-readiness .actions button{flex:1 1 135px}
+}
