@@ -14,7 +14,7 @@ from typing import Any
 from .builder import atomic_write_text
 from .project_fonts import font_asset_directory
 from .subtitle_export_status import read_subtitle_export_health
-from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, normalize_bundle_background
+from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, MODES, normalize_bundle_background
 
 RECEIPT = "archive_bundle_receipt.json"
 OUTPUT = "HSR_Voice_Archive_Bundle.mkv"
@@ -68,6 +68,12 @@ def _read_receipt(output: Path) -> dict[str, Any] | None:
                 or not isinstance(data.get("artifact"), dict)
                 or not isinstance(data.get("attach_project_fonts"), bool)):
             return None
+        bg = data["background"]
+        if bg.get("kind") not in MODES:
+            return None
+        if bg.get("spec") is not None:
+            if normalize_bundle_background(bg["spec"])["mode"] != bg["kind"]:
+                return None
         return data
     except (OSError, ValueError, TypeError):
         return None
