@@ -789,6 +789,11 @@ def gradient_background_check(browser, base_url, output, report):
           document.getElementById('finishedOutputs').classList.remove('hidden');
           document.getElementById('archiveBundlePanel').open=true;
         }""")
+        # Workspace auto-disclosure runs on requestAnimationFrame after
+        # navigation and may close the Export details panel. Open it as the
+        # user would after that navigation pass settles.
+        page.wait_for_timeout(220)
+        page.locator("#archiveBundlePanel").evaluate("(node) => { node.open = true; }")
         ensure(page.locator("#archiveCard").is_visible(),
                "MKV archive Export section is CSS-hidden despite being selected")
         ensure(page.locator("#bundleBackgroundMode").is_visible(),
