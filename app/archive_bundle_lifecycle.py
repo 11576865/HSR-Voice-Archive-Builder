@@ -181,6 +181,8 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
         result.update(state="unverified", message="存在旧 MKV，但缺少本次来源校验记录；建议重新生成。")
         return result
     try:
+        if blockers:
+            raise ValueError("MKV 生成前提不满足：" + "；".join(blockers))
         if (output / ".build_in_progress").exists():
             raise ValueError("项目构建进行中，旧 MKV 不代表最新结果")
         if _signature(target) != receipt["artifact"]:
