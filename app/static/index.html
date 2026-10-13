@@ -5896,6 +5896,8 @@ async function fetchSubtitles(){
       status.className='small muted';
     }
   }catch(x){
+    if(requestGeneration!==subtitleFetchGeneration||
+       (currentProject?.root||currentProject?.name||null)!==projectKey)return;
     if(status){
       status.textContent='加载字幕失败：'+shortError(x);
       status.className='small status-bad';
@@ -7143,7 +7145,7 @@ function layoutCueResetProject(projectKey){
   layoutCueClearAudio();
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
-  if(status){status.textContent='选择当前项目的真实字幕条目后，可以编辑并持久化中文字幕。';status.className='layout-cue-save-note';}
+  if(status){status.textContent='选择当前项目字幕后可调整显示时间；中文字幕正文请在「校对」中修改。';status.className='layout-cue-save-note';}
 }
 function layoutCueState(sub){
   if(!sub)return null;
@@ -7316,6 +7318,7 @@ async function saveLayoutCueTiming({reset=false}={}){
     if(!currentProject||layoutActiveProjectKey()!==projectKey)return false;
     const result=response.timing;
     if(!result||String(result.id)!==String(id))throw new Error('服务器未确认对应字幕的显示时间');
+    invalidateSharedSubtitleCorpus();
     const row=layoutCueRow(id);
     if(row){
       row.start=Number(result.start);row.end=Number(result.end);
