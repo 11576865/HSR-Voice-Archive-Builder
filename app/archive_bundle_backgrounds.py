@@ -132,7 +132,7 @@ def render_background_preview(
         result = subprocess.run(
             cmd, capture_output=True, check=False, timeout=25,
         )
-        if result.returncode != 0 or not result.stdout.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+        if result.returncode != 0 or not result.stdout.startswith(b"\x89PNG\r\n\x1a\n"):
             detail = result.stderr.decode("utf-8", "replace")[-600:]
             raise RuntimeError("FFmpeg 背景预览失败（确认当前 FFmpeg 支持 gradients/gblur）：" + detail)
         if len(result.stdout) > 3 * 1024 * 1024:
