@@ -5,6 +5,8 @@ on:
     paths:
       - "app/static/index.html"
       - "app/static/hsr-ui-convergence.css"
+      - "app/project_fonts.py"
+      - "tests/test_project_fonts.py"
       - "tests/test_hsr_ui_convergence.py"
       - "tests/test_hsr_touch_workbench.py"
       - "tests/test_hsr_navigation_save_gate.py"
@@ -51,6 +53,8 @@ jobs:
         run: python -m unittest tests.test_hsr_shared_subtitle_corpus -v
       - name: Assert viewport scroll, slider lock, and Karaoke help contracts
         run: python -m unittest tests.test_hsr_touch_workbench -v
+      - name: Validate project font upload and genuine libass font-folder raster
+        run: python -m unittest tests.test_project_fonts -v
       - name: Real Chromium to FastAPI to libass to VP8/Opus preview (no mock video endpoint)
         run: python tests/browser_live_preview_e2e.py --output artifacts/subtitle-browser
       - name: Upload real browser fixture screenshots and geometry report
