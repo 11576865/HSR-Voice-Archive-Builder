@@ -40,6 +40,28 @@ class SubtitleExportReceiptTests(unittest.TestCase):
         (self.output / SRT_NAME).write_text("altered outside app\n", encoding="utf-8")
         self.assertEqual(read_subtitle_export_health(self.output)["state"], "stale")
 
+    def test_ass_tamper_keeps_independent_srt_current(self):
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        baseline = read_subtitle_export_health(self.output)
+        self.assertTrue(baseline["srt_current"])
+        self.assertTrue(baseline["ass_current"])
+        (self.output / ASS_NAME).write_text("[Events]\\nchanged\\n", encoding="utf-8")
+        health = read_subtitle_export_health(self.output)
+        self.assertEqual(health["state"], "stale")
+        self.assertFalse(health["artifacts_current"])
+        self.assertTrue(health["srt_current"], "ASS-only change must not expire SRT")
+        self.assertFalse(health["ass_current"])
+        (self.output / SRT_NAME).write_text("changed SRT\\n", encoding="utf-8")
+        self.assertFalse(read_subtitle_export_health(self.output)["srt_current"])
+
+    def test_srt_only_export_has_independent_freshness(self):
+        (self.output / ASS_NAME).unlink()
+        record_subtitle_export(self.output, state="current", ass_required=False)
+        health = read_subtitle_export_health(self.output)
+        self.assertEqual(health["state"], "current")
+        self.assertTrue(health["srt_current"])
+        self.assertFalse(health["ass_current"])
+
     def test_missing_ass_is_not_marked_complete_when_ass_was_required(self):
         record_subtitle_export(self.output, state="current", ass_required=True)
         (self.output / ASS_NAME).unlink()
