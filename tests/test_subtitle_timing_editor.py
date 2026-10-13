@@ -12,7 +12,7 @@ import unittest
 class SubtitleDisplayTimingEditorTests(unittest.TestCase):
     def test_edit_revert_save_reset_and_late_response(self):
         html=(Path(__file__).resolve().parents[1]/"app/static/index.html").read_text(encoding="utf-8")
-        start=html.index("let layoutStressSample=null;")
+        start=html.index("// Shared immutable *complete* subtitle snapshot")
         end=html.index("async function updateLayoutPreview()",start)
         source=html[start:end]
         harness=r"""
