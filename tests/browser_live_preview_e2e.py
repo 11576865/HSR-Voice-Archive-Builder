@@ -82,7 +82,21 @@ def load_studio_under_production_csp(page) -> None:
         }};
         showWorkspace('layout',{scroll:false});
     }""")
-    page.locator('[data-timeline-cue]').nth(2).wait_for(state="attached", timeout=20000)
+    # The real browser may have queued the initial requestAnimationFrame before
+    # fixture project setup; explicitly await the production corpus loader to
+    # obtain a deterministic sample before testing genuine video bytes.
+    page.evaluate("() => loadLayoutStressSample({force:true})")
+    try:
+        page.locator('[data-timeline-cue]').nth(2).wait_for(state="attached", timeout=20000)
+    except Exception as exc:
+        state = page.evaluate("""() => ({
+          project: currentProject?.root,
+          studio: document.body.dataset.workspaceTask,
+          rows: layoutCorpusItems?.length,
+          selected: layoutCorpusSelectedId,
+          status: document.getElementById('layoutCorpusCheckStatus')?.textContent
+        })""")
+        raise AssertionError(f"Production corpus did not initialize: {state}") from exc
     page.locator("#studioEffectsTab").click()
     ensure(page.locator("#previewVideoBtn").is_visible(), "Effect preview hidden")
 

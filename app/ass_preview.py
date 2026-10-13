@@ -83,6 +83,7 @@ def render_ass_preview_png(
     word_alignments: list[object] | None = None,
     duration_seconds: float = 3.0,
     timestamp: float = 1.0,
+    font_dir: Path | None = None,
 ) -> bytes:
     """Render one representative subtitle frame through FFmpeg/libass."""
     ffmpeg = shutil.which("ffmpeg")
@@ -123,7 +124,7 @@ def render_ass_preview_png(
             "-ss",
             f"{render_timestamp:.3f}",
             "-vf",
-            f"subtitles='{escaped_ass}'",
+            f"subtitles='{escaped_ass}'" + (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else ""),
             "-frames:v",
             "1",
             str(png_path),
@@ -205,6 +206,7 @@ def render_ass_preview_video(
     source_video_bytes: bytes | None = None,
     source_start_seconds: float = 0.0,
     include_source_audio: bool = True,
+    font_dir: Path | None = None,
 ) -> bytes:
     """Render genuine ASS motion over black or an explicitly supplied local video.
 
@@ -264,7 +266,9 @@ def render_ass_preview_video(
         command = [
             ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
             *source_args, "-vf",
-            video_filters + f"subtitles='{escaped_ass}':original_size=1920x1080,format=yuv420p",
+            video_filters + f"subtitles='{escaped_ass}':original_size=1920x1080" +
+            (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else "") +
+            ",format=yuv420p",
         ]
         if source_video_bytes is not None:
             # Explicit stream map prevents attached pictures/subtitles or a
