@@ -3282,6 +3282,18 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
         <div id="artifactBrowser" class="artifact-browser"></div>
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
+        <details id="archiveBundlePanel" class="hsr-archive-bundle">
+          <summary>完整 MKV · FLAC 音频轨 + 可开关 ASS 软字幕轨 + 字体附件</summary>
+          <p class="small muted">独立于旧黑屏 MKV。字幕不会烧录进画面，播放器可自行开关；需先构建 continuous.flac 并生成 ASS。项目字体附件仅来自「排版」中已导入的字体。</p>
+          <div class="hsr-bundle-options">
+            <label for="bundleBackgroundColor">视频底色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label for="bundleBackgroundImage">背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
+            <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
+          </div>
+          <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
+            <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
+          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">输出为 HSR_Voice_Archive_Bundle.mkv。图片不会持久保存到项目，FLAC 保持无损，ASS 是软字幕轨，字体是独立附件。生成时不会删除已有独立成品。</p>
+        </details>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
         <summary>Archive / Build Records（档案与构建记录）</summary>
@@ -4604,6 +4616,7 @@ const outputDescriptions={
   'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
   'HSR_Voice_Archive.srt':'与 ASS 同一时间轴的通用 SRT 字幕',
   'HSR_Voice_Archive_Black.mkv':'黑色视频轨与连续 FLAC 的播放容器（不含字幕）',
+    'HSR_Voice_Archive_Bundle.mkv':'单文件 MKV：连续 FLAC 音轨、ASS 软字幕轨、项目字体附件、视频背景',
   'timeline_resolved.json':'按 PCM 采样位置解析后的统一时间轴',
   'manifest.json':'完整的机器可读档案，保存语音、文本、来源与时间',
   'manifest.csv':'便于在表格软件中查看和整理的档案清单',
@@ -4680,6 +4693,15 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
     actions:ass.exists
       ? [{label:'排版工作台',action:()=>showWorkspace('layout')}]
       : [{label:'生成 ASS',primary:true,action:startAssExport},{label:'排版设置',action:()=>showWorkspace('layout')}]
+  }));
+  const bundle=outputMap['HSR_Voice_Archive_Bundle.mkv']||{};
+  cards.push(artifactCard({
+    title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',
+    desc:'完整封装 · 连续 FLAC + 可选择 ASS 软字幕 + 项目字体附件；支持纯色或本地背景图。',
+    path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
+    actions:[{label:bundle.exists?'重新封装 MKV':'生成完整 MKV',primary:!bundle.exists,
+      action:()=>{document.getElementById('archiveBundlePanel').open=true;
+                  document.getElementById('archiveBundlePanel').scrollIntoView({block:'center'});}}]
   }));
   const mkv=outputMap['HSR_Voice_Archive_Black.mkv']||{};
   cards.push(artifactCard({
@@ -5207,7 +5229,7 @@ function jobProgressPercent(job){
     if(job.phase==='audio')return 88;
     if(job.phase==='final'||job.phase==='done')return 100;
   }
-  if(['black-video-export','ass-export'].includes(job.kind))return tot>0?Math.round(ratio*100):5;
+  if(['black-video-export','ass-export','archive-bundle-export'].includes(job.kind))return tot>0?Math.round(ratio*100):5;
   return tot>0?Math.round(ratio*100):5;
 }
 function setRunReport(title,body,open=true){
@@ -5222,6 +5244,7 @@ function completedReport(job){
   if(job?.kind==='remote-update-apply')return '已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。\n项目来源已更新，请重新构建成品。';
   if(job?.kind==='ass-export')return 'ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
   if(job?.kind==='black-video-export')return '黑屏 MKV 已生成：'+(r.output||'');
+  if(job?.kind==='archive-bundle-export')return '完整 MKV 已生成：'+(r.output||'')+' · 字体附件 '+Number(r.font_attachments||0)+' 个';
   if(['build','quick-build'].includes(job?.kind))return '构建完成。\n成品文件已放至：'+(currentProject?.output_path||'项目 output 目录');
   return job?.message||'任务已完成。';
 }
@@ -5231,7 +5254,7 @@ function renderJobCenterBar(active,projectJobs){
   dot.className='job-center-dot';
   if(active){
     const pct=jobProgressPercent(active);
-    const labels={build:'构建档案','quick-build':'快速构建','remote-update-check':'检查增量','remote-update-apply':'应用增量','ass-export':'生成 ASS','black-video-export':'生成黑屏 MKV'};
+    const labels={build:'构建档案','quick-build':'快速构建','remote-update-check':'检查增量','remote-update-apply':'应用增量','ass-export':'生成 ASS','black-video-export':'生成黑屏 MKV','archive-bundle-export':'完整 MKV 轨道封装'};
     title.textContent=(labels[active.kind]||'任务')+(active.project_name?' · '+active.project_name:'');
     meta.textContent=active.message||'正在处理';
     pctBox.textContent=pct+'%';fill.style.width=pct+'%';dot.classList.add('running');
@@ -5257,7 +5280,7 @@ function renderJobs(jobs){
   if(active){
     const cur=Number(active.progress_current||0),tot=Number(active.progress_total||0);
     const pct=jobProgressPercent(active);
-    const isBuild=['build','quick-build'].includes(active.kind),label=active.kind==='remote-update-check'?'检查新增语音':active.kind==='remote-update-apply'?'下载并应用新增语音':active.kind==='black-video-export'?'生成黑屏 MKV':active.kind==='ass-export'?'生成 ASS 字幕':'构建';
+    const isBuild=['build','quick-build'].includes(active.kind),label=active.kind==='remote-update-check'?'检查新增语音':active.kind==='remote-update-apply'?'下载并应用新增语音':active.kind==='archive-bundle-export'?'封装完整 MKV':active.kind==='black-video-export'?'生成黑屏 MKV':active.kind==='ass-export'?'生成 ASS 字幕':'构建';
     state.textContent=(activeForCurrent?'正在':'另一项目正在')+label+(active.project_name?'「'+active.project_name+'」':'')+'。';
     const count=tot>0?' · '+cur+'/'+tot:'';
     state.className='notice';setProgressValue(pct,active.message||label);textBox.textContent=(active.message||'正在处理')+count;failure.classList.add('hidden');
@@ -5279,9 +5302,9 @@ function renderJobs(jobs){
       if(isBuildFailure){setBuildButtonText('继续构建');setInlineBuildStatus('最近一次构建失败；修复后会复用仍然有效的检查点。',true);}
     }else if(succeeded){
       const completed=latest?.state==='succeeded'?latest:succeeded;
-      const completedLabel=completed.kind==='remote-update-check'?'新增语音检查':completed.kind==='remote-update-apply'?'增量更新':completed.kind==='black-video-export'?'黑屏 MKV':completed.kind==='ass-export'?'ASS 字幕':'构建';
+      const completedLabel=completed.kind==='remote-update-check'?'新增语音检查':completed.kind==='remote-update-apply'?'增量更新':completed.kind==='archive-bundle-export'?'完整 MKV':completed.kind==='black-video-export'?'黑屏 MKV':completed.kind==='ass-export'?'ASS 字幕':'构建';
       state.textContent='当前项目最近一次'+completedLabel+'已完成。';state.className='notice ok';setProgressValue(100,completedLabel+'已完成');
-      textBox.textContent=completed.kind==='black-video-export'?'黑屏 MKV 已生成；请外挂 ASS / SRT。':completed.kind==='remote-update-apply'?'新增语音已应用，请重新构建成品。':'操作已完成。';failure.classList.add('hidden');
+      textBox.textContent=completed.kind==='archive-bundle-export'?'完整 MKV 已生成；ASS 可开关、字体为独立附件。':completed.kind==='black-video-export'?'黑屏 MKV 已生成；请外挂 ASS / SRT。':completed.kind==='remote-update-apply'?'新增语音已应用，请重新构建成品。':'操作已完成。';failure.classList.add('hidden');
       setRunReport('已完成',completedReport(completed),false);
       setBuildButtonText('应用设置并构建');setInlineBuildStatus('构建已完成；修改设置后再次构建时，只重跑受影响的阶段。');
     }else{
@@ -5293,7 +5316,7 @@ function renderJobs(jobs){
     setBuildButtonsDisabled(latest?.state==='awaiting_input');
   }
   const box=document.getElementById('jobs');
-  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','ass-export':'生成 ASS 字幕','black-video-export':'生成黑屏 MKV'};
+  const labels={build:'构建','quick-build':'快速构建','remote-update-check':'远程更新检查','remote-update-apply':'下载并应用新增语音','ass-export':'生成 ASS 字幕','black-video-export':'生成黑屏 MKV','archive-bundle-export':'完整 MKV 封装'};
   const states={queued:'等待',running:'运行中',succeeded:'完成',failed:'失败',interrupted:'已中断',awaiting_input:'等待人工修订'};
   const row=j=>{
     const when=j.finished_at||j.started_at||j.created_at||'';
@@ -5356,6 +5379,11 @@ async function watchJob(id){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='ASS 字幕已生成。';
             setRunReport('ASS 字幕已生成',completedReport(x.job),false);
+          }else if(x.job.kind==='archive-bundle-export'){
+            const status=document.getElementById('bundleOutputStatus');
+            const result=x.job.result||{};
+            if(status){status.textContent='完整 MKV 逐轨验收通过：FLAC + ASS + 视频；字体附件 '+Number(result.font_attachments||0)+' 个。'+(result.output||'');status.className='small status-ok'}
+            setRunReport('完整 MKV 逐轨验收通过',completedReport(x.job),false);
           }else if(x.job.kind==='black-video-export'){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='黑屏 MKV 已生成。';
@@ -5380,7 +5408,7 @@ async function watchJob(id){
         }else if(x.job.state==='failed'){
           terminal=true;
           setLog(x.job.error||x.job);
-          if(['ass-export','black-video-export'].includes(x.job.kind)){
+          if(['ass-export','black-video-export','archive-bundle-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
           }
@@ -5507,6 +5535,45 @@ document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormD
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
+async function startArchiveBundle(){
+  const button=document.getElementById('exportArchiveBundleBtn');
+  const status=document.getElementById('bundleOutputStatus');
+  if(!currentProject?.root){if(status)status.textContent='请先打开项目。';return}
+  try{
+    button.disabled=true;
+    if(status)status.textContent='正在核验 FLAC、ASS、背景与字体附件…';
+    const file=document.getElementById('bundleBackgroundImage')?.files?.[0]||null;
+    if(file&&(!file.size||file.size>4*1024*1024))throw new Error('背景图片需在 4 MiB 以内');
+    let background_image_base64=null;
+    if(file){
+      background_image_base64=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onerror=()=>reject(new Error('无法读取本地背景图片'));
+        reader.onload=()=>{
+          const data=String(reader.result||''),idx=data.indexOf(',');
+          if(idx<0)reject(new Error('背景图片编码失败'));else resolve(data.slice(idx+1));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    const j=await api('/api/output/archive-bundle',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        expected_project_root:currentProject.root,
+        background_color:document.getElementById('bundleBackgroundColor')?.value||'#000000',
+        background_image_base64,
+        attach_project_fonts:!!document.getElementById('bundleIncludeFonts')?.checked
+      })
+    });
+    if(status)status.textContent='完整 MKV 任务已创建；后台逐轨生成与 FFprobe 校验中…';
+    watchJob(j.job);
+  }catch(x){
+    if(status){status.textContent='完整 MKV 启动失败：'+shortError(x);status.className='small status-bad'}
+    setLog(String(x));
+  }finally{button.disabled=false}
+}
+document.getElementById('exportArchiveBundleBtn')?.addEventListener('click',startArchiveBundle);
+document.getElementById('bundleOpenLayoutBtn')?.addEventListener('click',()=>showWorkspace('layout'));
 async function exportTranslationRecovery(){
   const s=document.getElementById('recoveryImportStatus');
   try{

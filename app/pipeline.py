@@ -1831,6 +1831,7 @@ def build_project_v02(
                 # A previous black MKV contains the old FLAC. Invalidate it
                 # only after the replacement FLAC has encoded and verified.
                 (out_dir / "HSR_Voice_Archive_Black.mkv").unlink(missing_ok=True)
+                (out_dir / "HSR_Voice_Archive_Bundle.mkv").unlink(missing_ok=True)
                 report.update(audio_report)
                 save_stage(
                     state_dir,

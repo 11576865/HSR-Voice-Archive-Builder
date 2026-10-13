@@ -16,6 +16,7 @@ from .ass_preview import decode_preview_source_video, normalize_preview_backgrou
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
+from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -1712,6 +1713,43 @@ def api_output_ass():
 
         job = create_job(
             "ass-export", run, with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/output/archive-bundle")
+async def api_output_archive_bundle(request: Request):
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Output directory is not configured")
+        if int(request.headers.get("content-length") or 0) > 8 * 1024 * 1024:
+            raise ValueError("MKV request exceeds 8 MiB")
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("MKV configuration must be a JSON object")
+        if str(data.get("expected_project_root") or "") != str(config.root):
+            raise ValueError("MKV export project context changed")
+        image = decode_bundle_background(data.get("background_image_base64"))
+        color = str(data.get("background_color") or "#000000")
+        include_fonts = data.get("attach_project_fonts") is True
+        source = output / "continuous.flac"
+        subtitle = output / "HSR_Voice_Archive.ass"
+        target = output / "HSR_Voice_Archive_Bundle.mkv"
+        if not source.is_file() or not subtitle.is_file():
+            raise FileNotFoundError("请先构建连续 FLAC，并生成 ASS 字幕")
+        def run(report_progress):
+            return ArchiveBundleExporter().export(
+                source, subtitle, target, fonts_dir=font_asset_directory(output),
+                include_fonts=include_fonts, background_color=color, background_image=image,
+                progress=lambda current, total, msg: report_progress("encode", msg, current, total),
+            )
+        job = create_job(
+            "archive-bundle-export", run, with_progress=True,
             project_root=config.root, project_name=config.name,
         )
         return {"ok": True, "job": job.id}

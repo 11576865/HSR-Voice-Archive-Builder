@@ -22,6 +22,7 @@ ARCHIVE_FILES = (
     "HSR_Voice_Archive.srt",
     "HSR_Voice_Archive.ass",
     "HSR_Voice_Archive_Black.mkv",
+        "HSR_Voice_Archive_Bundle.mkv",
     "ass_layout_overflow_report.json",
     "build_report.json",
     "continuous.flac",
@@ -56,7 +57,7 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
         for index, path in enumerate(paths):
             saved = backup / f"file-{index}"
             if path.is_file():
-                if path.name in {"continuous.flac", "HSR_Voice_Archive_Black.mkv"}:
+                if path.name in {"continuous.flac", "HSR_Voice_Archive_Black.mkv", "HSR_Voice_Archive_Bundle.mkv"}:
                     try:
                         os.link(path, saved)
                     except OSError:
