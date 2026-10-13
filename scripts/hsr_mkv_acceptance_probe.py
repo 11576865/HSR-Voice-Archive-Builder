@@ -96,6 +96,8 @@ def _verify_streams(probe: dict) -> tuple[list[str], dict]:
     if len(set(attachment_names)) != len(attachment_names):
         errors.append("Duplicate font attachment names")
     fmt = probe.get("format") or {}
+    if "matroska" not in str(fmt.get("format_name") or "").split(","):
+        errors.append("Container must be Matroska (not merely a media file with valid tracks)")
     try:
         duration = float(fmt.get("duration") or 0)
     except (ValueError, TypeError, OverflowError):
