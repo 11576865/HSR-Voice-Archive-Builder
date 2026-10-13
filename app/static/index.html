@@ -315,7 +315,7 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 @media(max-width:1000px){.update-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:640px){.update-toolbar{grid-template-columns:1fr}.update-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.update-change-diff{grid-template-columns:1fr}.update-review-head{flex-direction:column}}
 body[data-workspace="project"] #subtitleLayoutPreviewCard,body[data-workspace="project"] #subtitleReviewCard,body[data-workspace="project"] #gptSovitsCard,body[data-workspace="project"] #updateCard{display:none!important}
-body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
+body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]):not([data-workspace="export"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
 body[data-workspace="review"] #subtitleLayoutPreviewCard,body[data-workspace="review"] #gptSovitsCard,body[data-workspace="review"] #updateCard{display:none!important}
 body[data-workspace="layout"] #subtitleReviewCard,body[data-workspace="layout"] #gptSovitsCard,body[data-workspace="layout"] #updateCard{display:none!important}
 body[data-workspace="export"] #subtitleReviewCard,body[data-workspace="export"] #subtitleLayoutPreviewCard,body[data-workspace="export"] #updateCard{display:none!important}
