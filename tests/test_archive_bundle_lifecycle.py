@@ -103,8 +103,12 @@ class BundleLifecycleTests(unittest.TestCase):
         self.assertNotIn('(out_dir / "HSR_Voice_Archive_Bundle.mkv").unlink(missing_ok=True)', pipeline)
         for path in ("app/server.py", "app/lite_server.py"):
             code = (repo / path).read_text(encoding="utf-8")
-            pos = code.index('"/api/output/archive-bundle"')
-            section = code[pos:pos + 1750]
+            # Lite's body-size router now mentions this endpoint earlier.
+            # Inspect its actual handler, not the first URL string occurrence.
+            anchor = ('if path == "/api/output/archive-bundle":' if path.endswith("lite_server.py")
+                      else '@app.post("/api/output/archive-bundle")')
+            pos = code.index(anchor)
+            section = code[pos:pos + 1850]
             self.assertIn('data.get("reuse_saved_background") is True', section, path)
             self.assertIn('load_previous_bundle_image(output)', section, path)
         html = (repo / "app/static/index.html").read_text(encoding="utf-8")
