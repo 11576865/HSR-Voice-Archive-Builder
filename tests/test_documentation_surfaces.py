@@ -13,7 +13,10 @@ class DocumentationSurfaceTests(unittest.TestCase):
 
         self.assertIn(f"Current development version:** v{APP_VERSION}", readme)
         self.assertIn("continuous.flac", readme)
-        self.assertIn("ASS and black MKV are on-demand finished outputs", readme)
+        self.assertIn("HSR_Voice_Archive_Bundle.mkv", readme)
+        self.assertIn("旧版可选黑屏输出", readme)
+        self.assertIn("连续 FLAC、已验证 ASS、可选字体和背景派生", readme)
+        self.assertIn("上传背景图上限为 16 MiB", readme)
         self.assertIn("confirmed incremental `Chinese(PRC)` text as official Chinese target text", readme)
         self.assertIn("docs/reliability.md", readme)
         self.assertLess(len(readme), 12000)
