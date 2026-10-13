@@ -92,9 +92,10 @@ def prepare_complete_sources(output: Path, *, source_language: str = "en",
     missing_subtitles = any(not (output / name).is_file() for name in (SRT, ASS))
     if not missing_audio and not missing_subtitles:
         return
-    status = bundle_export_status(output)
-    if status["state"] != "current":
-        raise ValueError("Cannot recover working tracks from an unverified/stale MKV")
+    receipt = _read_receipt(output)
+    if (not receipt or not receipt.get("sealed")
+            or _signature(output / OUTPUT) != receipt.get("artifact")):
+        raise ValueError("Cannot restore sources from an unverified MKV")
     if missing_audio:
         extract_flac_from_mkv(output)
     if missing_subtitles:
@@ -134,6 +135,12 @@ def seal_complete_delivery(output: Path) -> None:
     for name in MEDIA_NAMES:
         path = output / name
         path.unlink(missing_ok=True)
+    # The old subtitle-free black-video output was produced by HSR and is now
+    # superseded by the single verified full bundle.
+    legacy = output / LEGACY_BLACK
+    if legacy.is_symlink():
+        raise ValueError("Unsafe historical black-MKV output path")
+    legacy.unlink(missing_ok=True)
 
 
 def publish_flac_only(output: Path) -> Path:
@@ -160,3 +167,54 @@ def publish_flac_only(output: Path) -> Path:
     for name in (SRT, ASS):
         (output / name).unlink(missing_ok=True)
     return audio
+
+
+def _comparable_stage_inputs(value: dict) -> dict:
+    """Delivery representation never changes the underlying encoded voice."""
+    ignored = {"generate_ass", "delivery_mode", "generate_chapter_flac"}
+    return {k: v for k, v in value.items()
+            if k not in ignored and k != "software_stage_version"}
+
+
+def recover_previous_audio_report(state_dir: Path, current_inputs: dict,
+                                  output: Path) -> dict | None:
+    """Prove an existing FLAC or sealed MKV was made for the same audio inputs.
+
+    Relies on the former scan/audio stage records and the verified MKV receipt;
+    never trusts filename equality alone. The caller records a fresh audio
+    artifact SHA after restoring the FLAC stream into a working file.
+    """
+    scan = state_dir / "stages/01_scan.json"
+    audio = state_dir / "stages/06_audio_state.json"
+    if not scan.is_file() or not audio.is_file():
+        return None
+    try:
+        a = json.loads(scan.read_text("utf-8"))
+        b = json.loads(audio.read_text("utf-8"))
+        previous = a["payload"]["inputs"]
+        if (_comparable_stage_inputs(previous)
+                != _comparable_stage_inputs(current_inputs)
+                or a["input_fingerprint"] != b["input_fingerprint"]
+                or b["stage"] != "audio"
+                or not isinstance(b["payload"]["report"], dict)):
+            return None
+        # A sealed MKV with the stored publication signature is proof that
+        # the former audio stage was successfully muxed and validated.
+        receipt = _read_receipt(output)
+        sealed = bool(receipt and receipt.get("sealed")
+                      and _signature(output / OUTPUT) == receipt.get("artifact"))
+        if sealed:
+            return b["payload"]["report"]
+        # A FLAC-only archive can reuse its formerly certified exact bytes.
+        source = output / FLAC
+        if not source.is_file() or source.is_symlink():
+            return None
+        from .stages import _sha256_file
+        return b["payload"]["report"] if any(
+            row.get("path") == FLAC
+            and row.get("size_bytes") == source.stat().st_size
+            and row.get("sha256") == _sha256_file(source)
+            for row in b.get("artifacts", [])
+        ) else None
+    except (OSError, KeyError, TypeError, ValueError):
+        return None
