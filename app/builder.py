@@ -846,7 +846,7 @@ def build_entries(
     return entries, report
 
 
-def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path, *, generate_ass: bool = False) -> None:
+def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Path, *, generate_ass: bool = False, write_subtitles: bool = True) -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
     js = [asdict(e) for e in entries]
     for row in js:
@@ -881,12 +881,13 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
     else:
         ass_file.unlink(missing_ok=True)
 
-    write_srt(
-        entries,
-        out_dir / "HSR_Voice_Archive.srt",
-        source_language=str(report.get("source_text_language", "en")),
-        target_language=str(report.get("target_language", "zh-CN")),
-    )
+    if write_subtitles:
+        write_srt(
+            entries,
+            out_dir / "HSR_Voice_Archive.srt",
+            source_language=str(report.get("source_text_language", "en")),
+            target_language=str(report.get("target_language", "zh-CN")),
+        )
 
     timeline_fields = [
         "index", "start", "audio_end", "display_end", "group", "filename",
