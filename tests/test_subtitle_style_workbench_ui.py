@@ -22,7 +22,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('href="/static/hsr-ui-convergence.css"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
-            "grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px)!important",
+            "grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);",
             html,
         )
         self.assertIn("aspect-ratio:16 / 9!important", html)

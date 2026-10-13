@@ -450,7 +450,15 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('class="preview-inspector" aria-label="字幕样式参数与操作"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
-            'grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px)!important;',
+            'grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);',
+            html,
+        )
+        self.assertIn(
+            'body[data-workspace="layout"] .preview-workbench.audit-open',
+            html,
+        )
+        self.assertIn(
+            'href="/static/hsr-ui-convergence.css"',
             html,
         )
         self.assertIn(

@@ -2223,7 +2223,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
 .preview-workbench{
   position:relative!important;
   display:grid!important;
-  grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px)!important;
+  grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);
   gap:0!important;
   width:100%!important;
   min-width:0!important;
@@ -2492,7 +2492,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard{
 }
 @media (min-width:1500px){
   .preview-workbench{
-    grid-template-columns:minmax(0,1fr) clamp(410px,25vw,470px)!important;
+    grid-template-columns:minmax(0,1fr) clamp(410px,25vw,470px);
   }
 }
 @media (min-width:760px) and (max-width:1200px){
@@ -2501,7 +2501,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard{
   }
   .preview-workbench{
     display:grid!important;
-    grid-template-columns:1fr!important;
+    grid-template-columns:1fr;
   }
   .preview-workbench .preview-stage{
     position:relative!important;
@@ -2544,7 +2544,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard{
   }
   .preview-workbench{
     display:grid!important;
-    grid-template-columns:1fr!important;
+    grid-template-columns:1fr;
   }
   .preview-workbench .preview-stage{
     position:relative!important;
@@ -2707,7 +2707,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard>p.small.muted{
    This is a structural workspace redesign, not another coat of card decoration. */
 body[data-workspace="layout"] main{max-width:1940px!important}
 body[data-workspace="layout"] .grid{width:100%!important;max-width:1900px!important}
-body[data-workspace="layout"] .preview-workbench{
+body[data-workspace="layout"] .preview-workbench.audit-open{
   display:grid!important;
   grid-template-columns:clamp(230px,17vw,280px) minmax(0,1fr) clamp(355px,25vw,430px)!important;
   align-items:start!important;
@@ -2766,7 +2766,7 @@ body[data-workspace="layout"] .preview-workbench{
 .layout-rail-audit-status{font-size:11px;line-height:1.5;color:var(--layout-muted);margin-top:9px}
 .preview-workbench .layout-preview-region{border-right:1px solid var(--layout-border)}
 @media(max-width:1360px) and (min-width:760px){
-  body[data-workspace="layout"] .preview-workbench{
+  body[data-workspace="layout"] .preview-workbench.audit-open{
     grid-template-columns:240px minmax(0,1fr)!important;
   }
   .preview-workbench .layout-corpus-rail{grid-row:1;grid-column:1;height:min(75dvh,720px)}
@@ -2775,7 +2775,7 @@ body[data-workspace="layout"] .preview-workbench{
   .preview-inspector .preview-controls{grid-template-columns:repeat(2,minmax(0,1fr))!important}
 }
 @media(max-width:759px){
-  body[data-workspace="layout"] .preview-workbench{grid-template-columns:minmax(0,1fr)!important}
+  body[data-workspace="layout"] .preview-workbench.audit-open{grid-template-columns:minmax(0,1fr)!important}
   .preview-workbench .layout-corpus-rail{position:relative;top:auto;height:auto;max-height:410px;border-right:0;border-bottom:1px solid var(--layout-border)}
   .layout-corpus-list{min-height:100px;max-height:180px}
   .layout-rail-title{padding:12px 14px 8px}
@@ -2806,7 +2806,7 @@ body[data-workspace="layout"] .preview-workbench{
 
 .layout-rail-head-actions{display:flex;align-items:center;gap:8px}
 @media(max-width:759px){
-  body[data-workspace="layout"] .preview-workbench{
+  body[data-workspace="layout"] .preview-workbench.audit-open{
     display:flex!important;flex-direction:column!important;align-items:stretch!important;
   }
   .preview-workbench .layout-preview-region{order:1!important;width:100%}
@@ -2908,7 +2908,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 /* Chromium-verified tablet correction: legacy grid-area:auto!important
    overrides grid-column unless the entire grid-area is set explicitly. */
 @media (min-width:760px) and (max-width:1360px){
-  body[data-workspace="layout"] .preview-workbench > .preview-inspector{
+  body[data-workspace="layout"] .preview-workbench.audit-open > .preview-inspector{
     grid-area:2 / 1 / 3 / -1 !important;
     width:100%!important;
     justify-self:stretch!important;
