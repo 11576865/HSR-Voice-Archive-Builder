@@ -8277,7 +8277,12 @@ function setHsrStudioMode(mode){
     if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);
     // Both the rail and its top-level opener become hidden in Effects.
     // Move focus before the layout-only toolbar disappears.
-    if(hadQaFocus)document.getElementById('studioEffectsTab')?.focus();
+    if(hadQaFocus){
+      const target=document.body.dataset.hsrStudioFocus==='true'
+        ?document.querySelector('[data-hsr-focus-task="effects"]')
+        :document.getElementById('studioEffectsTab');
+      target?.focus();
+    }
   }
   root.dataset.studioMode=next;
   const heading=document.getElementById('hsrStudioTitle');
