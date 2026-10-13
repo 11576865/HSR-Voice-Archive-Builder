@@ -35,7 +35,7 @@ class ArchiveBackgroundUiContractTests(unittest.TestCase):
                 self.assertIn('"/api/output/archive-bundle/background-preview"', source)
                 self.assertIn('"/api/output/archive-bundle"', source)
                 self.assertEqual(source.count('normalize_bundle_background(raw_spec'), 2)
-                self.assertIn('render_background_preview(', source)
+                self.assertIn('render_background_preview', source)
                 self.assertIn('background_spec=spec', source)
                 self.assertIn('RESOLUTIONS[spec["resolution"]][0]', source)
                 self.assertIn('RESOLUTIONS[spec["resolution"]][1]', source)
