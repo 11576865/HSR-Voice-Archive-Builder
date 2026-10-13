@@ -16,6 +16,7 @@ from .ass_preview import decode_preview_source_video, preview_config_from_payloa
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
+from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
@@ -138,6 +139,59 @@ def _progress_event_sse(job: dict, full_payload: bool = True, heartbeat_log: boo
     return f"event: progress\ndata: {data}\n\n"
 
 
+def _active_preview_font_dir() -> Path | None:
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        return font_asset_directory(output) if output is not None else None
+    except (ValueError, FileNotFoundError):
+        return None
+
+
+@app.get("/api/subtitle-layout/project-fonts")
+def api_subtitle_layout_project_fonts():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is not configured")
+        return {"ok": True, "fonts": list_project_fonts(output)}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
+
+
+@app.post("/api/subtitle-layout/import-font")
+async def api_subtitle_layout_import_font(request: Request):
+    try:
+        maximum = 18 * 1024 * 1024
+        length = request.headers.get("content-length")
+        if length is not None and int(length) > maximum:
+            raise ValueError("Font upload JSON exceeds 18 MiB")
+        raw = bytearray()
+        async for part in request.stream():
+            if len(raw) + len(part) > maximum:
+                raise ValueError("Font upload JSON exceeds 18 MiB")
+            raw.extend(part)
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("Font payload must be an object")
+        config = _active_config()
+        if str(data.get("expected_project_root") or "") != str(config.root):
+            raise ValueError("Font project context changed; retry after reopening")
+        assert_project_idle(config.root)
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is not configured")
+        result = await run_in_threadpool(
+            import_project_font, output,
+            str(data.get("filename") or ""),
+            str(data.get("font_base64") or ""),
+        )
+        return {"ok": True, "font": result}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.get("/api/subtitle-layout/fonts")
 def api_subtitle_layout_fonts(q: str = Query(""), limit: int = Query(400)):
     try:
@@ -150,7 +204,19 @@ def api_subtitle_layout_fonts(q: str = Query(""), limit: int = Query(400)):
 @app.get("/api/subtitle-layout/font-file")
 def api_subtitle_layout_font_file(family: str = Query(...)):
     try:
-        font_path, media_type = resolve_browser_font_file(family)
+        from_project = None
+        try:
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is not None:
+                from_project = project_font_for_family(output, family)
+        except (ValueError, FileNotFoundError):
+            pass
+        if from_project is not None:
+            font_path = from_project
+            media_type = {".ttf": "font/ttf", ".otf": "font/otf", ".ttc": "font/collection"}[font_path.suffix]
+        else:
+            font_path, media_type = resolve_browser_font_file(family)
         return Response(
             content=font_path.read_bytes(),
             media_type=media_type,
@@ -723,6 +789,7 @@ async def api_subtitle_layout_render_preview(request: Request):
             word_alignments=word_alignments,
             duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
             timestamp=float(data.get("preview_timestamp") or 1.0),
+            font_dir=_active_preview_font_dir(),
         )
         return Response(
             content=png,
@@ -773,6 +840,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             source_video_bytes=source_bytes,
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
             include_source_audio=data.get("include_source_audio", True) is True,
+            font_dir=_active_preview_font_dir(),
         )
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
