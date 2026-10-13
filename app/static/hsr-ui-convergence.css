@@ -190,3 +190,26 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
   margin:0 0 8px;
   line-height:1.5;
 }
+
+/* Archival Matroska output is a file-delivery task, not an effect preset. */
+#archiveBundlePanel.hsr-archive-bundle{
+  margin-top:12px;border:1px solid var(--line);border-radius:8px;
+  padding:12px 14px;background:var(--surface-primary);
+}
+#archiveBundlePanel>summary{
+  min-height:44px;padding:7px 0;font-weight:700;font-size:14px;
+}
+#archiveBundlePanel .hsr-bundle-options{
+  display:grid;grid-template-columns:minmax(160px,240px) minmax(250px,1fr);
+  gap:8px 16px;margin:12px 0;
+}
+#archiveBundlePanel .hsr-bundle-options>label{margin:0;min-width:0}
+#archiveBundlePanel input[type="color"]{display:block;min-height:44px}
+#archiveBundlePanel input[type="file"]{display:block;max-width:100%}
+#archiveBundlePanel .hsr-bundle-options .check{grid-column:1/-1;min-height:44px}
+#archiveBundlePanel .actions button{min-height:42px}
+#bundleOutputStatus{margin:12px 0 0;line-height:1.55;overflow-wrap:anywhere}
+@media(max-width:760px){
+  #archiveBundlePanel .hsr-bundle-options{grid-template-columns:minmax(0,1fr)}
+  #archiveBundlePanel .hsr-bundle-options .check{grid-column:auto}
+}
