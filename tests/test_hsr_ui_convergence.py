@@ -25,6 +25,21 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn('id="hsrInspectorTitle"', doc)
         self.assertIn("?'特效参数':'排版参数'", doc)
 
+    def test_effects_is_a_real_primary_navigation_destination_without_cloned_state(self):
+        doc = self.html
+        nav = doc[doc.index('<nav class="workspace-nav"'):doc.index('</nav>', doc.index('<nav class="workspace-nav"'))]
+        self.assertIn('id="studioStyleTab" data-workspace-target="layout"', nav)
+        self.assertIn('id="studioEffectsTab" data-workspace-target="effects"', nav)
+        self.assertEqual(nav.count('data-workspace-target='), 6)
+        self.assertIn("const visibleWorkspace=name==='effects'?'layout':name", doc)
+        self.assertIn('document.body.dataset.workspaceTask=name;', doc)
+        self.assertIn("setHsrStudioMode(name==='effects'?'effects':'style')", doc)
+        self.assertIn("previousWorkspace!=='layout'", doc)
+        self.assertNotIn("addEventListener('click',()=>setHsrStudioMode('effects'))", doc)
+        self.assertNotIn('class="hsr-studio-tabs"', doc)
+        self.assertIn('data-studio-scope="style"', doc)
+        self.assertIn('body[data-workspace-task="effects"]', self.css)
+
     def test_corpus_browser_advanced_not_second_primary_sidebar(self):
         doc = self.html
         self.assertIn('id="subListView"', doc)

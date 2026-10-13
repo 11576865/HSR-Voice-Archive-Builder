@@ -223,7 +223,16 @@ def load_studio(page):
     ensure(page.locator("#studioStyleTab").is_visible(), "Style mode missing")
     ensure(page.locator("#studioEffectsTab").is_visible(), "Effects mode missing")
     ensure(not page.locator("#layoutTimelineViewport").is_visible(), "Style shows effect timeline")
+    subtitleRequests = []
+    page.on("request", lambda request: subtitleRequests.append(request.url)
+            if "/subtitles?selector=all" in request.url else None)
     page.locator("#studioEffectsTab").click()
+    page.wait_for_timeout(150)
+    ensure(not subtitleRequests, "Layout -> Effects caused a second subtitle corpus fetch")
+    ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
+           "Effects is not a primary destination")
+    ensure(page.locator("#studioStyleTab").get_attribute("aria-current") is None,
+           "Layout and Effects both selected")
     ensure(page.locator("#layoutTimelineViewport").is_visible(), "Effects timeline hidden")
     ensure(page.locator("#previewVideoBtn").is_visible(), "Playable effect preview action hidden")
     ensure(not page.locator("#layoutCueFinalText").is_editable(), "Duplicate final text editor is writable")
@@ -245,7 +254,8 @@ def desktop_check(browser, base_url, output, report):
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
     # Default work area must be two-column and keep the duplicate list closed.
-    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(), "Batch QA affordance missing")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_hidden(),
+           "Layout-only batch QA control appears in Effects")
     ensure(page.locator("#layoutCorpusRail").is_hidden(), "Second full subtitle explorer still dominates UI")
     ensure(page.locator("#layoutTrialTextDetails").get_attribute("open") is None,
            "Manual text authoring should not be a second visible editor")
@@ -297,9 +307,10 @@ def desktop_check(browser, base_url, output, report):
     ensure("本地画面" in page.locator("#videoPreviewStatus").inner_text(), "Local footage provenance missing")
     screenshot(page, output, "desktop_local_footage_preview")
     page.locator("#studioStyleTab").click()
-    ensure(page.locator("#libassVideoPreview").is_hidden(), "Style mode retained stale video")
-    page.locator("#studioEffectsTab").click()
-    ensure(page.locator("#layoutCorpusRail").is_hidden(), "QA drawer reopened unexpectedly")
+    ensure(page.locator("#libassVideoPreview").is_hidden(), "Layout retained stale video")
+    ensure(page.locator('#studioStyleTab').get_attribute('aria-current') == 'page',
+           "Primary nav did not select Layout")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(), "Layout QA action hidden")
     page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "true",
            "QA drawer expansion state not exposed")
@@ -307,6 +318,19 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "false",
            "Batch audit accessibility state incorrect")
     screenshot(page, output, "desktop_optional_batch_qa")
+    page.locator("#studioEffectsTab").click()
+    ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
+           "Effects not selected in the primary navigation")
+    ensure(page.locator("#studioStyleTab").get_attribute("aria-current") is None,
+           "Two top-level workspace tabs selected")
+    ensure(page.evaluate("document.body.dataset.workspace") == "layout",
+           "Effects forked the canvas layout surface")
+    ensure(page.evaluate("document.body.dataset.workspaceTask") == "effects",
+           "Effects task identity lost")
+    ensure(page.locator("#layoutTimelineViewport").is_visible(),
+           "Top-level Effects lost the timeline")
+    ensure(page.locator("#layoutCorpusRail").is_visible(),
+           "Explicitly opened batch QA was silently closed")
     rail = rect(page, ".preview-workbench .layout-corpus-rail")
     stage = rect(page, ".preview-workbench .layout-preview-region")
     inspector = rect(page, ".preview-workbench .preview-inspector")
@@ -397,10 +421,16 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     load_studio(page)
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            f"{label}: duplicate explorer appears by default")
-    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
-           f"{label}: batch QA affordance hidden")
+    ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
+           f"{label}: Effects not selected as top-level workspace")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_hidden(),
+           f"{label}: layout-only batch QA leaks into Effects")
     screenshot(page, output, f"{label}_clean_studio")
+    page.locator("#studioStyleTab").click()
+    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
+           f"{label}: Layout batch QA action unavailable")
     page.locator("#layoutAuditDrawerToggle").click()
+    page.locator("#studioEffectsTab").click()
     ensure(page.locator("#layoutCorpusRail").is_visible(),
            f"{label}: optional batch inspector missing")
     vp = rect(page, "#layoutTimelineViewport")

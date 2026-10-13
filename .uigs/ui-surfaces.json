@@ -4,7 +4,7 @@
   "repository": "11576865/HSR-Voice-Archive-Builder",
   "platform": "web",
   "authority": "this repository",
-  "surface_count": 11,
+  "surface_count": 12,
   "surfaces": [
     {
       "id": "HSR.WORKSPACE.PROJECT",
@@ -60,6 +60,30 @@
       ],
       "tests": [
         "tests/test_progress_ui.py"
+      ],
+      "visual_evidence": []
+    },
+    {
+      "id": "HSR.WORKSPACE.EFFECTS",
+      "kind": "workspace",
+      "name": "字幕特效工作台",
+      "group": "EFFECTS",
+      "status": "implemented",
+      "intent": "通过一级工作区入口处理字幕动画、Karaoke、时间轴和真实视频效果预览，避免排版与特效操作混杂。",
+      "implementation_effect": "独立一级导航，但与排版共用字幕画布、项目状态和服务端数据；body[data-workspace=\"layout\"][data-workspace-task=\"effects\"] 选择特效操作视图。",
+      "source_refs": [
+        {
+          "path": "app/static/index.html",
+          "anchor": "data-workspace-target=\"effects\" / #subtitleLayoutPreviewCard[data-studio-mode=\"effects\"]"
+        }
+      ],
+      "patterns": [
+        "UIGS.COMPOSITION.PREVIEW_INSPECTOR_SPLIT",
+        "UIGS.INSPECTOR.PROGRESSIVE_CONTROL_DISCLOSURE"
+      ],
+      "tests": [
+        "tests/browser_visual_evidence.py",
+        "tests/test_hsr_ui_convergence.py"
       ],
       "visual_evidence": []
     },
