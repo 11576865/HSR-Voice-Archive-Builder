@@ -191,7 +191,8 @@ class Handler(BaseHTTPRequestHandler):
 
     def _read_body(self) -> bytes:
         length = _int(self.headers.get("Content-Length", "0"), 0)
-        if length < 0 or length > 8 * 1024 * 1024:
+        max_body = (36 if urlsplit(self.path).path == "/api/subtitle-layout/render-preview-video" else 8) * 1024 * 1024
+        if length < 0 or length > max_body:
             raise ValueError("Request body too large")
         return self.rfile.read(length)
 
@@ -694,6 +695,7 @@ class Handler(BaseHTTPRequestHandler):
                 container_format=fmt,
                 source_video_bytes=source_bytes,
                 source_start_seconds=_float(data.get("source_start_seconds"), 0.0),
+                include_source_audio=_bool(data.get("include_source_audio", "true")),
             )
             self._send_bytes(
                 200, video, "video/webm" if fmt == "webm" else "video/mp4",
