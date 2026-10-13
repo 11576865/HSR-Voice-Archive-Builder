@@ -6774,16 +6774,24 @@ async function renderLibassPreview(){
   }
 }
 
+function setHsrKaraokeReadiness(detail,level='neutral'){
+  const view=document.getElementById('hsrKaraokeReadinessDetail');
+  if(!view)return;
+  view.textContent=detail;
+  view.dataset.level=level;
+}
 async function loadWordAlignmentDiagnostics(){
   const status=document.getElementById('wordAlignmentStatus');
   if(!status)return;
   if(!currentProject){
+    setHsrKaraokeReadiness('请先打开项目，再生成或导入逐词时间。');
     status.textContent='打开项目后检查词级时间数据。';
     status.className='small muted layout-corpus-status';
     return null;
   }
   try{
     status.textContent='正在检查词级时间数据…';
+    setHsrKaraokeReadiness('正在读取当前项目的词级时间与本地对齐器状态。');
     status.className='small muted layout-corpus-status';
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments');
     const d=data.diagnostics||{};
@@ -6807,17 +6815,25 @@ async function loadWordAlignmentDiagnostics(){
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
     if(total<=0){
+      setHsrKaraokeReadiness('尚无可诊断的项目字幕。先构建项目并选择真实语音。','warning');
       status.textContent='当前项目没有可诊断的字幕条目。';
       status.className='small muted layout-corpus-status';
     }else if(usable<=0){
+      setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
+        ?'可以直接点击「本地生成缺失时间」。'
+        :'处理主机缺少 WhisperX；可在主机安装，或导入由其他工具生成的匹配 JSON。'),'warning');
       status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
     }else{
+      setHsrKaraokeReadiness('有效逐词时间 '+usable+' / '+total+' 条。'+(usable<total
+        ?'剩余条目仍需生成或导入，不能将现有时间用于其他字幕。'
+        :'当前全部字幕均有有效词级时间。'),usable<total?'warning':'ready');
       status.textContent='词级时间可用 '+usable+' / '+total+'（'+Number(d.usable_percent||0).toFixed(1)+'%）；缺失 '+missing+'，无效 '+invalid+'。';
       status.className='small '+(invalid?'status-warn':'status-ok')+' layout-corpus-status';
     }
     return d;
   }catch(err){
+    setHsrKaraokeReadiness('无法获取词级时间：'+shortError(err)+'。可以重试状态检查。','failed');
     status.textContent='词级时间诊断失败：'+shortError(err);
     status.className='small status-bad layout-corpus-status';
     return null;
@@ -6839,12 +6855,14 @@ async function generateLocalWordAlignments(){
       headers:{'Content-Type':'application/json'},
       body:JSON.stringify({force:false})
     });
+    setHsrKaraokeReadiness('已提交词级时间生成任务；请在任务中心确认完成，再刷新状态。');
     if(status){
       status.textContent='本地词级对齐任务已启动；进度请查看任务中心。';
       status.className='small status-ok layout-corpus-status';
     }
     watchJob(result.job);
   }catch(err){
+    setHsrKaraokeReadiness('启动本地生成失败：'+shortError(err),'failed');
     if(status){
       status.textContent='本地词级对齐启动失败：'+shortError(err);
       status.className='small status-bad layout-corpus-status';
