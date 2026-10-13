@@ -178,6 +178,20 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertEqual(status["state"], "current")
         self.assertEqual(status["image_saved"], True)
 
+    def test_ass_only_tamper_preserves_independent_srt_current_and_expires_mkv(self):
+        health = bundle_export_status(self.root)
+        self.assertTrue(health["prerequisites"]["srt_current"])
+        self.assertTrue(health["prerequisites"]["ass_current"])
+        (self.root / "HSR_Voice_Archive.ass").write_text("changed ASS independently")
+        later = bundle_export_status(self.root)
+        self.assertEqual(later["state"], "stale")
+        self.assertTrue(later["prerequisites"]["srt_current"],
+                        "Stable SRT keeps its independent artifact validity")
+        self.assertFalse(later["prerequisites"]["ass_current"])
+        self.assertFalse(later["prerequisites"]["subtitles_current"])
+        self.assertFalse(later["can_generate"])
+        self.assertTrue((self.root / OUTPUT).is_file())
+
     def test_standalone_srt_is_current_even_when_ass_is_not_exported(self):
         # An SRT-only export is a valid independent output, but cannot create
         # an MKV with selectable ASS until the ASS generation step completes.
