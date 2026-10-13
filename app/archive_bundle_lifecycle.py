@@ -51,6 +51,7 @@ def _sources(output: Path, fonts: bool) -> dict[str, Any]:
     return {
         "flac": _signature(output / "continuous.flac"),
         "ass": _signature(output / "HSR_Voice_Archive.ass"),
+        "srt": _signature(output / "HSR_Voice_Archive.srt"),
         "subtitle_receipt": _signature(output / "subtitle_export_receipt.json"),
         "fonts": _font_signatures(output, fonts),
     }
@@ -196,7 +197,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
         if _signature(target) != receipt["artifact"]:
             raise ValueError("MKV 文件已被修改或替换")
         if _sources(output, receipt["attach_project_fonts"]) != receipt["sources"]:
-            raise ValueError("连续 FLAC、ASS 或字体已变化")
+            raise ValueError("连续 FLAC、ASS、SRT 或字体已变化")
         health = read_subtitle_export_health(output)
         if not (health.get("state") == "current"
                 and health.get("artifacts_current") and health.get("ass_required")):
@@ -258,6 +259,7 @@ def record_bundle_publication(
         "background": bg,
         "attach_project_fonts": bool(include_fonts),
     }
-    if not receipt["artifact"] or not receipt["sources"]["flac"] or not receipt["sources"]["ass"]:
+    if (not receipt["artifact"] or not receipt["sources"]["flac"]
+            or not receipt["sources"]["ass"] or not receipt["sources"]["srt"]):
         raise ValueError("Cannot certify a missing MKV or source file")
     atomic_write_text(output / RECEIPT, json.dumps(receipt, ensure_ascii=False, indent=2))
