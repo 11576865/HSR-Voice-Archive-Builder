@@ -64,6 +64,17 @@ class BundleLifecycleTests(unittest.TestCase):
         (self.root / OUTPUT).unlink()
         self.assertEqual(bundle_export_status(self.root)["state"], "missing")
 
+    def test_corrupted_gradient_receipt_fails_closed_without_breaking_project_status(self):
+        self._record()
+        receipt_path = self.root / RECEIPT
+        receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+        receipt["background"]["spec"]["mode"] = "unexpected-filter-mode"
+        receipt_path.write_text(json.dumps(receipt), encoding="utf-8")
+        status = bundle_export_status(self.root)
+        self.assertEqual(status["state"], "unverified")
+        self.assertFalse(status["known"])
+        self.assertTrue((self.root / OUTPUT).exists())
+
     def test_source_marker_detects_in_progress_build_without_erasing_old_mkv(self):
         self._record()
         (self.root / ".build_in_progress").touch()
