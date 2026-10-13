@@ -144,6 +144,7 @@ def render_ass_preview_png(
 
 
 MAX_PREVIEW_SOURCE_BYTES = 24 * 1024 * 1024
+MAX_PREVIEW_IMAGE_BYTES = 6 * 1024 * 1024
 
 
 def decode_preview_source_video(value: object) -> bytes | None:
@@ -161,6 +162,48 @@ def decode_preview_source_video(value: object) -> bytes | None:
     if not decoded or len(decoded) > MAX_PREVIEW_SOURCE_BYTES:
         raise ValueError("Source video must contain 1–24 MiB of bytes")
     return decoded
+
+
+def decode_preview_background_image(value: object) -> bytes | None:
+    """Decode a bounded PNG/JPEG only; never accept paths, URLs, or SVG."""
+    if value is None or value == "":
+        return None
+    if not isinstance(value, str):
+        raise ValueError("Preview background image must be base64")
+    if len(value) > 4 * ((MAX_PREVIEW_IMAGE_BYTES + 2) // 3):
+        raise ValueError("Preview background image exceeds 6 MiB")
+    try:
+        image = base64.b64decode(value, validate=True)
+    except (ValueError, binascii.Error) as exc:
+        raise ValueError("Preview background image has invalid encoding") from exc
+    if not image or len(image) > MAX_PREVIEW_IMAGE_BYTES:
+        raise ValueError("Preview background image must be 1–6 MiB")
+    if not (image.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or
+            image.startswith(b"\\xff\\xd8\\xff")):
+        raise ValueError("Preview background image must be PNG or JPEG")
+    return image
+
+
+def _validate_preview_background_image(path: Path) -> None:
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RuntimeError("Background image preview requires FFprobe")
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name,width,height",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        data = json.loads(result.stdout) if result.returncode == 0 else {}
+        stream = data.get("streams", [])[0]
+        codec = str(stream.get("codec_name", ""))
+        width, height = int(stream["width"]), int(stream["height"])
+    except (subprocess.TimeoutExpired, IndexError, KeyError, TypeError,
+            ValueError, json.JSONDecodeError) as exc:
+        raise ValueError("Background image could not be decoded/probed") from exc
+    if codec not in {"png", "mjpeg"} or not (16 <= width <= 3840 and 16 <= height <= 2160):
+        raise ValueError("Background image must be PNG/JPEG, 16–3840 × 16–2160 pixels")
 
 
 def _validate_preview_source(path: Path, start: float, duration: float) -> None:
@@ -217,6 +260,7 @@ def render_ass_preview_video(
     source_start_seconds: float = 0.0,
     include_source_audio: bool = True,
     background_color: str = "#000000",
+    background_image_bytes: bytes | None = None,
     font_dir: Path | None = None,
 ) -> bytes:
     """Render genuine ASS motion over black or an explicitly supplied local video.
@@ -226,6 +270,13 @@ def render_ass_preview_video(
     The result is a preview clip, not a production media export.
     """
     background_color = normalize_preview_background_color(background_color)
+    if background_image_bytes is not None:
+        if not isinstance(background_image_bytes, bytes) or not 0 < len(background_image_bytes) <= MAX_PREVIEW_IMAGE_BYTES:
+            raise ValueError("Preview background image must be 1–6 MiB")
+        if source_video_bytes is not None:
+            raise ValueError("Select either a source video or a background image")
+        if not (background_image_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or background_image_bytes.startswith(b"\\xff\\xd8\\xff")):
+            raise ValueError("Preview background image must be PNG/JPEG")
     ffmpeg_color = "0x" + background_color[1:]
     duration = float(duration_seconds)
     if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
@@ -270,6 +321,13 @@ def render_ass_preview_video(
             # Normalize the user image without stretching its aspect ratio.
             video_filters = ("scale=960:540:force_original_aspect_ratio=decrease,"
                              f"pad=960:540:(ow-iw)/2:(oh-ih)/2:color={ffmpeg_color},setsar=1,fps=24,")
+        elif background_image_bytes is not None:
+            image_path = root / "background-image"
+            image_path.write_bytes(background_image_bytes)
+            _validate_preview_background_image(image_path)
+            source_args = ["-loop", "1", "-framerate", "24", "-i", str(image_path)]
+            video_filters = ("scale=960:540:force_original_aspect_ratio=decrease,"
+                             f"pad=960:540:(ow-iw)/2:(oh-ih)/2:color={ffmpeg_color},setsar=1,")
         else:
             source_args = [
                 "-f", "lavfi", "-i",
