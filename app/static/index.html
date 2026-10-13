@@ -3324,7 +3324,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
                 <option value="high">高画质（CRF 19）</option>
               </select>
             </label>
-            <label for="bundleBackgroundImage">更换背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
+            <label for="bundleBackgroundImage">更换背景图片（PNG/JPEG/WebP，最多 16 MiB；仍检查解码像素）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
             <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装时保存的背景图片（上传新图则优先使用新图；取消勾选则使用纯色）</label>
             <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
           </div>
@@ -3602,7 +3602,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
   <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤4 MiB）</label>
+  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤16 MiB）</label>
   <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
   <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
   <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
@@ -3611,7 +3611,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤4 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤16 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
 </div>
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
 
@@ -5688,7 +5688,7 @@ function bundleBackgroundSpec(){
 }
 async function readBundleImage(file){
   if(!file)return null;
-  if(!file.size||file.size>4*1024*1024)throw new Error('背景图片需在 4 MiB 以内');
+  if(!file.size||file.size>16*1024*1024)throw new Error('背景图片需在 16 MiB 以内');
   return await new Promise((resolve,reject)=>{
     const reader=new FileReader();
     reader.onerror=()=>reject(new Error('无法读取本地背景图片'));
@@ -8659,8 +8659,8 @@ async function renderHsrEffectVideo(){
     else if(backgroundImage){
       if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
         throw new Error('背景图片只支持 PNG、JPEG 或 WebP');
-      if(!backgroundImage.size||backgroundImage.size>4*1024*1024)
-        throw new Error('背景图片必须在 4 MiB 以内');
+      if(!backgroundImage.size||backgroundImage.size>16*1024*1024)
+        throw new Error('背景图片必须在 16 MiB 以内');
       payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
     }
     if(!stillCurrent())return;
