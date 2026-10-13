@@ -16,6 +16,7 @@ from app.archive_bundle_lifecycle import (
     OUTPUT, bundle_export_status, load_previous_bundle_image, record_bundle_publication,
 )
 from app.subtitle_export_status import record_subtitle_export
+from app.project import ProjectConfig, project_summary
 from app.lite_server import Handler
 
 
@@ -176,6 +177,35 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
             status = bundle_export_status(self.root)
         self.assertEqual(status["state"], "current")
         self.assertEqual(status["image_saved"], True)
+
+    def test_project_api_bundle_product_has_same_source_state_as_receipt(self):
+        config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs")
+        initial = project_summary(config)
+        receipt = initial["bundle_export"]
+        items = initial["output_groups"]
+        product = items["playback_bundle"][OUTPUT]
+        self.assertEqual(product["freshness"], receipt["state"])
+        self.assertTrue(product["current"])
+        self.assertFalse(product["needs_rebuild"])
+        self.assertTrue(product["can_generate"])
+        self.assertEqual(product["depends_on"], receipt["depends_on"])
+        self.assertIn("continuous.flac", items["independent_products"])
+        self.assertIn("HSR_Voice_Archive.ass", items["independent_products"])
+        self.assertNotIn(OUTPUT, items["independent_products"])
+        self.assertEqual(items["legacy_outputs"]["HSR_Voice_Archive_Black.mkv"]["role"],
+                         "legacy_independent_video")
+
+        # A stale ASS is still an independent saved file; do not rewrite it
+        # or claim the preserved MKV represents the changed subtitle.
+        (self.root / "HSR_Voice_Archive.ass").write_text("outdated")
+        later = project_summary(config)
+        product = later["output_groups"]["playback_bundle"][OUTPUT]
+        self.assertEqual(product["freshness"], "stale")
+        self.assertFalse(product["current"])
+        self.assertTrue(product["needs_rebuild"])
+        self.assertFalse(product["can_generate"])
+        self.assertTrue(later["outputs"][OUTPUT]["exists"])
+        self.assertTrue(later["outputs"]["continuous.flac"]["exists"])
 
     def test_legacy_mkv_is_not_the_complete_bundle(self):
         project = (Path(__file__).resolve().parents[1] / "app/project.py").read_text(encoding="utf-8")
