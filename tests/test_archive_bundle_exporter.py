@@ -310,6 +310,56 @@ class BundleRealFFmpegTests(unittest.TestCase):
             center = (90 * 320 + 160) * 3
             self.assertGreater(frame[center], frame[center + 1] + 35)
 
+    def test_real_image_above_legacy_4mib_survives_final_mkv_and_reuse(self):
+        """5+ MiB valid PNG is actually decoded by FFmpeg and saved for replay.
+
+        A synthetic PNG magic header alone would test only the Base64 gate,
+        not the decoded image / file-backed FFmpeg export path.
+        """
+        import random
+        import struct
+        import zlib
+
+        width, height = 1600, 1200
+        rng = random.Random(117)
+        rows = b"".join(b"\x00" + rng.randbytes(width * 3) for _ in range(height))
+
+        def chunk(name: bytes, data: bytes) -> bytes:
+            return (struct.pack(">I", len(data)) + name + data
+                    + struct.pack(">I", zlib.crc32(name + data) & 0xffffffff))
+
+        png = (bytes.fromhex("89504e470d0a1a0a")
+               + chunk(b"IHDR", struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0))
+               + chunk(b"IDAT", zlib.compress(rows, level=1))
+               + chunk(b"IEND", b""))
+        self.assertGreater(len(png), 4 * 1024 * 1024)
+        self.assertLessEqual(len(png), 16 * 1024 * 1024)
+        self.assertEqual(decode_bundle_background(
+            base64.b64encode(png).decode("ascii")), png)
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            target = root / "HSR_Voice_Archive_Bundle.mkv"
+            result = exporter.export(
+                audio, ass, target, require_current_ass=True,
+                background_image=png, background_spec={"mode": "image"},
+                background_color="#162431",
+            )
+            self.assertEqual(result["background"], "image")
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            self.assertEqual(load_previous_bundle_image(root), png)
+            codecs = {item["codec_type"]: item["codec_name"]
+                      for item in exporter._probe(target)["streams"]
+                      if item.get("codec_type") in {"video", "audio", "subtitle"}}
+            self.assertEqual(codecs, {"video": "h264", "audio": "flac", "subtitle": "ass"})
+            decoded = subprocess.run([
+                "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(target),
+                "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
+            ], check=True, capture_output=True, timeout=35).stdout
+            self.assertEqual(len(decoded), 320 * 180 * 3)
+
     def test_background_picture_is_actual_mkv_video(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
