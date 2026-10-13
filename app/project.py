@@ -847,6 +847,9 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "build_complete": not interrupted_build and report_file.is_file() and (
             final_stage_file.is_file() or legacy_final_stage_file.is_file()
         ),
+        "delivery_complete": (not interrupted_build and report_file.is_file()
+            and (final_stage_file.is_file() or legacy_final_stage_file.is_file())
+            and (config.delivery_mode == "flac_only" or bundle_health["state"] == "current")),
         "interrupted_build": interrupted_build,
         "report": report,
         "outputs": outputs,
