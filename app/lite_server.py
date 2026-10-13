@@ -17,6 +17,7 @@ from .ass_preview import decode_preview_source_video, normalize_preview_backgrou
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
+from .archive_bundle_lifecycle import load_previous_bundle_image
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
@@ -1462,6 +1463,8 @@ class Handler(BaseHTTPRequestHandler):
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV export project context changed")
             image = decode_bundle_background(data.get("background_image_base64"))
+            if image is None and data.get("reuse_saved_background") is True:
+                image = load_previous_bundle_image(output)
             color = str(data.get("background_color") or "#000000")
             include_fonts = _bool(data.get("attach_project_fonts"))
             source = output / "continuous.flac"
