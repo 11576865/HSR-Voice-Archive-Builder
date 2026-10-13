@@ -4,17 +4,14 @@
   gap:12px;padding:11px 18px;border-bottom:1px solid var(--layout-border);
   background:var(--surface-primary);
 }
-#subtitleLayoutPreviewCard > .hsr-studio-toolbar .hsr-studio-tabs {
-  display:flex;flex:1 1 350px;gap:6px;margin:0;
+/* Primary task ownership lives in the global six-destination workspace nav. */
+.workspace-nav button:nth-child(4){--nav-accent:var(--purple)}
+.workspace-nav button:nth-child(5){--nav-accent:var(--ok)}
+.workspace-nav button:nth-child(6){--nav-accent:var(--warn)}
+.workspace-nav button[data-workspace-target="effects"][aria-current="page"]{
+  color:var(--text);
 }
-#subtitleLayoutPreviewCard > .hsr-studio-toolbar .hsr-studio-tabs button {
-  flex:1 1 0;min-height:44px;border-radius:7px;border:1px solid var(--layout-border);
-  font-size:13px;font-weight:700;
-}
-#subtitleLayoutPreviewCard > .hsr-studio-toolbar .hsr-studio-tabs button[aria-pressed="true"] {
-  background:color-mix(in srgb,var(--layout-evidence-accent) 17%,var(--surface-primary));
-  border-color:var(--layout-evidence-accent);color:var(--text);
-}
+body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
 #layoutAuditDrawerToggle {
   min-height:42px;flex:0 0 auto;border:1px solid var(--layout-border);
   background:var(--surface-secondary);
@@ -73,8 +70,6 @@
 #subtitleLayoutPreviewCard .layout-rail-title h3{font-size:15px}
 @media(max-width:759px){
  #subtitleLayoutPreviewCard>.hsr-studio-toolbar{padding:9px 12px;gap:8px}
- #subtitleLayoutPreviewCard>.hsr-studio-toolbar .hsr-studio-tabs{flex:1 1 100%}
- #subtitleLayoutPreviewCard>.hsr-studio-toolbar .hsr-studio-tabs button{font-size:12px;min-height:44px}
  #layoutAuditDrawerToggle{width:100%}
  #subtitleLayoutPreviewCard .hsr-export-advanced{align-self:stretch}
 }
