@@ -70,7 +70,7 @@ class BundleRealFFmpegTests(unittest.TestCase):
             exporter.export(audio, ass, output, require_current_ass=True)
             previous = output.read_bytes()
             (root / "subtitle_timing_overrides.json").write_text(
-                '{"modified":true}', encoding="utf-8
+                '{"modified":true}', encoding="utf-8"
             )
             with self.assertRaisesRegex(ValueError, "ASS 字幕未通过"):
                 exporter.export(audio, ass, output, require_current_ass=True)
