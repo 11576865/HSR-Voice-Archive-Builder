@@ -145,6 +145,12 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertIn("独立于完整 MKV", html)
         self.assertIn("status:mkvStatus", html)
         self.assertIn("settings.can_generate===false", html)
+        # Prevent a TDZ ReferenceError while the existing project view is
+        # revealing old successful outputs from a partially rebuilt project.
+        self.assertIn("const availableProducts=p.output_groups?.final_products||p.outputs||{}", html)
+        self.assertIn("Object.entries(availableProducts)", html)
+        self.assertIn("status:mkvStatus", html)
+        self.assertIn("旧版黑屏视频，独立于完整 MKV", html)
         self.assertIn("16*1024*1024", html)
         self.assertIn("最多 16 MiB", html)
         self.assertNotIn("最多 4 MiB", html)
