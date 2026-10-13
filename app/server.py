@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
+from .ass_preview import decode_preview_source_video, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
@@ -740,6 +740,9 @@ async def api_subtitle_layout_render_preview(request: Request):
 @app.post("/api/subtitle-layout/render-preview-video")
 async def api_subtitle_layout_render_preview_video(request: Request):
     try:
+        size = request.headers.get("content-length")
+        if size is not None and int(size) > 8 * 1024 * 1024:
+            raise ValueError("Preview JSON body exceeds 8 MiB")
         data = await request.json()
         if not isinstance(data, dict):
             raise ValueError("Subtitle preview payload must be an object")
@@ -748,6 +751,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         if not isinstance(words, list):
             words = None
         fmt = str(data.get("preview_format") or "mp4").lower()
+        source_bytes = decode_preview_source_video(data.get("source_video_base64"))
         video = await run_in_threadpool(
             render_ass_preview_video,
             english_text=str(data.get("english_text") or ""),
@@ -758,10 +762,13 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             word_alignments=words,
             duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
             container_format=fmt,
+            source_video_bytes=source_bytes,
+            source_start_seconds=float(data.get("source_start_seconds") or 0.0),
         )
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
-            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt + "-black"},
+            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
+                     "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else "black"},
         )
     except Exception as exc:
         return JSONResponse(
