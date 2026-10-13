@@ -3,7 +3,7 @@
   "task_id": "hsr-completion-20261014",
   "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
   "status": "in_progress",
-  "current_bounded_work_unit": "Complete-MKV input consistency: reject concurrent FLAC/ASS/font replacements before publishing or certifying an archive; pushed implementation, two regression cases, and explanatory documentation.",
+  "current_bounded_work_unit": "Branch convergence checkpoint: compared 108 non-main branches, retained complete 109-ref inventory, re-landed unique PR #150 real image-preview tests and UI, closed superseded PR, and opened draft integration PR #159 for substantial unmerged ASS audit chain.",
   "completed_units": [
     {
       "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
@@ -14,18 +14,32 @@
       "summary": "Added source snapshot validation after mux and before final publication; protected previously verified MKV and receipt",
       "commit": "10b5371ca5ac731e838225f0d4d4e1a63a574b64",
       "validation": "pending"
+    },
+    {
+      "summary": "Full Git topology audit of 109 HSR branches; 108 non-main diverged, with explicit operational/version exceptions and feature cluster follow-up",
+      "commit": "2d2d1079c10cc84f3b3df901c127628bbe566c7b",
+      "inventory": ".uigs/tasks/hsr-branches-20261014.json"
+    },
+    {
+      "summary": "Re-landed image preview pixel/provenance regression, browser FFmpeg/libass CI, provenance-specific evidence UI and clear-image action; superseded PR #150 closed without merging stale 6 MiB version",
+      "commits": [
+        "c65702723dcd9d64c3f05ee9aaa8529860aaa568",
+        "a6d525b822931c51c51f8ca0b48c81a9da366652",
+        "3b9fe86b467e84eedad16c439e7838e6784f3730"
+      ],
+      "pr": 150,
+      "validation": "pending for exact final UI head"
     }
   ],
   "next_units": [
-    "Confirm CI results for the exact source-identity protection head; if failing, repair only the direct regression.",
-    "Review open draft PR #150 against current main and either integrate still-unique behaviour with tests or close it as superseded after explicit diff audit.",
-    "Execute Issue #158 on actual Android/Termux hardware with at least two Android players and one desktop player, including gradients and fonts. Record models/player versions and screenshots.",
-    "Measure ≥1-hour and long-duration archive output/runtime/peak RSS on identified hardware, plus encoded H.264 gradient banding at 720p CRF 28 and 1080p CRF 19.",
-    "Only after independent hardware/product evidence, decide final release/version milestones and update product acceptance status."
+    "Rebase/re-land the substantive archive audit, ASS coverage batches/locks and rendered-ink evidence from draft PR #159 on latest main; GitHub mergeable=false at creation, do not force a stale full-tree merge.",
+    "Deduplicate feat/hsr-layout-safety-ratio-karaoke-preview (ancestor of PR #159) and overlapping feat/subtitle-style-workbench-evidence-v15; recover only distinct validated behavior.",
+    "Review remaining diverged branch content semantically, track accepted/superseded/abandoned outcomes individually; protect uigs-outbox and historical version refs.",
+    "Validate Issue #158 on actual Android, two players plus desktop, gradient banding and >=1h archive throughput/RSS before declaring product acceptance."
   ],
   "branch": "main",
   "pr": null,
-  "latest_durable_commit": "10b5371ca5ac731e838225f0d4d4e1a63a574b64",
+  "latest_durable_commit": "3b9fe86b467e84eedad16c439e7838e6784f3730",
   "external_validation": {
     "previous_head_main_tests": "passed",
     "previous_head_browser_libass": "passed",
@@ -36,8 +50,12 @@
     "long_archive_performance": "unverified"
   },
   "blockers": [
-    "No physical Android device or multi-hour representative voice archive is connected to the current agent runtime; do not mark Issue #158 accepted without actual evidence.",
-    "Draft PR #150 has not been diff-audited for unique changes; do not merge or close it blindly."
+    "Draft PR #159 currently reports mergeable=false; 181-commit unmerged feature chain conflicts with current main, requiring semantic re-land and regression work.",
+    "Most remaining branches have divergent history but no completed content-equivalence review; no safe bulk merge/delete conclusion.",
+    "Exact-head browser/FFmpeg CI for new image evidence and UI remains pending.",
+    "No physical Android device / long actual archive acceptance for Issue #158."
   ],
-  "updated_at": "2026-10-14"
+  "updated_at": "2026-10-14",
+  "branch_inventory": ".uigs/tasks/hsr-branches-20261014.json",
+  "open_integration_pr": 159
 }
