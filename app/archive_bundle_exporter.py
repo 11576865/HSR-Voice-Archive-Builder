@@ -146,10 +146,27 @@ class ArchiveBundleExporter:
             color = "0x" + background_color[1:]
             cmd = [self.ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
             if spec["mode"] in {"linear", "radial", "soft"}:
-                gradient, video_filter = gradient_source(
+                gradient, still_filter = gradient_source(
                     spec, width=self.width, height=self.height, fps=self.fps,
                 )
-                cmd += ["-f", "lavfi", "-i", gradient]
+                # FFmpeg's gradient is static. Render its pixels ONCE rather
+                # than running a Gaussian blur on every frame of a long archive.
+                still = root / "generated-background.png"
+                render = [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-y",
+                          "-f", "lavfi", "-i", gradient]
+                if still_filter:
+                    render += ["-vf", still_filter]
+                render += ["-frames:v", "1", str(still)]
+                try:
+                    subprocess.run(render, capture_output=True, text=True,
+                                   check=True, timeout=90)
+                except subprocess.CalledProcessError as exc:
+                    raise RuntimeError(
+                        "当前 FFmpeg 无法生成渐变背景，请检查 gradients/gblur 支持："
+                        + (exc.stderr or "")[-900:]
+                    ) from exc
+                cmd += ["-loop", "1", "-framerate", str(self.fps), "-i", str(still)]
+                video_filter = None
             elif spec["mode"] == "color":
                 cmd += ["-f", "lavfi", "-i",
                         f"color=c={color}:s={self.width}x{self.height}:r={self.fps}"]
