@@ -5529,6 +5529,45 @@ document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormD
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
+async function startArchiveBundle(){
+  const button=document.getElementById('exportArchiveBundleBtn');
+  const status=document.getElementById('bundleOutputStatus');
+  if(!currentProject?.root){if(status)status.textContent='请先打开项目。';return}
+  try{
+    button.disabled=true;
+    if(status)status.textContent='正在核验 FLAC、ASS、背景与字体附件…';
+    const file=document.getElementById('bundleBackgroundImage')?.files?.[0]||null;
+    if(file&&(!file.size||file.size>4*1024*1024))throw new Error('背景图片需在 4 MiB 以内');
+    let background_image_base64=null;
+    if(file){
+      background_image_base64=await new Promise((resolve,reject)=>{
+        const reader=new FileReader();
+        reader.onerror=()=>reject(new Error('无法读取本地背景图片'));
+        reader.onload=()=>{
+          const data=String(reader.result||''),idx=data.indexOf(',');
+          if(idx<0)reject(new Error('背景图片编码失败'));else resolve(data.slice(idx+1));
+        };
+        reader.readAsDataURL(file);
+      });
+    }
+    const j=await api('/api/output/archive-bundle',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        expected_project_root:currentProject.root,
+        background_color:document.getElementById('bundleBackgroundColor')?.value||'#000000',
+        background_image_base64,
+        attach_project_fonts:!!document.getElementById('bundleIncludeFonts')?.checked
+      })
+    });
+    if(status)status.textContent='完整 MKV 任务已创建；后台逐轨生成与 FFprobe 校验中…';
+    watchJob(j.job);
+  }catch(x){
+    if(status){status.textContent='完整 MKV 启动失败：'+shortError(x);status.className='small status-bad'}
+    setLog(String(x));
+  }finally{button.disabled=false}
+}
+document.getElementById('exportArchiveBundleBtn')?.addEventListener('click',startArchiveBundle);
+document.getElementById('bundleOpenLayoutBtn')?.addEventListener('click',()=>showWorkspace('layout'));
 async function exportTranslationRecovery(){
   const s=document.getElementById('recoveryImportStatus');
   try{
