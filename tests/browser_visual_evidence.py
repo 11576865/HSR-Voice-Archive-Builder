@@ -831,7 +831,53 @@ def gradient_background_check(browser, base_url, output, report):
         }""", timeout=30000)
         ensure(requests and requests[-1]["mode"] == "soft",
                "Browser submitted wrong soft gradient to FFmpeg")
-        ensure(not errors, "Gradient background browser JS error: " + repr(errors))
+        # Actual production browser DOM contract: a stale MKV is not a
+        # second current deliverable and doesn't erase FLAC/SRT/ASS artifacts.
+        states = page.evaluate("""() => {
+          const existing=name=>({path:'/qa/fixture/output/'+name,exists:true,size_bytes:64});
+          const outputs={
+            'HSR_Voice_Archive_Bundle.mkv':existing('HSR_Voice_Archive_Bundle.mkv'),
+            'HSR_Voice_Archive_Black.mkv':existing('HSR_Voice_Archive_Black.mkv'),
+            'continuous.flac':existing('continuous.flac'),
+            'HSR_Voice_Archive.srt':existing('HSR_Voice_Archive.srt'),
+            'HSR_Voice_Archive.ass':existing('HSR_Voice_Archive.ass')
+          };
+          const project={root:'/qa/fixture',bundle_export:{
+            state:'stale',needs_rebuild:true,can_generate:false,
+            message:'字幕已变化，旧文件保留',blockers:['请先更新 ASS/SRT'],
+            prerequisites:{continuous_flac:true,subtitles_current:false}
+          }};
+          const inspect=()=>{
+            const cards=[...document.querySelectorAll('#artifactBrowser .artifact-card')];
+            return {labels:cards.map(x=>x.querySelector('.badge')?.textContent),
+              names:cards.map(x=>x.querySelector('.artifact-card-title')?.textContent),
+              count:document.getElementById('artifactCount')?.textContent,
+              pendingAction:cards[0]?.querySelector('.artifact-card-actions button')?.textContent};
+          };
+          renderArtifactBrowser(project,outputs,outputs);
+          const stale=inspect();
+          project.bundle_export={...project.bundle_export,state:'current',needs_rebuild:false,
+            can_generate:true,blockers:[],prerequisites:{continuous_flac:true,subtitles_current:true}};
+          renderArtifactBrowser(project,outputs,outputs);
+          const current=inspect();
+          project.bundle_export={...project.bundle_export,state:'stale',needs_rebuild:true,
+            can_generate:false,blockers:['请先更新 ASS/SRT'],
+            prerequisites:{continuous_flac:true,subtitles_current:false}};
+          renderArtifactBrowser(project,outputs,outputs);
+          return {stale,current};
+        }""")
+        ensure(states["stale"]["labels"][0] == "旧文件·已过期",
+               "Old MKV must not show as a current bundle")
+        ensure("先更新 ASS/SRT" in states["stale"]["pendingAction"],
+               "Stale subtitle prerequisite needs an actionable UI path")
+        ensure(states["current"]["labels"][0] == "当前有效",
+               "Current bundle should show validated source status")
+        ensure(states["stale"]["names"][1:4] == [
+            "continuous.flac", "HSR_Voice_Archive.srt", "HSR_Voice_Archive.ass"],
+            "Independent master/subtitle artifacts must be preserved")
+        ensure(states["stale"]["labels"][-1] == "旧版独立输出",
+               "Legacy black MKV must not look like another current MKV")
+        ensure(not errors, "Gradient/background browser JS error: " + repr(errors))
         screenshot(page, output, "gradient_background_" + str(width))
         evidence.append({"viewport": str(width)+"x"+str(height),
                          "mode": requests[-1]["mode"],
