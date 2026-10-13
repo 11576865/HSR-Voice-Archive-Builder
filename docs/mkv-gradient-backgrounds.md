@@ -40,3 +40,28 @@ HSR 是语音与字幕档案构建器，不承担通用 Matroska Remux。完整 
 6. 真实 Android 物理设备、终端播放器色彩管理、持续运行大批量多小时档案是**独立验收范围**，当前 CI 不代表已完成。
 
 默认仍是纯色 + 720p + 标准画质，旧保存的纯色／图片配置兼容。新背景方案不扩大视频来源、上传 MIME 或允许任意 FFmpeg filtergraph 输入。
+
+
+## 成品 MKV 的只读技术核查（Issue #158 的证据准备）
+
+Windows、Linux 和 Android/Termux 均可使用 **Python 标准库 + FFmpeg/FFprobe** 运行已提交的技术核查工具。先按照正常 HSR 流程生成完整 MKV，再在运行机器上执行：
+
+```bash
+python scripts/hsr_mkv_acceptance_probe.py \
+  /path/to/project/output/HSR_Voice_Archive_Bundle.mkv \
+  --evidence-dir /path/to/acceptance-evidence
+```
+
+Windows PowerShell：
+
+```powershell
+python scripts/hsr_mkv_acceptance_probe.py "D:\HSR\project\output\HSR_Voice_Archive_Bundle.mkv" --evidence-dir "D:\HSR\acceptance-evidence"
+```
+
+预期产物是 `report.json` 和 `decoded_h264_0.png`、`decoded_h264_1.png`（极短视频仅有第一张）。该工具只读取 MKV；解码截图来自**已经封装、经过 H.264 压缩的成品**，而不是用户预览 PNG 或仅由渐变滤镜生成的源图片。
+
+报告记录：目标文件尺寸/修改时间、FFmpeg/FFprobe 版本、可用的 `gradients`/`gblur`/`ass` 滤镜、容器格式、H.264+FLAC+ASS 轨道、字体附件名、可验证时长、解码后 PNG 的 SHA-256 与实际解码耗时。Android/Termux 可补充读取系统版本与设备型号，但不会读取设备序列号、账号信息或用户目录。
+
+**严格的证据边界：** `status=technical_pass` 只证明本机 FFprobe 可识别结构，且 FFmpeg 能成功解码两张最终 H.264 画面。不证明 Android 播放器能正确选中 ASS、渲染附件字体，也不证明听到 FLAC、渐变无色带或长时档案编码效率合格。报告中的 `device_playback`、`visual_banding`、`long_duration_performance` 始终保留 `unverified`，需要实际播放器和硬件证据才能更新 [Issue #158](https://github.com/11576865/HSR-Voice-Archive-Builder/issues/158)。
+
+测试证据使用 `tests/test_hsr_mkv_acceptance_probe.py`：包括错误容器/轨道/字体身份拒绝、缺失工具时 fail-closed、无法解码时不误报通过、报告与原始 MKV 分离，以及合成真实 H.264+FLAC+ASS MKV 的双帧解码。CI 环境成功不等于在实际 Android/Termux 设备上运行成功。
