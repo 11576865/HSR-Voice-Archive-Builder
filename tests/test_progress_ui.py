@@ -148,7 +148,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("x.job.state==='awaiting_input'", html)
         self.assertIn('id="runReportDetails"', html)
         self.assertNotIn('id="blackVideoBtn"', html)
-        self.assertIn("label:'生成旧版黑屏 MKV',action:startBlackVideo", html)
+        self.assertIn("旧工程遗留黑屏 MKV（历史文件，不是当前默认交付）", html)
+        self.assertIn("exportIndividualTrack('flac')", html)
         self.assertIn("legacyDetails.append(legacySummary,legacyCard)", html)
         self.assertIn("showWorkspace('export');", html)
         self.assertIn("'/api/output/black-video'", html)
@@ -176,7 +177,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("上一代恢复包", html)
         self.assertIn("后端可能拒绝删除", html)
         self.assertNotIn('id="assOutputBtn"', html)
-        self.assertIn("label:'生成 ASS',primary:true,action:startAssExport", html)
+        self.assertIn("exportIndividualTrack('ass')", html)
         self.assertIn("'/api/output/ass'", html)
         # The duplicate build-result stat block is gone. The project overview
         # may still use official/API translation metrics once, as the canonical summary.
