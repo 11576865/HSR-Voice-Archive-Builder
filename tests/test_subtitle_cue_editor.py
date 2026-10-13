@@ -68,96 +68,43 @@ const run=x=>vm.runInContext(x,context);
 (async()=>{
   await run('loadLayoutStressSample({force:true,selectId:11})');
   assert.equal(node('layoutCueFinalText').value,'第一条');
-  assert.equal(node('layoutCueStart').textContent,'T5.0');
-  assert.equal(node('layoutCueEnd').textContent,'T9.0');
+  assert.equal(node('layoutCueFinalText').readOnly,true);
+  assert.equal(node('layoutCueReadOnlyText').textContent,'第一条');
+  assert.equal(node('layoutCueSaveBtn').disabled,true);
   assert.equal(node('layoutCueScrubber').disabled,false);
-  run("layoutCueUpdateDraft('第一条未保存')");
-  assert.equal(node('prevChsText').value,'第一条未保存');
-  assert.equal(node('layoutCueSaveBtn').disabled,false);
-  assert.equal(node('layoutCorpusList').innerHTML.includes('未保存正文'),true);
 
+  // The former editable Layout source path must be inert, not a second
+  // independently persisted owner. Review is the only write surface.
+  run("layoutCueUpdateDraft('不得从排版写入')");
+  assert.equal(node('layoutCueFinalText').value,'第一条');
+  assert.equal(node('layoutCueReadOnlyText').textContent,'第一条');
+  assert.equal(await run('saveLayoutCueText()'),false);
+  assert.equal(saves.length,0,'Hidden Layout must never POST a text mutation');
+
+  // Selection, source-time display and project corpus refresh still work.
   await run('loadLayoutStressSample({force:true,selectId:12})');
   assert.equal(node('layoutCueFinalText').value,'第二条');
   await run('loadLayoutStressSample({force:true,selectId:11})');
-  assert.equal(node('layoutCueFinalText').value,'第一条未保存','cue draft survives navigation');
+  assert.equal(node('layoutCueFinalText').value,'第一条');
 
-  const first=run('saveLayoutCueText()');
-  assert.equal(saves.length,1);
-  const sent=JSON.parse(saves[0].opts.body);
-  assert.equal(sent.expected_project_root,'/project-alpha');
-  assert.deepEqual(sent.subtitles,[{
-    id:11,final_chs:'第一条未保存',
-    expected_final_chs:'第一条',
-    expected_source_member_id:'voice/scene-A/11.wav'
-  }]);
-  assert.equal(await run('saveLayoutCueText()'),false,'save single flight');
-  run("layoutCueUpdateDraft('保存期间继续编辑')");
-  saves.shift().resolve({ok:true,result:{updated_count:1,ass_error:''}});
-  assert.equal(await first,false,'subsequent draft must remain dirty');
-  assert.equal(node('layoutCueFinalText').value,'保存期间继续编辑');
-  assert.equal(node('layoutCueSaveBtn').disabled,false);
-  assert.equal(subtitles[0].final_chs,'第一条未保存','saved old snapshot is kept separate');
-
-  const next=run('saveLayoutCueText()');
-  assert.equal(saves.length,1);
-  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].final_chs,'保存期间继续编辑');
-  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].expected_final_chs,'第一条未保存');
-  saves.shift().resolve({ok:true,result:{updated_count:1,ass_error:''}});
-  assert.equal(await next,true);
-  assert.equal(node('layoutCueSaveBtn').disabled,true);
-  assert.equal(subtitles[0].final_chs,'保存期间继续编辑');
-
-  run("layoutCueUpdateDraft('过期窗口修改')");
-  const stale=run('saveLayoutCueText()');
-  assert.equal(saves.length,1);
-  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].expected_final_chs,'保存期间继续编辑');
-  saves.shift().reject(new Error('Subtitle text changed since it was loaded; refresh before editing'));
-  assert.equal(await stale,false);
-  assert.equal(node('layoutCueFinalText').value,'过期窗口修改','rejected edit must retain draft');
-  assert.match(node('layoutCueSaveStatus').textContent,/刷新/);
-  assert.equal(subtitles[0].final_chs,'保存期间继续编辑','conflict must not alter local saved baseline');
-
-  // Explicit corpus refresh retrieves the other tab's new server baseline.
-  // Keep the local draft, but disable Save until the user resolves the conflict.
-  subtitles[0].final_chs='另一个窗口已保存';
+  // A change made by Review / another session is adopted on refresh.
+  subtitles[0].final_chs='校对已经保存的新正文';
   await run('loadLayoutStressSample({force:true,refresh:true,selectId:11})');
-  assert.equal(node('layoutCueFinalText').value,'过期窗口修改');
-  assert.equal(node('layoutCueTextConflict').hidden,false);
+  assert.equal(node('layoutCueFinalText').value,'校对已经保存的新正文');
+  assert.equal(node('layoutCueReadOnlyText').textContent,'校对已经保存的新正文');
   assert.equal(node('layoutCueSaveBtn').disabled,true);
-  assert.equal(await run('saveLayoutCueText()'),false,'cannot overwrite new server baseline silently');
-  run('layoutCueKeepLocalDraft()');
-  assert.equal(node('layoutCueTextConflict').hidden,true);
-  assert.equal(node('layoutCueSaveBtn').disabled,false);
-  const reconciled=run('saveLayoutCueText()');
-  assert.equal(saves.length,1);
-  assert.equal(JSON.parse(saves[0].opts.body).subtitles[0].expected_final_chs,'另一个窗口已保存');
-  saves.shift().resolve({ok:true,result:{updated_count:1,ass_error:''}});
-  assert.equal(await reconciled,true);
-  assert.equal(subtitles[0].final_chs,'过期窗口修改');
-
-  // A second remote update with no foreground draft should refresh normally.
-  subtitles[0].final_chs='服务器新正文';
-  await run('loadLayoutStressSample({force:true,refresh:true,selectId:11})');
-  assert.equal(node('layoutCueTextConflict').hidden,true);
-  assert.equal(node('layoutCueFinalText').value,'服务器新正文');
-
-  run("layoutCueUpdateDraft('试验修改')");
-  run('layoutCueRevertDraft()');
-  assert.equal(node('layoutCueFinalText').value,'服务器新正文');
-  assert.equal(node('layoutCueSaveBtn').disabled,true);
+  assert.equal(saves.length,0);
 
   node('layoutCueScrubber').value='75';
   run('layoutCueTimePreview()');
   assert.equal(node('layoutCueScrubberTime').textContent,'T8.0 · 75%');
 
-  // Project switching discards old project drafts and resets the selected editor.
   context.currentProject={root:'/project-beta',name:'beta',config:{}};
   run("layoutCueResetProject('/project-beta')");
   assert.equal(node('layoutCueFinalText').disabled,true);
   assert.equal(node('layoutCueSaveBtn').disabled,true);
   assert.ok(previewUpdates>=3);
-  assert.ok(invalidations>=2);
-  process.stdout.write('cue editor production JS contract: OK\n');
+  process.stdout.write('layout read-only + cue timing production JS contract: OK\\n');
 })().catch(e=>{console.error(e);process.exitCode=1});
 """
         script = "const source = " + json.dumps(source, ensure_ascii=False) + ";\n" + harness

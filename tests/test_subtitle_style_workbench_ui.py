@@ -256,7 +256,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("beforeunload", html)
         self.assertIn("function layoutCuePrepareWaveform(blob,identity)", html)
         self.assertIn("function layoutCueSeekAudio(fraction)", html)
-        self.assertIn("event.key==='ArrowDown'", html)
+        self.assertIn("layoutCueNudgeTiming(edge.dataset.timelineEdge", html)
+        self.assertNotIn("getElementById('layoutCueFinalText')?.addEventListener", html)
         self.assertIn("layoutCorpusPersistable=data.persistable===true;", html)
         self.assertIn("layoutCorpusRefreshBtn", html)
 
