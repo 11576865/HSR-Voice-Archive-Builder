@@ -8345,7 +8345,7 @@ async function renderHsrEffectVideo(){
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地视频 + ASS':backgroundImage?'本地图片 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'可用源音轨随画面同步截取':'无音频')+' · 可播放和拖动检查。';
+    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地图片 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'可用源音轨随画面同步截取':'无音频')+' · 可播放和拖动检查。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
