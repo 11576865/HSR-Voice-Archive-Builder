@@ -17,6 +17,8 @@ on:
       - "app/subtitles.py"
       - "app/subtitle_timing.py"
       - "app/ass_preview.py"
+      - "app/archive_bundle_exporter.py"
+      - "tests/test_archive_bundle_exporter.py"
       - "app/server.py"
       - "app/lite_server.py"
       - "tests/test_hsr_three_pass_scope.py"
@@ -94,6 +96,8 @@ jobs:
         run: python -m unittest tests.test_hsr_preview_background_color -v
       - name: Prove genuine local footage plus ASS compositing
         run: python -m unittest tests.test_hsr_local_footage_preview -v
+      - name: Prove full MKV selectable ASS, FLAC, fonts and actual image-backed video
+        run: python -m unittest tests.test_archive_bundle_exporter -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
         uses: actions/upload-artifact@v4
