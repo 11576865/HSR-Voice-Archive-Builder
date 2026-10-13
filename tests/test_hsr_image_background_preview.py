@@ -13,7 +13,7 @@ from unittest.mock import patch
 from fastapi.testclient import TestClient
 
 from app.archive_bundle_exporter import MAX_BACKGROUND_BYTES, decode_bundle_background
-from app.ass_preview import render_ass_preview_video
+from app.ass_preview import _validate_preview_background_image, render_ass_preview_video
 from app.security import api_token
 from app.server import app
 from subtitle_layout.config import SubtitleRenderConfig
@@ -52,6 +52,34 @@ class DynamicBackgroundImageTests(unittest.TestCase):
             )
         self.assertEqual(result.status_code, 400)
         render.assert_not_called()
+
+    def test_common_phone_photo_and_pixel_safety_gate(self):
+        # FFprobe provides the source dimensions; the final preview always
+        # downsizes to 960×540. Do not reject a compressed 12 MP phone image
+        # merely because its width is greater than the old 3840-pixel cap.
+        for width, height, accepted in (
+            (4032, 3024, True),
+            (6000, 4000, True),  # Exactly 24 megapixels.
+            (8192, 2929, True),
+            (8192, 3000, False),
+            (9000, 100, False),
+            (16, 16, True),
+            (15, 100, False),
+        ):
+            with self.subTest(width=width, height=height):
+                probe = subprocess.CompletedProcess(
+                    ["ffprobe"], 0,
+                    stdout=json.dumps({"streams": [{
+                        "codec_type": "video", "width": width, "height": height,
+                    }]}),
+                )
+                with patch("app.ass_preview.shutil.which", return_value="ffprobe"), \\
+                     patch("app.ass_preview.subprocess.run", return_value=probe):
+                    if accepted:
+                        _validate_preview_background_image(Path("sample.jpg"))
+                    else:
+                        with self.assertRaisesRegex(ValueError, "safe limit"):
+                            _validate_preview_background_image(Path("sample.jpg"))
 
     @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
                          "Real FFmpeg/FFprobe required")
