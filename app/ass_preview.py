@@ -322,7 +322,7 @@ def render_ass_preview_video(
             video_filters = ("scale=960:540:force_original_aspect_ratio=decrease,"
                              f"pad=960:540:(ow-iw)/2:(oh-ih)/2:color={ffmpeg_color},setsar=1,fps=24,")
         elif background_image_bytes is not None:
-            image_path = root / "background-image"
+            image_path = root / ("background.png" if background_image_bytes.startswith(b"\x89PNG\r\n\x1a\n") else "background.jpg")
             image_path.write_bytes(background_image_bytes)
             _validate_preview_background_image(image_path)
             source_args = ["-loop", "1", "-framerate", "24", "-i", str(image_path)]
