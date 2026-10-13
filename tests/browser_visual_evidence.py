@@ -235,7 +235,11 @@ def load_studio(page):
            "Layout and Effects both selected")
     ensure(page.locator("#layoutTimelineViewport").is_visible(), "Effects timeline hidden")
     ensure(page.locator("#previewVideoBtn").is_visible(), "Playable effect preview action hidden")
-    ensure(not page.locator("#layoutCueFinalText").is_editable(), "Duplicate final text editor is writable")
+    ensure(page.locator("#layoutCueFinalText").count() == 0,
+           "Duplicate final text editor still exists in DOM")
+    ensure(page.locator("#layoutCueAudio").count() == 0,
+           "Duplicated original WAV control remains in Effects")
+    ensure(page.locator("audio").count() == 1, "More than one original audio player")
     page.evaluate("() => window.scrollTo(0, 0)")
 
 
@@ -262,8 +266,8 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#studioEffectsTab").bounding_box()["y"] <
            page.locator(".preview-workbench").bounding_box()["y"],
            "Layout / Effects tabs are not top-level tasks")
-    ensure(page.locator("#layoutCueFinalText").is_hidden(),
-           "Duplicated final text textarea is still visible")
+    ensure(page.locator("#layoutCueFinalText").count() == 0,
+           "Duplicated final text textarea is still mounted")
     screenshot(page, output, "desktop_clean_effects_workspace")
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
