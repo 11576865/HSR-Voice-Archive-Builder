@@ -7,6 +7,7 @@ render evidence or phone-device screenshots.
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import math
 import os
@@ -99,7 +100,7 @@ def geometry(payload: dict) -> dict:
 
 
 def real_browser_video_fixture() -> bytes:
-    """Real decodable MP4 bytes, kept separate from backend libass proof."""
+    """Real decodable WebM bytes, kept separate from backend libass proof."""
     with tempfile.TemporaryDirectory(prefix="hsr-browser-video-") as td:
         path = Path(td) / "motion.webm"
         subprocess.run(
@@ -120,7 +121,15 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
         body = request.post_data_json if request.method == "POST" and request.post_data else {}
         if path.endswith("/api/subtitle-layout/render-preview-video") and video_bytes:
             assert body.get("preview_format") == "webm", "Chromium must negotiate VP8"
-            route.fulfill(status=200, content_type="video/webm", body=video_bytes)
+            has_source = "source_video_base64" in body
+            if has_source:
+                assert base64.b64decode(body["source_video_base64"], validate=True) == video_bytes
+                assert body.get("source_start_seconds") == 0.2
+            # Browser test proves decoded playback and UI provenance; separate
+            # real-FFmpeg test proves the output pixels include actual ASS.
+            route.fulfill(status=200, content_type="video/webm", body=video_bytes,
+                          headers={"X-HSR-Preview-Background":
+                                   "local-footage" if has_source else "black"})
             return
         if path.endswith("/api/status"):
             payload = {
@@ -223,7 +232,8 @@ def desktop_check(browser, base_url, output, report):
     writes = []
     errors = []
     page.on("pageerror", lambda error: errors.append(str(error)))
-    page.route("**/api/**", make_router(rows, writes, real_browser_video_fixture()))
+    fixture_video=real_browser_video_fixture()
+    page.route("**/api/**", make_router(rows, writes, fixture_video))
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
     # This is a real Chromium decoded-video interaction, but the API response
@@ -252,6 +262,21 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
     page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
     screenshot(page, output, "desktop_effect_video_playback")
+    # File picker must forward actual source bytes and update evidence identity.
+    page.locator("#effectFootageFile").set_input_files({
+        "name": "user-footage.webm", "mimeType": "video/webm", "buffer": fixture_video
+    })
+    page.locator("#effectFootageStart").fill("0.2")
+    ensure(page.locator("#libassVideoPreview").is_hidden(), "Changing selected footage retained stale output")
+    page.locator("#previewVideoBtn").click()
+    page.wait_for_function("""() => {
+      const evidence=document.querySelector('.layout-preview-evidence').dataset.previewEvidence;
+      const video=document.getElementById('libassVideoPreview');
+      return evidence==='video-footage' && video.readyState>=2;
+    }""",timeout=20000)
+    ensure(page.locator("#libassVideoPreview").is_visible(), "Uploaded-footage preview was not decoded")
+    ensure("本地画面" in page.locator("#videoPreviewStatus").inner_text(), "Local footage provenance missing")
+    screenshot(page, output, "desktop_local_footage_preview")
     page.locator("#studioStyleTab").click()
     ensure(page.locator("#libassVideoPreview").is_hidden(), "Style mode retained stale video")
     page.locator("#studioEffectsTab").click()
