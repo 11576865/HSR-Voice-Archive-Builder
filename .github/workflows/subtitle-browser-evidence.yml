@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - "app/static/index.html"
+      - "app/static/hsr-ui-convergence.css"
+      - "tests/test_hsr_ui_convergence.py"
       - "tests/browser_visual_evidence.py"
       - "tests/browser_live_preview_e2e.py"
       - "tests/test_subtitle_integrated_export.py"
@@ -38,6 +40,8 @@ jobs:
           python -m playwright install --with-deps chromium
       - name: Render responsive workbench and exercise real drag interactions
         run: python tests/browser_visual_evidence.py --output artifacts/subtitle-browser
+      - name: Assert compact UI ownership and syntax contracts
+        run: python -m unittest tests.test_hsr_ui_convergence -v
       - name: Real Chromium to FastAPI to libass to VP8/Opus preview (no mock video endpoint)
         run: python tests/browser_live_preview_e2e.py --output artifacts/subtitle-browser
       - name: Upload real browser fixture screenshots and geometry report
