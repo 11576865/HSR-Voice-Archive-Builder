@@ -162,6 +162,16 @@ def publish_flac_only(output: Path) -> Path:
             raise ValueError("Unsafe subtitle path")
     # The former bundle and its publication receipt are now an obsolete
     # *project-owned* output. A failure before this line leaves them intact.
+    receipt = _read_receipt(output)
+    if receipt:
+        # Preserve only the small replayable background configuration, never
+        # the old MKV or the redundant FLAC track after profile transition.
+        from .archive_bundle_lifecycle import PREFERENCES
+        atomic_write_text(output / PREFERENCES, json.dumps({
+            "schema_version": 1,
+            "background": receipt["background"],
+            "attach_project_fonts": receipt["attach_project_fonts"],
+        }, ensure_ascii=False, indent=2))
     (output / OUTPUT).unlink(missing_ok=True)
     (output / RECEIPT).unlink(missing_ok=True)
     for name in (SRT, ASS):
