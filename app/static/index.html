@@ -3604,6 +3604,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
   <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤16 MiB）</label>
   <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
+  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
   <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
   <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
   <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
@@ -6837,7 +6838,8 @@ function setPreviewEvidence(mode, detail = '') {
     geometry:['浏览器几何预览','显示排版求解器的布局与安全区；不是实际 ASS 字形渲染。','尚未进行真实渲染','几何求解 · 非真实渲染'],
     rendering:['实际 ASS 渲染中','正在请求 FFmpeg/libass；画布暂时显示浏览器几何结果。','正在验证','几何求解 · 渲染进行中'],
     libass:['FFmpeg/libass 实际渲染','当前可见帧由真实渲染路径根据本次试调值生成；尚不代表已保存或完成导出。','真实渲染帧','实际 ASS 渲染'],
-    video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时视频，背景可能是纯色或本地图片。','可播放视频 · 非正式导出','真实动态特效 · 背景视频'],
+    video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时纯色视频。','可播放视频 · 非正式导出','真实动态特效 · 纯色背景'],
+    'video-image':['FFmpeg/libass 图片背景合成','真实解码本地图片作为连续视频帧，再由 libass 渲染动态字幕；不保存图片到项目。','图片帧 + 动态 ASS · 非正式导出','真实动态特效 · 图片背景'],
     'video-footage':['FFmpeg/libass 视频合成','真实读取本次选择的本地视频画面并叠加 ASS 字幕；源音频取决于本次音轨选项，不保存原素材。','源素材叠加 · 非正式导出','真实动态特效 · 本地素材'],
     stale:['真实渲染结果已过期','参数、字幕样本或时间点变化；当前已退回浏览器几何预览。','请重新渲染','几何求解 · 结果已过期'],
     failed:['真实渲染失败','真实渲染未完成；画布只显示浏览器几何结果。','渲染未验证','几何求解 · 渲染失败']
@@ -6850,7 +6852,7 @@ function setPreviewEvidence(mode, detail = '') {
   if(modeLabel)modeLabel.textContent=current[3];
   document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',mode==='libass'?'false':'true');
   document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
-  document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'||mode==='video-footage'?'true':'false');
+  document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'||mode==='video-image'||mode==='video-footage'?'true':'false');
 }
 
 function invalidateLibassPreview(){
@@ -8737,7 +8739,7 @@ async function renderHsrEffectVideo(){
     });
     if(!stillCurrent())return;
     video.classList.remove('hidden');
-    setPreviewEvidence(footage?'video-footage':'video');
+    setPreviewEvidence(footage?'video-footage':backgroundImage?'video-image':'video');
     setHsrEffectOperation('ready','视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
     // The render trigger lives in the Inspector, but playback lives on stage.
     // Reveal the successful result so the action is not perceived as inert.
@@ -9010,11 +9012,21 @@ document.getElementById('previewLibassBtn')?.addEventListener('click',renderLiba
 document.getElementById('previewVideoBtn')?.addEventListener('click',renderHsrEffectVideo);
 document.getElementById('effectBackgroundImageFile')?.addEventListener('change',event=>{
   effectBackgroundImageFile=event.target.files?.[0]||null;
+  document.getElementById('effectBackgroundImageClearBtn').disabled=!effectBackgroundImageFile;
   invalidateLibassPreview();
   const status=document.getElementById('videoPreviewStatus');
   if(status)status.textContent=effectBackgroundImageFile
     ? '已选背景图片：'+effectBackgroundImageFile.name+'；点击「播放动态特效」以实际 FFmpeg 输出验证。'
     : '未选择背景图片；下一次动态视频使用当前纯色背景（若已选视频则视频优先）。';
+});
+document.getElementById('effectBackgroundImageClearBtn')?.addEventListener('click',()=>{
+  effectBackgroundImageFile=null;
+  const input=document.getElementById('effectBackgroundImageFile');
+  if(input)input.value='';
+  document.getElementById('effectBackgroundImageClearBtn').disabled=true;
+  invalidateLibassPreview();
+  const status=document.getElementById('videoPreviewStatus');
+  if(status)status.textContent='背景图片已清除；当前预览仍可使用本地视频或所选纯色。';
 });
 document.getElementById('effectFootageFile')?.addEventListener('change',event=>{
   effectFootageFile=event.target.files?.[0]||null;
