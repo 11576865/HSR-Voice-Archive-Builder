@@ -96,6 +96,18 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertNotIn(".workspace-nav button:nth-child", self.css)
         self.assertNotIn(".hsr-studio-tabs button", doc)
 
+    def test_focused_viewport_has_escape_and_internal_scrolling(self):
+        doc, css = self.html, self.css
+        self.assertEqual(doc.count('id="hsrStudioFocusToggle"'), 1)
+        self.assertIn("function setHsrStudioFocusMode(enabled)", doc)
+        self.assertIn("root.classList.toggle('hsr-focus-active',active)", doc)
+        self.assertIn("if(visibleWorkspace!=='layout')setHsrStudioFocusMode(false)", doc)
+        self.assertIn("event.key==='Escape'&&document.body.dataset.hsrStudioFocus==='true'", doc)
+        self.assertIn('body[data-hsr-studio-focus="true"]', css)
+        self.assertIn("overflow:hidden!important;overscroll-behavior:none", css)
+        self.assertIn("position:fixed!important;inset:0!important", css)
+        self.assertIn("overflow-y:auto!important", css)
+
     def test_production_script_parse(self):
         if not __import__("shutil").which("node"):
             self.skipTest("Node not installed")
