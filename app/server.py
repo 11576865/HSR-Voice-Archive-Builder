@@ -19,7 +19,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .archive_bundle_lifecycle import load_previous_bundle_image
-from .archive_bundle_backgrounds import RESOLUTIONS, normalize_bundle_background, render_background_preview
+from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -1725,6 +1725,22 @@ def api_output_ass():
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
+async def _read_bounded_bundle_json(request: Request) -> dict:
+    """Enforce upload budget on bytes received, not Content-Length alone."""
+    length = request.headers.get("content-length")
+    if length is not None and int(length) > MAX_BUNDLE_JSON_BYTES:
+        raise ValueError("MKV background JSON request exceeds 24 MiB")
+    raw = bytearray()
+    async for chunk in request.stream():
+        if len(raw) + len(chunk) > MAX_BUNDLE_JSON_BYTES:
+            raise ValueError("MKV background JSON request exceeds 24 MiB")
+        raw.extend(chunk)
+    data = json.loads(raw)
+    if not isinstance(data, dict):
+        raise ValueError("MKV configuration must be a JSON object")
+    return data
+
+
 @app.post("/api/output/archive-bundle/background-preview")
 async def api_preview_archive_bundle_background(request: Request):
     try:
@@ -1732,9 +1748,7 @@ async def api_preview_archive_bundle_background(request: Request):
         output = resolve_project_path(config, config.output_dir)
         if output is None:
             raise ValueError("Output directory is not configured")
-        if int(request.headers.get("content-length") or 0) > 8 * 1024 * 1024:
-            raise ValueError("Background preview request exceeds 8 MiB")
-        data = await request.json()
+        data = await _read_bounded_bundle_json(request)
         if not isinstance(data, dict):
             raise ValueError("Background preview must be an object")
         if str(data.get("expected_project_root") or "") != str(config.root):
@@ -1765,9 +1779,7 @@ async def api_output_archive_bundle(request: Request):
         output = resolve_project_path(config, config.output_dir)
         if output is None:
             raise ValueError("Output directory is not configured")
-        if int(request.headers.get("content-length") or 0) > 8 * 1024 * 1024:
-            raise ValueError("MKV request exceeds 8 MiB")
-        data = await request.json()
+        data = await _read_bounded_bundle_json(request)
         if not isinstance(data, dict):
             raise ValueError("MKV configuration must be a JSON object")
         if str(data.get("expected_project_root") or "") != str(config.root):
