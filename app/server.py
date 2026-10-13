@@ -534,7 +534,8 @@ async def api_post_project_subtitles(
 
         assert_project_idle(config.root)
         result = update_project_subtitles(config, output_dir, updates)
-        return {"ok": True, "result": result}
+        auto_job = maybe_queue_complete_mkv(config)
+        return {"ok": True, "result": result, "auto_bundle_job": auto_job}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -561,7 +562,8 @@ async def api_post_project_subtitle_timing(project_id: str, item_id: str, reques
             reset=body.get("reset") is True,
             expected_start=body.get("expected_start"), expected_end=body.get("expected_end"),
         )
-        return {"ok": True, **result}
+        auto_job = maybe_queue_complete_mkv(config) if result.get("artifacts_current") else None
+        return {"ok": True, **result, "auto_bundle_job": auto_job}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -585,8 +587,9 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
             config, output_dir, force_ass=body.get("force_ass") is True
         )
         artifact_error = str(refreshed.get("ass_error") or "")
+        auto_job = maybe_queue_complete_mkv(config) if not artifact_error else None
         return {
-            "ok": True, "refreshed": refreshed,
+            "ok": True, "refreshed": refreshed, "auto_bundle_job": auto_job,
             "artifacts_current": not bool(artifact_error),
             "artifact_error": artifact_error,
             "export_status": read_subtitle_export_health(output_dir),
