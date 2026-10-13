@@ -6035,7 +6035,11 @@ async function saveSubtitleItemInBackground(targetSub){
 
   const sentId=targetSub.id;
   const sentText=String(targetSub.final_chs??'');
+  const expectedText=String(targetSub._savedFinal??'');
+  const expectedMember=String(targetSub.source_member_id||'');
   const sentKey=subtitleKey(targetSub);
+  const projectName=currentProject.name||'active';
+  const projectRoot=currentProject.root||null;
 
   targetSub._saving=true;
   renderSubtitleEditState();
@@ -6044,11 +6048,22 @@ async function saveSubtitleItemInBackground(targetSub){
 
   const saveOp=async()=>{
     try{
-      const j=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles',{
+      if(!currentProject||(currentProject.root||null)!==projectRoot||
+         (currentProject.name||'active')!==projectName)return false;
+      const j=await api('/api/project/'+encodeURIComponent(projectName)+'/subtitles',{
         method:'POST',
         headers:{'Content-Type':'application/json'},
-        body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})
+        body:JSON.stringify({
+          expected_project_root:projectRoot,
+          subtitles:[{
+            id:sentId,final_chs:sentText,
+            expected_final_chs:expectedText,
+            expected_source_member_id:expectedMember
+          }]
+        })
       });
+      if(!currentProject||(currentProject.root||null)!==projectRoot||
+         (currentProject.name||'active')!==projectName)return false;
       if(Number(j.result?.updated_count||0)!==1)throw new Error('后端未确认保存当前字幕');
       const target=loadedSubtitles.find(x=>subtitleKey(x)===sentKey);
       if(target){
@@ -6068,7 +6083,11 @@ async function saveSubtitleItemInBackground(targetSub){
       );
       return true;
     }catch(x){
-      setSubtitleSaveUi('error','保存字幕失败：'+shortError(x)+'；当前输入仍保留在页面中。');
+      const reason=shortError(x);
+      const stale=/Subtitle (text|source clip|cue identity) changed|Subtitle cue identity is missing or ambiguous|project context changed/i.test(reason);
+      setSubtitleSaveUi('error',(stale
+        ? '字幕已在其他会话或重新构建后变化；请核对服务器版本，不会自动覆盖。'
+        : '保存字幕失败：'+reason)+'；当前输入仍保留在页面中。');
       setLog(String(x));
       return false;
     }finally{
