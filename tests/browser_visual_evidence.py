@@ -360,6 +360,11 @@ def desktop_check(browser, base_url, output, report):
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
     ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
            "Moving from focused QA rail to Effects lost visible keyboard focus")
+    page.locator("#studioStyleTab").click()
+    page.locator("#layoutAuditDrawerToggle").focus()
+    page.evaluate("() => showWorkspace('effects',{scroll:false})")
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
+           "Layout QA opener retained hidden focus after switching to Effects")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Focused QA rail did not close when entering Effects")
     stage = rect(page, ".preview-workbench .layout-preview-region")
@@ -463,14 +468,30 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#layoutCorpusRail").is_visible(),
            f"{label}: optional Layout QA explorer is inaccessible")
+    ensure(page.locator("#layoutCorpusRail").get_attribute("inert") is None,
+           f"{label}: expanded QA remains inert")
+    ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "true",
+           f"{label}: QA control state out of sync")
+    for selector in ("#layoutCorpusSearch", "#layoutCorpusList", "#layoutCorpusRefreshBtn"):
+        ensure(page.locator(selector).is_visible(),
+               f"{label}: opened mobile QA is missing {selector}")
+    ensure(page.locator("#layoutCorpusMobileToggleBtn").count() == 0,
+           f"{label}: nested second QA expander reappeared")
     screenshot(page, output, f"{label}_optional_layout_qa")
-    page.locator("#studioEffectsTab").click()
+    # The global task switch hides the QA toolbar as well as its rail;
+    # focused controls must transfer focus to the visible Effects tab.
+    page.locator("#layoutAuditDrawerToggle").focus()
+    page.evaluate("() => showWorkspace('effects',{scroll:false})")
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
+           f"{label}: focus stranded on now-hidden QA opener")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            f"{label}: layout QA rail leaks into Effects")
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
            f"{label}: layout QA accessibility state not reset")
     ensure(page.locator("#layoutCorpusRail").get_attribute("inert") is not None,
            f"{label}: hidden QA controls remain focusable")
+    ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "false",
+           f"{label}: QA opener did not return to closed state")
     vp = rect(page, "#layoutTimelineViewport")
     canvas = rect(page, ".preview-workbench .preview-stage")
     cue = rect(page, "#layoutCueEditorPanel")
