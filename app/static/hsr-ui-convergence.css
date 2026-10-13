@@ -174,3 +174,19 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
 #subtitleLayoutPreviewCard .hsr-project-font-list button{
   flex:0 1 auto;max-width:100%;white-space:normal;text-align:left;
 }
+
+/* Solid-color pixels in actual FFmpeg dynamic output, not CSS-only stage paint. */
+#subtitleLayoutPreviewCard #effectPreviewBackgroundColor{
+  min-height:43px;
+  width:100%;
+  padding:4px;
+  border:1px solid var(--layout-border);
+  background:var(--layout-section);
+  border-radius:7px;
+  cursor:pointer;
+}
+#subtitleLayoutPreviewCard .hsr-footage-color-note{
+  grid-column:1/-1;
+  margin:0 0 8px;
+  line-height:1.5;
+}
