@@ -150,21 +150,27 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     ass = bool(ass_sig and ass_sig["size"] > 0)
     srt = bool(srt_sig and srt_sig["size"] > 0)
     subtitle = read_subtitle_export_health(output)
-    subtitles_current = bool(subtitle.get("state") == "current"
-                             and subtitle.get("artifacts_current") and subtitle.get("ass_required"))
+    srt_current = bool(srt and subtitle.get("state") == "current"
+                       and subtitle.get("artifacts_current"))
+    ass_current = bool(ass and srt_current and subtitle.get("ass_required"))
+    subtitles_current = ass_current
     build_busy = (output / ".build_in_progress").exists()
     prerequisites = {
         "continuous_flac": flac,
         "ass": ass,
         "srt": srt,
+        "srt_current": srt_current,
+        "ass_current": ass_current,
         "subtitles_current": subtitles_current,
         "build_idle": not build_busy,
     }
     blockers = []
     if not flac:
         blockers.append("连续 FLAC 缺失或为空，请先完成档案构建")
-    if not ass or not srt or not subtitles_current:
-        blockers.append("ASS/SRT 缺失、为空或已过期，请先生成最新字幕")
+    if not srt_current:
+        blockers.append("独立 SRT 缺失、为空或已过期，请先更新字幕")
+    if not ass_current:
+        blockers.append("ASS 未导出或未通过最新字幕回执校验，请先生成 ASS")
     if build_busy:
         blockers.append("项目正在构建，完成后再封装")
     result: dict[str, Any] = {
