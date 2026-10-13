@@ -101,6 +101,11 @@ class HsrUiConvergence(unittest.TestCase):
         doc, css = self.html, self.css
         self.assertEqual(doc.count('id="hsrStudioFocusToggle"'), 1)
         self.assertEqual(doc.count('id="hsrTouchSliderToggle"'), 1)
+        self.assertEqual(doc.count('id="hsrFontImportShortcut"'), 1)
+        self.assertIn("if(document.body.dataset.workspaceTask!=='layout')showWorkspace('layout',{scroll:false})",doc)
+        self.assertIn("const importer=document.getElementById('projectFontImporter')",doc)
+        self.assertIn("if(importer)importer.open=true",doc)
+
         self.assertIn("function setHsrStudioFocusMode(enabled)", doc)
         self.assertIn("if(visibleWorkspace==='layout'){", doc)
         self.assertIn("setHsrStudioFocusMode(true);", doc)
