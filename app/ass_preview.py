@@ -178,8 +178,8 @@ def decode_preview_background_image(value: object) -> bytes | None:
         raise ValueError("Preview background image has invalid encoding") from exc
     if not image or len(image) > MAX_PREVIEW_IMAGE_BYTES:
         raise ValueError("Preview background image must be 1–6 MiB")
-    if not (image.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or
-            image.startswith(b"\\xff\\xd8\\xff")):
+    if not (image.startswith(b"\x89PNG\r\n\x1a\n") or
+            image.startswith(b"\xff\xd8\xff")):
         raise ValueError("Preview background image must be PNG or JPEG")
     return image
 
@@ -275,7 +275,7 @@ def render_ass_preview_video(
             raise ValueError("Preview background image must be 1–6 MiB")
         if source_video_bytes is not None:
             raise ValueError("Select either a source video or a background image")
-        if not (background_image_bytes.startswith(b"\\x89PNG\\r\\n\\x1a\\n") or background_image_bytes.startswith(b"\\xff\\xd8\\xff")):
+        if not (background_image_bytes.startswith(b"\x89PNG\r\n\x1a\n") or background_image_bytes.startswith(b"\xff\xd8\xff")):
             raise ValueError("Preview background image must be PNG/JPEG")
     ffmpeg_color = "0x" + background_color[1:]
     duration = float(duration_seconds)
