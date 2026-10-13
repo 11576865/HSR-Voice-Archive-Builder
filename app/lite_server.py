@@ -1523,9 +1523,11 @@ class Handler(BaseHTTPRequestHandler):
             if not bundle_export_status(output)["can_generate"]:
                 raise ValueError("独立字幕源过期或无有效可复用 MKV，请先更新档案")
             def run(report_progress):
+                from .subtitles import subtitle_render_config
                 prepare_complete_sources(
                     output, source_language=config.source_text_language,
                     target_language=config.target_language,
+                    render_config=subtitle_render_config(config),
                 )
                 result = ArchiveBundleExporter(
                     width=RESOLUTIONS[spec["resolution"]][0],
