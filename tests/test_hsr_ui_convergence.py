@@ -1,0 +1,72 @@
+"""Regression contract for HSR subtitle UI task separation and reduced duplicate controls."""
+from pathlib import Path
+import re
+import subprocess
+import tempfile
+import unittest
+
+ROOT = Path(__file__).resolve().parents[1]
+HTML = ROOT / "app/static/index.html"
+CSS = ROOT / "app/static/hsr-ui-convergence.css"
+
+
+class HsrUiConvergence(unittest.TestCase):
+    @classmethod
+    def setUpClass(cls):
+        cls.html = HTML.read_text(encoding="utf-8")
+        cls.css = CSS.read_text(encoding="utf-8")
+
+    def test_task_navigation_outside_parameter_inspector(self):
+        doc = self.html
+        self.assertEqual(doc.count('id="studioStyleTab"'), 1)
+        self.assertEqual(doc.count('id="studioEffectsTab"'), 1)
+        self.assertLess(doc.index('id="studioStyleTab"'), doc.index('class="preview-workbench"'))
+        self.assertLess(doc.index('id="studioEffectsTab"'), doc.index('class="preview-workbench"'))
+        self.assertIn('id="hsrInspectorTitle"', doc)
+        self.assertIn("?'特效参数':'排版参数'", doc)
+
+    def test_corpus_browser_advanced_not_second_primary_sidebar(self):
+        doc = self.html
+        self.assertIn('id="subListView"', doc)
+        self.assertIn('id="layoutCorpusRail"', doc)
+        self.assertIn('id="layoutAuditDrawerToggle" aria-expanded="false"', doc)
+        self.assertIn('id="layoutCorpusRail" aria-label="批量排版检查与问题字幕定位" aria-hidden="true" inert', doc)
+        self.assertIn("workbench.classList.toggle('audit-open',!!open)", doc)
+        self.assertIn("rail.toggleAttribute('inert',!open)", doc)
+        self.assertIn("rail.contains(document.activeElement)", doc)
+        self.assertIn(".preview-workbench:not(.audit-open) .layout-corpus-rail", self.css)
+
+    def test_one_final_text_editor_and_trial_hidden_by_default(self):
+        doc = self.html
+        self.assertIn('id="subFinalEditor"', doc)
+        self.assertIn('id="layoutTrialTextDetails"', doc)
+        self.assertIn("手动试调字幕文本（不会修改项目字幕）", doc)
+        self.assertIn('id="layoutCueReadOnlyText"', doc)
+        self.assertIn('id="layoutCueFinalText" rows="3" disabled readonly aria-readonly="true" hidden', doc)
+        self.assertIn("display.textContent=selected?state.draft", doc)
+        self.assertIn('id="layoutOpenProofreadingBtn"', doc)
+        self.assertIn('class="hsr-export-advanced"', doc)
+
+    def test_single_new_css_authority_and_valid_css_boundary(self):
+        self.assertEqual(self.html.count('href="/static/hsr-ui-convergence.css"'), 1)
+        self.assertNotIn(r"\\n#subtitleLayoutPreviewCard", self.html)
+        self.assertNotIn(r"\n#subtitleLayoutPreviewCard", self.html)
+        self.assertIn("min-width:1361px", self.css)
+        self.assertIn("max-width:759px", self.css)
+        self.assertIn("max-width:1360px", self.css)
+
+    def test_production_script_parse(self):
+        if not __import__("shutil").which("node"):
+            self.skipTest("Node not installed")
+        scripts = re.findall(r"<script[^>]*>(.*?)</script>", self.html, re.S)
+        self.assertTrue(scripts)
+        with tempfile.TemporaryDirectory() as td:
+            for i, script in enumerate(scripts):
+                target = Path(td) / f"block-{i}.js"
+                target.write_text(script, encoding="utf-8")
+                run = subprocess.run(["node", "--check", str(target)], capture_output=True, text=True)
+                self.assertEqual(run.returncode, 0, run.stderr)
+
+
+if __name__ == "__main__":
+    unittest.main()
