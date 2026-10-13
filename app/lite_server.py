@@ -845,7 +845,8 @@ class Handler(BaseHTTPRequestHandler):
                 reset=str(data.get("reset", "")).lower() in {"true", "1"},
                 expected_start=data.get("expected_start"), expected_end=data.get("expected_end"),
             )
-            self._json({"ok": True, **result})
+            auto_job = maybe_queue_complete_mkv(config) if result.get("artifacts_current") else None
+            self._json({"ok": True, **result, "auto_bundle_job": auto_job})
             return
 
         if "/subtitles" in path and path.startswith("/api/project/"):
@@ -870,7 +871,8 @@ class Handler(BaseHTTPRequestHandler):
 
             assert_project_idle(config.root)
             result = update_project_subtitles(config, output, updates)
-            self._json({"ok": True, "result": result})
+            auto_job = maybe_queue_complete_mkv(config)
+            self._json({"ok": True, "result": result, "auto_bundle_job": auto_job})
             return
 
         if path == "/api/quick/scan":
