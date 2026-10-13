@@ -222,8 +222,15 @@ def _validate_preview_background_image(path: Path) -> None:
     except (IndexError, KeyError, TypeError, ValueError, OverflowError,
             subprocess.TimeoutExpired) as exc:
         raise ValueError("Background image cannot be decoded") from exc
-    if not 16 <= width <= 3840 or not 16 <= height <= 2160:
-        raise ValueError("Background image exceeds supported 3840×2160 dimensions")
+    # Still images are downscaled to a 960×540 preview. The former
+    # 3840×2160 source cap rejected ordinary 4032×3024 phone photos even
+    # when the encoded file was well below the advertised 16 MiB limit.
+    # Match the existing complete-MKV image preflight's bounded pixel budget.
+    if not (16 <= width <= 8192 and 16 <= height <= 8192 and width * height <= 24_000_000):
+        raise ValueError(
+            f"Background image {width}×{height} exceeds the safe limit: "
+            "16–8192 pixels per side and at most 24 million pixels"
+        )
 
 
 def render_ass_preview_video(
