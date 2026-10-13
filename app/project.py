@@ -690,8 +690,22 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         name for name in outputs if name not in final_product_names
     )
     output_groups = {
+        # Backward-compatible union for existing clients.
         "final_products": {
             name: outputs[name] for name in final_product_names
+        },
+        # A single combined playable MKV depends on independently retained
+        # FLAC/ASS/SRT, while the historical black MKV is a separate legacy
+        # output rather than a second current bundle.
+        "playback_bundle": {
+            "HSR_Voice_Archive_Bundle.mkv": outputs["HSR_Voice_Archive_Bundle.mkv"],
+        },
+        "independent_products": {
+            name: outputs[name] for name in final_product_names
+            if name not in {"HSR_Voice_Archive_Bundle.mkv", "HSR_Voice_Archive_Black.mkv"}
+        },
+        "legacy_outputs": {
+            "HSR_Voice_Archive_Black.mkv": outputs["HSR_Voice_Archive_Black.mkv"],
         },
         "archive_records": {
             name: outputs[name] for name in archive_record_names
