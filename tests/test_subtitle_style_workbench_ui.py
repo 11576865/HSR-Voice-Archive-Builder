@@ -15,7 +15,10 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("字幕样式工作台", html)
         self.assertNotIn(">字幕排版工作台</h2>", html)
         self.assertIn("SUBTITLE STYLE WORKBENCH", html)
-        self.assertIn("STYLE INSPECTOR", html)
+        self.assertIn('id="hsrInspectorTitle"', html)
+        self.assertIn('id="studioStyleTab"', html)
+        self.assertIn('id="studioEffectsTab"', html)
+        self.assertIn('href="/static/hsr-ui-convergence.css"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
             "grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px)!important",
@@ -116,7 +119,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
 
     def test_real_render_and_geometry_actions_report_distinct_evidence(self) -> None:
         html = self.html
-        self.assertIn('id="previewGeometryBtn" aria-pressed="true"', html)
+        self.assertIn('id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true"', html)
         self.assertIn('id="previewLibassBtn" aria-pressed="false"', html)
         for state in ("geometry", "rendering", "libass", "stale", "failed"):
             self.assertIn(f"{state}:[", html)
