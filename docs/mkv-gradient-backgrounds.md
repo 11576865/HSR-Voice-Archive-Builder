@@ -14,7 +14,7 @@ HSR 是语音与字幕档案构建器，不承担通用 Matroska Remux。完整 
 | 柔和渐变 | 三个色点 | `gradients:type=radial` 加 `gblur` |
 | 图片 | PNG／JPEG／WebP（不超过 16 MiB） | 解码、缩放和补边；图片保存在项目中以便复用 |
 
-另有 720p／1080p 输出分辨率及标准／高画质（H.264 CRF 28／19）选项，帧率保持 1 fps。用户上传图片的既有文件大小和 2400 万解码像素约束保持不变；**程序生成的渐变不经过上传接口**。
+另有 720p／1080p 输出分辨率及标准／高画质（H.264 CRF 28／19）选项，帧率保持 1 fps。用户上传图片由原先 4 MiB 提高至 16 MiB，Base64 JSON 请求上限为 24 MiB；2400 万解码像素与单边分辨率约束保持不变；**程序生成的渐变不经过上传接口**。
 
 预览请求调用**真实 FFmpeg** 输出 640×360 PNG，显示独立预览证据。最终 H.264 压缩后色带、显示器色深及播放器色彩管理可能影响观感，不能将 PNG 预览当作最终无损验收。新参数使旧预览失效，重复请求的旧结果不能覆写新参数预览。
 
@@ -73,3 +73,14 @@ python scripts/hsr_mkv_acceptance_probe.py "D:\HSR\project\output\HSR_Voice_Arch
 **严格的证据边界：** `status=technical_pass` 只证明本机 FFprobe 可识别结构，且 FFmpeg 能成功解码两张最终 H.264 画面。不证明 Android 播放器能正确选中 ASS、渲染附件字体，也不证明听到 FLAC、渐变无色带或长时档案编码效率合格。报告中的 `device_playback`、`visual_banding`、`long_duration_performance` 始终保留 `unverified`，需要实际播放器和硬件证据才能更新 [Issue #158](https://github.com/11576865/HSR-Voice-Archive-Builder/issues/158)。
 
 测试证据使用 `tests/test_hsr_mkv_acceptance_probe.py`：包括错误容器/轨道/字体身份拒绝、缺失工具时 fail-closed、无法解码时不误报通过、报告与原始 MKV 分离，以及合成真实 H.264+FLAC+ASS MKV 的双帧解码。CI 环境成功不等于在实际 Android/Termux 设备上运行成功。
+
+
+## 完整 MKV 与其他成品的依赖及更新状态
+
+- `continuous.flac`：独立无损母版音频，完整 MKV 仅复制其 FLAC 音轨，不会修改源文件。
+- `HSR_Voice_Archive.srt` 和 `HSR_Voice_Archive.ass`：基于同一个字幕数据与独立字幕导出回执的成品。完整 MKV 使用通过当前一致性校验的 ASS 软字幕；二者仍可单独保存和使用。
+- `HSR_Voice_Archive_Bundle.mkv`：由当前 FLAC、已校验的 ASS/SRT、字体与背景生成的**派生播放成品**。生成前检查源存在、字幕回执状态及项目构建空闲。来源改变或中断后旧 MKV 保留在磁盘，但在成品区标为过期；新文件通过逐轨验证后替换。
+- `HSR_Voice_Archive_Black.mkv`：历史兼容的独立黑屏视频输出，没有完整 MKV 的来源状态回执，不应被展示为另一个“当前完整 MKV”。
+- 项目 API 的 `output_groups` 保留既有 `final_products`，新增 `playback_bundle`、`independent_products` 与 `legacy_outputs` 供成品区使用；不会自动把完整 MKV 反向拆成 FLAC 或字幕。
+
+图片上传仍通过本机浏览器和服务端的 Base64 JSON 路径，16 MiB 是**原始图像字节上限**，24 MiB 是服务端严格按实际读取字节检查的 JSON 上限，而不是输出 MKV 的体积上限。FFmpeg 解析和解码像素约束保留。
