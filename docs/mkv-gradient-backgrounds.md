@@ -46,6 +46,12 @@ HSR 是语音与字幕档案构建器，不承担通用 Matroska Remux。完整 
 
 `project_summary.output_groups.playback_bundle` 的完整 MKV 项会直接给出来自同一次回执计算的 `freshness`、`needs_rebuild`、`can_generate`、`depends_on` 和 `blockers`，旧版黑屏 MKV 单独标为 `legacy_independent_video`。这避免客户端将「磁盘上存在文件」误解为「成品仍代表最新来源」，同时不破坏旧 `final_products` 接口结构。
 
+### 单个字幕成品的独立验收
+
+字幕导出回执除原有聚合 `state`、`artifacts_current` 外，还分别提供 `srt_current` 与 `ass_current`。它们按同一份输入来源签名和各自的文件哈希判断：只修改 ASS 时，未变化的 SRT 继续是当前有效的独立文本成品；只修改 SRT 时，未变化的 ASS 仍可单独有效。**完整 MKV 的 `subtitles_current` 仍要求两者同时有效**，不因单个文件未变化而放行整个封装。
+
+`project_summary.output_groups.independent_products` 暴露这两个字幕文件的 `current`／`freshness` 与 `used_in_bundle`；连续 FLAC 作为独立无损母版，`ready_for_bundle` 只是非空预检，`freshness=unverified` 不表示已用 FFprobe 独立验证其音频身份。完整 MKV 的 `playback_bundle` 状态继续由来源回执负责，旧黑屏 MKV 不能继承该状态。
+
 ## 验收合同
 
 1. `normalize_bundle_background()` 拒绝非法模式、注入型颜色／方向／分辨率／画质。
