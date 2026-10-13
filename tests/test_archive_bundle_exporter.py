@@ -8,7 +8,10 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background
+from app.archive_bundle_exporter import (
+    ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles,
+)
+from app.subtitle_export_status import record_subtitle_export
 
 
 class BundleInputValidationTests(unittest.TestCase):
@@ -49,6 +52,84 @@ class BundleRealFFmpegTests(unittest.TestCase):
         )
         return subtitles
 
+    @staticmethod
+    def _certify(root: Path) -> None:
+        (root / "manifest.json").write_text('{"entries":[]}', encoding="utf-8")
+        (root / "HSR_Voice_Archive.srt").write_text(
+            "1\\n00:00:00,000 --> 00:00:01,500\\nTest\\n", encoding="utf-8"
+        )
+        record_subtitle_export(root, state="current", ass_required=True)
+
+    def test_stale_ass_blocks_new_mkv_and_preserves_previous_valid_archive(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            exporter.export(audio, ass, output, require_current_ass=True)
+            previous = output.read_bytes()
+            (root / "subtitle_timing_overrides.json").write_text(
+                '{"modified":true}', encoding="utf-8
+            )
+            with self.assertRaisesRegex(ValueError, "ASS 字幕未通过"):
+                exporter.export(audio, ass, output, require_current_ass=True)
+            self.assertEqual(output.read_bytes(), previous)
+
+    def test_ass_mutation_during_mux_fails_before_atomic_replace(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            exporter.export(audio, ass, output, require_current_ass=True)
+            previous = output.read_bytes()
+            original_validate = exporter.validate
+            def mutate_after_validation(*args, **kwargs):
+                original_validate(*args, **kwargs)
+                (root / "subtitles_overrides.json").write_text(
+                    '{"edit":"during mux"}', encoding="utf-8"
+                )
+            exporter.validate = mutate_after_validation
+            with self.assertRaisesRegex(ValueError, "ASS 字幕未通过"):
+                exporter.export(audio, ass, output, require_current_ass=True,
+                                background_color="#112233")
+            self.assertEqual(output.read_bytes(), previous)
+
+    def test_wrong_video_codec_is_rejected_even_with_valid_flac_and_ass(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            valid = root / "valid.mkv"
+            invalid = root / "wrong-video.mkv"
+            exporter.export(audio, ass, valid)
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(valid),
+                "-map", "0", "-c:v", "mpeg4", "-q:v", "5",
+                "-c:a", "copy", "-c:s", "copy", str(invalid),
+            ], check=True, capture_output=True, timeout=40)
+            with self.assertRaisesRegex(RuntimeError, "H.264"):
+                exporter.validate(invalid, expected_fonts=0, expected_duration=1.6)
+
+    def test_symlinked_font_directory_is_rejected(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            actual = root / "redirected"
+            actual.mkdir()
+            link = root / "subtitle_fonts"
+            try:
+                link.symlink_to(actual, target_is_directory=True)
+            except (OSError, NotImplementedError) as exc:
+                self.skipTest(f"Symlinks unavailable: {exc}")
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            with self.assertRaisesRegex(ValueError, "符号链接"):
+                exporter.export(audio, ass, root / "out.mkv",
+                                fonts_dir=link, include_fonts=True)
+            self.assertFalse((root / "out.mkv").exists())
+
     def test_real_soft_ass_audio_video_with_optional_font_attachment(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -73,6 +154,12 @@ class BundleRealFFmpegTests(unittest.TestCase):
             self.assertEqual(codecs["subtitle"], "ass")
             self.assertEqual(codecs["video"], "h264")
             self.assertAlmostEqual(float(probe["format"]["duration"]), 1.6, delta=0.5)
+            if family_font.is_file():
+                with self.assertRaisesRegex(RuntimeError, "名称与实际项目字体不一致"):
+                    exporter.validate(
+                        target, expected_fonts=1, expected_duration=1.6,
+                        expected_font_names={"different.ttf"},
+                    )
 
     def test_background_picture_is_actual_mkv_video(self):
         with tempfile.TemporaryDirectory() as td:
