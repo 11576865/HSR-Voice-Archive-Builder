@@ -16,6 +16,7 @@ from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
+from .archive_mkv import ArchiveMkvExporter, decode_background_image
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
@@ -203,7 +204,8 @@ class Handler(BaseHTTPRequestHandler):
         length = _int(self.headers.get("Content-Length", "0"), 0)
         endpoint = urlsplit(self.path).path
         max_body = (36 if endpoint == "/api/subtitle-layout/render-preview-video" else
-                    18 if endpoint == "/api/subtitle-layout/import-font" else 8) * 1024 * 1024
+                    18 if endpoint == "/api/subtitle-layout/import-font" else
+                    12 if endpoint == "/api/output/archive-mkv" else 8) * 1024 * 1024
         if length < 0 or length > max_body:
             raise ValueError("Request body too large")
         return self.rfile.read(length)
@@ -1446,6 +1448,38 @@ class Handler(BaseHTTPRequestHandler):
                 "ass-export", run, with_progress=True,
                 project_root=config.root, project_name=config.name,
             )
+            self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/output/archive-mkv":
+            config = _active_config()
+            if data.get("expected_project_root", "") != str(config.root):
+                raise ValueError("Archive MKV project context changed; reopen and retry")
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Output directory is not configured")
+            source, ass = output / "continuous.flac", output / "HSR_Voice_Archive.ass"
+            if not source.is_file() or not ass.is_file():
+                raise FileNotFoundError("完整 MKV 需要 continuous.flac 和 HSR_Voice_Archive.ass；请先构建并生成 ASS")
+            background = decode_background_image(data.get("background_image_base64"))
+            color = data.get("background_color") or "#101820"
+            fonts = [font_asset_directory(output) / str(item["filename"])
+                     for item in list_project_fonts(output)]
+            target = output / "HSR_Voice_Archive_Package.mkv"
+
+            def run(report_progress):
+                return ArchiveMkvExporter().export_archive(
+                    source, target, subtitles_ass=ass,
+                    background_color=color, background_image=background,
+                    font_files=fonts,
+                    progress=lambda current, total, message: report_progress(
+                        "encode", message, current, total
+                    ),
+                )
+
+            job = create_job("archive-mkv-export", run, with_progress=True,
+                             project_root=config.root, project_name=config.name)
             self._json({"ok": True, "job": job.id})
             return
 
