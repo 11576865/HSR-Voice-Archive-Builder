@@ -828,6 +828,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             words = None
         fmt = str(data.get("preview_format") or "mp4").lower()
         source_bytes = decode_preview_source_video(data.get("source_video_base64"))
+        background_image = decode_bundle_background(data.get("preview_background_image_base64"))
         background_color = normalize_preview_background_color(data.get("preview_background_color"))
         video = await run_in_threadpool(
             render_ass_preview_video,
@@ -843,12 +844,13 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
             include_source_audio=data.get("include_source_audio", True) is True,
             background_color=background_color,
+            background_image_bytes=background_image,
             font_dir=_active_preview_font_dir(),
         )
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
-                     "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("black" if background_color == "#000000" else "solid-color")},
+                     "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
         )
     except Exception as exc:
         return JSONResponse(
