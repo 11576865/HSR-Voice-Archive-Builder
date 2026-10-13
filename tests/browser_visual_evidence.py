@@ -269,9 +269,9 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#layoutCorpusRail").is_hidden(), "Second full subtitle explorer still dominates UI")
     ensure(page.locator("#layoutTrialTextDetails").get_attribute("open") is None,
            "Manual text authoring should not be a second visible editor")
-    ensure(page.locator("#studioEffectsTab").bounding_box()["y"] <
+    ensure(page.locator('[data-hsr-focus-task="effects"]').bounding_box()["y"] <
            page.locator(".preview-workbench").bounding_box()["y"],
-           "Layout / Effects tabs are not top-level tasks")
+           "Focused Layout / Effects task navigation is not above the editing surface")
     ensure(page.locator("#layoutCueFinalText").count() == 0,
            "Duplicated final text textarea is still mounted")
     shell = page.locator("#subtitleLayoutPreviewCard .preview-workbench").bounding_box()
