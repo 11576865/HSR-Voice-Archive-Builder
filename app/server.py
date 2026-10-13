@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import base64
 import json
 import shutil
 import tempfile
@@ -18,7 +19,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .archive_bundle_lifecycle import load_previous_bundle_image
-from .archive_bundle_backgrounds import RESOLUTIONS, normalize_bundle_background
+from .archive_bundle_backgrounds import RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -1720,6 +1721,36 @@ def api_output_ass():
             project_root=config.root, project_name=config.name,
         )
         return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/output/archive-bundle/background-preview")
+async def api_preview_archive_bundle_background(request: Request):
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Output directory is not configured")
+        if int(request.headers.get("content-length") or 0) > 8 * 1024 * 1024:
+            raise ValueError("Background preview request exceeds 8 MiB")
+        data = await request.json()
+        if not isinstance(data, dict):
+            raise ValueError("Background preview must be an object")
+        if str(data.get("expected_project_root") or "") != str(config.root):
+            raise ValueError("MKV preview project context changed")
+        spec = normalize_bundle_background(data.get("background_spec"))
+        image = decode_bundle_background(data.get("background_image_base64"))
+        if image is None and data.get("reuse_saved_background") is True:
+            image = load_previous_bundle_image(output)
+        if (spec["mode"] == "image") != (image is not None):
+            raise ValueError("图片模式需要图片，渐变和纯色不能附带图片")
+        png = await run_in_threadpool(
+            render_background_preview, spec,
+            color=str(data.get("background_color") or "#000000"), image=image,
+        )
+        return {"ok": True, "image_base64": base64.b64encode(png).decode("ascii"),
+                "source": "ffmpeg", "width": 640, "height": 360}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
