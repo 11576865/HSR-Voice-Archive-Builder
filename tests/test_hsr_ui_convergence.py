@@ -86,7 +86,8 @@ class HsrUiConvergence(unittest.TestCase):
         doc = self.html
         self.assertIn("if(next==='effects'){", doc)
         self.assertIn("document.activeElement===drawerToggle", doc)
-        self.assertIn("if(hadQaFocus)document.getElementById('studioEffectsTab')?.focus();", doc)
+        self.assertIn("const target=document.body.dataset.hsrStudioFocus==='true'", doc)
+        self.assertIn("document.querySelector('[data-hsr-focus-task=\"effects\"]')", doc)
         self.assertIn("setHsrAuditDrawer(false);", doc)
         self.assertIn("if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);", doc)
         self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.css)
@@ -95,6 +96,23 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertNotIn(".workspace-nav button:nth-child", doc)
         self.assertNotIn(".workspace-nav button:nth-child", self.css)
         self.assertNotIn(".hsr-studio-tabs button", doc)
+
+    def test_focused_task_viewport_and_gesture_ownership(self):
+        doc, css = self.html, self.css
+        self.assertEqual(doc.count('id="hsrStudioFocusToggle"'), 1)
+        self.assertEqual(doc.count('id="hsrTouchSliderToggle"'), 1)
+        self.assertIn("function setHsrStudioFocusMode(enabled)", doc)
+        self.assertIn("if(visibleWorkspace==='layout'){", doc)
+        self.assertIn("setHsrStudioFocusMode(true);", doc)
+        self.assertIn("if(visibleWorkspace!=='layout')setHsrStudioFocusMode(false)", doc)
+        self.assertIn("event.key==='Escape'&&document.body.dataset.hsrStudioFocus==='true'", doc)
+        self.assertIn('data-hsr-focus-task="layout"', doc)
+        self.assertIn('data-hsr-focus-task="effects"', doc)
+        self.assertIn("function setHsrTouchSliderLock(locked)", doc)
+        self.assertIn("for(const eventName of ['pointerup','pointercancel'])",doc)
+        self.assertIn('body[data-hsr-studio-focus="true"]', css)
+        self.assertIn('overflow:hidden!important;overscroll-behavior:none', css)
+        self.assertIn('position:fixed!important;inset:0!important', css)
 
     def test_production_script_parse(self):
         if not __import__("shutil").which("node"):
