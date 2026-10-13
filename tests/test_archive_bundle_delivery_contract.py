@@ -207,7 +207,7 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertTrue((self.root / OUTPUT).is_file())
 
     def test_project_api_bundle_product_has_same_source_state_as_receipt(self):
-        config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs")
+        config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs", output_dir=".")
         initial = project_summary(config)
         receipt = initial["bundle_export"]
         items = initial["output_groups"]
@@ -241,7 +241,7 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertTrue(later["outputs"]["continuous.flac"]["exists"])
 
     def test_project_records_do_not_expire_unchanged_srt_after_ass_edit(self):
-        config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs")
+        config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs", output_dir=".")
         (self.root / "HSR_Voice_Archive.ass").write_text("changed independently")
         summary = project_summary(config)
         independent = summary["output_groups"]["independent_products"]
