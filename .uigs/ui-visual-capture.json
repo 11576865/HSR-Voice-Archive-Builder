@@ -112,6 +112,40 @@
       ]
     },
     {
+      "id": "HSR.EFFECTS.WORKBENCH.DESKTOP_DARK",
+      "surface_ids": [
+        "HSR.WORKSPACE.EFFECTS"
+      ],
+      "adapter": "playwright-web",
+      "evidence_level": "production-rendered",
+      "route": "/",
+      "selector": "#subtitleLayoutPreviewCard",
+      "capture_region": "element",
+      "viewport": {
+        "width": 1365,
+        "height": 900,
+        "device_scale_factor": 1
+      },
+      "color_scheme": "dark",
+      "locale": "zh-CN",
+      "ready": {
+        "selector": "#subtitleLayoutPreviewCard",
+        "state": "visible",
+        "settle_ms": 900
+      },
+      "fixture": {
+        "workspace": "effects"
+      },
+      "source_dependencies": [
+        "app/static/index.html"
+      ],
+      "output_name": "HSR.LAYOUT.WORKBENCH.DESKTOP_DARK.png",
+      "limitations": [
+        "Production layout UI; not classified as runtime-backed libass evidence.",
+        "The capture harness reveals the real production panel when it is normally gated by active-project state; it does not fabricate project data."
+      ]
+    },
+    {
       "id": "HSR.LAYOUT.WORKBENCH.TABLET_DARK",
       "surface_ids": [
         "HSR.WORKSPACE.LAYOUT",
