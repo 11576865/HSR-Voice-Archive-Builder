@@ -209,20 +209,30 @@ class ArchiveBundleExporter:
             cmd += ["-t", f"{duration:.3f}", "-progress", "pipe:1", "-nostats", str(temporary)]
             if progress:
                 progress(0, total_ms, "正在封装连续 FLAC、可开关 ASS 字幕与字体附件")
-            proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
-            assert proc.stdout is not None
-            for line in proc.stdout:
-                key, sep, value = line.strip().partition("=")
-                if sep and key in {"out_time_us", "out_time_ms"}:
-                    try:
-                        position = min(total_ms, max(0, int(value) // 1000))
-                    except ValueError:
-                        continue
-                    if progress:
-                        progress(position, total_ms, "正在生成完整 MKV")
-            stderr = proc.stderr.read() if proc.stderr is not None else ""
-            if proc.wait() != 0:
-                raise RuntimeError("完整 MKV 封装失败：" + stderr.strip()[-1500:])
+            # Popen owns stdout/stderr pipes; its context manager closes both
+            # reliably on success, encode failure, or a raised progress callback.
+            with subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                  stderr=subprocess.PIPE, text=True) as proc:
+                try:
+                    assert proc.stdout is not None
+                    for line in proc.stdout:
+                        key, sep, value = line.strip().partition("=")
+                        if sep and key in {"out_time_us", "out_time_ms"}:
+                            try:
+                                position = min(total_ms, max(0, int(value) // 1000))
+                            except ValueError:
+                                continue
+                            if progress:
+                                progress(position, total_ms, "正在生成完整 MKV")
+                    stderr = proc.stderr.read() if proc.stderr is not None else ""
+                    if proc.wait() != 0:
+                        raise RuntimeError("完整 MKV 封装失败：" + stderr.strip()[-1500:])
+                except BaseException:
+                    # Never leave a background FFmpeg writer running after an
+                    # aborted job or callback failure.
+                    if proc.poll() is None:
+                        proc.terminate()
+                    raise
             self.validate(
                 temporary, expected_fonts=len(fonts), expected_duration=duration,
                 expected_font_names={font.name for font, _ in fonts},
