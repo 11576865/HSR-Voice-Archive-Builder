@@ -141,23 +141,23 @@ def render_ass_preview_png(
         return png_path.read_bytes()
 
 
-MAX_PREVIEW_SOURCE_BYTES = 4 * 1024 * 1024
+MAX_PREVIEW_SOURCE_BYTES = 24 * 1024 * 1024
 
 
 def decode_preview_source_video(value: object) -> bytes | None:
-    """Decode at most 4 MiB. Never accept arbitrary paths or URLs."""
+    """Decode a bounded 24 MiB opt-in local clip, never a path or URL."""
     if value is None or value == "":
         return None
     if not isinstance(value, str):
         raise ValueError("Source video must be a base64 string")
     if len(value) > 4 * ((MAX_PREVIEW_SOURCE_BYTES + 2) // 3):
-        raise ValueError("Source video exceeds 4 MiB")
+        raise ValueError("Source video exceeds 24 MiB")
     try:
         decoded = base64.b64decode(value, validate=True)
     except (binascii.Error, ValueError) as exc:
         raise ValueError("Invalid source video encoding") from exc
     if not decoded or len(decoded) > MAX_PREVIEW_SOURCE_BYTES:
-        raise ValueError("Source video must contain 1–4 MiB of bytes")
+        raise ValueError("Source video must contain 1–24 MiB of bytes")
     return decoded
 
 
@@ -204,11 +204,13 @@ def render_ass_preview_video(
     container_format: str = "mp4",
     source_video_bytes: bytes | None = None,
     source_start_seconds: float = 0.0,
+    include_source_audio: bool = True,
 ) -> bytes:
     """Render genuine ASS motion over black or an explicitly supplied local video.
 
-    Upload input is ephemeral, never saved to a project. Audio is intentionally
-    absent from this visual proof. Full production-media export is separate.
+    Source bytes are ephemeral and never written to project storage. When
+    requested, the source audio track is trimmed together with source picture.
+    The result is a preview clip, not a production media export.
     """
     duration = float(duration_seconds)
     if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
@@ -220,7 +222,7 @@ def render_ass_preview_video(
         not isinstance(source_video_bytes, bytes)
         or not 0 < len(source_video_bytes) <= MAX_PREVIEW_SOURCE_BYTES
     ):
-        raise ValueError("Source video must be 1–4 MiB of local bytes")
+        raise ValueError("Source video must be 1–24 MiB of local bytes")
     fmt = str(container_format).lower()
     if fmt not in {"mp4", "webm"}:
         raise ValueError("Unsupported preview container: use mp4 or webm")
@@ -263,14 +265,27 @@ def render_ass_preview_video(
             ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
             *source_args, "-vf",
             video_filters + f"subtitles='{escaped_ass}':original_size=1920x1080,format=yuv420p",
-            "-an",
         ]
+        if source_video_bytes is not None:
+            # Explicit stream map prevents attached pictures/subtitles or a
+            # second source audio from leaking into the preview.
+            command += ["-map", "0:v:0"]
+            if include_source_audio:
+                command += ["-map", "0:a:0?"]
+            else:
+                command += ["-an"]
+        else:
+            command += ["-an"]
         if fmt == "webm":
             command += ["-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
                         "-b:v", "1200k"]
+            if source_video_bytes is not None and include_source_audio:
+                command += ["-c:a", "libopus", "-b:a", "96k"]
         else:
             command += ["-c:v", "libx264", "-preset", "ultrafast",
                         "-crf", "22", "-movflags", "+faststart"]
+            if source_video_bytes is not None and include_source_audio:
+                command += ["-c:a", "aac", "-b:a", "128k"]
         command += ["-t", f"{duration:.3f}", str(result_path)]
         try:
             completed = subprocess.run(
