@@ -19,7 +19,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .archive_bundle_lifecycle import load_previous_bundle_image
-from .archive_bundle_backgrounds import RESOLUTIONS, normalize_bundle_background, render_background_preview
+from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
@@ -206,8 +206,12 @@ class Handler(BaseHTTPRequestHandler):
     def _read_body(self) -> bytes:
         length = _int(self.headers.get("Content-Length", "0"), 0)
         endpoint = urlsplit(self.path).path
-        max_body = (36 if endpoint == "/api/subtitle-layout/render-preview-video" else
-                    18 if endpoint == "/api/subtitle-layout/import-font" else 8) * 1024 * 1024
+        max_body = (36 * 1024 * 1024 if endpoint == "/api/subtitle-layout/render-preview-video" else
+                    18 * 1024 * 1024 if endpoint == "/api/subtitle-layout/import-font" else
+                    MAX_BUNDLE_JSON_BYTES if endpoint in (
+                        "/api/output/archive-bundle",
+                        "/api/output/archive-bundle/background-preview",
+                    ) else 8 * 1024 * 1024)
         if length < 0 or length > max_body:
             raise ValueError("Request body too large")
         return self.rfile.read(length)
