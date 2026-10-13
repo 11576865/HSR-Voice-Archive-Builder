@@ -151,7 +151,7 @@ def _active_project_font_dir() -> Path | None:
         config = _active_config()
         output = resolve_project_path(config, config.output_dir)
         return font_asset_directory(output) if output is not None else None
-    except (ValueError, FileNotFoundError):
+    except (ValueError, FileNotFoundError, RuntimeError):
         return None
 
 
@@ -339,7 +339,7 @@ class Handler(BaseHTTPRequestHandler):
                 output = resolve_project_path(config, config.output_dir)
                 if output is not None:
                     font_path = project_font_for_family(output, family)
-            except (ValueError, FileNotFoundError):
+            except (ValueError, FileNotFoundError, RuntimeError):
                 pass
             if font_path is None:
                 font_path, media_type = resolve_browser_font_file(family)
