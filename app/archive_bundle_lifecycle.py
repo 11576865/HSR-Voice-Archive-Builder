@@ -14,13 +14,12 @@ from typing import Any
 from .builder import atomic_write_text
 from .project_fonts import font_asset_directory
 from .subtitle_export_status import read_subtitle_export_health
-from .archive_bundle_backgrounds import normalize_bundle_background
+from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, normalize_bundle_background
 
 RECEIPT = "archive_bundle_receipt.json"
 OUTPUT = "HSR_Voice_Archive_Bundle.mkv"
 IMAGE_PREFIX = ".hsr-bundle-bg-"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".webp"}
-MAX_IMAGE_BYTES = 4 * 1024 * 1024
 
 
 def _signature(path: Path) -> dict[str, int] | None:
