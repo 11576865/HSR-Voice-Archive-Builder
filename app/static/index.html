@@ -2938,6 +2938,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 .hsr-footage-picker>input,.hsr-footage-picker>button,.hsr-footage-picker>p{min-width:0;max-width:100%}
 .hsr-footage-picker>p{grid-column:1/-1;margin:0}
 @media(max-width:759px){.hsr-footage-picker{grid-template-columns:1fr}}
+
+/* HSR MKV background: task-scoped, responsive controls. */
+#archiveBundlePanel .hsr-bundle-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+#archiveBundlePanel .hsr-bundle-options label{min-width:0}
+#archiveBundlePanel .hsr-bundle-options input[type=color]{width:66px;min-height:36px}
+#archiveBundlePanel .hsr-bundle-options select{max-width:100%}
 </style>
 <link rel="stylesheet" href="/static/hsr-ui-convergence.css">
 </head>
@@ -3287,10 +3293,44 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <p class="small muted">使用最新连续 FLAC、已验证 ASS 和项目字体重新生成完整 MKV；旧文件保留到新文件生成并验收通过，再安全替换。字幕不会烧录进画面。</p>
           <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 是否需要重新生成。</p>
           <div class="hsr-bundle-options">
-            <label for="bundleBackgroundColor">视频底色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label for="bundleBackgroundMode">背景类型
+              <select id="bundleBackgroundMode">
+                <option value="color">纯色</option>
+                <option value="linear">线性渐变</option>
+                <option value="radial">径向渐变</option>
+                <option value="soft">柔和渐变</option>
+                <option value="image">项目图片</option>
+              </select>
+            </label>
+            <label for="bundleBackgroundColor">底色／图片补边色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientFirst">起始颜色 <input id="bundleGradientFirst" type="color" value="#243350" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientSecond">结束颜色 <input id="bundleGradientSecond" type="color" value="#0d1729" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientThird">柔和过渡色 <input id="bundleGradientThird" type="color" value="#3e4269" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientDirection">渐变方向
+              <select id="bundleGradientDirection">
+                <option value="diagonal">对角线</option><option value="horizontal">水平</option><option value="vertical">垂直</option>
+              </select>
+            </label>
+            <label for="bundleVideoResolution">背景视频分辨率
+              <select id="bundleVideoResolution">
+                <option value="720p">1280 × 720 · 标准</option>
+                <option value="1080p">1920 × 1080 · 高清</option>
+              </select>
+            </label>
+            <label for="bundleVideoQuality">编码画质
+              <select id="bundleVideoQuality">
+                <option value="standard">标准（CRF 28）</option>
+                <option value="high">高画质（CRF 19）</option>
+              </select>
+            </label>
             <label for="bundleBackgroundImage">更换背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
             <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装时保存的背景图片（上传新图则优先使用新图；取消勾选则使用纯色）</label>
             <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
+          </div>
+          <div class="box" style="max-width:640px">
+            <div class="actions"><button type="button" id="bundlePreviewBtn" class="secondary">真实 FFmpeg 背景预览</button></div>
+            <img id="bundleBackgroundPreview" alt="FFmpeg 生成的背景画面预览" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#090e19;border-radius:8px;display:none" />
+            <p class="small muted" id="bundlePreviewStatus" role="status" aria-live="polite">预览由 FFmpeg 生成 640 × 360 背景帧；最终 H.264 画质请以 MKV 成品为准。</p>
           </div>
           <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
             <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
