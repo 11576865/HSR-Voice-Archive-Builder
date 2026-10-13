@@ -268,6 +268,18 @@ def desktop_check(browser, base_url, output, report):
            "Layout / Effects tabs are not top-level tasks")
     ensure(page.locator("#layoutCueFinalText").count() == 0,
            "Duplicated final text textarea is still mounted")
+    shell = page.locator("#subtitleLayoutPreviewCard .preview-workbench").bounding_box()
+    ensure(shell is not None and shell["height"] < 850,
+           f"Desktop workbench must be viewport-bounded, not an endless document: {shell}")
+    scroll_regions=page.evaluate("""() => {
+      const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
+      const preview=root.querySelector('.layout-preview-region');
+      const inspector=root.querySelector('.preview-inspector');
+      return [preview,inspector].map(x=>({scroll:getComputedStyle(x).overflowY,
+        height:x.clientHeight,outer:root.clientHeight}));
+    }""")
+    ensure(all(x["scroll"] == "auto" and x["height"] <= x["outer"]+3 for x in scroll_regions),
+           f"Desktop canvas and Inspector must be independent scroll panes: {scroll_regions}")
     screenshot(page, output, "desktop_clean_effects_workspace")
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
@@ -586,6 +598,40 @@ def shared_corpus_request_check(browser, base_url, report):
     page.close()
 
 
+
+def touch_safety_check(browser, base_url, report):
+    page=browser.new_page(viewport={"width":390,"height":844},
+                          device_scale_factor=1,is_mobile=True,has_touch=True)
+    rows=[dict(x) for x in SUBTITLES]
+    page.route("**/api/**",make_router(rows,[]))
+    page.goto(base_url,wait_until="domcontentloaded")
+    load_studio(page)
+    # Explicitly access Layout's typography Inspector.
+    page.locator("#studioStyleTab").click()
+    page.locator("#prevChsSize").scroll_into_view_if_needed()
+    locked=page.evaluate("""() => ({
+      pointer:getComputedStyle(document.getElementById('prevChsSize')).pointerEvents,
+      button:document.getElementById('hsrTouchSliderToggle').getAttribute('aria-pressed'),
+      inspectorHeight:document.querySelector('.preview-inspector').getBoundingClientRect().height
+    })""")
+    ensure(locked["pointer"]=="none" and locked["button"]=="false",
+           f"Touch slide-to-scroll must not modify range values: {locked}")
+    ensure(locked["inspectorHeight"]<=720,
+           f"Touch Inspector still grows into endless document: {locked}")
+    page.locator("#hsrTouchSliderToggle").click()
+    unlocked=page.evaluate("""() => ({
+      pointer:getComputedStyle(document.getElementById('prevChsSize')).pointerEvents,
+      button:document.getElementById('hsrTouchSliderToggle').getAttribute('aria-pressed')
+    })""")
+    ensure(unlocked["pointer"]=="auto" and unlocked["button"]=="true",
+           f"Explicit touch-slider adjustment must be possible: {unlocked}")
+    page.locator("#hsrTouchSliderToggle").click()
+    ensure(page.locator("#hsrTouchSliderToggle").get_attribute("aria-pressed")=="false",
+           "Touch slider did not return to scroll-safe state")
+    report["touch_sliders"]={"locked":locked,"unlocked":unlocked}
+    page.close()
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--output", type=Path, default=Path("artifacts/subtitle-browser"))
@@ -605,6 +651,7 @@ def main():
             browser = playwright.chromium.launch(headless=True, args=["--no-sandbox"])
             try:
                 desktop_check(browser, url, args.output, report)
+                touch_safety_check(browser, url, report)
                 shared_corpus_request_check(browser, url, report)
                 mobile_check(browser, url, args.output, report, 390, 844, "mobile_390")
                 mobile_check(browser, url, args.output, report, 768, 1024, "tablet_768")

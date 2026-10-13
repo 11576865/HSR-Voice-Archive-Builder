@@ -72,3 +72,83 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
  #layoutAuditDrawerToggle{width:100%}
  #subtitleLayoutPreviewCard .hsr-export-advanced{align-self:stretch}
 }
+
+#subtitleLayoutPreviewCard #hsrTouchSliderToggle,
+#subtitleLayoutPreviewCard #hsrTouchSliderHint{display:none}
+/* Operational viewport: keep long Inspector/Cue panels from expanding the
+   browser document indefinitely. Internal regions scroll independently. */
+@media (min-width:1100px) and (min-height:600px) and (pointer:fine) {
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open){
+    height:clamp(440px,calc(100dvh - 225px),1100px)!important;
+    max-height:calc(100dvh - 120px)!important;
+    min-height:0!important;
+    overflow:hidden!important;
+    align-items:stretch!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.layout-preview-region,
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.preview-inspector{
+    height:100%!important;
+    max-height:100%!important;
+    min-height:0!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    overscroll-behavior-y:contain;
+    scrollbar-gutter:stable;
+    position:relative!important;
+    top:auto!important;
+  }
+}
+/* On touch devices a compact Inspector remains reachable without turning the
+   whole page into a column of dozens of permanent sliders. */
+@media (pointer:coarse){
+  #subtitleLayoutPreviewCard .preview-inspector{
+    max-height:min(70dvh,720px)!important;
+    overflow-y:auto!important;
+    overscroll-behavior-y:contain;
+    scrollbar-gutter:stable;
+  }
+  #subtitleLayoutPreviewCard .preview-inspector:not(.hsr-touch-sliders-unlocked) input[type="range"]{
+    pointer-events:none!important;
+    touch-action:pan-y;
+  }
+  #subtitleLayoutPreviewCard .preview-inspector.hsr-touch-sliders-unlocked input[type="range"]{
+    pointer-events:auto!important;
+    touch-action:none;
+  }
+  #subtitleLayoutPreviewCard #hsrTouchSliderToggle{
+    display:inline-flex!important;
+    min-height:40px;
+    padding:7px 10px;
+    align-items:center;
+    justify-content:center;
+    border:1px solid var(--layout-border);
+    background:var(--layout-section);
+    color:var(--layout-text);
+  }
+  #subtitleLayoutPreviewCard #hsrTouchSliderHint{
+    display:block;
+    padding:7px 12px;
+    margin:0;
+    color:var(--layout-muted);
+    font-size:11px;
+  }
+}
+#subtitleLayoutPreviewCard .hsr-alignment-help{
+  max-width:100%;
+  margin:12px 0 0;
+  border:1px solid var(--layout-border);
+  padding:8px 10px;
+  border-radius:7px;
+  overflow-wrap:anywhere;
+  font-size:12px;
+}
+#subtitleLayoutPreviewCard .hsr-alignment-help summary{cursor:pointer}
+#subtitleLayoutPreviewCard .hsr-alignment-help p{line-height:1.65}
+#subtitleLayoutPreviewCard .hsr-alignment-help pre{
+  white-space:pre-wrap;
+  overflow-wrap:anywhere;
+  overflow-x:auto;
+  max-width:100%;
+  max-height:180px;
+  font-size:11px;
+}

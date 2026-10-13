@@ -3481,7 +3481,9 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
 
         <aside class="preview-inspector" aria-label="字幕样式参数与操作">
-          <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span></div>
+          <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span>
+            <button id="hsrTouchSliderToggle" type="button" aria-pressed="false" aria-controls="previewControls" title="触屏滚动时锁定滑块，防止误改参数">解锁滑块调节</button></div>
+            <p id="hsrTouchSliderHint" class="small muted" role="status">触屏模式下滑块默认锁定：上下滑动只滚动参数；需要调节时点「解锁滑块调节」。</p>
   <details id="layoutTrialTextDetails" class="hsr-preview-trial">
     <summary>手动试调字幕文本（不会修改项目字幕）</summary>
     <div class="row preview-copy-fields">
@@ -3525,9 +3527,9 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地素材，使用黑底</button>
   <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。只读取当前选定的视频片段，来源音轨与画面一同截取；不接入归档 WAV，不保存输入到项目。较长影片请先剪出小样。</p>
 </div>
-<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">未选择素材：FFmpeg/libass 生成黑底 WebM/MP4。选择素材后将真实叠加字幕而不是仅将图片放在视频控件上。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
 
-        <div class="preview-controls">
+        <div class="preview-controls" id="previewControls">
           <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>文字与字体</span><small>Font & type</small></summary>
             <div class="layout-inspector-section-body">
@@ -3685,7 +3687,14 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
             <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-            <div class="small muted inspector-help">仅在条目存在完整、单调且可信的词级时间戳时启用。<code>\kf</code> 比 <code>\k</code> 更平滑；动态裁剪仅用于单行字幕，多行会自动降级为普通整句。本地生成使用可选 WhisperX forced alignment；未安装时不会自动下载或伪造时间。导入/生成结果写入 <code>word_alignments.json</code>，不会改写 manifest 的文本来源。</div>
+            <div class="small muted inspector-help">Karaoke 并不需要你从网上寻找某个固定文件：它需要当前项目每条字幕中每个词的开始／结束时间。优先点击「刷新状态」，再使用「本地生成缺失时间」（处理主机需安装 WhisperX）；也可以从其他对齐工具导入 JSON。完成后选择有词级时间的真实字幕，再点击「播放动态特效」。没有时间数据时不会伪造逐词高亮。</div>
+            <details id="hsrAlignmentHelp" class="hsr-alignment-help">
+              <summary>词级时间 JSON 从哪里来？查看格式与示例</summary>
+              <p>可以使用 WhisperX 为本项目的原音频和已知台词做强制对齐；或自己通过其他工具得到时间戳。导入的是数据，不是字幕字体，也不是视频文件。</p>
+              <p>导入 JSON 顶层使用 <code>alignments</code> 数组，条目通过项目内的 <code>id</code> 或 <code>source_member_id</code> 匹配。时间单位为秒，须与对应原音频的时长一致。</p>
+              <pre id="hsrWordAlignmentExample">{"alignments":[{"id":11,"words":[{"word":"May","start":0.0,"end":0.35},{"word":"this","start":0.35,"end":0.65},{"word":"journey","start":0.65,"end":1.2}]}]}</pre>
+              <p>示例的 <code>id:11</code> 和单词只是格式示意，不能直接导入任意项目；必须替换成真实字幕条目、完整原文词序和时间戳。</p>
+            </details>
           </section>
             </div>
           </details>
@@ -8107,9 +8116,19 @@ function setHsrStudioMode(mode){
   if(inspectorEyebrow)inspectorEyebrow.textContent=next==='effects'?'EFFECTS':'LAYOUT';
   document.getElementById('studioStyleTab')?.setAttribute('aria-pressed',next==='style'?'true':'false');
   document.getElementById('studioEffectsTab')?.setAttribute('aria-pressed',next==='effects'?'true':'false');
-  root.querySelectorAll('.layout-inspector-section[data-studio-scope]').forEach(section=>{
-    if(section.dataset.studioScope===next)section.open=true;
-  });
+  // Avoid reopening every long parameter accordion on each task change.
+  // Keep explicit user choices while changing subtask; first entry stays discoverable.
+  const previous=root.dataset.lastInspectorMode;
+  if(previous!==next){
+    let first=true;
+    root.querySelectorAll('.layout-inspector-section[data-studio-scope]').forEach(section=>{
+      if(section.dataset.studioScope===next){
+        section.open=first;
+        first=false;
+      }else section.open=false;
+    });
+    root.dataset.lastInspectorMode=next;
+  }
   invalidateLibassPreview();
 }
 // Layout and Effects are first-class workspace destinations; the primary nav
@@ -8127,6 +8146,18 @@ function setHsrAuditDrawer(open){
   toggle.setAttribute('aria-expanded',open?'true':'false');
   toggle.textContent=open?'收起批量检查':'批量排版检查';
 }
+document.getElementById('hsrTouchSliderToggle')?.addEventListener('click',()=>{
+  const inspector=document.querySelector('#subtitleLayoutPreviewCard .preview-inspector');
+  const toggle=document.getElementById('hsrTouchSliderToggle');
+  const help=document.getElementById('hsrTouchSliderHint');
+  if(!inspector||!toggle)return;
+  const unlocked=inspector.classList.toggle('hsr-touch-sliders-unlocked');
+  toggle.setAttribute('aria-pressed',unlocked?'true':'false');
+  toggle.textContent=unlocked?'锁定滑块（防误触）':'解锁滑块调节';
+  if(help)help.textContent=unlocked
+    ?'滑块现在可触控调节。完成后锁定，以免上下滚动时修改参数。'
+    :'滑块已锁定：可上下滚动，不会意外修改滑块值；键盘仍可使用。';
+});
 document.getElementById('layoutAuditDrawerToggle')?.addEventListener('click',()=>{
   const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
   setHsrAuditDrawer(!root?.classList.contains('audit-open'));
@@ -8202,13 +8233,21 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent())return;
     video.classList.remove('hidden');
     setPreviewEvidence(footage?'video-footage':'video');
+    // The render trigger lives in the Inspector, but playback lives on stage.
+    // Reveal the successful result so the action is not perceived as inert.
+    if(typeof video.scrollIntoView==='function'){
+      video.scrollIntoView({block:'center',behavior:'smooth'});
+    }
     if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':'黑底 ASS')+' · '+(footageAudio&&footage?'可用源音轨随画面同步截取':'无音频')+' · 可播放和拖动检查。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
     clearVideoPreview();
     setPreviewEvidence('failed','动态视频生成或解码失败；不以几何截图代替视频结果。');
-    if(status)status.textContent='动态视频预览失败：'+String(error.message||error);
+    if(status){
+      status.textContent='动态视频预览失败：'+String(error.message||error)+'。请检查处理主机 FFmpeg、源素材编码与已安装字体；如启用 Karaoke，还需有效词级时间。';
+      status.className='small status-bad';
+    }
   }finally{
     if(stillCurrent()){
       videoPreviewController=null;
