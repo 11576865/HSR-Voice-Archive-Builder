@@ -16,7 +16,7 @@ from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
-from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background
+from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
@@ -1469,10 +1469,12 @@ class Handler(BaseHTTPRequestHandler):
             target = output / "HSR_Voice_Archive_Bundle.mkv"
             if not source.is_file() or not subtitle.is_file():
                 raise FileNotFoundError("请先构建连续 FLAC，并生成 ASS 字幕")
+            require_current_bundle_subtitles(output)
             def run(report_progress):
                 return ArchiveBundleExporter().export(
                     source, subtitle, target, fonts_dir=font_asset_directory(output),
                     include_fonts=include_fonts, background_color=color, background_image=image,
+                require_current_ass=True,
                     progress=lambda current, total, msg: report_progress("encode", msg, current, total),
                 )
             job = create_job(
