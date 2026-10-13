@@ -1964,7 +1964,9 @@ if __name__ == "__main__":
                    help="Order the main archive (FLAC + subtitles) by story chapter")
     p.add_argument("--chapter-flac", action="store_true",
                    help="Also generate one verified continuous FLAC per major story group")
-    p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
+    p.add_argument("--generate-ass", action="store_true", help="Legacy flag: generate ASS when running direct pipeline")
+    p.add_argument("--delivery-mode", choices=("complete", "flac_only"), default="complete",
+                   help="Complete FLAC + SRT + ASS + MKV by default; optional FLAC only")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
     p.add_argument("--translation-model", default=translation_default_model())
@@ -1989,6 +1991,7 @@ if __name__ == "__main__":
         chapter_order=a.chapter_order,
         generate_chapter_flac=a.chapter_flac,
         generate_ass=a.generate_ass,
+        delivery_mode=a.delivery_mode,
         translate_missing=a.translate_missing,
         review_official_target=a.review_official_target,
         translation_model=a.translation_model,
