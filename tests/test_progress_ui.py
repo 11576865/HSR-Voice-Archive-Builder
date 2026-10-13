@@ -150,7 +150,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertNotIn('id="blackVideoBtn"', html)
         self.assertIn("旧工程遗留黑屏 MKV（历史文件，不是当前默认交付）", html)
         self.assertIn("exportIndividualTrack('flac')", html)
-        self.assertIn("legacyDetails.append(legacySummary,legacyCard)", html)
+        self.assertIn("details.append(summary,artifactCard({", html)
         self.assertIn("showWorkspace('export');", html)
         self.assertIn("'/api/output/black-video'", html)
         self.assertNotIn('id="openOutputBtn"', html)
