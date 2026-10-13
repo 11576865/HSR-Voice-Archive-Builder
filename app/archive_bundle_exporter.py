@@ -19,6 +19,9 @@ from typing import Callable
 from .project_fonts import font_asset_directory, list_project_fonts
 from .subtitle_export_status import read_subtitle_export_health
 from .archive_bundle_lifecycle import RECEIPT, record_bundle_publication
+from .archive_bundle_backgrounds import (
+    QUALITIES, gradient_source, normalize_bundle_background,
+)
 
 ProgressCallback = Callable[[int, int, str], None]
 MAX_BACKGROUND_BYTES = 4 * 1024 * 1024
@@ -93,6 +96,7 @@ class ArchiveBundleExporter:
         *, fonts_dir: Path | None = None, include_fonts: bool = True,
         background_color: str = "#000000",
         background_image: bytes | None = None,
+        background_spec: dict[str, str] | None = None,
         progress: ProgressCallback | None = None,
         require_current_ass: bool = False,
     ) -> dict[str, object]:
@@ -105,12 +109,17 @@ class ArchiveBundleExporter:
             raise ValueError("连续 FLAC 或 ASS 为空，拒绝生成不完整 MKV")
         if not COLOR.fullmatch(str(background_color)):
             raise ValueError("Background color must be #RRGGBB")
+        spec = normalize_bundle_background(background_spec or {
+            "mode": "image" if background_image is not None else "color",
+        })
         if background_image is not None:
             if not isinstance(background_image, bytes) or not 0 < len(background_image) <= MAX_BACKGROUND_BYTES:
                 raise ValueError("Background image exceeds the 4 MiB maximum")
             suffix = image_extension(background_image)
         else:
             suffix = None
+        if (spec["mode"] == "image") != (background_image is not None):
+            raise ValueError("Image background requires an uploaded or saved image; other modes cannot use one")
         audio_probe = self._probe(audio)
         duration = float(audio_probe.get("format", {}).get("duration") or 0)
         if not math.isfinite(duration) or duration <= 0:
@@ -136,7 +145,12 @@ class ArchiveBundleExporter:
             temporary = root / "bundle.mkv"
             color = "0x" + background_color[1:]
             cmd = [self.ffmpeg, "-y", "-hide_banner", "-loglevel", "error"]
-            if background_image is None:
+            if spec["mode"] in {"linear", "radial", "soft"}:
+                gradient, video_filter = gradient_source(
+                    spec, width=self.width, height=self.height, fps=self.fps,
+                )
+                cmd += ["-f", "lavfi", "-i", gradient]
+            elif spec["mode"] == "color":
                 cmd += ["-f", "lavfi", "-i",
                         f"color=c={color}:s={self.width}x{self.height}:r={self.fps}"]
                 video_filter = None
@@ -161,7 +175,8 @@ class ArchiveBundleExporter:
             cmd += [
                 "-i", str(audio), "-i", str(subtitles),
                 "-map", "0:v:0", "-map", "1:a:0", "-map", "2:s:0",
-                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                "-c:v", "libx264", "-preset", "ultrafast",
+                "-crf", str(QUALITIES[spec["quality"]]),
                 "-tune", "stillimage", "-pix_fmt", "yuv420p",
                 "-c:a", "copy", "-c:s", "ass",
                 "-metadata:s:a:0", "title=HSR continuous voice",
@@ -217,6 +232,7 @@ class ArchiveBundleExporter:
                         target.parent, background_color=background_color,
                         background_image=background_image, image_extension=suffix,
                         include_fonts=include_fonts, artifact=temporary,
+                        background_spec=spec,
                     )
                     require_current_bundle_subtitles(target.parent)
                     temporary.replace(target)
@@ -235,7 +251,9 @@ class ArchiveBundleExporter:
             "duration_seconds": duration,
             "audio_codec": "flac", "subtitles_embedded": True,
             "subtitles_burned_in": False, "font_attachments": len(fonts),
-            "background": "image" if background_image is not None else background_color,
+            "background": spec["mode"] if spec["mode"] != "color" else background_color,
+            "background_spec": spec, "resolution": f"{self.width}x{self.height}",
+            "video_quality": spec["quality"],
         }
 
     def validate(
