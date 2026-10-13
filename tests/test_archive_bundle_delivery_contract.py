@@ -8,6 +8,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from app.archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, MAX_IMAGE_BYTES
 from app.archive_bundle_exporter import decode_bundle_background
@@ -134,6 +135,47 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertFalse(status["prerequisites"]["subtitles_current"])
         self.assertFalse(status["can_generate"])
         self.assertTrue((self.root / OUTPUT).exists())
+
+    def test_zero_byte_sources_block_generation_but_keep_published_mkv(self):
+        for filename, prereq in (
+            ("continuous.flac", "continuous_flac"),
+            ("HSR_Voice_Archive.ass", "ass"),
+            ("HSR_Voice_Archive.srt", "srt"),
+        ):
+            with self.subTest(filename=filename):
+                path = self.root / filename
+                original = path.read_bytes()
+                try:
+                    path.write_bytes(b"")
+                    result = bundle_export_status(self.root)
+                    self.assertFalse(result["can_generate"])
+                    self.assertFalse(result["prerequisites"][prereq])
+                    self.assertTrue(result["blockers"])
+                    self.assertEqual(result["state"], "stale")
+                    self.assertEqual((self.root / OUTPUT).read_bytes(), b"mkv")
+                finally:
+                    path.write_bytes(original)
+                    record_subtitle_export(self.root, state="current", ass_required=True)
+                    # Rebase the receipt against the restored fixtures for
+                    # independent test subcases.
+                    record_bundle_publication(
+                        self.root, background_color="#000000", background_image=None,
+                        image_extension=None, include_fonts=False,
+                    )
+
+    def test_large_saved_background_status_hashing_avoids_eager_image_read(self):
+        image = PNG_HEADER + b"z" * (5 * 1024 * 1024)
+        record_bundle_publication(
+            self.root, background_color="#000000", background_image=image,
+            image_extension=".png", include_fonts=False,
+            background_spec={"mode": "image"},
+        )
+        # Full content needs to be loaded only when the user explicitly
+        # requests reuse; project summary should hash in bounded chunks.
+        with patch.object(Path, "read_bytes", side_effect=AssertionError("eager read")):
+            status = bundle_export_status(self.root)
+        self.assertEqual(status["state"], "current")
+        self.assertEqual(status["image_saved"], True)
 
     def test_legacy_mkv_is_not_the_complete_bundle(self):
         project = (Path(__file__).resolve().parents[1] / "app/project.py").read_text(encoding="utf-8")
