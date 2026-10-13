@@ -41,7 +41,7 @@ class BackgroundModelTests(unittest.TestCase):
         for mode in ("linear", "radial", "soft"):
             spec = normalize_bundle_background({"mode": mode, "direction": "horizontal"})
             graph, blur = gradient_source(spec, width=320, height=180, fps=1)
-            self.assertIn("speed=0", graph)
+            self.assertIn("speed=0.00001", graph)
             self.assertIn("seed=1", graph)
             self.assertIn("r=1", graph)
             self.assertNotIn("#", graph)
