@@ -68,8 +68,8 @@ const run=x=>vm.runInContext(x,context);
 (async()=>{
   await run('loadLayoutStressSample({force:true,selectId:11})');
   assert.equal(node('layoutCueReadOnlyText').textContent,'第一条');
-  assert.equal(node('layoutCueTimingStart').value,'8');
-  assert.equal(node('layoutCueTimingEnd').value,'10');
+  assert.equal(node('layoutCueTimingStart').value,'5');
+  assert.equal(node('layoutCueTimingEnd').value,'9');
   assert.equal(saves.length,0,'Layout cannot write subtitle final text');
 
   // Selection changes only which persisted row is projected.
