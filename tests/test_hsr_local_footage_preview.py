@@ -200,7 +200,7 @@ class LocalFootageContractTests(unittest.TestCase):
         for options in [
             {"background_image_bytes": png, "source_video_bytes": b"clip"},
             {"background_image_bytes": b"not-an-image"},
-            {"background_image_bytes": png + b"x" * (4 * 1024 * 1024)},
+            {"background_image_bytes": png + b"x" * (16 * 1024 * 1024)},
         ]:
             with self.subTest(options=str(options.keys())), self.assertRaises(ValueError):
                 self.call(**options)
