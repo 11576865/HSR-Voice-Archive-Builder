@@ -50,7 +50,8 @@ class HsrThreePassUiTests(unittest.TestCase):
         self.assertIn("/api/subtitle-layout/render-preview-video", html)
         self.assertIn("video.addEventListener('loadeddata',ready)", html)
         self.assertIn("clearVideoPreview()", html)
-        self.assertIn("黑底无声", html)
+        self.assertIn("黑底 ASS", html)
+        self.assertIn("本地画面 + ASS", html)
 
     def test_explicit_bilingual_style_does_not_apply_second_safe_margins(self):
         from subtitle_layout.ass_writer import render_ass

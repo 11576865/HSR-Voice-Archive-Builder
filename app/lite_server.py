@@ -13,7 +13,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
+from .ass_preview import decode_preview_source_video, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .diff import classify
@@ -682,6 +682,7 @@ class Handler(BaseHTTPRequestHandler):
                 except (TypeError, ValueError):
                     words = None
             fmt = str(data.get("preview_format") or "mp4").lower()
+            source_bytes = decode_preview_source_video(data.get("source_video_base64"))
             video = render_ass_preview_video(
                 english_text=data.get("english_text", ""),
                 chinese_text=data.get("chinese_text", ""),
@@ -691,10 +692,13 @@ class Handler(BaseHTTPRequestHandler):
                 word_alignments=words,
                 duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
                 container_format=fmt,
+                source_video_bytes=source_bytes,
+                source_start_seconds=_float(data.get("source_start_seconds"), 0.0),
             )
             self._send_bytes(
                 200, video, "video/webm" if fmt == "webm" else "video/mp4",
-                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt + "-black"},
+                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
+                               "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else "black"},
             )
             return
 
