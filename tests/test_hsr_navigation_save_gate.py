@@ -119,6 +119,21 @@ const drain=async()=>{const callbacks=state.frames.splice(0);for(const callback 
         self.assertIn("if(legacyEditor?.readOnly===true||legacyEditor?.disabled===true)return;", html)
         self.assertIn('id="layoutCueFinalText" rows="3" disabled readonly', html)
 
+    def test_review_writer_carries_optimistic_lock_and_fixed_project_identity(self):
+        html = (ROOT / "app/static/index.html").read_text(encoding="utf-8")
+        begin = html.index("async function saveSubtitleItemInBackground(")
+        end = html.index("async function saveCurrentSubtitle(", begin)
+        writer = html[begin:end]
+        self.assertIn("const expectedText=String(targetSub._savedFinal??'')", writer)
+        self.assertIn("const expectedMember=String(targetSub.source_member_id||'')", writer)
+        self.assertIn("const projectName=currentProject.name||'active'", writer)
+        self.assertIn("const projectRoot=currentProject.root||null", writer)
+        self.assertIn("expected_project_root:projectRoot", writer)
+        self.assertIn("expected_final_chs:expectedText", writer)
+        self.assertIn("expected_source_member_id:expectedMember", writer)
+        self.assertIn("project context changed", writer)
+
+
 
 if __name__ == "__main__":
     unittest.main()
