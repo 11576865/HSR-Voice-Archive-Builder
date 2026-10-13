@@ -789,6 +789,10 @@ def gradient_background_check(browser, base_url, output, report):
           document.getElementById('finishedOutputs').classList.remove('hidden');
           document.getElementById('archiveBundlePanel').open=true;
         }""")
+        ensure(page.locator("#archiveCard").is_visible(),
+               "MKV archive Export section is CSS-hidden despite being selected")
+        ensure(page.locator("#bundleBackgroundMode").is_visible(),
+               "Background mode selector is not visible in Export workspace")
         ensure(page.locator("#bundleBackgroundMode").input_value() == "linear",
                "Saved gradient background mode not restored")
         ensure(page.locator("#bundleVideoResolution").input_value() == "1080p",
