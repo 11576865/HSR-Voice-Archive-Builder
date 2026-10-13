@@ -73,8 +73,8 @@ class DynamicBackgroundImageTests(unittest.TestCase):
                         "codec_type": "video", "width": width, "height": height,
                     }]}),
                 )
-                with patch("app.ass_preview.shutil.which", return_value="ffprobe"), \\
-                     patch("app.ass_preview.subprocess.run", return_value=probe):
+                with (patch("app.ass_preview.shutil.which", return_value="ffprobe"),
+                      patch("app.ass_preview.subprocess.run", return_value=probe)):
                     if accepted:
                         _validate_preview_background_image(Path("sample.jpg"))
                     else:
