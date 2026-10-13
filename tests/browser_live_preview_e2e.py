@@ -10,10 +10,14 @@ import json
 import shutil
 import socket
 import subprocess
+import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
+
+# Allow direct execution as "python tests/browser_live_preview_e2e.py".
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import uvicorn
 from playwright.sync_api import sync_playwright
