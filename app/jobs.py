@@ -13,6 +13,12 @@ from .project import STATE_DIR, atomic_write_json
 JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
 BUILD_KINDS = {"build", "quick-build"}
+# These jobs produce or invalidate files in one project's output directory.
+# Concurrent writers can overwrite a newer, validated MKV/ASS/FLAC artifact.
+PROJECT_OUTPUT_WRITERS = BUILD_KINDS | {
+    "ass-export", "black-video-export", "archive-bundle-export",
+    "remote-update-apply",
+}
 
 
 def now() -> str:
@@ -131,6 +137,16 @@ def create_job(
                 raise RuntimeError(
                     "已有构建任务正在运行，请等待它完成后再开始新的构建"
                 )
+        if kind in PROJECT_OUTPUT_WRITERS and job.project_root:
+            for existing in _JOBS.values():
+                if (existing.project_root == job.project_root
+                        and existing.kind in PROJECT_OUTPUT_WRITERS
+                        and existing.state in {"queued", "running"}):
+                    raise RuntimeError(
+                        "同一项目已有输出任务正在运行（"
+                        + existing.kind
+                        + "），请等待完成，避免 FLAC/ASS/MKV 成品被并发覆盖"
+                    )
         _JOBS[job.id] = job
         _persist_locked()
 
