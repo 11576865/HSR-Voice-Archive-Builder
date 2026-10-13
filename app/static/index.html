@@ -3356,7 +3356,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
     <section class="card" id="subtitleLayoutPreviewCard" data-studio-mode="style">
       <div class="topline">
         <div>
-          <div class="layout-workbench-kicker">SUBTITLE STYLE WORKBENCH</div><h2 id="hsrStudioTitle" style="margin-bottom:4px">字幕样式工作台</h2>
+          <div class="layout-workbench-kicker" id="hsrStudioEyebrow">SUBTITLE LAYOUT</div><h2 id="hsrStudioTitle" style="margin-bottom:4px">字幕排版工作台</h2>
           <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
@@ -8330,6 +8330,8 @@ function setHsrStudioMode(mode){
   root.dataset.studioMode=next;
   const heading=document.getElementById('hsrStudioTitle');
   if(heading)heading.textContent=next==='effects'?'字幕特效工作台':'字幕排版工作台';
+  const eyebrow=document.getElementById('hsrStudioEyebrow');
+  if(eyebrow)eyebrow.textContent=next==='effects'?'SUBTITLE EFFECTS':'SUBTITLE LAYOUT';
   const inspectorTitle=document.getElementById('hsrInspectorTitle');
   if(inspectorTitle)inspectorTitle.textContent=next==='effects'?'特效参数':'排版参数';
   const inspectorEyebrow=document.getElementById('hsrInspectorEyebrow');
