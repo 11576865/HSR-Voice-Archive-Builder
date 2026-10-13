@@ -26,12 +26,14 @@ class HsrThreePassUiTests(unittest.TestCase):
     def test_one_user_facing_text_editor_and_audio_owner(self):
         html = self.html
         self.assertIn('id="subFinalEditor"', html)
-        self.assertIn('id="layoutCueFinalText" rows="3" disabled readonly', html)
-        self.assertIn('class="layout-cue-actions" hidden', html)
-        self.assertIn('class="layout-cue-audio" hidden', html)
+        self.assertNotIn('id="layoutCueFinalText"', html)
+        self.assertNotIn('class="layout-cue-actions"', html)
+        self.assertNotIn('class="layout-cue-audio"', html)
+        self.assertEqual(html.count('<audio '), 1)
+        self.assertIn('id="subOriginalAudio"', html)
         self.assertIn('id="layoutOpenProofreadingBtn"', html)
         self.assertIn("showWorkspace('review')", html)
-        self.assertIn("editor.readOnly=true", html)
+        self.assertIn('id="layoutCueReadOnlyText"', html)
 
     def test_style_and_effects_have_disjoint_parameter_owners(self):
         html = self.html
