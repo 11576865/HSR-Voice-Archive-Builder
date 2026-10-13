@@ -4,7 +4,7 @@
   "repository": "11576865/HSR-Voice-Archive-Builder",
   "platform": "web",
   "authority": "this repository",
-  "surface_count": 11,
+  "surface_count": 12,
   "surfaces": [
     {
       "id": "HSR.WORKSPACE.PROJECT",
