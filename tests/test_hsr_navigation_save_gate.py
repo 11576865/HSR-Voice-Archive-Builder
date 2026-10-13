@@ -41,6 +41,7 @@ const context = {
   updatePanelTiers:x=>{state.panel=x},
   requestAnimationFrame:fn=>state.frames.push(fn),
   setHsrStudioMode:x=>{state.mode=x},
+  setHsrStudioFocusMode:()=>{}, // Focus-mode UI is tested in real Chromium separately.
   updateLayoutPreview:()=>{},
   loadLayoutStressSample:async options=>{state.loads.push(options)},
   setSubtitleSaveUi:(status,message)=>state.messages.push([status,message]),
