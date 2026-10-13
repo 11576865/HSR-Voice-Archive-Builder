@@ -5,6 +5,7 @@ on:
     paths:
       - "app/static/index.html"
       - "tests/browser_visual_evidence.py"
+      - "tests/browser_live_preview_e2e.py"
       - "tests/test_subtitle_integrated_export.py"
       - "app/subtitles.py"
       - "app/subtitle_timing.py"
@@ -32,10 +33,13 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
+          python -m pip install -r requirements-test.txt
           python -m pip install "playwright==1.55.0"
           python -m playwright install --with-deps chromium
       - name: Render responsive workbench and exercise real drag interactions
         run: python tests/browser_visual_evidence.py --output artifacts/subtitle-browser
+      - name: Real Chromium to FastAPI to libass to VP8/Opus preview (no mock video endpoint)
+        run: python tests/browser_live_preview_e2e.py --output artifacts/subtitle-browser
       - name: Upload real browser fixture screenshots and geometry report
         if: always()
         uses: actions/upload-artifact@v4

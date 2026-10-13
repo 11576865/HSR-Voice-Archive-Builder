@@ -120,18 +120,65 @@ class LocalFootageContractTests(unittest.TestCase):
         self.assertEqual(res.headers["x-hsr-preview-background"], "local-footage")
         self.assertEqual(renderer.call_args.kwargs["source_video_bytes"], b"fake-movie")
         self.assertEqual(renderer.call_args.kwargs["source_start_seconds"], 1.2)
+        self.assertIs(renderer.call_args.kwargs["include_source_audio"], True)
         with patch("app.server.render_ass_preview_video") as renderer:
             bad = client.post(url, json={**data, "source_video_base64": "not-base64"},
                               headers={"X-HSR-Token": api_token()})
         self.assertEqual(bad.status_code, 400)
         renderer.assert_not_called()
 
+    def test_bounded_input_accepts_medium_clip_and_rejects_over_limit(self):
+        medium = b"x" * (5 * 1024 * 1024)
+        self.assertEqual(decode_preview_source_video(base64.b64encode(medium).decode()), medium)
+        with self.assertRaises(ValueError):
+            decode_preview_source_video(base64.b64encode(
+                b"x" * (MAX_PREVIEW_SOURCE_BYTES + 1)
+            ).decode())
+
+    def test_audio_options_explicitly_follow_selected_source(self):
+        source_bytes = b"fake-source"
+        for fmt, audio, expected in [
+            ("mp4", True, "aac"),
+            ("webm", True, "libopus"),
+            ("mp4", False, None),
+        ]:
+            with self.subTest(fmt=fmt, audio=audio):
+                def fake_run(cmd, **kwargs):
+                    if "ffprobe" in cmd[0]:
+                        return subprocess.CompletedProcess(cmd, 0, json.dumps({
+                            "streams": [{"codec_type": "video", "width": 320, "height": 180}],
+                            "format": {"duration": 7.0},
+                        }), "")
+                    self.assertIn("-map", cmd)
+                    self.assertIn("0:v:0", cmd)
+                    if audio:
+                        self.assertIn("0:a:0?", cmd)
+                        self.assertIn(expected, cmd)
+                        self.assertNotIn("-an", cmd)
+                    else:
+                        self.assertIn("-an", cmd)
+                        self.assertNotIn("0:a:0?", cmd)
+                    Path(cmd[-1]).write_bytes(b"encoded")
+                    return subprocess.CompletedProcess(cmd, 0, "", "")
+                with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
+                     patch("app.ass_preview.write_ass"), \
+                     patch("app.ass_preview.subprocess.run", side_effect=fake_run):
+                    result = render_ass_preview_video(
+                        english_text="Hello", chinese_text="你好",
+                        source_language="en", target_language="zh-CN",
+                        config=SubtitleRenderConfig(), duration_seconds=2,
+                        source_video_bytes=source_bytes, container_format=fmt,
+                        include_source_audio=audio,
+                    )
+                self.assertEqual(result, b"encoded")
+
     def test_ui_selected_video_is_explicit_and_not_persisted(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
         for literal in ('id="effectFootageFile"', 'id="effectFootageStart"',
                         'id="effectFootageClearBtn"', "effectFootageAsBase64",
                         "payload.source_video_base64", "payload.source_start_seconds",
-                        "X-HSR-Preview-Background", "'video-footage'"):
+                        "X-HSR-Preview-Background", "'video-footage'",
+                        'id="effectFootageAudio"', "payload.include_source_audio"):
             self.assertIn(literal, html)
 
 
