@@ -24,8 +24,13 @@ class BundleInputValidationTests(unittest.TestCase):
         root = Path(__file__).resolve().parents[1]
         for name in ("app/server.py", "app/lite_server.py"):
             code = (root / name).read_text(encoding="utf-8")
-            start = code.index('"/api/output/archive-bundle"')
-            block = code[start: start + 2900]
+            # Match the *route handler*, not an earlier unrelated budget
+            # table that happens to contain the same endpoint string.
+            marker = ('if path == "/api/output/archive-bundle":'
+                      if name.endswith("lite_server.py")
+                      else '@app.post("/api/output/archive-bundle")')
+            start = code.index(marker)
+            block = code[start: start + 4200]
             self.assertIn("require_current_bundle_subtitles(output)", block, name)
             self.assertIn("require_current_ass=True", block, name)
 
