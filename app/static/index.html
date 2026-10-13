@@ -3544,7 +3544,18 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <input id="prevPriFont" value="Noto Sans" autocomplete="off">
               <button type="button" class="secondary font-browse-btn" data-font-target="prevPriFont">浏览</button>
             </div>
-            <div id="fontResolveStatus" class="small muted inspector-help">字体名仍可直接输入；“浏览”只列出处理主机可发现的字体 family。</div>
+            <div id="fontResolveStatus" class="small muted inspector-help">“浏览”仅列出主机已经安装的字体。若实际 ASS 渲染发生字体回退，请在下面将自己的 TTF/OTF/TTC 导入当前项目，而不是只填写字体名。</div>
+            <details id="projectFontImporter" class="hsr-project-font-importer">
+              <summary>导入字体到当前项目（真实 ASS 预览可用）</summary>
+              <label for="projectFontFile">本地字体文件 · TTF / OTF / TTC，最多 12 MiB</label>
+              <input id="projectFontFile" type="file" accept=".ttf,.otf,.ttc,font/ttf,font/otf" />
+              <label for="projectFontTarget">导入后应用于</label>
+              <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
+              <button id="projectFontImportBtn" class="secondary" type="button">导入并应用到当前试调</button>
+              <button id="projectFontRefreshBtn" class="secondary" type="button">查看已导入字体</button>
+              <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
+              <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">仅使用你有权使用和再分发的字体。上传不会安装到系统字体目录；当前阶段用于项目真实预览，完整 MKV 附件封装将单独验收。</p>
+            </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevChsSize" style="margin:0">中文基础字号</label>
               <span id="prevChsSizeVal" class="small muted">48 px</span>
@@ -6328,6 +6339,80 @@ async function loadFontBrowser(query=''){
     list.innerHTML='<div class="update-empty">无法读取主机字体列表；仍可直接输入字体名。</div>';
   }
 }
+
+async function refreshProjectFontList(){
+  const root=currentProject?.root||null;
+  const list=document.getElementById('projectFontList');
+  if(!list)return;
+  list.textContent='';
+  if(!root){list.textContent='请先打开项目。';return;}
+  try{
+    const data=await api('/api/subtitle-layout/project-fonts');
+    if(currentProject?.root!==root)return;
+    const fonts=Array.isArray(data.fonts)?data.fonts:[];
+    if(!fonts.length){list.textContent='当前项目还没有导入字体。';return;}
+    for(const item of fonts){
+      const button=document.createElement('button');
+      button.type='button';button.className='secondary';
+      button.textContent=item.family+' · '+Math.round(Number(item.bytes||0)/1024)+' KiB';
+      button.onclick=()=>{
+        const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
+        const input=document.getElementById(target);
+        if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
+        ensureHostFontLoaded(item.family).catch(()=>{});
+      };
+      list.appendChild(button);
+    }
+  }catch(error){list.textContent='读取项目字体失败：'+shortError(error);}
+}
+async function importCurrentProjectFont(){
+  const file=document.getElementById('projectFontFile')?.files?.[0];
+  const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
+  const status=document.getElementById('projectFontImportStatus');
+  const button=document.getElementById('projectFontImportBtn');
+  const root=currentProject?.root||null;
+  try{
+    if(!root)throw new Error('请先打开项目，再导入字体');
+    if(!file)throw new Error('请选择 TTF、OTF 或 TTC 文件');
+    if(file.size<=0||file.size>12*1024*1024)throw new Error('字体必须小于等于 12 MiB');
+    if(button)button.disabled=true;
+    if(status){status.textContent='正在读取并验证项目字体…';status.className='small muted';}
+    const encoded=await new Promise((resolve,reject)=>{
+      const reader=new FileReader();
+      reader.onerror=()=>reject(new Error('无法读取本地字体'));
+      reader.onload=()=>{
+        const value=String(reader.result||'');
+        const index=value.indexOf(',');
+        if(index<0)reject(new Error('字体文件编码失败'));
+        else resolve(value.slice(index+1));
+      };
+      reader.readAsDataURL(file);
+    });
+    if(currentProject?.root!==root)return;
+    const data=await api('/api/subtitle-layout/import-font',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({expected_project_root:root,filename:file.name,font_base64:encoded})
+    });
+    if(currentProject?.root!==root)return;
+    const family=String(data.font?.family||'');
+    if(!family)throw new Error('服务器没有返回可识别的字体族名');
+    hostFontFaces.delete(family); // A prior browser fallback is no longer authoritative.
+    const field=document.getElementById(target);
+    if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
+    await ensureHostFontLoaded(family,{quiet:true});
+    if(status){status.textContent='已导入并选择「'+family+'」。点击「实际 ASS 渲染」验证，不要只相信几何预览。';status.className='small status-ok';}
+    await refreshProjectFontList();
+  }catch(error){
+    if(status){status.textContent='字体导入失败：'+shortError(error);status.className='small status-bad';}
+  }finally{
+    if(button)button.disabled=false;
+  }
+}
+document.getElementById('projectFontImportBtn')?.addEventListener('click',importCurrentProjectFont);
+document.getElementById('projectFontRefreshBtn')?.addEventListener('click',refreshProjectFontList);
+document.getElementById('projectFontImporter')?.addEventListener('toggle',event=>{
+  if(event.target.open)refreshProjectFontList();
+});
 
 function openFontBrowser(targetId){
   fontBrowserTargetId=targetId;
