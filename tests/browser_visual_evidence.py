@@ -770,7 +770,10 @@ def gradient_background_check(browser, base_url, output, report):
             )
         page.route("**/api/**", make_router([dict(x) for x in SUBTITLES], []))
         page.route("**/api/output/archive-bundle/background-preview", preview_route)
-        page.goto(base_url, wait_until="domcontentloaded")
+        # App startup calls refresh() asynchronously and can change the
+        # archive's visibility. Wait for fixture network to settle before
+        # installing the checked project state.
+        page.goto(base_url, wait_until="networkidle")
         page.evaluate("""() => {
           currentProject={root:'/qa/fixture',name:'Gradient fixture'};
           syncArchiveBundleProjectState({
@@ -796,6 +799,19 @@ def gradient_background_check(browser, base_url, output, report):
         page.locator("#archiveBundlePanel").evaluate("(node) => { node.open = true; }")
         ensure(page.locator("#archiveCard").is_visible(),
                "MKV archive Export section is CSS-hidden despite being selected")
+        if not page.locator("#bundleBackgroundMode").is_visible():
+            print("GRADIENT UI VISIBILITY DIAGNOSTIC", json.dumps(page.evaluate("""() => {
+              const el=document.getElementById('bundleBackgroundMode');
+              const rows=[];
+              for(let node=el;node;node=node.parentElement)rows.push({
+                tag:node.tagName,id:node.id,classes:node.className,
+                hidden:node.hidden,open:node.tagName==='DETAILS'?node.open:undefined,
+                display:getComputedStyle(node).display,
+                visibility:getComputedStyle(node).visibility
+              });
+              return {workspace:document.body.dataset.workspace,
+                project:currentProject?.root||null,ancestors:rows};
+            }"""), ensure_ascii=False))
         ensure(page.locator("#bundleBackgroundMode").is_visible(),
                "Background mode selector is not visible in Export workspace")
         ensure(page.locator("#bundleBackgroundMode").input_value() == "linear",
