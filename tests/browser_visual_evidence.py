@@ -58,6 +58,14 @@ class QuietHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def do_GET(self):
+        if self.path.startswith("/static/hsr-ui-convergence.css"):
+            css=(ROOT / "app/static/hsr-ui-convergence.css").read_bytes()
+            self.send_response(200)
+            self.send_header("Content-Type", "text/css; charset=utf-8")
+            self.send_header("Content-Length", str(len(css)))
+            self.end_headers()
+            self.wfile.write(css)
+            return
         if self.path.startswith("/app/static/index.html"):
             # Match the production FastAPI template injection; serving raw
             # index.html would leave a bare JS sentinel and abort startup.
@@ -236,6 +244,17 @@ def desktop_check(browser, base_url, output, report):
     page.route("**/api/**", make_router(rows, writes, fixture_video))
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
+    # Default work area must be two-column and keep the duplicate list closed.
+    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(), "Batch QA affordance missing")
+    ensure(page.locator("#layoutCorpusRail").is_hidden(), "Second full subtitle explorer still dominates UI")
+    ensure(page.locator("#layoutTrialTextDetails").get_attribute("open") is None,
+           "Manual text authoring should not be a second visible editor")
+    ensure(page.locator("#studioEffectsTab").bounding_box()["y"] <
+           page.locator(".preview-workbench").bounding_box()["y"],
+           "Layout / Effects tabs are not top-level tasks")
+    ensure(page.locator("#layoutCueFinalText").is_hidden(),
+           "Duplicated final text textarea is still visible")
+    screenshot(page, output, "desktop_clean_effects_workspace")
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
     page.locator("#previewVideoBtn").click()
@@ -280,6 +299,14 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#studioStyleTab").click()
     ensure(page.locator("#libassVideoPreview").is_hidden(), "Style mode retained stale video")
     page.locator("#studioEffectsTab").click()
+    ensure(page.locator("#layoutCorpusRail").is_hidden(), "QA drawer reopened unexpectedly")
+    page.locator("#layoutAuditDrawerToggle").click()
+    ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "true",
+           "QA drawer expansion state not exposed")
+    ensure(page.locator("#layoutCorpusRail").is_visible(), "Batch audit disappeared")
+    ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "false",
+           "Batch audit accessibility state incorrect")
+    screenshot(page, output, "desktop_optional_batch_qa")
     rail = rect(page, ".preview-workbench .layout-corpus-rail")
     stage = rect(page, ".preview-workbench .layout-preview-region")
     inspector = rect(page, ".preview-workbench .preview-inspector")
@@ -368,6 +395,14 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     page.route("**/api/**", make_router(rows, []))
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           f"{label}: duplicate explorer appears by default")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
+           f"{label}: batch QA affordance hidden")
+    screenshot(page, output, f"{label}_clean_studio")
+    page.locator("#layoutAuditDrawerToggle").click()
+    ensure(page.locator("#layoutCorpusRail").is_visible(),
+           f"{label}: optional batch inspector missing")
     vp = rect(page, "#layoutTimelineViewport")
     canvas = rect(page, ".preview-workbench .preview-stage")
     cue = rect(page, "#layoutCueEditorPanel")
@@ -415,7 +450,7 @@ def main():
     url = f"http://127.0.0.1:{server.server_port}/app/static/index.html"
     report = {
         "category": "Chromium rendering of checked-out production HTML/CSS/JS with API fixtures",
-        "backend": "test doubles (NOT real manifest, FFmpeg/libass, physical-device or final-media validation)",
+        "backend": "test doubles for corpus and geometry (NOT real manifest, FFmpeg/libass, physical-device or final-media validation)",
         "screenshots": [],
     }
     try:
