@@ -346,6 +346,18 @@ def desktop_check(browser, base_url, output, report):
            "Hidden QA rail remains keyboard interactive")
     ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "false",
            "QA opener did not reset when leaving Layout")
+    # Programmatic task switches must not strand keyboard focus in a newly
+    # inert subtree or on the layout-only (now hidden) drawer opener.
+    page.locator("#studioStyleTab").click()
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           "Old Layout QA drawer unexpectedly reopened on return")
+    page.locator("#layoutAuditDrawerToggle").click()
+    page.locator("#layoutCorpusSearch").focus()
+    page.evaluate("() => showWorkspace('effects',{scroll:false})")
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
+           "Moving from focused QA rail to Effects lost visible keyboard focus")
+    ensure(page.locator("#layoutCorpusRail").is_hidden(),
+           "Focused QA rail did not close when entering Effects")
     stage = rect(page, ".preview-workbench .layout-preview-region")
     inspector = rect(page, ".preview-workbench .preview-inspector")
     timeline = rect(page, "#layoutTimelineViewport")
