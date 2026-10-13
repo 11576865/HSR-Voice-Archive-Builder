@@ -3,7 +3,7 @@
   "task_id": "hsr-completion-20261014",
   "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
   "status": "in_progress",
-  "current_bounded_work_unit": "Branch convergence checkpoint: compared 108 non-main branches, retained complete 109-ref inventory, re-landed unique PR #150 real image-preview tests and UI, closed superseded PR, and opened draft integration PR #159 for substantial unmerged ASS audit chain.",
+  "current_bounded_work_unit": "User-approved default complete archive: independent continuous FLAC+SRT+ASS, one black/custom video+FLAC+two selectable subtitle MKV, optional FLAC-only. Implemented on draft PR #160; exact-head FFmpeg/Chromium CI outstanding; do not merge main.",
   "completed_units": [
     {
       "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
@@ -29,9 +29,19 @@
       ],
       "pr": 150,
       "validation": "pending for exact final UI head"
+    },
+    {
+      "summary": "Submitted draft PR #160 implementing corrected full-by-default delivery and optional FLAC-only, dual independent MKV subtitle streams with FFprobe verification, source receipts including SRT, status/edit-triggered deduplicated refresh, Export-only artifact inventory, legacy black MKV advanced disclosure",
+      "branch": "feat/hsr-default-complete-archive-dual-subtitles-20261014",
+      "pr": 160,
+      "validation": "Python and Termux passed at 8ba01db6; real Chromium/media exact-head pending after bug fixes"
     }
   ],
   "next_units": [
+    "Check exact-head PR #160 FFmpeg/libass and Chromium CI for media stream shape, browser event handling, and pixel provenance; fix any red tests without relaxing feature invariants.",
+    "Implement or explicitly constrain fail-closed auto-reconciliation when files are modified outside app, and the real-world long-running Android service/background trigger coverage.",
+    "Verify FLAC-only mode does not output new subtitles or MKV on both FastAPI and Lite endpoints, including previous artifact preservation and CLI path.",
+    "Check setup/default background image settings and reuse after source changes with Android player testing.",
     "Rebase/re-land the substantive archive audit, ASS coverage batches/locks and rendered-ink evidence from draft PR #159 on latest main; GitHub mergeable=false at creation, do not force a stale full-tree merge.",
     "Deduplicate feat/hsr-layout-safety-ratio-karaoke-preview (ancestor of PR #159) and overlapping feat/subtitle-style-workbench-evidence-v15; recover only distinct validated behavior.",
     "Review remaining diverged branch content semantically, track accepted/superseded/abandoned outcomes individually; protect uigs-outbox and historical version refs.",
@@ -50,6 +60,9 @@
     "long_archive_performance": "unverified"
   },
   "blockers": [
+    "PR #160 is DRAFT and not merged; new exact-head real FFmpeg/libass/Chromium CI still pending as of latest inspection.",
+    "Externally modified ASS/SRT without a validated export receipt cannot currently be automatically certified or re-encoded; user-requested exhaustive change triggers remain incomplete.",
+    "Physical Android device playback and >=1h archive timing/RSS/colorbanding remain unverified (Issue #158).",
     "Draft PR #159 currently reports mergeable=false; 181-commit unmerged feature chain conflicts with current main, requiring semantic re-land and regression work.",
     "Most remaining branches have divergent history but no completed content-equivalence review; no safe bulk merge/delete conclusion.",
     "Exact-head browser/FFmpeg CI for new image evidence and UI remains pending.",
@@ -57,5 +70,25 @@
   ],
   "updated_at": "2026-10-14",
   "branch_inventory": ".uigs/tasks/hsr-branches-20261014.json",
-  "open_integration_pr": 159
+  "open_integration_pr": 159,
+  "open_delivery_pr": 160,
+  "delivery_policy": {
+    "default": "complete",
+    "independent_outputs": [
+      "continuous.flac",
+      "HSR_Voice_Archive.srt",
+      "HSR_Voice_Archive.ass"
+    ],
+    "default_bundle": "HSR_Voice_Archive_Bundle.mkv",
+    "mkv_tracks": [
+      "H264 black or custom video",
+      "single stream-copied FLAC audio",
+      "soft ASS subtitles",
+      "soft SRT subtitles",
+      "optional font attachments"
+    ],
+    "optional_mode": "flac_only",
+    "legacy_black": "compatible old video+FLAC no subtitles, not default",
+    "source_refresh": "verified source generation is re-encoded atomically; external uncatalogued manual edits pending safe re-certification"
+  }
 }
