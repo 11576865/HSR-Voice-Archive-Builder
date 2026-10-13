@@ -4712,15 +4712,16 @@ function copyTextValue(value){
   try{document.execCommand('copy');return Promise.resolve()}finally{box.remove()}
 }
 
-function artifactCard({title,kind,desc,path,size,exists=true,actions=[]}){
+function artifactCard({title,kind,desc,path,size,exists=true,status=null,actions=[]}){
   const card=document.createElement('article');
-  card.className='artifact-card '+(kind||'')+(exists?'':' missing');
+  card.className='artifact-card '+(kind||'')+(exists?'':' missing')+(status==='stale'||status==='unverified'?' stale':'');
+  card.dataset.current=exists&&status!=='stale'&&status!=='unverified'?'true':'false';
   const meta=[];
   if(exists&&size!==undefined)meta.push(bytes(size));
   if(path)meta.push(path);
   card.innerHTML=
     '<div class="artifact-card-head"><div><div class="artifact-card-kind">'+escapeHtml(kind||'artifact')+'</div><div class="artifact-card-title">'+escapeHtml(title)+'</div></div>'+
-    '<span class="badge">'+(exists?'可用':'未生成')+'</span></div>'+
+    '<span class="badge">'+escapeHtml(status==='stale'?'旧文件·已过期':status==='unverified'?'旧文件·未核验':status==='current'?'当前有效':status==='legacy'?'旧版独立输出':exists?'可用':'未生成')+'</span></div>'+
     '<div class="artifact-card-desc">'+escapeHtml(desc||'')+'</div>'+
     (meta.length?'<div class="artifact-card-meta">'+meta.map(x=>'<span>'+escapeHtml(x)+'</span>').join('')+'</div>':'')+
     '<div class="artifact-card-actions"></div>';
@@ -4745,59 +4746,77 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   const browser=document.getElementById('artifactBrowser'),count=document.getElementById('artifactCount');
   if(!browser)return;
   browser.innerHTML='';
-  const cards=[];
-  const master=finalProducts['continuous.flac']||outputMap['continuous.flac']||{};
+  const cards=[], bundleState=p?.bundle_export||{}, prerequisites=bundleState.prerequisites||{};
+  const outputs=name=>finalProducts[name]||outputMap[name]||{};
+  const bundle=outputs('HSR_Voice_Archive_Bundle.mkv');
+  const master=outputs('continuous.flac'),srt=outputs('HSR_Voice_Archive.srt'),ass=outputs('HSR_Voice_Archive.ass');
+  const subtitleReady=!!prerequisites.subtitles_current;
+  const navigateToBundle=()=>{
+    showWorkspace('export',{scroll:false});
+    // The Export workspace contains the same project-owned MKV control surface.
+    requestAnimationFrame(()=>{
+      const panel=document.getElementById('archiveBundlePanel');
+      if(panel){panel.open=true;panel.scrollIntoView({block:'center'})}
+    });
+  };
+  const mkvStatus=bundle.exists?(bundleState.state==='current'?'current':
+    bundleState.state==='unverified'?'unverified':'stale'):null;
+  const bundleDescription='完整播放封装（由 continuous.flac + 当前 ASS 软字幕 + 已授权字体 + 背景生成）；'+
+    (bundleState.message||'请先生成连续 FLAC 和 ASS/SRT。')+
+    (bundleState.blockers?.length?' 前置条件：'+bundleState.blockers.join('；'):'');
   cards.push(artifactCard({
-    title:'continuous.flac',kind:'audio',desc:outputDescription('continuous.flac'),
+    title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',status:mkvStatus,
+    desc:bundleDescription,path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
+    actions:[bundleState.can_generate===false
+      ? {label:!prerequisites.continuous_flac?'先构建连续 FLAC':'先更新 ASS/SRT',
+         primary:true,action:!prerequisites.continuous_flac
+           ? ()=>showWorkspace('project') : ()=>showWorkspace('layout')}
+      : {label:bundleState.state==='current'?'调整背景／重新封装':
+                 bundle.exists?'更新过期 MKV':'生成完整 MKV',
+         primary:bundleState.state!=='current',action:navigateToBundle}]
+  }));
+  // The sources are independently downloadable deliverables, not copies of MKV.
+  cards.push(artifactCard({
+    title:'continuous.flac',kind:'audio',
+    desc:'无损母版音频；完整 MKV 直接复制此 FLAC 音轨，而不是反向生成音频。',
     path:master.path,size:master.size_bytes,exists:!!master.exists
   }));
-  const srt=finalProducts['HSR_Voice_Archive.srt']||outputMap['HSR_Voice_Archive.srt']||{};
   cards.push(artifactCard({
-    title:'HSR_Voice_Archive.srt',kind:'subtitle',desc:outputDescription('HSR_Voice_Archive.srt'),
+    title:'HSR_Voice_Archive.srt',kind:'subtitle',
+    status:srt.exists&&!subtitleReady?'stale':null,
+    desc:'独立文本字幕成品；与 ASS 由同一字幕源导出。'+(!subtitleReady?' 当前字幕待更新。':''),
     path:srt.path,size:srt.size_bytes,exists:!!srt.exists,
     actions:[{label:'字幕校对',action:()=>showWorkspace('review')}]
   }));
-  const ass=outputMap['HSR_Voice_Archive.ass']||{};
   cards.push(artifactCard({
-    title:'HSR_Voice_Archive.ass',kind:'subtitle',desc:outputDescription('HSR_Voice_Archive.ass'),
+    title:'HSR_Voice_Archive.ass',kind:'subtitle',
+    status:ass.exists&&!subtitleReady?'stale':null,
+    desc:'独立样式字幕，也是完整 MKV 的可开关软字幕输入；修改后需重新封装 MKV。',
     path:ass.path,size:ass.size_bytes,exists:!!ass.exists,
     actions:ass.exists
       ? [{label:'排版工作台',action:()=>showWorkspace('layout')}]
       : [{label:'生成 ASS',primary:true,action:startAssExport},{label:'排版设置',action:()=>showWorkspace('layout')}]
   }));
-  const bundle=outputMap['HSR_Voice_Archive_Bundle.mkv']||{};
-  cards.push(artifactCard({
-    title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',
-    desc:'完整封装 · 连续 FLAC + 可选择 ASS 软字幕 + 项目字体附件；'+
-      (p?.bundle_export?.state==='stale'?'旧 MKV 已过期，需重新生成。':
-       p?.bundle_export?.state==='unverified'?'旧 MKV 尚无来源校验记录，请重新生成。':
-       p?.bundle_export?.state==='current'?'当前文件与来源一致。':'支持纯色或本地背景图。'),
-    path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
-    actions:[{label:!bundle.exists?'生成完整 MKV':
-      p?.bundle_export?.needs_rebuild?'重新生成并替换 MKV':'重新封装 MKV',
-      primary:!bundle.exists||!!p?.bundle_export?.needs_rebuild,
-      action:()=>{document.getElementById('archiveBundlePanel').open=true;
-                  document.getElementById('archiveBundlePanel').scrollIntoView({block:'center'});}}]
-  }));
-  const mkv=outputMap['HSR_Voice_Archive_Black.mkv']||{};
-  cards.push(artifactCard({
-    title:'HSR_Voice_Archive_Black.mkv',kind:'video',desc:outputDescription('HSR_Voice_Archive_Black.mkv'),
-    path:mkv.path,size:mkv.size_bytes,exists:!!mkv.exists,
-    actions:mkv.exists?[]:[{label:'生成黑屏 MKV',primary:true,action:startBlackVideo}]
-  }));
   const chapterFiles=Object.entries(finalProducts).filter(([name,o])=>name.startsWith('chapter_flac/')&&name.endsWith('.flac')&&o?.exists);
-  const chapterDir=finalProducts['chapter_flac/']||outputMap['chapter_flac/']||{};
-  const chapterExpected=!!p?.config?.generate_chapter_flac;
-  if(chapterExpected||chapterDir.exists||chapterFiles.length){
+  const chapterDir=outputs('chapter_flac/');
+  if(p?.config?.generate_chapter_flac||chapterDir.exists||chapterFiles.length){
     cards.push(artifactCard({
       title:'章节 / 大组连续 FLAC',kind:'audio',
-      desc:chapterFiles.length?('已生成 '+chapterFiles.length+' 个章节 / 大组音频。'):'已启用章节 FLAC，但当前没有可用章节成品。',
-      path:chapterDir.path,size:undefined,exists:!!chapterDir.exists,
-      actions:[]
+      desc:chapterFiles.length?'独立章节音频 '+chapterFiles.length+' 个；不是完整 MKV 的附加轨道。':'已启用章节导出，但没有可用章节文件。',
+      path:chapterDir.path,exists:!!chapterDir.exists
     }));
   }
-  for(const card of cards){browser.appendChild(card)}
-  if(count)count.textContent=cards.filter(x=>!x.classList.contains('missing')).length+' 项可用';
+  // Kept for compatibility, but no longer marketed as an equal/current bundle.
+  const old=outputs('HSR_Voice_Archive_Black.mkv');
+  if(old.exists){
+    cards.push(artifactCard({
+      title:'HSR_Voice_Archive_Black.mkv',kind:'video',status:'legacy',
+      desc:'旧版黑屏视频，独立于完整 MKV；不含相同的来源回执，不代表当前 FLAC/ASS 的封装状态。',
+      path:old.path,size:old.size_bytes,exists:true
+    }));
+  }
+  for(const card of cards)browser.appendChild(card);
+  if(count)count.textContent=cards.filter(x=>x.dataset.current==='true').length+' 项现有文件（过期文件另标）';
 }
 
 function renderExportWorkspace(p){
@@ -4944,7 +4963,12 @@ function fillProject(p){
   const hint=document.getElementById('archiveHint');
   hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
-  document.getElementById('finishedOutputs').classList.toggle('hidden',!has);
+  // Existing products remain inspectable after interrupted rebuilds, with their
+  // own freshness labels; never hide the last-known-good MKV merely because
+  // the newest project build is incomplete.
+  const anyProduct=Object.entries(finalProducts).some(([name,item])=>
+    name!=='chapter_flac/'&&!!item?.exists);
+  document.getElementById('finishedOutputs').classList.toggle('hidden',!has&&!anyProduct);
   const usage=[];
   if(!has&&r.translation_estimated_total_tokens!==undefined)usage.push('本次剩余预计 Token '+n(r.translation_estimated_total_tokens));
   if(r.translation_actual_total_tokens!==undefined)usage.push('累计实际 Token '+n(r.translation_actual_total_tokens));
