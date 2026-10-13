@@ -286,6 +286,17 @@ def desktop_check(browser, base_url, output, report):
     }""")
     ensure(all(x["scroll"] == "auto" and x["height"] <= x["outer"]+3 for x in scroll_regions),
            f"Desktop canvas and Inspector must be independent scroll panes: {scroll_regions}")
+    ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
+           "Karaoke generation/import remains hidden in an advanced disclosure")
+    for action in ("#refreshWordAlignmentBtn","#importWordAlignmentBtn"):
+        ensure(page.locator(action).is_visible(),"Missing visible Karaoke recovery: "+action)
+    page.evaluate("() => loadWordAlignmentDiagnostics()")
+    ensure("尚无可诊断" in page.locator("#hsrKaraokeReadinessDetail").inner_text(),
+           "Karaoke readiness failed to explain missing project data")
+    ensure(page.locator("#generateWordAlignmentBtn").is_disabled(),
+           "WhisperX generation claimed availability in an unconfigured fixture")
+    ensure(page.locator("#hsrEffectOperationStatus").is_visible(),
+           "Effects operation status is not visible beside the stage")
     screenshot(page, output, "desktop_clean_effects_workspace")
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
@@ -310,6 +321,10 @@ def desktop_check(browser, base_url, output, report):
         print("CHROMIUM VIDEO DIAGNOSTIC",json.dumps(details,ensure_ascii=False),flush=True)
         raise
     ensure(page.locator("#libassVideoPreview").is_visible(), "Decoded video not visible")
+    ensure(page.locator("#hsrEffectOperationStatus").get_attribute("data-phase")=="ready",
+           "Video returned without decoder-confirmed visible success")
+    ensure("可播放" in page.locator("#hsrEffectOperationTitle").inner_text(),
+           "Stage shows no confirmed playback status")
     page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
     page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
     screenshot(page, output, "desktop_effect_video_playback")
@@ -319,6 +334,8 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#effectBackgroundImageFile").set_input_files({
         "name": "custom-image.png", "mimeType": "image/png", "buffer": png
     })
+    ensure(page.locator("#hsrEffectOperationStatus").get_attribute("data-phase")=="stale",
+           "Changing media retained false success state")
     page.locator("#previewVideoBtn").click()
     page.wait_for_function("""() => {
       const video=document.getElementById('libassVideoPreview');
