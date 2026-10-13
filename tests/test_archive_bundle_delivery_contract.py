@@ -218,6 +218,11 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertTrue(product["can_generate"])
         self.assertEqual(product["depends_on"], receipt["depends_on"])
         self.assertIn("continuous.flac", items["independent_products"])
+        self.assertEqual(items["independent_products"]["continuous.flac"]["role"], "independent_lossless_master")
+        self.assertTrue(items["independent_products"]["continuous.flac"]["ready_for_bundle"])
+        self.assertEqual(items["independent_products"]["continuous.flac"]["freshness"], "unverified")
+        self.assertEqual(items["independent_products"]["HSR_Voice_Archive.srt"]["freshness"], "current")
+        self.assertEqual(items["independent_products"]["HSR_Voice_Archive.ass"]["freshness"], "current")
         self.assertIn("HSR_Voice_Archive.ass", items["independent_products"])
         self.assertNotIn(OUTPUT, items["independent_products"])
         self.assertEqual(items["legacy_outputs"]["HSR_Voice_Archive_Black.mkv"]["role"],
@@ -234,6 +239,17 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertFalse(product["can_generate"])
         self.assertTrue(later["outputs"][OUTPUT]["exists"])
         self.assertTrue(later["outputs"]["continuous.flac"]["exists"])
+
+    def test_project_records_do_not_expire_unchanged_srt_after_ass_edit(self):
+        config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs")
+        (self.root / "HSR_Voice_Archive.ass").write_text("changed independently")
+        summary = project_summary(config)
+        independent = summary["output_groups"]["independent_products"]
+        self.assertTrue(independent["HSR_Voice_Archive.srt"]["current"])
+        self.assertEqual(independent["HSR_Voice_Archive.srt"]["freshness"], "current")
+        self.assertFalse(independent["HSR_Voice_Archive.ass"]["current"])
+        self.assertEqual(independent["HSR_Voice_Archive.ass"]["freshness"], "stale")
+        self.assertFalse(summary["output_groups"]["playback_bundle"][OUTPUT]["current"])
 
     def test_legacy_mkv_is_not_the_complete_bundle(self):
         project = (Path(__file__).resolve().parents[1] / "app/project.py").read_text(encoding="utf-8")
