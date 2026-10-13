@@ -121,12 +121,24 @@ def run(output: Path) -> None:
                     page.on("pageerror", lambda err: errors.append(str(err)))
                     mock = make_router([dict(row) for row in SUBTITLES], [])
                     seen_real = []
+                    captured_media = []
                     def route_api(route):
                         if route.request.url.split("?", 1)[0].endswith(
                             "/api/subtitle-layout/render-preview-video"
                         ):
                             seen_real.append(route.request.post_data_json)
-                            route.continue_()
+                            # Playwright's route.continue_() does not reliably
+                            # expose the response body through Response.body().
+                            # Fetch from the actual FastAPI origin, record its
+                            # real bytes, then deliver the same response to
+                            # Chromium. Never fabricate video response bytes.
+                            upstream = route.fetch(timeout=100000)
+                            payload = upstream.body()
+                            captured_media.append({
+                                "body": payload, "status": upstream.status,
+                                "headers": upstream.headers,
+                            })
+                            route.fulfill(response=upstream, body=payload)
                         else:
                             mock(route)
                     page.route("**/api/**", route_api)
@@ -157,7 +169,10 @@ def run(output: Path) -> None:
                     ensure("source_video_base64" in seen_real[0],
                            "Browser did not upload actual source bytes")
                     output_movie = root / "live-output.webm"
-                    raw_response = response.body()
+                    ensure(captured_media, "No actual FastAPI response was captured")
+                    raw_response = captured_media[0]["body"]
+                    ensure(captured_media[0]["status"] == 200,
+                           "Actual FastAPI response was not successful")
                     ensure(response.headers.get("content-type", "").startswith("video/webm"),
                            "Real preview returned unexpected Content-Type: " +
                            str(response.headers.get("content-type")))
@@ -204,6 +219,7 @@ def run(output: Path) -> None:
                     report = {
                         "type": "live_asgi_ffmpeg_libass_browser_e2e",
                         "api_mocked": False,
+                        "preview_route_capture": "Playwright route.fetch upstream to real FastAPI",
                         "other_project_apis_mocked": True,
                         "input_bytes": len(fixture),
                         "output_bytes": output_movie.stat().st_size,
