@@ -144,7 +144,7 @@ def _active_preview_font_dir() -> Path | None:
         config = _active_config()
         output = resolve_project_path(config, config.output_dir)
         return font_asset_directory(output) if output is not None else None
-    except (ValueError, FileNotFoundError):
+    except (ValueError, FileNotFoundError, RuntimeError):
         return None
 
 
@@ -210,7 +210,7 @@ def api_subtitle_layout_font_file(family: str = Query(...)):
             output = resolve_project_path(config, config.output_dir)
             if output is not None:
                 from_project = project_font_for_family(output, family)
-        except (ValueError, FileNotFoundError):
+        except (ValueError, FileNotFoundError, RuntimeError):
             pass
         if from_project is not None:
             font_path = from_project
