@@ -18,7 +18,7 @@ from typing import Callable
 
 from .project_fonts import font_asset_directory, list_project_fonts
 from .subtitle_export_status import read_subtitle_export_health
-from .archive_bundle_lifecycle import record_bundle_publication
+from .archive_bundle_lifecycle import RECEIPT, record_bundle_publication
 
 ProgressCallback = Callable[[int, int, str], None]
 MAX_BACKGROUND_BYTES = 4 * 1024 * 1024
@@ -200,13 +200,34 @@ class ArchiveBundleExporter:
             # last successfully validated archive.
             if require_current_ass:
                 require_current_bundle_subtitles(target.parent)
-            temporary.replace(target)
             if require_current_ass:
-                record_bundle_publication(
-                    target.parent, background_color=background_color,
-                    background_image=background_image, image_extension=suffix,
-                    include_fonts=include_fonts,
-                )
+                # Prepare project image and receipt BEFORE replacing the old MKV.
+                # The temporary inode keeps its size/mtime across os.replace().
+                # If publication fails, restore the small previous receipt;
+                # the previous MKV's bytes have not been touched.
+                previous_receipt = target.parent / RECEIPT
+                receipt_backup = root / "previous-receipt.json"
+                had_receipt = previous_receipt.is_file()
+                if previous_receipt.is_symlink():
+                    raise ValueError("Unsafe existing archive bundle receipt")
+                if had_receipt:
+                    shutil.copyfile(previous_receipt, receipt_backup)
+                try:
+                    record_bundle_publication(
+                        target.parent, background_color=background_color,
+                        background_image=background_image, image_extension=suffix,
+                        include_fonts=include_fonts, artifact=temporary,
+                    )
+                    require_current_bundle_subtitles(target.parent)
+                    temporary.replace(target)
+                except BaseException:
+                    if had_receipt:
+                        receipt_backup.replace(previous_receipt)
+                    else:
+                        previous_receipt.unlink(missing_ok=True)
+                    raise
+            else:
+                temporary.replace(target)
         if progress:
             progress(total_ms, total_ms, "完整 MKV 已通过音频／视频／软字幕／字体附件验收")
         return {
