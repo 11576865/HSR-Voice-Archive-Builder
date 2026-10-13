@@ -19,6 +19,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
+from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
@@ -1755,6 +1756,27 @@ async def _read_bounded_bundle_json(request: Request) -> dict:
     return data
 
 
+@app.post("/api/output/individual")
+def api_export_individual_track(kind: str = Form(...)):
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("No project output directory")
+        if kind not in {"flac", "srt", "ass"}:
+            raise ValueError("Choose FLAC, SRT or ASS")
+        def run(report_progress):
+            report_progress("extract", "正在从已验证的 MKV 无损提取指定轨道", 0, 1)
+            path = export_optional_track(output, kind)
+            report_progress("extract", "单独成品已导出", 1, 1)
+            return {"path": str(path), "kind": kind, "size_bytes": path.stat().st_size}
+        job = create_job("artifact-extract", run, with_progress=True,
+                         project_root=config.root, project_name=config.name)
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.post("/api/output/archive-bundle/background-preview")
 async def api_preview_archive_bundle_background(request: Request):
     try:
@@ -1812,11 +1834,18 @@ async def api_output_archive_bundle(request: Request):
         source = output / "continuous.flac"
         subtitle = output / "HSR_Voice_Archive.ass"
         target = output / "HSR_Voice_Archive_Bundle.mkv"
-        if not source.is_file() or not subtitle.is_file():
-            raise FileNotFoundError("请先构建连续 FLAC，并生成 ASS 字幕")
-        require_current_bundle_subtitles(output)
+        if config.delivery_mode != "complete":
+            raise ValueError("请在项目设置中先选择完整 MKV 交付模式")
+        from .archive_bundle_lifecycle import bundle_export_status
+        if not bundle_export_status(output)["can_generate"]:
+            raise ValueError("独立字幕源过期或无有效可复用的 MKV，请先更新档案")
         def run(report_progress):
-            return ArchiveBundleExporter(
+            prepare_complete_sources(
+                output, source_language=config.source_text_language,
+                target_language=config.target_language,
+                render_config=subtitle_render_config(config),
+            )
+            result = ArchiveBundleExporter(
                 width=RESOLUTIONS[spec["resolution"]][0],
                 height=RESOLUTIONS[spec["resolution"]][1],
             ).export(
@@ -1825,6 +1854,8 @@ async def api_output_archive_bundle(request: Request):
                 require_current_ass=True,
                 progress=lambda current, total, msg: report_progress("encode", msg, current, total),
             )
+            seal_complete_delivery(output)
+            return result
         job = create_job(
             "archive-bundle-export", run, with_progress=True,
             project_root=config.root, project_name=config.name,
