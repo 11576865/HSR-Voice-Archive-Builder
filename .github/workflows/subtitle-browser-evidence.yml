@@ -22,6 +22,7 @@ on:
       - "tests/test_hsr_three_pass_scope.py"
       - "tests/test_hsr_local_footage_preview.py"
       - "tests/test_hsr_preview_background_color.py"
+      - "tests/test_hsr_image_background_preview.py"
       - ".github/workflows/subtitle-browser-evidence.yml"
   workflow_dispatch:
 
@@ -94,6 +95,8 @@ jobs:
         run: python -m unittest tests.test_hsr_preview_background_color -v
       - name: Prove genuine local footage plus ASS compositing
         run: python -m unittest tests.test_hsr_local_footage_preview -v
+      - name: Prove real imported image pixels in libass dynamic video
+        run: python -m unittest tests.test_hsr_image_background_preview -v
       - name: Upload FFmpeg/libass pixel evidence
         if: always()
         uses: actions/upload-artifact@v4
