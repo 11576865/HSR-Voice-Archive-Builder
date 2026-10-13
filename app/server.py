@@ -18,6 +18,7 @@ from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .archive_bundle_lifecycle import load_previous_bundle_image
+from .archive_bundle_backgrounds import RESOLUTIONS, normalize_bundle_background
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
@@ -1737,9 +1738,12 @@ async def api_output_archive_bundle(request: Request):
             raise ValueError("MKV configuration must be a JSON object")
         if str(data.get("expected_project_root") or "") != str(config.root):
             raise ValueError("MKV export project context changed")
+        spec = normalize_bundle_background(data.get("background_spec"))
         image = decode_bundle_background(data.get("background_image_base64"))
         if image is None and data.get("reuse_saved_background") is True:
             image = load_previous_bundle_image(output)
+        if (spec["mode"] == "image") != (image is not None):
+            raise ValueError("图片背景需要上传或复用已保存图片；渐变和纯色模式不能包含图片")
         color = str(data.get("background_color") or "#000000")
         include_fonts = data.get("attach_project_fonts") is True
         source = output / "continuous.flac"
@@ -1749,9 +1753,12 @@ async def api_output_archive_bundle(request: Request):
             raise FileNotFoundError("请先构建连续 FLAC，并生成 ASS 字幕")
         require_current_bundle_subtitles(output)
         def run(report_progress):
-            return ArchiveBundleExporter().export(
+            return ArchiveBundleExporter(
+                width=RESOLUTIONS[spec["resolution"]][0],
+                height=RESOLUTIONS[spec["resolution"]][1],
+            ).export(
                 source, subtitle, target, fonts_dir=font_asset_directory(output),
-                include_fonts=include_fonts, background_color=color, background_image=image,
+                include_fonts=include_fonts, background_color=color, background_image=image, background_spec=spec,
                 require_current_ass=True,
                 progress=lambda current, total, msg: report_progress("encode", msg, current, total),
             )
