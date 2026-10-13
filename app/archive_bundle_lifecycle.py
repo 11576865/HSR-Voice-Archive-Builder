@@ -103,7 +103,7 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
     return {
         "known": True,
         "background_color": str(bg.get("color") or "#000000"),
-        "background_kind": "image" if bg.get("kind") == "image" else "color",
+        "background_kind": bg.get("kind") or "color",
         "image_saved": bg.get("kind") == "image",
         "attach_project_fonts": receipt["attach_project_fonts"],
         "background_spec": normalize_bundle_background(bg.get("spec") or {
@@ -122,10 +122,41 @@ def load_previous_bundle_image(output: Path) -> bytes:
 
 
 def bundle_export_status(output: Path) -> dict[str, Any]:
+    """Only the combined MKV is derived; independent FLAC and subtitle deliverables remain.
+
+    A file existing on disk does not imply readiness for a *new* bundle build.
+    Surface source prerequisites separately from last-published MKV freshness.
+    """
     settings = previous_bundle_settings(output)
     target = output / OUTPUT
-    result: dict[str, Any] = {**settings, "state": "missing", "needs_rebuild": True,
-                              "message": "尚未生成完整 MKV。"}
+    flac = _signature(output / "continuous.flac") is not None
+    ass = _signature(output / "HSR_Voice_Archive.ass") is not None
+    srt = _signature(output / "HSR_Voice_Archive.srt") is not None
+    subtitle = read_subtitle_export_health(output)
+    subtitles_current = bool(subtitle.get("state") == "current"
+                             and subtitle.get("artifacts_current") and subtitle.get("ass_required"))
+    build_busy = (output / ".build_in_progress").exists()
+    prerequisites = {
+        "continuous_flac": flac,
+        "ass": ass,
+        "srt": srt,
+        "subtitles_current": subtitles_current,
+        "build_idle": not build_busy,
+    }
+    blockers = []
+    if not flac:
+        blockers.append("缺少连续 FLAC，请先完成档案构建")
+    if not ass or not srt or not subtitles_current:
+        blockers.append("ASS/SRT 未完成或已过期，请先生成最新字幕")
+    if build_busy:
+        blockers.append("项目正在构建，完成后再封装")
+    result: dict[str, Any] = {
+        **settings, "state": "missing", "needs_rebuild": True,
+        "can_generate": not blockers, "blockers": blockers,
+        "prerequisites": prerequisites, "depends_on": ["continuous.flac", "HSR_Voice_Archive.ass",
+                                                           "HSR_Voice_Archive.srt", "subtitle_export_receipt.json"],
+        "message": "尚未生成完整 MKV。",
+    }
     if not target.is_file() or target.is_symlink():
         return result
     receipt = _read_receipt(output)
