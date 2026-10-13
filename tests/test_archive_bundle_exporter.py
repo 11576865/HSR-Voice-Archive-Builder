@@ -139,6 +139,29 @@ class BundleRealFFmpegTests(unittest.TestCase):
         )
         record_subtitle_export(root, state="current", ass_required=True)
 
+    def test_default_dual_soft_subtitle_tracks_and_srt_staleness(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            target = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            result = exporter.export(audio, ass, target, require_current_ass=True)
+            self.assertEqual(result["subtitle_codecs"], ["ass", "subrip"])
+            streams = exporter._probe(target)["streams"]
+            self.assertEqual([row["codec_name"] for row in streams if row["codec_type"] == "subtitle"],
+                             ["ass", "subrip"])
+            self.assertEqual(len([row for row in streams if row["codec_type"] == "audio"]), 1)
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            previous = target.read_bytes()
+            (root / "HSR_Voice_Archive.srt").write_text(
+                "1\\n00:00:00,000 --> 00:00:01,500\\nExternally edited\\n", encoding="utf-8")
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertEqual(target.read_bytes(), previous)
+            with self.assertRaises(ValueError):
+                exporter.export(audio, ass, target, require_current_ass=True)
+            self.assertEqual(target.read_bytes(), previous)
+
     def test_stale_ass_blocks_new_mkv_and_preserves_previous_valid_archive(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -400,10 +423,10 @@ class BundleRealFFmpegTests(unittest.TestCase):
             self.assertEqual(result["background"], "image")
             self.assertEqual(bundle_export_status(root)["state"], "current")
             self.assertEqual(load_previous_bundle_image(root), png)
-            codecs = {item["codec_type"]: item["codec_name"]
-                      for item in exporter._probe(target)["streams"]
-                      if item.get("codec_type") in {"video", "audio", "subtitle"}}
-            self.assertEqual(codecs, {"video": "h264", "audio": "flac", "subtitle": "ass"})
+            media_streams = [row for row in exporter._probe(target)["streams"]
+                             if row.get("codec_type") in {"video", "audio", "subtitle"}]
+            self.assertEqual([row["codec_name"] for row in media_streams],
+                             ["h264", "flac", "ass", "subrip"])
             decoded = subprocess.run([
                 "ffmpeg", "-hide_banner", "-loglevel", "error", "-i", str(target),
                 "-frames:v", "1", "-f", "rawvideo", "-pix_fmt", "rgb24", "pipe:1",
