@@ -282,10 +282,10 @@ class TestSubtitleEditor(unittest.TestCase):
             self.assertIn("final_chs", corrected)
             self.assertIn("规则，就是用来打破的！", corrected)
 
-            # SRT is a core output; ASS is generated only on demand.
+            # Complete delivery regenerates independent ASS and SRT by default.
             ass_file = out / "HSR_Voice_Archive.ass"
             srt_file = out / "HSR_Voice_Archive.srt"
-            self.assertFalse(ass_file.exists())
+            self.assertTrue(ass_file.is_file())
             self.assertTrue(srt_file.is_file())
 
             srt_content = srt_file.read_text(encoding="utf-8-sig")
