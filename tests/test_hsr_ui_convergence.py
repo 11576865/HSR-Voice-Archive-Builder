@@ -51,6 +51,16 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn("rail.contains(document.activeElement)", doc)
         self.assertIn(".preview-workbench:not(.audit-open) .layout-corpus-rail", self.css)
 
+    def test_mobile_qa_has_one_open_state_and_no_orphan_toggle(self):
+        doc = self.html
+        self.assertNotIn("layoutCorpusMobileToggleBtn", doc)
+        self.assertNotIn(".layout-corpus-rail:not(.is-open)", doc)
+        self.assertIn('id="layoutAuditDrawerToggle" aria-expanded="false" aria-controls="layoutCorpusRail"', doc)
+        self.assertIn("workbench.classList.toggle('audit-open',!!open)", doc)
+        self.assertIn("rail.classList.toggle('is-open',!!open)", doc)
+        self.assertIn("rail.toggleAttribute('inert',!open)", doc)
+        self.assertIn("toggle.setAttribute('aria-expanded',open?'true':'false')", doc)
+
     def test_one_final_text_editor_and_trial_hidden_by_default(self):
         doc = self.html
         self.assertIn('id="subFinalEditor"', doc)
@@ -74,9 +84,11 @@ class HsrUiConvergence(unittest.TestCase):
 
     def test_effects_closes_layout_qa_and_nav_identity_is_semantic(self):
         doc = self.html
-        self.assertIn("if(next==='effects'&&root.querySelector('.preview-workbench.audit-open'))", doc)
+        self.assertIn("if(next==='effects'){", doc)
+        self.assertIn("document.activeElement===drawerToggle", doc)
+        self.assertIn("if(hadQaFocus)document.getElementById('studioEffectsTab')?.focus();", doc)
         self.assertIn("setHsrAuditDrawer(false);", doc)
-        self.assertIn("if(hadRailFocus)document.getElementById('studioEffectsTab')?.focus();", doc)
+        self.assertIn("if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);", doc)
         self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.css)
         for task in ("review", "layout", "effects", "export", "update"):
             self.assertIn(f'.workspace-nav button[data-workspace-target="{task}"]', doc)

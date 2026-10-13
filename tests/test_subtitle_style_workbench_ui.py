@@ -194,7 +194,6 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
             "layoutCorpusPrevPageBtn",
             "layoutCorpusNextPageBtn",
             "layoutCorpusPageStatus",
-            "layoutCorpusMobileToggleBtn",
             "layoutStyleUndoBtn",
             "layoutStyleRedoBtn",
         ):
@@ -216,8 +215,10 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn(".preview-workbench .layout-corpus-rail{", html)
         self.assertIn("order:2!important;width:100%", html)
         self.assertIn(".preview-workbench .preview-inspector{order:3!important", html)
-        self.assertIn('aria-expanded="false" aria-controls="layoutCorpusList"', html)
-        self.assertIn("rail.classList.toggle('is-open')", html)
+        self.assertIn('id="layoutAuditDrawerToggle" aria-expanded="false" aria-controls="layoutCorpusRail"', html)
+        self.assertIn("workbench.classList.toggle('audit-open',!!open)", html)
+        self.assertIn("rail.classList.toggle('is-open',!!open)", html)
+        self.assertNotIn("layoutCorpusMobileToggleBtn", html)
 
 
 
