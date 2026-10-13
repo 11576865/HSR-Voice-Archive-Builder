@@ -135,7 +135,7 @@ class BundleRealFFmpegTests(unittest.TestCase):
     def _certify(root: Path) -> None:
         (root / "manifest.json").write_text('{"entries":[]}', encoding="utf-8")
         (root / "HSR_Voice_Archive.srt").write_text(
-            "1\\n00:00:00,000 --> 00:00:01,500\\nTest\\n", encoding="utf-8"
+            "1\n00:00:00,000 --> 00:00:01,500\nTest\n", encoding="utf-8"
         )
         record_subtitle_export(root, state="current", ass_required=True)
 
@@ -155,7 +155,7 @@ class BundleRealFFmpegTests(unittest.TestCase):
             self.assertEqual(bundle_export_status(root)["state"], "current")
             previous = target.read_bytes()
             (root / "HSR_Voice_Archive.srt").write_text(
-                "1\\n00:00:00,000 --> 00:00:01,500\\nExternally edited\\n", encoding="utf-8")
+                "1\n00:00:00,000 --> 00:00:01,500\nExternally edited\n", encoding="utf-8")
             self.assertEqual(bundle_export_status(root)["state"], "stale")
             self.assertEqual(target.read_bytes(), previous)
             with self.assertRaises(ValueError):
