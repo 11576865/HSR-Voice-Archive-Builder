@@ -72,6 +72,31 @@ class BackgroundUploadBudgetTests(unittest.TestCase):
             Handler._read_body(too_big)
 
 
+class FastApiArchiveBodyBudgetTests(unittest.IsolatedAsyncioTestCase):
+    async def test_missing_content_length_is_bounded_by_actual_bytes(self):
+        from app.server import _read_bounded_bundle_json
+
+        class FakeRequest:
+            def __init__(self, data, content_length=None):
+                self.headers = {} if content_length is None else {"content-length": str(content_length)}
+                self.data = data
+
+            async def stream(self):
+                for start in range(0, len(self.data), 256 * 1024):
+                    yield self.data[start:start + 256 * 1024]
+
+        # 8 MiB was formerly the hard cap. A 9 MiB JSON body must now pass.
+        body = json.dumps({"background_image_base64": "X" * (9 * 1024 * 1024)}).encode()
+        got = await _read_bounded_bundle_json(FakeRequest(body))
+        self.assertEqual(len(got["background_image_base64"]), 9 * 1024 * 1024)
+        with self.assertRaisesRegex(ValueError, "24 MiB"):
+            await _read_bounded_bundle_json(FakeRequest(body, content_length=MAX_BUNDLE_JSON_BYTES + 1))
+        # Forged/missing Content-Length cannot evade the streamed-byte limit.
+        too_big = b"X" * (MAX_BUNDLE_JSON_BYTES + 1)
+        with self.assertRaisesRegex(ValueError, "24 MiB"):
+            await _read_bounded_bundle_json(FakeRequest(too_big))
+
+
 class BundleAsDerivedDeliverableTests(unittest.TestCase):
     def setUp(self):
         td = tempfile.TemporaryDirectory()
