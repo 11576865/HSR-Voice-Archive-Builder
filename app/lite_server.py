@@ -1464,10 +1464,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Output directory is not configured")
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV preview project context changed")
-            spec = normalize_bundle_background(data.get("background_spec"))
-            image = decode_bundle_background(data.get("background_image_base64"))
+                        image = decode_bundle_background(data.get("background_image_base64"))
             if image is None and data.get("reuse_saved_background") is True:
                 image = load_previous_bundle_image(output)
+            raw_spec = data.get("background_spec")
+            spec = normalize_bundle_background(raw_spec if raw_spec is not None else {
+                "mode": "image" if image is not None else "color",
+            })
             if (spec["mode"] == "image") != (image is not None):
                 raise ValueError("图片模式需要图片，渐变和纯色不能附带图片")
             png = render_background_preview(
@@ -1485,10 +1488,13 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Output directory is not configured")
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV export project context changed")
-            spec = normalize_bundle_background(data.get("background_spec"))
-            image = decode_bundle_background(data.get("background_image_base64"))
+                        image = decode_bundle_background(data.get("background_image_base64"))
             if image is None and data.get("reuse_saved_background") is True:
                 image = load_previous_bundle_image(output)
+            raw_spec = data.get("background_spec")
+            spec = normalize_bundle_background(raw_spec if raw_spec is not None else {
+                "mode": "image" if image is not None else "color",
+            })
             if (spec["mode"] == "image") != (image is not None):
                 raise ValueError("图片背景需要上传或复用已保存图片；渐变和纯色模式不能包含图片")
             color = str(data.get("background_color") or "#000000")
