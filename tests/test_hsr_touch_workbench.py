@@ -49,6 +49,27 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("WhisperX", self.html)
         self.assertIn("不能直接导入任意项目", self.html)
 
+    def test_karaoke_and_effect_feedback_have_visible_primary_entrypoints(self):
+        html, css = self.html, self.css
+        for name in ("wordAlignmentStatus", "refreshWordAlignmentBtn",
+                     "generateWordAlignmentBtn", "importWordAlignmentBtn",
+                     "wordAlignmentFile", "wordAlignmentProviderStatus",
+                     "hsrEffectOperationStatus", "hsrEffectOperationTitle",
+                     "hsrEffectOperationDetail", "hsrKaraokeReadiness"):
+            self.assertEqual(html.count('id="' + name + '"'), 1, name)
+        self.assertLess(html.index('id="hsrKaraokeReadiness"'),
+                        html.index('class="hsr-footage-picker"'))
+        self.assertLess(html.index('id="hsrEffectOperationStatus"'),
+                        html.index('class="layout-preview-evidence"'))
+        self.assertIn("function setHsrEffectOperation(phase, detail='')", html)
+        self.assertIn("setHsrEffectOperation('encoding'", html)
+        self.assertIn("setHsrEffectOperation('decoding'", html)
+        self.assertIn("setHsrEffectOperation('ready'", html)
+        self.assertIn("setHsrEffectOperation('failed'", html)
+        self.assertIn("setHsrKaraokeReadiness('0 / '", html)
+        self.assertIn(".hsr-karaoke-readiness",css)
+        self.assertIn(".hsr-effect-operation-status",css)
+
     def test_playback_is_revealed_after_decode_not_before(self):
         a = self.html.index("async function renderHsrEffectVideo()")
         end = self.html.find("\nfunction ", a + 10)
