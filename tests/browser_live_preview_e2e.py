@@ -49,7 +49,13 @@ def probe(ffprobe: str, target: Path) -> dict:
         ffprobe, "-v", "error", "-show_entries",
         "format=duration:stream=codec_type,codec_name,width,height,start_time",
         "-of", "json", str(target),
-    ], check=True, capture_output=True, text=True, timeout=15)
+    ], check=False, capture_output=True, text=True, timeout=15)
+    if result.returncode:
+        prefix = target.read_bytes()[:60]
+        raise AssertionError(
+            f"ffprobe cannot decode API response ({target.stat().st_size} bytes, "
+            f"first bytes={prefix!r}): {result.stderr[:1400]}"
+        )
     return json.loads(result.stdout)
 
 
@@ -151,7 +157,13 @@ def run(output: Path) -> None:
                     ensure("source_video_base64" in seen_real[0],
                            "Browser did not upload actual source bytes")
                     output_movie = root / "live-output.webm"
-                    output_movie.write_bytes(response.body())
+                    raw_response = response.body()
+                    ensure(response.headers.get("content-type", "").startswith("video/webm"),
+                           "Real preview returned unexpected Content-Type: " +
+                           str(response.headers.get("content-type")))
+                    ensure(raw_response.startswith(b"\x1a\x45\xdf\xa3"),
+                           "API returned non-WebM bytes: " + repr(raw_response[:100]))
+                    output_movie.write_bytes(raw_response)
                     metadata = probe(ffprobe, output_movie)
                     streams = metadata.get("streams", [])
                     video = next((item for item in streams
