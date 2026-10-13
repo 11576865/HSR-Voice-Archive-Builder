@@ -109,7 +109,11 @@ class BundleLifecycleTests(unittest.TestCase):
     def test_project_summary_and_both_servers_expose_rebuild_contract(self):
         repo = Path(__file__).resolve().parents[1]
         project = (repo / "app/project.py").read_text(encoding="utf-8")
-        self.assertIn('"bundle_export": bundle_export_status(output)', project)
+        self.assertIn('bundle_health = bundle_export_status(output)', project)
+        self.assertIn('"bundle_export": bundle_health', project)
+        self.assertIn('freshness=bundle_health["state"]', project)
+        self.assertIn('needs_rebuild=bundle_health["needs_rebuild"]', project)
+        self.assertIn('role="legacy_independent_video"', project)
         pipeline = (repo / "app/pipeline.py").read_text(encoding="utf-8")
         self.assertNotIn('(out_dir / "HSR_Voice_Archive_Bundle.mkv").unlink(missing_ok=True)', pipeline)
         for path in ("app/server.py", "app/lite_server.py"):
