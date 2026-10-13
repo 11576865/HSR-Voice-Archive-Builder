@@ -17,6 +17,7 @@ from .subtitle_export_status import read_subtitle_export_health, _inputs as _sub
 from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, MODES, normalize_bundle_background
 
 RECEIPT = "archive_bundle_receipt.json"
+PREFERENCES = "archive_bundle_preferences.json"
 OUTPUT = "HSR_Voice_Archive_Bundle.mkv"
 IMAGE_PREFIX = ".hsr-bundle-bg-"
 IMAGE_EXTENSIONS = {".png", ".jpg", ".webp"}
@@ -105,8 +106,30 @@ def _image_asset(output: Path, receipt: dict[str, Any]) -> Path | None:
     return image
 
 
+
+
+def _background_preferences(output: Path) -> dict[str, Any] | None:
+    # Preferences are not a publication certificate. They preserve a custom
+    # backdrop when the user temporarily switches to FLAC-only and retires MKV.
+    path = output / PREFERENCES
+    if not path.is_file() or path.is_symlink():
+        return None
+    try:
+        data = json.loads(path.read_text(encoding="utf-8"))
+        if (data.get("schema_version") != 1
+                or not isinstance(data.get("background"), dict)
+                or not isinstance(data.get("attach_project_fonts"), bool)):
+            return None
+        bg = data["background"]
+        if bg.get("kind") not in MODES:
+            return None
+        normalize_bundle_background(bg.get("spec") or {"mode": bg["kind"]})
+        return data
+    except (OSError, ValueError, TypeError, KeyError):
+        return None
+
 def previous_bundle_settings(output: Path) -> dict[str, Any]:
-    receipt = _read_receipt(output)
+    receipt = _read_receipt(output) or _background_preferences(output)
     if receipt is None:
         return {"known": False, "background_color": "#000000",
                 "background_kind": "color", "image_saved": False,
@@ -126,7 +149,7 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
 
 
 def load_previous_bundle_image(output: Path) -> bytes:
-    receipt = _read_receipt(output)
+    receipt = _read_receipt(output) or _background_preferences(output)
     if receipt is None or receipt["background"].get("kind") != "image":
         raise ValueError("该项目没有可复用的 MKV 背景图，请上传图片或改用纯色")
     image = _image_asset(output, receipt)
