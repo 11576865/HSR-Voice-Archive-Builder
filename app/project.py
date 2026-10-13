@@ -782,11 +782,28 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
             "error": f"{type(exc).__name__}: {exc}",
         }
     from .archive_bundle_lifecycle import bundle_export_status
+    bundle_health = bundle_export_status(output)
+    # One authoritative receipt-backed status is published both at the
+    # historical project.bundle_export path and on the product itself.
+    # Never treat a stale MKV as a valid current result merely because
+    # the file still exists for rollback/use as a historical artifact.
+    combined = output_groups["playback_bundle"]["HSR_Voice_Archive_Bundle.mkv"]
+    combined.update(
+        role="derived_playback_bundle",
+        freshness=bundle_health["state"],
+        current=bundle_health["state"] == "current",
+        needs_rebuild=bundle_health["needs_rebuild"],
+        can_generate=bundle_health["can_generate"],
+        depends_on=bundle_health["depends_on"],
+        blockers=bundle_health["blockers"],
+    )
+    legacy = output_groups["legacy_outputs"]["HSR_Voice_Archive_Black.mkv"]
+    legacy.update(role="legacy_independent_video", freshness="unverified")
     return {
         "name": config.name,
         "root": config.root,
         "output_path": str(output),
-        "bundle_export": bundle_export_status(output),
+        "bundle_export": bundle_health,
         "config": asdict(config),
         "has_manifest": manifest.is_file(),
         "build_complete": not interrupted_build and report_file.is_file() and (
