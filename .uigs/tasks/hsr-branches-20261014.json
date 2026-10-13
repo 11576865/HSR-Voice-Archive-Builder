@@ -1,0 +1,696 @@
+{
+  "schema_version": 1,
+  "repository": "11576865/HSR-Voice-Archive-Builder",
+  "date": "2026-10-14",
+  "comparison_base": "6e370850f411a9a8810ee85324ddcf8658a58c72",
+  "total_branches": 109,
+  "compared_nonmain": 108,
+  "compare_summary": "Each non-main branch is git-diverged from main. Topological divergence does not prove that functionality is absent from current main.",
+  "important_branches": [
+    {
+      "branch": "feat/hsr-archive-audit-karaoke-v1",
+      "ahead": 181,
+      "behind": 85,
+      "note": "Adds audit, ASS coverage batches, writer locks and sampling modules currently absent on main."
+    },
+    {
+      "branch": "feat/hsr-layout-safety-ratio-karaoke-preview",
+      "ahead": 180,
+      "behind": 85,
+      "note": "Direct ancestor of archive audit branch; integrate as one feature chain."
+    },
+    {
+      "branch": "feat/subtitle-style-workbench-evidence-v15",
+      "ahead": 155,
+      "behind": 85,
+      "note": "Overlaps prior cluster; requires semantic deduplication."
+    },
+    {
+      "branch": "feat/hsr-real-image-background-preview-20261013",
+      "ahead": 10,
+      "behind": 68,
+      "note": "Open draft PR #150; main already has larger 16 MiB PNG/JPEG/WebP implementation. Port useful evidence/clear UX and close superseded PR."
+    }
+  ],
+  "cannot_claim_complete": [
+    "Physical Android/player/long archive evidence tracked in Issue #158",
+    "Large audit feature cluster not merged",
+    "Semantic review of historical branches not finished"
+  ],
+  "branches": [
+    {
+      "name": "codex/chinese-subtitle-source",
+      "head": "a337c2d91aca5f99fd276e1ec8a6c24111167f79",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "design/application-shell-v3",
+      "head": "1eaf51f6386ce6ec2d5eac924ae62552fad7133c",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "design/project-overview-job-center",
+      "head": "d329ee28a1e506df76c2717d7587b6d7a4fd6e44",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "design/unified-favicon",
+      "head": "bda7657c609bc183d595ce4cd84720f00e0e871e",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "design/workbench-visual-system",
+      "head": "a3704089f223772887b7a2943fa961c12376b339",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "design/workbench-visual-system-main",
+      "head": "cd5ce104194a7d075efc079812cef5f2f45b4beb",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/ass-layout-engine",
+      "head": "4503348afb1e1e079d8e3f8dbb5e90ecc744327c",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-archive-audit-karaoke-v1",
+      "head": "20c8216beef50403c57f0e480b5e0dc89a18778f",
+      "topology_to_main": "diverged",
+      "disposition": "requires_feature_integration"
+    },
+    {
+      "name": "feat/hsr-complete-mkv-tracks-fonts-background-20261013",
+      "head": "e05057ad3fe1bd437e6cbc942ebdb21d281f3efe",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-gradient-soft-background-complete-20261013",
+      "head": "19aab7466be868dc6aaa6dc21092bfb305a563bf",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-layout-safety-ratio-karaoke-preview",
+      "head": "017581d94e6307b6adfca437407fe1693567af00",
+      "topology_to_main": "diverged",
+      "disposition": "requires_feature_integration"
+    },
+    {
+      "name": "feat/hsr-local-footage-ass-preview-20261013",
+      "head": "e3e2ff874260e56ea0295ab631be4cd2cca1a985",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-mkv-rebuild-saved-background-lifecycle-20261013",
+      "head": "04858795214b4656c27e86c880f2a3d2bd0177c9",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-mkv-rebuild-source-aware-v2-20261013",
+      "head": "3937184c4afb77ab6236b948d0318d2ee32e4437",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-mkv-soft-package-20261013",
+      "head": "43079afe9ff8e287d98bd08cac0a8393b01aade6",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-preview-background-color-20261013",
+      "head": "18452329c27151c6389557fcdf699bfc608be7df",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-project-font-import-preview-20261013",
+      "head": "8f34a8debcd4e8a5922d882e9ee5ec959b3fee63",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/hsr-real-image-background-preview-20261013",
+      "head": "33d2a7c327845418622a070e60a1ffa47839a5e8",
+      "topology_to_main": "diverged",
+      "disposition": "superseded_pending_pr_closure"
+    },
+    {
+      "name": "feat/hsr-real-image-effect-preview-20261013",
+      "head": "1f14e8e2ab5f8d6b2a8563e392bbfc4aeb434bc9",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/subtitle-review-editor-step1-11326546756999094971",
+      "head": "0f408eb08202f86e4d6ad282e7947b7ca65c92fb",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feat/subtitle-style-workbench-evidence-v15",
+      "head": "8796f417a0106f7b266cbefa8179319ec941fabb",
+      "topology_to_main": "diverged",
+      "disposition": "requires_feature_integration"
+    },
+    {
+      "name": "feature/automatic-translation-recovery",
+      "head": "2c17348d3d4f3dbbe60dfff930f2dfe6ee19b998",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/chapter-continuous-flac",
+      "head": "fd5c51e86b07a150326ff5f362e4ab78100113ac",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/font-browser-preview-background",
+      "head": "c6d18c306811110f1472ec501b74077ff3e8354c",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/huggingface-incremental-apply",
+      "head": "148910cdc4548e1505756112a7294ba3d4985e65",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/incremental-apply-local-package",
+      "head": "f92ede7bd985eacbd4b958ca33578492ed276f15",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/incremental-update-review-workbench",
+      "head": "fedf622910c2c378fc3b740171e9457b6d39c932",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/proofreading-productivity",
+      "head": "f55ed63eee5f4db3c5f2447dd2015ba19592e4d8",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/subtitle-proofreading-workbench",
+      "head": "19012f4685c817ecae21ccd9bc73fa8ada4ae412",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/subtitle-proofreading-workbench-main",
+      "head": "18fa075a9973db78958837ce072d77f49e47dd92",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/text-recovery-import-export",
+      "head": "63642de10ace3dcfd29036f0a98e88affb2b40ff",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "feature/timeline-ass",
+      "head": "87490eea1d03755d42f59c4a1a1cfcbab5b45171",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/ass-bilingual-layout",
+      "head": "9d56692b4761fb3160dfd8c3c50c7c53b3c059ec",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-effects-layout-qa-leak-20261013",
+      "head": "07f4e7430970067dab089364aebf49992d769476",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-first-class-effects-navigation-20261013",
+      "head": "8c2221ee95650f620711a54ec1701851bede09ba",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-focused-studio-viewport-20261013",
+      "head": "3cbe77587bedc562fb4ae015665c84d72b823e90",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-mkv-subtitle-freshness-and-validation-20261013",
+      "head": "62d4ddaab64e6d2e262da3304e4632748dd99e8d",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-mobile-qa-single-owner-20261013",
+      "head": "7ca54b8fd6590485dd8e8a8c01c75b3d6f520cf0",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-responsive-css-ownership-20261013",
+      "head": "019aa1e4923435326e7f69a76bcef0310130e6c4",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-retire-legacy-layout-audio-css-20261013",
+      "head": "934eeb20ba48eace490d92424e34b1867c830222",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-review-to-studio-save-gate-20261013",
+      "head": "95e1734f823f5934f6368b958246c1f4a9e59539",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-shared-subtitle-corpus-20261013",
+      "head": "3ea4bfa887cac97d64751828bff702d0092791a9",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-source-audio-and-real-browser-e2e-20261013",
+      "head": "a24b25889b8b19dfafab6c05492e1edf44a1bd9f",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-three-pass-subtitle-workflow-20261013",
+      "head": "4072b8c43098d26512071b4c6e4054ee7e40ed63",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-ui-convergence-real-ownership-20261013",
+      "head": "070f69fe6932f952baf302d135259d6dc9ce2bd3",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-viewport-and-gesture-workbench-20261013",
+      "head": "e4cbb271e4b38302a4832dee164d54a3cd18344f",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/hsr-viewport-touch-preview-guidance-20261013",
+      "head": "c0fec818e7758cae2cdef372ef4e40bc655ddaa0",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/layout-workbench-theme-geometry",
+      "head": "73b3de32c9149bf2e96b074d7a6546388bfa4842",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/light-layout-theme-authority",
+      "head": "64b1ab5f75ed7e2892a8144f8c6b40fb4d120178",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/light-layout-theme-authority-main",
+      "head": "0bb6cb374be7a21a61d08466663c4cd72417c37d",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/mobile-subtitle-review-layout-defaults",
+      "head": "57a0f8d569b70eda802b98163db8dff8e3ccb852",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/mobile-ui-density-reflow",
+      "head": "4f05091f8c3c371b0968c86fbd12d3dd99a400d4",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/recovery-safety-guards",
+      "head": "249158b4b012912ba257e38f617b6cc6ea22f001",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/remote-update-identity",
+      "head": "641f6130248c1263bbebceb1d0d229cdfd8d1ce2",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/subtitle-editor-autosave",
+      "head": "2c409ec03121731eb7cea365c11431b35a88b71a",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/subtitle-override-consistency",
+      "head": "3b61f457a5ff077b48bddd16775ca99b6f5999a0",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/timeline-ass-finalize",
+      "head": "57da311215576f50e7b2c9920fbaf9ac39abe38c",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/v1-resource-recovery-and-defaults",
+      "head": "727ab3045263a4001a9809c47d2ed688df0c63e5",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "fix/workspace-wide-layout-authority",
+      "head": "0be912c2d8e3a6a6842b70c79a3887df3b3a69c8",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "hotfix-termux-lite-clean",
+      "head": "ac950126dea1fe8de25f563f7e6e5e6437a82e4f",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "hotfix-termux-openai",
+      "head": "fa6b4b1f74a19c80832cb7111de0bfe33b7d5389",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "hotfix-termux-py7zr",
+      "head": "2b513b25e036886d370d2ec5dfe08666ad1a6230",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "jules-12659437696323660637-3a8fd21e",
+      "head": "16bbf4116602c7e193e0695d90abfc0cd3e8e570",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "jules-5273946917185945690-747214cb",
+      "head": "50ead7c074401371e0a378de05ad15d2775a8b15",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "main",
+      "head": "6e370850f411a9a8810ee85324ddcf8658a58c72",
+      "topology_to_main": "authority",
+      "disposition": "keep_authority"
+    },
+    {
+      "name": "pages/minimal-wide-launcher",
+      "head": "eaa253f103f73ec1290f23af7e6cb31251c61524",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "pages/mobile-console-responsive",
+      "head": "146f4200b1a95da34cd4b570340c10863d35ae68",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "pages/modern-platform-launcher",
+      "head": "33903825cf92a8a3202ab7aa52b106cd5c3fd8e0",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "pages/windows-balanced-technical-entry",
+      "head": "1a6f1c500e926b1c7dd463ed9ba2401e85cae90f",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "pages-termux-copy",
+      "head": "3819dbe5961abfbb89b321f5ccbbd68ad261cf83",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "pages-ui-refresh",
+      "head": "426daedcb4ca8d5c13610a401904453cd2f91873",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "quick-folder-languages",
+      "head": "f9a8c76e42fc01e37a7992716c9d5cb069340f79",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "quick-partial-coverage",
+      "head": "41f848bbf7fba2655ed01623d7934f0594c5addd",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "refactor-subtitle-editor-ui-17686072827794854590",
+      "head": "18c249066ced6e4a9f186356ce96397dd2e9fbb9",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/add-local-web-entry",
+      "head": "23a0271368770df6056c4ef510ea7f69d075c8a7",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/clarify-language-packages",
+      "head": "dc33ce9283c61eb6ce7decc9ffe4a1fd83d7d10d",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/high-contrast-collapsible-shell",
+      "head": "49f18f8af6c45d91d6e4d41377bb106c52e3076a",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/mobile-single-column-workbench",
+      "head": "0d614ef378406ea43b9af5428388b3a1e62c9587",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/pages-simplified-entry",
+      "head": "0a013efcbdc3ca7b9a54e01c802bbff1266fb104",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/quick-build-settings",
+      "head": "f260225caea8cc758cbeb24713ca87c068725d73",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/theme-coherence-utility-drawer-fixes",
+      "head": "3aaa814fe1590e89a24abaf370f75067e2d8e006",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/theme-system-and-collapse-fixes",
+      "head": "3d3fdebbba32dc0bdfc9ab9a13c924fba64c431f",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "ui/workflow-density-review-update-export",
+      "head": "da49645f545445d99794441388861d063adb26fa",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    },
+    {
+      "name": "uigs-outbox",
+      "head": "78893f525386b714441e3242e1665f0df752788b",
+      "topology_to_main": "diverged",
+      "disposition": "keep_operational"
+    },
+    {
+      "name": "v0.2",
+      "head": "c6d96c551030fb49eaa414c242991fd5297b7954",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.3",
+      "head": "f36493e90d7cb988befd6a9829ce08e48ae85778",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.4",
+      "head": "58b5709acf32b6454280135357ad069f3765d50c",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.5-ci-py313",
+      "head": "f71cbc5e167936d812c9b6f9d00bc2c701d68d0c",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.5-termux-lite",
+      "head": "ae02e945ec493c8c5938f004a71626a79bd15f34",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.5-termux-lite-clean",
+      "head": "2c4a2c3ec049222f63c7f279353699dde08caab7",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.5",
+      "head": "c14b522711542a8af97163737c830c4813490418",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.6-rest-translation",
+      "head": "2f125d0f7270933250c1bac6bc3aa737d1382309",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.7-api-provider",
+      "head": "8366412586aad599969c5e3bf22ed94d6b1f4797",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.7-benchmark-autodiscovery",
+      "head": "5c05e7d167584042935ee6b575db37020b5497a0",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.7-default-sol",
+      "head": "85e0b4006f44900ce81174246f8bf4594b25dcc7",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.7-translation-benchmark",
+      "head": "abe69056a6734c92c3c9e19a26e74d603eb8b596",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.8-quick-mode",
+      "head": "83c260708475f814ae88ed783c204024c78cc85e",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.8-translation-qa",
+      "head": "02687ba2729d3f3f3458eb8b287354d177b81599",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-c-api-budget-cache",
+      "head": "d628bf471170dc67a86711c7c0418edbfa0fcbd0",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-d-instant-feedback",
+      "head": "7c2ee87f9f3a0c225dae1fba066e3e84cafb2a19",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-d-progress-ui",
+      "head": "b0993dd0334fc2514484dc9de8b3a793f149be01",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-d-qa-glossary",
+      "head": "ed202ec21570a8f8c9aadf76d6f98f2793bfde4d",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-d-termux-output-default",
+      "head": "b5273a157477c0bc00a935a258767f02dcc2f4a9",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-e-project-language-roles",
+      "head": "ad5f919e56600e0e7e124d80550e9a19ddcea845",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-f-state-layout",
+      "head": "f05c7a349ee972ef04fa5d2243f0da708f963d38",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-g-source-relink",
+      "head": "3cc04be15d5d622c6e1df79bcb6f6d16b0c3bab0",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-h-project-clone",
+      "head": "6cd3bce3402352d407c1250b559f09c708979212",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "v0.9-i-incremental-refresh",
+      "head": "f56fb66c1ebfddec15b98c6e495d5e0e642e2159",
+      "topology_to_main": "diverged",
+      "disposition": "keep_historical"
+    },
+    {
+      "name": "voice-gap-adaptation-engine-14890963359753375035",
+      "head": "73da9bc2bf27e8364ffa5732932ce79bf196702d",
+      "topology_to_main": "diverged",
+      "disposition": "pending_semantic_diff_review"
+    }
+  ]
+}
