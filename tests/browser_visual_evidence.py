@@ -852,7 +852,7 @@ def gradient_background_check(browser, base_url, output, report):
             return {labels:cards.map(x=>x.querySelector('.badge')?.textContent),
               names:cards.map(x=>x.querySelector('.artifact-card-title')?.textContent),
               count:document.getElementById('artifactCount')?.textContent,
-              pendingAction:cards[0]?.querySelector('.artifact-card-actions button')?.textContent};
+              pendingAction:[...cards[0]?.querySelectorAll('.artifact-card-actions button')||[]].map(x=>x.textContent).join(' / ')};
           };
           renderArtifactBrowser(project,outputs,outputs);
           const stale=inspect();
