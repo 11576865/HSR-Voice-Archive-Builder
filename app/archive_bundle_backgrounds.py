@@ -72,7 +72,11 @@ def gradient_source(spec: dict[str, str], *, width: int, height: int, fps: int) 
     src = (f"gradients=s={width}x{height}:r={fps}:type={gradient_type}:"
            f"{colors}:n={n}:{coords}:seed=1:speed=0")
     # gblur is available across more FFmpeg builds than optional frei0r effects.
-    return src, "gblur=sigma=24" if mode == "soft" else None
+    # Preview and final video keep approximately the same blur footprint in
+    # proportional screen coordinates, avoiding a sharp 1080p export after a
+    # noticeably softer 640px preview.
+    sigma = max(1, min(72, round(width * 24 / 640)))
+    return src, f"gblur=sigma={sigma}" if mode == "soft" else None
 
 
 def render_background_preview(
