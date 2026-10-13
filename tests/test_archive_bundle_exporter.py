@@ -15,6 +15,29 @@ from app.subtitle_export_status import record_subtitle_export
 
 
 class BundleInputValidationTests(unittest.TestCase):
+    def test_mkv_routes_require_current_ass_at_launch_and_publish(self):
+        root = Path(__file__).resolve().parents[1]
+        for name in ("app/server.py", "app/lite_server.py"):
+            code = (root / name).read_text(encoding="utf-8")
+            start = code.index('"/api/output/archive-bundle"')
+            block = code[start: start + 2900]
+            self.assertIn("require_current_bundle_subtitles(output)", block, name)
+            self.assertIn("require_current_ass=True", block, name)
+
+    def test_unverified_or_nonass_receipts_are_refused(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            (root / "manifest.json").write_text('{"entries":[]}', encoding="utf-8")
+            (root / "HSR_Voice_Archive.srt").write_text("one", encoding="utf-8")
+            (root / "HSR_Voice_Archive.ass").write_text("[Events]", encoding="utf-8")
+            with self.assertRaisesRegex(ValueError, "ASS 字幕未通过"):
+                require_current_bundle_subtitles(root)
+            record_subtitle_export(root, state="current", ass_required=False)
+            with self.assertRaisesRegex(ValueError, "ASS 字幕未通过"):
+                require_current_bundle_subtitles(root)
+            record_subtitle_export(root, state="current", ass_required=True)
+            require_current_bundle_subtitles(root)
+
     def test_background_is_bounded_and_sniffed(self):
         with self.assertRaisesRegex(ValueError, "PNG, JPEG or WebP"):
             decode_bundle_background(base64.b64encode(b"not an image").decode("ascii"))
