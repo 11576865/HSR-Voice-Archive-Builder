@@ -5,13 +5,17 @@ import base64
 import shutil
 import subprocess
 import tempfile
+import threading
+import time
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 from app.archive_bundle_exporter import (
     ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles,
 )
 from app.subtitle_export_status import record_subtitle_export
+from app import jobs as job_registry
 
 
 class BundleInputValidationTests(unittest.TestCase):
@@ -46,6 +50,52 @@ class BundleInputValidationTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             decode_bundle_background("A" * (6 * 1024 * 1024))
         self.assertIsNone(decode_bundle_background(None))
+
+
+class BundleOutputJobSerializationTests(unittest.TestCase):
+    def test_archive_job_blocks_other_same_project_output_writers(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            project = str(root / "project-a")
+            other = str(root / "project-b")
+            started, release = threading.Event(), threading.Event()
+            def hold_mux():
+                started.set()
+                release.wait(10)
+                return {"ok": True}
+            with patch.object(job_registry, "JOBS_FILE", root / "jobs.json"):
+                first = job_registry.create_job(
+                    "archive-bundle-export", hold_mux,
+                    project_root=project, project_name="Archive A",
+                )
+                self.assertTrue(started.wait(timeout=8), "Archive job failed to start")
+                try:
+                    for kind in ("archive-bundle-export", "ass-export", "black-video-export",
+                                 "quick-build", "remote-update-apply"):
+                        with self.subTest(kind=kind):
+                            with self.assertRaisesRegex(RuntimeError, "同一项目已有输出任务"):
+                                job_registry.create_job(
+                                    kind, lambda: None, project_root=project,
+                                    project_name="Archive A",
+                                )
+                    unrelated = job_registry.create_job(
+                        "archive-bundle-export", lambda: {"ok": True},
+                        project_root=other, project_name="Archive B",
+                    )
+                    self.assertIsNotNone(job_registry.get_job(unrelated.id))
+                finally:
+                    release.set()
+                until = time.monotonic() + 8
+                while time.monotonic() < until:
+                    if job_registry.get_job(first.id)["state"] == "succeeded":
+                        break
+                    time.sleep(0.02)
+                self.assertEqual(job_registry.get_job(first.id)["state"], "succeeded")
+                repeat = job_registry.create_job(
+                    "archive-bundle-export", lambda: {"ok": True},
+                    project_root=project, project_name="Archive A",
+                )
+                self.assertIsNotNone(job_registry.get_job(repeat.id))
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
