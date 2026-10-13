@@ -878,7 +878,9 @@ def write_manifest(entries: list[Entry], report: dict[str, object], out_dir: Pat
             source_language=str(report.get("source_text_language", "en")),
             target_language=str(report.get("target_language", "zh-CN")),
         )
-    else:
+    elif write_subtitles:
+        # Legacy subtitle-capable callers may intentionally disable ASS.
+        # FLAC-only mode must not destroy a previously published ASS.
         ass_file.unlink(missing_ok=True)
 
     if write_subtitles:
