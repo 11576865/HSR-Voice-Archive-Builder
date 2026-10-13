@@ -4933,7 +4933,7 @@ function syncArchiveBundleProjectState(project,force=false){
     reuse.title=settings.image_saved?'沿用当前项目内已校验保存的图片':'当前项目暂无可复用的背景图片';
   }
   const bundlePanel=document.getElementById('archiveBundlePanel');
-  if(bundlePanel)bundlePanel.classList.toggle('hidden',p?.config?.delivery_mode==='flac_only');
+  if(bundlePanel)bundlePanel.classList.toggle('hidden',project?.config?.delivery_mode==='flac_only');
   const state=document.getElementById('bundleFreshnessStatus');
   if(state){
     state.textContent=(settings.message||'请先打开项目。')+
