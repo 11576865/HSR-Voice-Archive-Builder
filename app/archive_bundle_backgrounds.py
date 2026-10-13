@@ -70,7 +70,7 @@ def gradient_source(spec: dict[str, str], *, width: int, height: int, fps: int) 
     # Every stop, point, seed and speed is explicit: no default random colors,
     # nondeterministic seed or slowly rotating static archive background.
     src = (f"gradients=s={width}x{height}:r={fps}:type={gradient_type}:"
-           f"{colors}:n={n}:{coords}:seed=1:speed=0")
+           f"{colors}:n={n}:{coords}:seed=1:speed=0.00001")
     # gblur is available across more FFmpeg builds than optional frei0r effects.
     # Preview and final video keep approximately the same blur footprint in
     # proportional screen coordinates, avoiding a sharp 1080p export after a
