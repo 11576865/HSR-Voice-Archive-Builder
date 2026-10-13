@@ -728,6 +728,7 @@ class Handler(BaseHTTPRequestHandler):
                     words = None
             fmt = str(data.get("preview_format") or "mp4").lower()
             source_bytes = decode_preview_source_video(data.get("source_video_base64"))
+            background_image = decode_bundle_background(data.get("preview_background_image_base64"))
             background_color = normalize_preview_background_color(data.get("preview_background_color"))
             video = render_ass_preview_video(
                 english_text=data.get("english_text", ""),
@@ -742,12 +743,13 @@ class Handler(BaseHTTPRequestHandler):
                 source_start_seconds=_float(data.get("source_start_seconds"), 0.0),
                 include_source_audio=_bool(data.get("include_source_audio", "true")),
                 background_color=background_color,
+                background_image_bytes=background_image,
                 font_dir=_active_project_font_dir(),
             )
             self._send_bytes(
                 200, video, "video/webm" if fmt == "webm" else "video/mp4",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
-                               "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("black" if background_color == "#000000" else "solid-color")},
+                               "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
             )
             return
 

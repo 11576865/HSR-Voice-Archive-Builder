@@ -172,17 +172,118 @@ class LocalFootageContractTests(unittest.TestCase):
                     )
                 self.assertEqual(result, b"encoded")
 
+
+    def test_static_image_ffmpeg_path_and_no_source_audio(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"mock-image"
+        calls = []
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[0] == "ffprobe":
+                return subprocess.CompletedProcess(cmd, 0, json.dumps({
+                    "streams": [{"codec_type": "video", "width": 640, "height": 360}]
+                }), "")
+            self.assertIn("-loop", cmd)
+            self.assertEqual(cmd[cmd.index("-loop") + 1], "1")
+            self.assertIn("-framerate", cmd)
+            self.assertIn("-an", cmd)
+            self.assertNotIn("0:a:0?", cmd)
+            self.assertIn("subtitles=", cmd[cmd.index("-vf") + 1])
+            self.assertEqual(Path(cmd[cmd.index("-i") + 1]).read_bytes(), png)
+            Path(cmd[-1]).write_bytes(b"image-source-video-encoded")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
+             patch("app.ass_preview.write_ass"), \
+             patch("app.ass_preview.subprocess.run", side_effect=fake_run):
+            encoded = self.call(background_image_bytes=png, background_color="#2468ac")
+        self.assertEqual(encoded, b"image-source-video-encoded")
+        self.assertEqual(len(calls), 2)
+        for options in [
+            {"background_image_bytes": png, "source_video_bytes": b"clip"},
+            {"background_image_bytes": b"not-an-image"},
+            {"background_image_bytes": png + b"x" * (4 * 1024 * 1024)},
+        ]:
+            with self.subTest(options=str(options.keys())), self.assertRaises(ValueError):
+                self.call(**options)
+
+    def test_api_accepts_verified_background_image_identity(self):
+        client = TestClient(app, base_url="http://127.0.0.1:8765")
+        png = b"\x89PNG\r\n\x1a\n" + b"mock-image"
+        data = {"chinese_text": "你好", "english_text": "Hi",
+                "preview_background_image_base64": base64.b64encode(png).decode(),
+                "preview_background_color": "#2468ac", "preview_format": "webm"}
+        with patch("app.server.render_ass_preview_video", return_value=b"video") as render:
+            response = client.post("/api/subtitle-layout/render-preview-video",
+                                   json=data, headers={"X-HSR-Token": api_token()})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["x-hsr-preview-background"], "background-image")
+        self.assertEqual(render.call_args.kwargs["background_image_bytes"], png)
+        invalid = client.post("/api/subtitle-layout/render-preview-video",
+                              json={**data, "preview_background_image_base64":
+                                    base64.b64encode(b"bad-file").decode()},
+                              headers={"X-HSR-Token": api_token()})
+        self.assertEqual(invalid.status_code, 400)
+
     def test_ui_selected_video_is_explicit_and_not_persisted(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
         for literal in ('id="effectFootageFile"', 'id="effectFootageStart"',
                         'id="effectFootageClearBtn"', "effectFootageAsBase64",
                         "payload.source_video_base64", "payload.source_start_seconds",
                         "X-HSR-Preview-Background", "'video-footage'",
-                        'id="effectFootageAudio"', "payload.include_source_audio"):
+                        'id="effectFootageAudio"', "payload.include_source_audio",
+                        'id="effectBackgroundImageFile"', "payload.preview_background_image_base64"):
             self.assertIn(literal, html)
 
 
 class RealSourceFootageProof(unittest.TestCase):
+    def test_real_background_image_produces_video_frames(self):
+        ffmpeg, ffprobe = shutil.which("ffmpeg"), shutil.which("ffprobe")
+        if not ffmpeg or not ffprobe:
+            self.skipTest("FFmpeg/FFprobe unavailable")
+        encoders = subprocess.run([ffmpeg, "-hide_banner", "-encoders"],
+                                 capture_output=True, text=True, timeout=8).stdout
+        filters = subprocess.run([ffmpeg, "-hide_banner", "-filters"],
+                                capture_output=True, text=True, timeout=8).stdout
+        if "libx264" not in encoders or "subtitles" not in filters:
+            self.skipTest("libx264/libass unavailable")
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            picture = root / "background.png"
+            subprocess.run([
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=1",
+                "-frames:v", "1", "-threads", "1", "-update", "1",
+                str(picture)
+            ], capture_output=True, check=True, timeout=20)
+            encoded = render_ass_preview_video(
+                english_text="Actual picture", chinese_text="真实背景",
+                source_language="en", target_language="zh-CN",
+                config=SubtitleRenderConfig(
+                    chs_font="DejaVu Sans", primary_font="DejaVu Sans",
+                    fade_in_ms=0, fade_out_ms=0, enable_kinetic=False,
+                ), background_color="#112233",
+                background_image_bytes=picture.read_bytes(),
+                container_format="mp4", duration_seconds=1.0,
+            )
+            target = root / "preview.mp4"
+            target.write_bytes(encoded)
+            probe = subprocess.run([
+                ffprobe, "-v", "error", "-show_entries",
+                "stream=codec_type,width,height:format=duration",
+                "-of", "json", str(target)
+            ], capture_output=True, text=True, check=True, timeout=10)
+            result = json.loads(probe.stdout)
+            video = next(s for s in result["streams"] if s["codec_type"] == "video")
+            self.assertEqual((video["width"], video["height"]), (960, 540))
+            self.assertGreater(float(result["format"]["duration"]), 0.8)
+            frame = subprocess.run([
+                ffmpeg, "-hide_banner", "-loglevel", "error",
+                "-ss", "0.5", "-i", str(target), "-frames:v", "1",
+                "-f", "rawvideo", "-pix_fmt", "rgb24", "-"
+            ], capture_output=True, check=True, timeout=15).stdout
+            self.assertEqual(len(frame), 960*540*3)
+            self.assertGreater(len(set(frame)), 30,
+                               "Actual image background must preserve a colorful input, not pure color")
+
     def test_real_ffmpeg_video_is_overlaid_with_ass(self):
         ffmpeg = shutil.which("ffmpeg")
         ffprobe = shutil.which("ffprobe")

@@ -130,14 +130,20 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
         if path.endswith("/api/subtitle-layout/render-preview-video") and video_bytes:
             assert body.get("preview_format") == "webm", "Chromium must negotiate VP8"
             has_source = "source_video_base64" in body
+            has_image = "preview_background_image_base64" in body
+            assert not (has_source and has_image), "Background input sources must be exclusive"
             if has_source:
                 assert base64.b64decode(body["source_video_base64"], validate=True) == video_bytes
                 assert body.get("source_start_seconds") == 0.2
+            if has_image:
+                assert base64.b64decode(body["preview_background_image_base64"], validate=True).startswith(
+                    b"\x89PNG\r\n\x1a\n")
             # Browser test proves decoded playback and UI provenance; separate
             # real-FFmpeg test proves the output pixels include actual ASS.
             route.fulfill(status=200, content_type="video/webm", body=video_bytes,
                           headers={"X-HSR-Preview-Background":
-                                   "local-footage" if has_source else "black"})
+                                   "local-footage" if has_source else
+                                   "background-image" if has_image else "black"})
             return
         if path.endswith("/api/status"):
             payload = {
@@ -307,6 +313,19 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
     page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
     screenshot(page, output, "desktop_effect_video_playback")
+    # An image must reach the actual video endpoint, rather than being used
+    # merely as decorative background in the browser's geometry preview.
+    png=b"\x89PNG\r\n\x1a\n"+b"browser-fixture"
+    page.locator("#effectBackgroundImageFile").set_input_files({
+        "name": "custom-image.png", "mimeType": "image/png", "buffer": png
+    })
+    page.locator("#previewVideoBtn").click()
+    page.wait_for_function("""() => {
+      const video=document.getElementById('libassVideoPreview');
+      return video.readyState>=2 && document.getElementById('videoPreviewStatus')
+        .textContent.includes('本地背景图片');
+    }""",timeout=20000)
+    screenshot(page, output, "desktop_image_background_effect_preview")
     # File picker must forward actual source bytes and update evidence identity.
     page.locator("#effectFootageFile").set_input_files({
         "name": "user-footage.webm", "mimeType": "video/webm", "buffer": fixture_video

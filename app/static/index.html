@@ -3534,13 +3534,16 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
   <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
+  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤4 MiB）</label>
+  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
+  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
   <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
   <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
   <label for="effectFootageStart">源视频起始位置（秒）</label>
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
-  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地素材，使用黑底</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。只读取当前选定的视频片段，来源音轨与画面一同截取；不接入归档 WAV，不保存输入到项目。较长影片请先剪出小样。</p>
+  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
+  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤4 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
 </div>
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
 
@@ -6534,6 +6537,7 @@ let videoPreviewObjectUrl = null;
 let videoPreviewGeneration = 0;
 let videoPreviewController = null;
 let effectFootageFile = null;
+let effectBackgroundImageFile = null;
 
 function effectFootageOffset(){
   const value=Number(document.getElementById('effectFootageStart')?.value||0);
@@ -6583,8 +6587,8 @@ function setPreviewEvidence(mode, detail = '') {
     geometry:['浏览器几何预览','显示排版求解器的布局与安全区；不是实际 ASS 字形渲染。','尚未进行真实渲染','几何求解 · 非真实渲染'],
     rendering:['实际 ASS 渲染中','正在请求 FFmpeg/libass；画布暂时显示浏览器几何结果。','正在验证','几何求解 · 渲染进行中'],
     libass:['FFmpeg/libass 实际渲染','当前可见帧由真实渲染路径根据本次试调值生成；尚不代表已保存或完成导出。','真实渲染帧','实际 ASS 渲染'],
-    video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时黑底视频；没有用户视频画面和音轨。','可播放视频 · 非正式导出','真实动态特效 · 黑底视频'],
-    'video-footage':['FFmpeg/libass 视频合成','真实读取本次选择的本地视频画面并叠加 ASS 字幕；不是正式成片，无音频，不保存原素材。','源素材叠加 · 非正式导出','真实动态特效 · 本地素材'],
+    video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时视频，背景可能是纯色或本地图片。','可播放视频 · 非正式导出','真实动态特效 · 背景视频'],
+    'video-footage':['FFmpeg/libass 视频合成','真实读取本次选择的本地视频画面并叠加 ASS 字幕；源音频取决于本次音轨选项，不保存原素材。','源素材叠加 · 非正式导出','真实动态特效 · 本地素材'],
     stale:['真实渲染结果已过期','参数、字幕样本或时间点变化；当前已退回浏览器几何预览。','请重新渲染','几何求解 · 结果已过期'],
     failed:['真实渲染失败','真实渲染未完成；画布只显示浏览器几何结果。','渲染未验证','几何求解 · 渲染失败']
   };
@@ -6596,7 +6600,7 @@ function setPreviewEvidence(mode, detail = '') {
   if(modeLabel)modeLabel.textContent=current[3];
   document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',mode==='libass'?'false':'true');
   document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
-  document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'?'true':'false');
+  document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'||mode==='video-footage'?'true':'false');
 }
 
 function invalidateLibassPreview(){
@@ -8333,6 +8337,7 @@ async function renderHsrEffectVideo(){
   if(originalDuration>8)payload.word_alignments=null; // do not misapply out-of-clip timing
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
+  const backgroundImage=effectBackgroundImageFile;
   const footageStart=document.getElementById('effectFootageStart')?.value||'0';
   const footageAudio=!!document.getElementById('effectFootageAudio')?.checked;
   const backgroundColor=document.getElementById('effectPreviewBackgroundColor')?.value||'#000000';
@@ -8340,20 +8345,28 @@ async function renderHsrEffectVideo(){
   videoPreviewController=controller;
   const generation=videoPreviewGeneration;
   const stillCurrent=()=>generation===videoPreviewGeneration&&identity===currentLibassPreviewIdentity()&&
-    footage===effectFootageFile&&footageStart===(document.getElementById('effectFootageStart')?.value||'0')&&
+    footage===effectFootageFile&&backgroundImage===effectBackgroundImageFile&&footageStart===(document.getElementById('effectFootageStart')?.value||'0')&&
     footageAudio===!!document.getElementById('effectFootageAudio')?.checked&&
     backgroundColor===(document.getElementById('effectPreviewBackgroundColor')?.value||'#000000')&&
     document.getElementById('subtitleLayoutPreviewCard')?.dataset.studioMode==='effects';
   try{
     if(button)button.disabled=true;
     setPreviewEvidence('rendering',footage?'正在把当前 ASS 效果叠加到选定的真实本地视频…':'正在渲染真实连续视频；单帧图片不作为本操作的成功结果。');
-    if(status)status.textContent=footage?'正在读取本地视频并使用 FFmpeg/libass 合成…':'正在 FFmpeg/libass 合成黑底动态字幕…';
+    if(status)status.textContent=footage?'正在读取本地视频并使用 FFmpeg/libass 合成…':
+      backgroundImage?'正在将本地背景图片逐帧合成真实字幕视频…':'正在 FFmpeg/libass 合成自选纯色背景动态字幕…';
     const player=document.getElementById('libassVideoPreview');
     payload.preview_format=player?.canPlayType?.('video/webm; codecs="vp8"')?'webm':'mp4';
     payload.source_start_seconds=effectFootageOffset();
     payload.include_source_audio=!!footage&&footageAudio;
     payload.preview_background_color=backgroundColor;
     if(footage)payload.source_video_base64=await effectFootageAsBase64(footage);
+    else if(backgroundImage){
+      if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
+        throw new Error('背景图片只支持 PNG、JPEG 或 WebP');
+      if(!backgroundImage.size||backgroundImage.size>4*1024*1024)
+        throw new Error('背景图片必须在 4 MiB 以内');
+      payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
+    }
     if(!stillCurrent())return;
     const response=await fetch('/api/subtitle-layout/render-preview-video',{
       method:'POST',headers:{...headers(),'Content-Type':'application/json'},
@@ -8370,7 +8383,7 @@ async function renderHsrEffectVideo(){
     const expectedType=payload.preview_format==='webm'?'video/webm':'video/mp4';
     if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
-    if(actualBackground && actualBackground!==(footage?'local-footage':backgroundColor==='#000000'?'black':'solid-color')){
+    if(actualBackground && actualBackground!==(footage?'local-footage':backgroundImage?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
       throw new Error('服务器响应的背景来源与当前选择不一致');
     }
     const video=document.getElementById('libassVideoPreview');
@@ -8396,7 +8409,7 @@ async function renderHsrEffectVideo(){
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'可用源音轨随画面同步截取':'无音频')+' · 可播放和拖动检查。';
+    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
@@ -8659,6 +8672,14 @@ document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>apply
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
 document.getElementById('previewVideoBtn')?.addEventListener('click',renderHsrEffectVideo);
+document.getElementById('effectBackgroundImageFile')?.addEventListener('change',event=>{
+  effectBackgroundImageFile=event.target.files?.[0]||null;
+  invalidateLibassPreview();
+  const status=document.getElementById('videoPreviewStatus');
+  if(status)status.textContent=effectBackgroundImageFile
+    ? '已选背景图片：'+effectBackgroundImageFile.name+'；点击「播放动态特效」以实际 FFmpeg 输出验证。'
+    : '未选择背景图片；下一次动态视频使用当前纯色背景（若已选视频则视频优先）。';
+});
 document.getElementById('effectFootageFile')?.addEventListener('change',event=>{
   effectFootageFile=event.target.files?.[0]||null;
   clearVideoPreview();
@@ -8666,7 +8687,7 @@ document.getElementById('effectFootageFile')?.addEventListener('change',event=>{
   const status=document.getElementById('videoPreviewStatus');
   if(status)status.textContent=effectFootageFile
     ? '已选择本地视频：'+effectFootageFile.name+'（'+(effectFootageFile.size/1048576).toFixed(2)+' MiB）；点击「播放动态特效」合成，源文件不会保存到项目。'
-    : '未选择素材，动态预览将使用黑底。';
+    : '未选择视频；如已选择背景图片则使用图片，否则使用所选纯色。';
 });
 document.getElementById('effectPreviewBackgroundColor')?.addEventListener('input',()=>{
   clearVideoPreview();
@@ -8689,7 +8710,7 @@ document.getElementById('effectFootageClearBtn')?.addEventListener('click',()=>{
   document.getElementById('effectFootageClearBtn').disabled=true;
   clearVideoPreview();
   const status=document.getElementById('videoPreviewStatus');
-  if(status)status.textContent='本地视频已清除；下一次动态预览使用黑底。';
+  if(status)status.textContent='本地视频已清除；下一次动态预览使用已选背景图片或当前纯色。';
 });
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
