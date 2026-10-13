@@ -6,6 +6,7 @@ on:
       - "app/static/index.html"
       - "app/static/hsr-ui-convergence.css"
       - "tests/test_hsr_ui_convergence.py"
+      - "tests/test_hsr_navigation_save_gate.py"
       - "tests/browser_visual_evidence.py"
       - "tests/browser_live_preview_e2e.py"
       - "tests/test_subtitle_integrated_export.py"
@@ -42,6 +43,8 @@ jobs:
         run: python tests/browser_visual_evidence.py --output artifacts/subtitle-browser
       - name: Assert compact UI ownership and syntax contracts
         run: python -m unittest tests.test_hsr_ui_convergence -v
+      - name: Verify Review save-gate and duplicate editor write ownership
+        run: python -m unittest tests.test_hsr_navigation_save_gate -v
       - name: Real Chromium to FastAPI to libass to VP8/Opus preview (no mock video endpoint)
         run: python tests/browser_live_preview_e2e.py --output artifacts/subtitle-browser
       - name: Upload real browser fixture screenshots and geometry report
