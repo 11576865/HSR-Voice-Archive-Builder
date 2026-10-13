@@ -782,6 +782,11 @@ def gradient_background_check(browser, base_url, output, report):
             }
           });
           showWorkspace('export',{scroll:false});
+          // This deterministic browser fixture has no built project summary:
+          // reveal the normal Export result container explicitly, rather
+          // than simulating a successful build or pretending files exist.
+          document.getElementById('archiveCard').classList.remove('hidden');
+          document.getElementById('finishedOutputs').classList.remove('hidden');
           document.getElementById('archiveBundlePanel').open=true;
         }""")
         ensure(page.locator("#bundleBackgroundMode").input_value() == "linear",
