@@ -17,7 +17,7 @@ BUILD_KINDS = {"build", "quick-build"}
 # Concurrent writers can overwrite a newer, validated MKV/ASS/FLAC artifact.
 PROJECT_OUTPUT_WRITERS = BUILD_KINDS | {
     "ass-export", "black-video-export", "archive-bundle-export",
-    "remote-update-apply",
+    "artifact-extract", "remote-update-apply",
 }
 
 
