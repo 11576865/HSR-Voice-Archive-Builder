@@ -152,3 +152,25 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
   max-height:180px;
   font-size:11px;
 }
+
+/* Imported font assets belong to the project, not to the host/global font list. */
+#subtitleLayoutPreviewCard .hsr-project-font-importer{
+  padding:10px 12px;margin:10px 0 12px;
+  border:1px solid var(--layout-border);
+  border-radius:8px;background:var(--layout-section);
+  max-width:100%;min-width:0;
+}
+#subtitleLayoutPreviewCard .hsr-project-font-importer summary{
+  cursor:pointer;font-size:12px;font-weight:700;
+}
+#subtitleLayoutPreviewCard .hsr-project-font-importer button{
+  min-height:39px;margin:8px 6px 0 0;
+}
+#subtitleLayoutPreviewCard .hsr-project-font-importer p{line-height:1.55;overflow-wrap:anywhere}
+#subtitleLayoutPreviewCard .hsr-project-font-list{
+  display:flex;flex-wrap:wrap;gap:6px;min-width:0;
+  margin:8px 0;font-size:12px;overflow-wrap:anywhere;
+}
+#subtitleLayoutPreviewCard .hsr-project-font-list button{
+  flex:0 1 auto;max-width:100%;white-space:normal;text-align:left;
+}
