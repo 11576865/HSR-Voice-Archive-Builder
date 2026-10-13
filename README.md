@@ -11,7 +11,7 @@
 
 ## About
 
-HSR Voice Archive Builder converts local character voice packages into reproducible voice archives: ordered dialogue, verified continuous FLAC, bilingual subtitles, manifests, update metadata, optional ASS/MKV presentation outputs, and GPT-SoVITS-ready training exports. It is designed around local processing, explicit provenance, resumable builds and conservative update handling rather than opaque one-click downloading.
+HSR Voice Archive Builder converts local character voice packages into reproducible voice archives: ordered dialogue, verified continuous FLAC, bilingual subtitles, manifests, update metadata, default ASS/SRT plus verified playable MKV and an opt-in FLAC-only mode, and GPT-SoVITS-ready training exports. It is designed around local processing, explicit provenance, resumable builds and conservative update handling rather than opaque one-click downloading.
 
 ## 项目定位
 
@@ -36,11 +36,11 @@ Resolved Timeline
         ├── manifest / corrected index
         ├── HSR_Voice_Archive.srt
         ├── continuous.flac
-        ├── optional ASS
-        └── optional black MKV
+        ├── HSR_Voice_Archive.ass
+        └── HSR_Voice_Archive_Bundle.mkv  # 黑色或自定义背景 + FLAC + ASS + SRT
 ```
 
-其中 **Timeline、manifest 和来源信息是机器可复现状态**；字幕样式、ASS、MKV 等属于可重新生成的展示层。
+其中 **Timeline、manifest 和来源信息是机器可复现状态**；独立 FLAC、SRT、ASS 和完整 MKV 是默认交付。字幕样式与 MKV 可从经验证来源重新生成，且用户可以显式选择仅 FLAC 模式。
 
 ## 当前适用范围
 
