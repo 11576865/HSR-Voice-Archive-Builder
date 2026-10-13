@@ -18,6 +18,7 @@ from typing import Callable
 
 from .project_fonts import font_asset_directory, list_project_fonts
 from .subtitle_export_status import read_subtitle_export_health
+from .archive_bundle_lifecycle import record_bundle_publication
 
 ProgressCallback = Callable[[int, int, str], None]
 MAX_BACKGROUND_BYTES = 4 * 1024 * 1024
@@ -200,6 +201,12 @@ class ArchiveBundleExporter:
             if require_current_ass:
                 require_current_bundle_subtitles(target.parent)
             temporary.replace(target)
+            if require_current_ass:
+                record_bundle_publication(
+                    target.parent, background_color=background_color,
+                    background_image=background_image, image_extension=suffix,
+                    include_fonts=include_fonts,
+                )
         if progress:
             progress(total_ms, total_ms, "完整 MKV 已通过音频／视频／软字幕／字体附件验收")
         return {
