@@ -18,6 +18,7 @@ from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_re
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
+from .auto_delivery import maybe_queue_complete_mkv
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
@@ -533,7 +534,8 @@ async def api_post_project_subtitles(
 
         assert_project_idle(config.root)
         result = update_project_subtitles(config, output_dir, updates)
-        return {"ok": True, "result": result}
+        auto_job = maybe_queue_complete_mkv(config)
+        return {"ok": True, "result": result, "auto_bundle_job": auto_job}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -560,7 +562,8 @@ async def api_post_project_subtitle_timing(project_id: str, item_id: str, reques
             reset=body.get("reset") is True,
             expected_start=body.get("expected_start"), expected_end=body.get("expected_end"),
         )
-        return {"ok": True, **result}
+        auto_job = maybe_queue_complete_mkv(config) if result.get("artifacts_current") else None
+        return {"ok": True, **result, "auto_bundle_job": auto_job}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
@@ -584,8 +587,9 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
             config, output_dir, force_ass=body.get("force_ass") is True
         )
         artifact_error = str(refreshed.get("ass_error") or "")
+        auto_job = maybe_queue_complete_mkv(config) if not artifact_error else None
         return {
-            "ok": True, "refreshed": refreshed,
+            "ok": True, "refreshed": refreshed, "auto_bundle_job": auto_job,
             "artifacts_current": not bool(artifact_error),
             "artifact_error": artifact_error,
             "export_status": read_subtitle_export_health(output_dir),
@@ -867,7 +871,9 @@ def api_status():
     project = None
     if _active_root is not None:
         try:
-            project = project_summary(_active_config())
+            config = _active_config()
+            maybe_queue_complete_mkv(config)
+            project = project_summary(config)
         except Exception:
             project = None
     return {
@@ -933,6 +939,7 @@ def api_quick_build(
     reference_language: str = Form("auto"),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
+    delivery_mode: str = Form("complete"),
     translate_missing: bool = Form(True),
     review_official_target: bool = Form(False),
 ):
@@ -958,6 +965,7 @@ def api_quick_build(
             group_gap=max(0.0, group_gap),
             chapter_order=chapter_order,
             generate_chapter_flac=generate_chapter_flac,
+            delivery_mode=delivery_mode,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
         )
@@ -985,6 +993,7 @@ def api_quick_build(
                 make_flac=config.make_flac,
                 chapter_order=config.chapter_order,
                 generate_chapter_flac=config.generate_chapter_flac,
+                delivery_mode=config.delivery_mode,
                 translate_missing=config.translate_missing,
                 translation_model=config.translation_model,
                 translation_batch_size=config.translation_batch_size,
@@ -1038,6 +1047,7 @@ def api_project_create(
     remote_character: str = Form(""),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
+    delivery_mode: str = Form("complete"),
     translate_missing: bool = Form(True),
     review_official_target: bool = Form(False),
 ):
@@ -1059,6 +1069,7 @@ def api_project_create(
             remote_character=remote_character,
             chapter_order=chapter_order,
             generate_chapter_flac=generate_chapter_flac,
+            delivery_mode=delivery_mode,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
         )
@@ -1207,6 +1218,7 @@ def api_project_save(
     make_flac: bool = Form(False),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
+    delivery_mode: str = Form("complete"),
     translate_missing: bool = Form(False),
     review_official_target: bool = Form(False),
     translation_model: str = Form(""),
@@ -1239,6 +1251,7 @@ def api_project_save(
             make_flac=make_flac,
             chapter_order=chapter_order,
             generate_chapter_flac=generate_chapter_flac,
+            delivery_mode=delivery_mode,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
             translation_model=translation_model.strip() or translation_default_model(),
@@ -1283,6 +1296,7 @@ def api_project_build():
                 make_flac=config.make_flac,
                 chapter_order=config.chapter_order,
                 generate_chapter_flac=config.generate_chapter_flac,
+                delivery_mode=config.delivery_mode,
                 translate_missing=config.translate_missing,
                 translation_model=config.translation_model,
                 translation_batch_size=config.translation_batch_size,

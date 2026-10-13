@@ -2947,6 +2947,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #archiveBundlePanel .hsr-bundle-options select{max-width:100%}
 </style>
 <link rel="stylesheet" href="/static/hsr-ui-convergence.css">
+<style>
+/* Archive owns build status; Export owns the single full artifact inventory. */
+body[data-workspace="project"] #archiveCard{display:none!important}
+.legacy-output-details{margin-top:12px;padding:12px;border:1px solid var(--line);border-radius:6px}
+.legacy-output-details summary{cursor:pointer}
+.legacy-output-details .artifact-card{margin-top:12px}
+</style>
 </head>
 <body>
 <a href="#mainContent" class="skip-link">跳过导航进入主内容</a>
@@ -3066,6 +3073,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
         <p class="small muted">Quick Mode 固定生成简体中文字幕；源文本可使用 EN / CHS / JP / KR。第二语言包只作为额外逐条语义参考，不会混入连续 FLAC。</p>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
+        <label>生成模式
+  <select id="quickDeliveryMode">
+    <option value="complete">完整语音字幕档案（默认：FLAC + SRT + ASS + 背景视频 MKV）</option>
+    <option value="flac_only">仅连续 FLAC（不新生成字幕或 MKV）</option>
+  </select>
+</label>
         <label class="check"><input id="quickChapterOrder" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
         <label class="check"><input id="quickChapterFlac" type="checkbox"> 额外生成按章节 / 大组拆分的连续 FLAC</label>
         <label class="check"><input id="quickTranslateMissing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
@@ -3123,7 +3136,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
               <label>术语覆盖层 CSV / JSON（可选）</label><input name="glossary_path" placeholder="D:\\HSR\\glossary.csv">
               <label>远程索引角色过滤词（可选）</label><input name="remote_character" placeholder="Evanescia">
               <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
-              <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
+              <label>生成模式
+  <select name="delivery_mode">
+    <option value="complete">完整语音字幕档案（默认：FLAC + SRT + ASS + 背景视频 MKV）</option>
+    <option value="flac_only">仅连续 FLAC（不新生成字幕或 MKV）</option>
+  </select>
+</label>
+        <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
               <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
               <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
               <label class="check"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
@@ -3183,6 +3202,12 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           </select></div>
         </div>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
+        <label>生成模式
+  <select name="delivery_mode">
+    <option value="complete">完整语音字幕档案（默认：FLAC + SRT + ASS + 背景视频 MKV）</option>
+    <option value="flac_only">仅连续 FLAC（不新生成字幕或 MKV）</option>
+  </select>
+</label>
         <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
         <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
         <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
@@ -3290,8 +3315,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         <div id="artifactBrowser" class="artifact-browser"></div>
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
         <details id="archiveBundlePanel" class="hsr-archive-bundle">
-          <summary>完整 MKV · FLAC 音频轨 + 可开关 ASS 软字幕轨 + 字体附件</summary>
-          <p class="small muted">完整 MKV 是最终播放封装：复制连续 FLAC 母版音轨、加入最新 ASS 可开关字幕、可选字体附件和背景。独立 FLAC、SRT、ASS 均保留供单独使用；旧版黑屏 MKV 不等同于本完整封装。旧 MKV 直到新文件逐轨验收通过才替换。</p>
+          <summary>默认完整 MKV · 黑色／自定义背景 + FLAC 音轨 + SRT／ASS 双字幕轨</summary>
+          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认黑色背景，可自定义背景；复制独立连续 FLAC 的唯一音轨，封入可切换 SRT 和 ASS 两条字幕轨及可选字体。原始 FLAC、SRT、ASS 独立保留；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
           <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 的来源一致性与生成前提。</p>
           <div class="hsr-bundle-options">
             <label for="bundleBackgroundMode">背景类型
@@ -3335,7 +3360,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           </div>
           <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
             <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
-          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">成功封装时保存背景设置及图片到项目，供下次重新生成复用；FLAC 保持无损，ASS 是软字幕轨。生成失败不覆盖旧完整 MKV。</p>
+          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">成功封装时保存背景设置及图片，供下次源文件更新后复用；音轨保留 FLAC 无损编码，ASS/SRT 是两条独立软字幕轨。失败时保留上一版 MKV。</p>
         </details>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
@@ -4748,6 +4773,7 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   if(!browser)return;
   browser.innerHTML='';
   const cards=[], bundleState=p?.bundle_export||{}, prerequisites=bundleState.prerequisites||{};
+  const flacOnly=p?.config?.delivery_mode==='flac_only';
   const outputs=name=>finalProducts[name]||outputMap[name]||{};
   const bundle=outputs('HSR_Voice_Archive_Bundle.mkv');
   const master=outputs('continuous.flac'),srt=outputs('HSR_Voice_Archive.srt'),ass=outputs('HSR_Voice_Archive.ass');
@@ -4763,10 +4789,10 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   };
   const mkvStatus=bundle.exists?(bundleState.state==='current'?'current':
     bundleState.state==='unverified'?'unverified':'stale'):null;
-  const bundleDescription='完整播放封装（由 continuous.flac + 当前 ASS 软字幕 + 已授权字体 + 背景生成）；'+
+  const bundleDescription='默认完整播放封装：黑色或自定义背景视频 + 一条 FLAC 音轨 + 可切换的 SRT、ASS 双字幕轨 + 可选字体；'+
     (bundleState.message||'请先生成连续 FLAC 和 ASS/SRT。')+
     (bundleState.blockers?.length?' 前置条件：'+bundleState.blockers.join('；'):'');
-  cards.push(artifactCard({
+  if(!flacOnly)cards.push(artifactCard({
     title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',status:mkvStatus,
     desc:bundleDescription,path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
     actions:[bundleState.can_generate===false
@@ -4783,14 +4809,14 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
     desc:'无损母版音频；完整 MKV 直接复制此 FLAC 音轨，而不是反向生成音频。',
     path:master.path,size:master.size_bytes,exists:!!master.exists
   }));
-  cards.push(artifactCard({
+  if(!flacOnly)cards.push(artifactCard({
     title:'HSR_Voice_Archive.srt',kind:'subtitle',
     status:srt.exists&&!srtCurrent?'stale':null,
     desc:'独立文本字幕成品；与 ASS 由同一字幕源导出。'+(!srtCurrent?' 当前 SRT 未通过独立字幕回执校验。':''),
     path:srt.path,size:srt.size_bytes,exists:!!srt.exists,
     actions:[{label:'字幕校对',action:()=>showWorkspace('review')}]
   }));
-  cards.push(artifactCard({
+  if(!flacOnly)cards.push(artifactCard({
     title:'HSR_Voice_Archive.ass',kind:'subtitle',
     status:ass.exists&&!assCurrent?'stale':null,
     desc:'独立样式字幕，也是完整 MKV 的可开关软字幕输入；修改后需重新封装 MKV。',
@@ -4808,15 +4834,21 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
       path:chapterDir.path,exists:!!chapterDir.exists
     }));
   }
-  // Optional compatibility product; not an alternative "current bundle".
+  // Legacy black-only MKV remains accessible, not an equal default delivery.
   const old=outputs('HSR_Voice_Archive_Black.mkv');
-  cards.push(artifactCard({
+  const legacyCard=artifactCard({
     title:'HSR_Voice_Archive_Black.mkv',kind:'video',status:old.exists?'legacy':null,
     desc:'旧版黑屏视频，独立于完整 MKV；不含相同的来源回执，不代表当前 FLAC/ASS 的封装状态。',
     path:old.path,size:old.size_bytes,exists:!!old.exists,
-    actions:old.exists?[]:[{label:'生成黑屏 MKV',primary:true,action:startBlackVideo}]
-  }));
+    actions:old.exists?[]:[{label:'生成旧版黑屏 MKV',action:startBlackVideo}]
+  });
   for(const card of cards)browser.appendChild(card);
+  const legacyDetails=document.createElement('details');
+  legacyDetails.className='legacy-output-details';
+  const legacySummary=document.createElement('summary');
+  legacySummary.textContent='历史兼容输出 · 不含字幕的旧版黑屏 MKV';
+  legacyDetails.append(legacySummary,legacyCard);
+  browser.appendChild(legacyDetails);
   if(count)count.textContent=cards.filter(x=>x.dataset.current==='true').length+' 项现有文件（过期文件另标）';
 }
 
@@ -4833,7 +4865,7 @@ function renderProjectOverview(p){
   const r=p.report||{},source=p.source_status||{},outputs=p.outputs||{},groups=p.output_groups||{},finalProducts=groups.final_products||{};
   const reviewPending=!!outputs['semantic_review_required.txt']?.exists;
   const missingWavs=Number(r.count_unavailable_wavs||0),missingText=Number(r.count_missing_target_text||0);
-  const has=!!p.build_complete,hasGaps=has&&(missingWavs>0||missingText>0);
+  const has=!!(p.delivery_complete??p.build_complete),hasGaps=has&&(missingWavs>0||missingText>0);
   document.getElementById('overviewProjectName').textContent=p.name||'未命名项目';
   document.getElementById('overviewProjectRoute').textContent=(p.config?.source_text_language||'—')+' → '+(p.config?.target_language||'—')+' · '+(p.output_path||'尚无输出路径');
   const status=document.getElementById('overviewStatus');
@@ -4842,6 +4874,7 @@ function renderProjectOverview(p){
   else if(reviewPending){statusText='等待人工复核';statusClass='warn'}
   else if(hasGaps){statusText='完成，存在缺项';statusClass='warn'}
   else if(has){statusText='档案完成';statusClass='ok'}
+  else if(p.build_complete){statusText='基础档案已生成 · MKV 待更新';statusClass='warn'}
   status.textContent=statusText;status.className='project-status '+statusClass;
   document.getElementById('overviewTotal').textContent=n(r.count_total);
   document.getElementById('overviewOfficial').textContent=n(Number(r.count_official_chs_lab||0)+Number(r.count_incremental_official_reference||0));
@@ -4899,6 +4932,8 @@ function syncArchiveBundleProjectState(project,force=false){
     reuse.disabled=!settings.image_saved;
     reuse.title=settings.image_saved?'沿用当前项目内已校验保存的图片':'当前项目暂无可复用的背景图片';
   }
+  const bundlePanel=document.getElementById('archiveBundlePanel');
+  if(bundlePanel)bundlePanel.classList.toggle('hidden',project?.config?.delivery_mode==='flac_only');
   const state=document.getElementById('bundleFreshnessStatus');
   if(state){
     state.textContent=(settings.message||'请先打开项目。')+
@@ -4951,7 +4986,7 @@ function fillProject(p){
   }
   document.getElementById('gptSovitsOutput').value=
     (p.root||'')+' / '+(c.output_dir||'output')+' / '+speaker.value+'_GPTSoVITS';
-  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','intro_gap','same_group_gap','group_gap','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
+  for(const k of ['name','index_csv','wav_source','output_dir','bilingual_csv','chs_source','glossary_path','reference_source','audio_language','source_text_language','target_language','reference_language','update_candidates','remote_character','remote_index_url','intro_gap','same_group_gap','group_gap','delivery_mode','translation_model','translation_batch_size','translation_token_budget','translation_budget_usd']){
     if(f.elements[k])f.elements[k].value=c[k]??'';
   }
   if(f.elements.chapter_order)f.elements.chapter_order.checked=!!c.chapter_order;
@@ -4961,14 +4996,14 @@ function fillProject(p){
   syncAdvancedTranslationVisibility();
   document.getElementById('candidatePath').value=c.update_candidates||'';
   document.getElementById('remoteCharacter').value=c.remote_character||'';
-  const r=p.report||{},has=!!p.build_complete;
+  const r=p.report||{},has=!!(p.delivery_complete??p.build_complete);
   const reviewPending=!!p.outputs?.['semantic_review_required.txt']?.exists;
   document.getElementById('reviewPanel').classList.toggle('hidden',!reviewPending);
   const missingWavs=Number(r.count_unavailable_wavs||0),missingText=Number(r.count_missing_target_text||0);
   const hasGaps=has&&(missingWavs>0||missingText>0);
-  document.getElementById('manifestState').textContent=has?(hasGaps?'构建完成，存在缺项':'完整构建已完成'):'尚未完成';
+  document.getElementById('manifestState').textContent=has?(hasGaps?'构建完成，存在缺项':'完整交付已完成'):(p.build_complete?'FLAC／字幕已生成 · MKV 待更新':'尚未完成');
   const hint=document.getElementById('archiveHint');
-  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。';
+  hint.textContent=p.interrupted_build?'上次构建在写入成品期间中断；现有文件可能分属不同构建，请重新构建并核对报告。':reviewPending?'翻译与语义检查已完成到人工复核节点；修订 TXT 导入后将从检查点继续。':hasGaps?'构建已结束，但有 '+missingWavs+' 条索引 WAV 不可用、'+missingText+' 条缺少目标文本。请在 build_report.json 核对具体条目。':has?'构建流程已完整结束；下方成品文件可以作为本次档案结果。':(p.build_complete?'独立文件已生成，但默认完整模式的 MKV 尚未完成或已过期；将在来源校验通过后自动更新。':'目前只有中间阶段文件或尚未开始构建；这些缓存用于断点恢复，不代表构建成功。');
   hint.className='notice '+(p.interrupted_build||reviewPending||hasGaps?'warn':has?'ok':'');
   // Existing products remain inspectable after interrupted rebuilds, with their
   // own freshness labels; never hide the last-known-good MKV merely because
@@ -5644,6 +5679,7 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('intro_gap',document.getElementById('quickIntroGap').value||'9.00');
   d.set('same_group_gap',document.getElementById('quickSameGroupGap').value||'1.50');
   d.set('group_gap',document.getElementById('quickGroupGap').value||'3.00');
+  d.set('delivery_mode',document.getElementById('quickDeliveryMode')?.value||'complete');
   d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
   d.set('translation_budget_usd',document.getElementById('quickUsdBudget').value||'0');
   const j=await api('/api/quick/build',{method:'POST',body:d});
@@ -5852,7 +5888,7 @@ document.getElementById('relinkSourceBtn').onclick=async()=>{try{await relinkSel
 document.getElementById('overviewBuildBtn').onclick=()=>document.getElementById('buildBtn')?.click();
 document.getElementById('overviewReviewBtn').onclick=()=>showWorkspace('review');
 document.getElementById('overviewUpdateBtn').onclick=()=>showWorkspace('update');
-document.getElementById('overviewArtifactsBtn').onclick=()=>document.getElementById('archiveCard')?.scrollIntoView({behavior:'smooth',block:'start'});
+document.getElementById('overviewArtifactsBtn').onclick=()=>showWorkspace('export');
 document.getElementById('projectSwitcher').onchange=updateProjectActionButtons;
 document.getElementById('openSelectedProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await switchProject(document.getElementById('projectSwitcher').value);s.textContent='项目已打开。';s.className='small status-ok action-status'}catch(x){s.textContent='打开失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};
 document.getElementById('newProjectBtn').onclick=async()=>{const s=document.getElementById('projectActionStatus');try{await startNewProject();s.textContent='已进入新建 / 导入模式。';s.className='small status-ok action-status'}catch(x){s.textContent='操作失败：'+shortError(x);s.className='small status-bad action-status';setLog(String(x))}};

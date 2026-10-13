@@ -11,7 +11,7 @@
 
 ## About
 
-HSR Voice Archive Builder converts local character voice packages into reproducible voice archives: ordered dialogue, verified continuous FLAC, bilingual subtitles, manifests, update metadata, optional ASS/MKV presentation outputs, and GPT-SoVITS-ready training exports. It is designed around local processing, explicit provenance, resumable builds and conservative update handling rather than opaque one-click downloading.
+HSR Voice Archive Builder converts local character voice packages into reproducible voice archives: ordered dialogue, verified continuous FLAC, bilingual subtitles, manifests, update metadata, default ASS/SRT plus verified playable MKV and an opt-in FLAC-only mode, and GPT-SoVITS-ready training exports. It is designed around local processing, explicit provenance, resumable builds and conservative update handling rather than opaque one-click downloading.
 
 ## 项目定位
 
@@ -36,11 +36,11 @@ Resolved Timeline
         ├── manifest / corrected index
         ├── HSR_Voice_Archive.srt
         ├── continuous.flac
-        ├── optional ASS
-        └── optional black MKV
+        ├── HSR_Voice_Archive.ass
+        └── HSR_Voice_Archive_Bundle.mkv  # 黑色或自定义背景 + FLAC + ASS + SRT
 ```
 
-其中 **Timeline、manifest 和来源信息是机器可复现状态**；字幕样式、ASS、MKV 等属于可重新生成的展示层。
+其中 **Timeline、manifest 和来源信息是机器可复现状态**；独立 FLAC、SRT、ASS 和完整 MKV 是默认交付。字幕样式与 MKV 可从经验证来源重新生成，且用户可以显式选择仅 FLAC 模式。
 
 ## 当前适用范围
 
@@ -196,8 +196,8 @@ HSR Voice Archive Builder · Quick Mode
 2. 执行 **扫描 / 预检**；
 3. 查看游戏/角色识别、索引覆盖、章节覆盖、LAB 和翻译缺口；
 4. 只有在顺序和来源足够可靠时创建项目；
-5. 构建 `continuous.flac`、SRT 与 manifest；
-6. 需要时再进行人工字幕校对、ASS 排版、词级时间轴和增量更新。
+5. 默认生成连续 FLAC、SRT、ASS 与黑色背景的完整 MKV（背景可自定义）；
+6. 人工字幕校对、ASS 排版或成品来源改变时，重新封装经逐轨验证的 MKV；也可以在创建／项目设置中选择“仅连续 FLAC”模式。
 
 Quick Scan 的原则是：
 
@@ -213,7 +213,7 @@ Genshin provider 也支持对应的本地索引覆盖。
 
 ## 输出结构
 
-典型固定输出：
+默认完整模式的独立成品和可播放封装：
 
 ```text
 output/
@@ -222,20 +222,17 @@ output/
 ├── bilingual_index_corrected.csv
 ├── timeline_resolved.json
 ├── build_report.json
-├── update_plan.json
-├── HSR_Voice_Archive.srt
-└── continuous.flac
+├── continuous.flac                  # 独立无损音频母版
+├── HSR_Voice_Archive.srt           # 独立 SRT 字幕
+├── HSR_Voice_Archive.ass           # 独立 ASS 字幕
+└── HSR_Voice_Archive_Bundle.mkv    # 黑色／自定义背景 + FLAC + SRT + ASS
 ```
 
-按需生成：
+完整 MKV 包含一条 H.264 视频轨（默认纯黑，可修改）、一条直接流复制的 FLAC 音轨、两条各自可选择的软字幕轨（ASS、SRT），以及可选字体附件。**不会额外编码出第二条音轨**。独立 FLAC/SRT/ASS 继续保留供编辑和分别分发。
 
-```text
-HSR_Voice_Archive.ass
-HSR_Voice_Archive_Bundle.mkv
-HSR_Voice_Archive_Black.mkv  # 旧版可选黑屏输出
-```
+项目可显式选择“仅连续 FLAC”模式：该模式不再新生成字幕或 MKV，已有文件不会未经确认被删除。黑屏 `HSR_Voice_Archive_Black.mkv` 属于仅有 FLAC 和黑色视频、**不带字幕**的旧版可选黑屏输出（兼容输出），不再与完整 MKV 并列为默认交付。
 
-**成品关系**：`continuous.flac` 是独立的无损音频母版；`HSR_Voice_Archive.srt` 和 `HSR_Voice_Archive.ass` 是基于同一字幕时间轴的独立字幕成品。完整 `HSR_Voice_Archive_Bundle.mkv` 是由当前 FLAC、已验证 ASS、可选字体和背景派生的单文件播放封装，**不会替代或覆盖 FLAC、SRT、ASS**。FLAC/ASS 或相关字幕来源一旦更新，旧完整 MKV 被标记为过期，但原文件保留到新 MKV 通过验证后安全替换。旧版黑屏 MKV 是单独的兼容输出，不是与完整 MKV 等价的成品。
+完成基础档案构建时自动封装完整 MKV；在服务运行、界面刷新与应用内字幕编辑后，如经校验的 FLAC/SRT/ASS 或字体来源发生改变，后台去重排队重新封装。新 MKV 必须先通过音轨、双字幕轨和视频的独立校验，才能原子替换旧文件。**直接绕过应用改写字幕文件会使来源回执失效**：必须先重新校验，不能将不可信外部改写静默认证为当前项目结果。
 
 完整 MKV 支持纯色、线性／径向／柔和渐变和用户上传 PNG/JPEG/WebP 背景、720p／1080p，以及标准／高画质编码。**上传背景图上限为 16 MiB**（Base64 JSON 请求总量不超过 24 MiB），并保留原有单边分辨率与最大解码像素安全检查。该上传限制不是成品视频大小限制。
 

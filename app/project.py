@@ -47,9 +47,10 @@ class ProjectConfig:
     same_group_gap: float = 1.50
     group_gap: float = 3.00
     make_flac: bool = True
+    delivery_mode: str = "complete"  # complete | flac_only
     chapter_order: bool = False
     generate_chapter_flac: bool = False
-    generate_ass: bool = False
+    generate_ass: bool = True  # derived from delivery_mode
     subtitle_preset: str = "standard"
     subtitle_chs_font: str = "汉仪旗黑"
     subtitle_primary_font: str = "Noto Sans"
@@ -169,10 +170,13 @@ def create_project(
     remote_character: str = "",
     chapter_order: bool = False,
     generate_chapter_flac: bool = False,
+    delivery_mode: str = "complete",
     translate_missing: bool = True,
     review_official_target: bool = False,
 ) -> ProjectConfig:
     root = normalize_root(root)
+    if delivery_mode not in {"complete", "flac_only"}:
+        raise ValueError("Unsupported delivery mode")
     if not name.strip():
         raise ValueError("Project name is required")
     if not index_csv.strip():
@@ -204,6 +208,8 @@ def create_project(
         remote_character=remote_character.strip(),
         chapter_order=bool(chapter_order),
         generate_chapter_flac=bool(generate_chapter_flac),
+        delivery_mode=delivery_mode,
+        generate_ass=delivery_mode == "complete",
         translate_missing=bool(translate_missing),
         review_official_target=bool(review_official_target),
     )
@@ -222,11 +228,14 @@ def load_project(root_or_file: Path) -> ProjectConfig:
         raise ValueError(f"Unsupported project schema: {data.get('schema_version')}")
     data["root"] = str(path.parent)
     config = ProjectConfig(**data)
-    # Continuous FLAC is the archive builder's primary artifact. Older project
-    # files may contain make_flac=false from the former optional UI.
-    if not config.make_flac or config.generate_ass:
+    # The default delivery profile now includes independent FLAC/SRT/ASS
+    # and a derived playback MKV. Old projects migrate to the full profile;
+    # users can explicitly select FLAC-only without deleting past outputs.
+    if config.delivery_mode not in {"complete", "flac_only"}:
+        raise ValueError("Unsupported delivery mode")
+    if not config.make_flac or config.generate_ass != (config.delivery_mode == "complete"):
         config.make_flac = True
-        config.generate_ass = False
+        config.generate_ass = config.delivery_mode == "complete"
         save_project(config)
     remember_project(path.parent)
     return config
@@ -251,10 +260,15 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
         if key == "make_flac":
             value = True
         if key == "generate_ass":
-            value = False
+            continue  # always derive from delivery_mode
+        if key == "delivery_mode" and value not in {"complete", "flac_only"}:
+            raise ValueError("Unsupported delivery mode")
         if value is None:
             continue
         setattr(config, key, value)
+    config.generate_ass = config.delivery_mode == "complete"
+    if config.delivery_mode == "flac_only":
+        config.generate_chapter_flac = False
     root = normalize_root(Path(config.root))
     for key in ("index_csv", "wav_source", "output_dir", "state_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
@@ -833,6 +847,9 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "build_complete": not interrupted_build and report_file.is_file() and (
             final_stage_file.is_file() or legacy_final_stage_file.is_file()
         ),
+        "delivery_complete": (not interrupted_build and report_file.is_file()
+            and (final_stage_file.is_file() or legacy_final_stage_file.is_file())
+            and (config.delivery_mode == "flac_only" or bundle_health["state"] == "current")),
         "interrupted_build": interrupted_build,
         "report": report,
         "outputs": outputs,

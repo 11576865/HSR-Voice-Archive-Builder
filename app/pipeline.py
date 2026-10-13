@@ -1412,6 +1412,7 @@ def build_project_v02(
     chapter_order: bool = False,
     generate_chapter_flac: bool = False,
     generate_ass: bool = False,
+    delivery_mode: str | None = None,
     translate_missing: bool = False,
     translation_model: str = translation_default_model(),
     translation_batch_size: int = 80,
@@ -1430,6 +1431,13 @@ def build_project_v02(
     game_id: str = "honkai-star-rail",
     recovery_callback: Callable[[str], None] | None = None,
 ) -> dict[str, object]:
+    if delivery_mode not in {None, "complete", "flac_only"}:
+        raise ValueError("Unsupported delivery mode")
+    # Explicit complete delivery is authoritative; keep direct legacy pipeline
+    # callers (delivery_mode=None) behavior compatible until migrated.
+    if delivery_mode is not None:
+        generate_ass = delivery_mode == "complete"
+    write_subtitles = delivery_mode != "flac_only"
     out_dir = out_dir.expanduser().resolve()
     out_dir.mkdir(parents=True, exist_ok=True)
     state_dir = state_dir.expanduser().resolve() if state_dir else out_dir
@@ -1495,6 +1503,7 @@ def build_project_v02(
         "chapter_order": chapter_order,
         "generate_chapter_flac": bool(generate_chapter_flac),
         "generate_ass": generate_ass,
+        "delivery_mode": delivery_mode,
         "translate_missing": translate_missing,
         "review_official_target": bool(review_official_target),
         "translation_route": translation_route,
@@ -1736,7 +1745,7 @@ def build_project_v02(
             out_dir / "manifest.csv",
             out_dir / "bilingual_index_corrected.csv",
             out_dir / "timeline_resolved.json",
-            out_dir / "HSR_Voice_Archive.srt",
+            *([out_dir / "HSR_Voice_Archive.srt"] if write_subtitles else []),
         ]
         if generate_ass:
             manifest_artifacts.append(out_dir / "HSR_Voice_Archive.ass")
@@ -1750,14 +1759,16 @@ def build_project_v02(
         ) is not None:
             resumed_stages.append("manifest")
         else:
-            write_manifest(entries, report, out_dir, generate_ass=generate_ass)
+            write_manifest(entries, report, out_dir, generate_ass=generate_ass,
+                           write_subtitles=write_subtitles)
             _augment_outputs(entries, report, out_dir)
-            refresh_subtitle_artifacts_from_settings(
-                out_dir,
-                source_language=source_text_language,
-                target_language=target_language,
-                generate_ass=generate_ass,
-            )
+            if write_subtitles:
+                refresh_subtitle_artifacts_from_settings(
+                    out_dir,
+                    source_language=source_text_language,
+                    target_language=target_language,
+                    generate_ass=generate_ass,
+                )
             save_stage(
                 state_dir,
                 STAGE_FILES["manifest"],
@@ -1771,12 +1782,13 @@ def build_project_v02(
 
         # Human proofreading is a derived layer. Re-apply it even when the
         # manifest stage was resumed from an earlier verified build.
-        refresh_subtitle_artifacts_from_settings(
-            out_dir,
-            source_language=source_text_language,
-            target_language=target_language,
-            generate_ass=generate_ass,
-        )
+        if write_subtitles:
+            refresh_subtitle_artifacts_from_settings(
+                out_dir,
+                source_language=source_text_language,
+                target_language=target_language,
+                generate_ass=generate_ass,
+            )
 
         progress(
             "audio",
@@ -1844,14 +1856,16 @@ def build_project_v02(
                     artifact_root=out_dir,
                 )
                 rebuilt_stages.append("audio")
-            write_manifest(entries, report, out_dir, generate_ass=generate_ass)
+            write_manifest(entries, report, out_dir, generate_ass=generate_ass,
+                           write_subtitles=write_subtitles)
             _augment_outputs(entries, report, out_dir)
-            refresh_subtitle_artifacts_from_settings(
-                out_dir,
-                source_language=source_text_language,
-                target_language=target_language,
-                generate_ass=generate_ass,
-            )
+            if write_subtitles:
+                refresh_subtitle_artifacts_from_settings(
+                    out_dir,
+                    source_language=source_text_language,
+                    target_language=target_language,
+                    generate_ass=generate_ass,
+                )
             save_stage(
                 state_dir,
                 STAGE_FILES["manifest"],
@@ -1903,6 +1917,34 @@ def build_project_v02(
             artifacts=[out_dir / "build_report.json"],
             artifact_root=out_dir,
         )
+    if delivery_mode == "complete":
+        # Publish the full product only after the independent FLAC and both
+        # subtitle receipts were generated. Failed FFmpeg mux must not replace
+        # an earlier valid MKV or claim that the full delivery completed.
+        from .archive_bundle_backgrounds import RESOLUTIONS
+        from .archive_bundle_exporter import ArchiveBundleExporter
+        from .archive_bundle_lifecycle import (
+            bundle_export_status, load_previous_bundle_image, previous_bundle_settings,
+        )
+        from .project_fonts import font_asset_directory
+        settings = previous_bundle_settings(out_dir)
+        spec = settings["background_spec"]
+        if bundle_export_status(out_dir)["needs_rebuild"]:
+            background = (load_previous_bundle_image(out_dir)
+                          if spec["mode"] == "image" else None)
+            width, height = RESOLUTIONS[spec["resolution"]]
+            progress("bundle", "正在更新完整 MKV：视频 + FLAC + ASS + SRT", 6, 6)
+            report["complete_mkv"] = ArchiveBundleExporter(width=width, height=height).export(
+                out_dir / "continuous.flac", out_dir / "HSR_Voice_Archive.ass",
+                out_dir / "HSR_Voice_Archive_Bundle.mkv",
+                fonts_dir=font_asset_directory(out_dir),
+                include_fonts=settings["attach_project_fonts"],
+                background_color=settings["background_color"],
+                background_image=background, background_spec=spec,
+                require_current_ass=True,
+                progress=lambda current, total, message: progress(
+                    "bundle", message, current, max(1, total)),
+            )
     return report
 
 
@@ -1922,7 +1964,9 @@ if __name__ == "__main__":
                    help="Order the main archive (FLAC + subtitles) by story chapter")
     p.add_argument("--chapter-flac", action="store_true",
                    help="Also generate one verified continuous FLAC per major story group")
-    p.add_argument("--generate-ass", action="store_true", help="Generate ASS subtitle file")
+    p.add_argument("--generate-ass", action="store_true", help="Legacy flag: generate ASS when running direct pipeline")
+    p.add_argument("--delivery-mode", choices=("complete", "flac_only"), default="complete",
+                   help="Complete FLAC + SRT + ASS + MKV by default; optional FLAC only")
     p.add_argument("--translate-missing", action="store_true")
     p.add_argument("--review-official-target", action="store_true")
     p.add_argument("--translation-model", default=translation_default_model())
@@ -1947,6 +1991,7 @@ if __name__ == "__main__":
         chapter_order=a.chapter_order,
         generate_chapter_flac=a.chapter_flac,
         generate_ass=a.generate_ass,
+        delivery_mode=a.delivery_mode,
         translate_missing=a.translate_missing,
         review_official_target=a.review_official_target,
         translation_model=a.translation_model,

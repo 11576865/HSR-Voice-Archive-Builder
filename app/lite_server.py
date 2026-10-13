@@ -18,6 +18,7 @@ from .ass_preview import decode_preview_source_video, normalize_preview_backgrou
 from .credentials import translation_default_model
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
+from .auto_delivery import maybe_queue_complete_mkv
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
@@ -364,7 +365,9 @@ class Handler(BaseHTTPRequestHandler):
             project = None
             if _active_root is not None:
                 try:
-                    project = project_summary(_active_config())
+                    config = _active_config()
+                    maybe_queue_complete_mkv(config)
+                    project = project_summary(config)
                 except Exception:
                     project = None
             self._json({
@@ -842,7 +845,8 @@ class Handler(BaseHTTPRequestHandler):
                 reset=str(data.get("reset", "")).lower() in {"true", "1"},
                 expected_start=data.get("expected_start"), expected_end=data.get("expected_end"),
             )
-            self._json({"ok": True, **result})
+            auto_job = maybe_queue_complete_mkv(config) if result.get("artifacts_current") else None
+            self._json({"ok": True, **result, "auto_bundle_job": auto_job})
             return
 
         if "/subtitles" in path and path.startswith("/api/project/"):
@@ -867,7 +871,8 @@ class Handler(BaseHTTPRequestHandler):
 
             assert_project_idle(config.root)
             result = update_project_subtitles(config, output, updates)
-            self._json({"ok": True, "result": result})
+            auto_job = maybe_queue_complete_mkv(config)
+            self._json({"ok": True, "result": result, "auto_bundle_job": auto_job})
             return
 
         if path == "/api/quick/scan":
@@ -918,6 +923,7 @@ class Handler(BaseHTTPRequestHandler):
                 group_gap=max(0.0, _float(data.get("group_gap"), 3.00)),
                 chapter_order=_bool(data.get("chapter_order")),
                 generate_chapter_flac=_bool(data.get("generate_chapter_flac")),
+                delivery_mode=data.get("delivery_mode", "complete"),
                 translate_missing=_bool(data.get("translate_missing")),
                 review_official_target=_bool(data.get("review_official_target")),
             )
@@ -945,6 +951,7 @@ class Handler(BaseHTTPRequestHandler):
                     make_flac=config.make_flac,
                     chapter_order=config.chapter_order,
                     generate_chapter_flac=config.generate_chapter_flac,
+                    delivery_mode=config.delivery_mode,
                     translate_missing=config.translate_missing,
                     translation_model=config.translation_model,
                     translation_batch_size=config.translation_batch_size,
@@ -996,6 +1003,7 @@ class Handler(BaseHTTPRequestHandler):
                 remote_character=data.get("remote_character", ""),
                 chapter_order=_bool(data.get("chapter_order")),
                 generate_chapter_flac=_bool(data.get("generate_chapter_flac")),
+                delivery_mode=data.get("delivery_mode", "complete"),
                 translate_missing=_bool(data.get("translate_missing")) if "translate_missing" in data else True,
                 review_official_target=_bool(data.get("review_official_target")) if "review_official_target" in data else False,
             )
@@ -1129,6 +1137,7 @@ class Handler(BaseHTTPRequestHandler):
                 make_flac=_bool(data.get("make_flac")),
                 chapter_order=_bool(data.get("chapter_order")),
                 generate_chapter_flac=_bool(data.get("generate_chapter_flac")),
+                delivery_mode=data.get("delivery_mode", config.delivery_mode),
                 translate_missing=_bool(data.get("translate_missing")),
                 review_official_target=_bool(data.get("review_official_target")),
                 translation_model=data.get("translation_model", "").strip() or translation_default_model(),
@@ -1169,6 +1178,7 @@ class Handler(BaseHTTPRequestHandler):
                     make_flac=config.make_flac,
                     chapter_order=config.chapter_order,
                     generate_chapter_flac=config.generate_chapter_flac,
+                    delivery_mode=config.delivery_mode,
                     translate_missing=config.translate_missing,
                     translation_model=config.translation_model,
                     translation_batch_size=config.translation_batch_size,
