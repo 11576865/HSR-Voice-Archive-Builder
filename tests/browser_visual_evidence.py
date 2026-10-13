@@ -845,7 +845,7 @@ def gradient_background_check(browser, base_url, output, report):
           const project={root:'/qa/fixture',bundle_export:{
             state:'stale',needs_rebuild:true,can_generate:false,
             message:'字幕已变化，旧文件保留',blockers:['请先更新 ASS/SRT'],
-            prerequisites:{continuous_flac:true,subtitles_current:false}
+            prerequisites:{continuous_flac:true,srt_current:true,ass_current:false,subtitles_current:false}
           }};
           const inspect=()=>{
             const cards=[...document.querySelectorAll('#artifactBrowser .artifact-card')];
@@ -857,12 +857,12 @@ def gradient_background_check(browser, base_url, output, report):
           renderArtifactBrowser(project,outputs,outputs);
           const stale=inspect();
           project.bundle_export={...project.bundle_export,state:'current',needs_rebuild:false,
-            can_generate:true,blockers:[],prerequisites:{continuous_flac:true,subtitles_current:true}};
+            can_generate:true,blockers:[],prerequisites:{continuous_flac:true,srt_current:true,ass_current:true,subtitles_current:true}};
           renderArtifactBrowser(project,outputs,outputs);
           const current=inspect();
           project.bundle_export={...project.bundle_export,state:'stale',needs_rebuild:true,
             can_generate:false,blockers:['请先更新 ASS/SRT'],
-            prerequisites:{continuous_flac:true,subtitles_current:false}};
+            prerequisites:{continuous_flac:true,srt_current:true,ass_current:false,subtitles_current:false}};
           renderArtifactBrowser(project,outputs,outputs);
           return {stale,current};
         }""")
@@ -875,6 +875,10 @@ def gradient_background_check(browser, base_url, output, report):
         ensure(states["stale"]["names"][1:4] == [
             "continuous.flac", "HSR_Voice_Archive.srt", "HSR_Voice_Archive.ass"],
             "Independent master/subtitle artifacts must be preserved")
+        ensure(states["stale"]["labels"][2] == "可用",
+               "An independently current SRT must not be marked stale merely because ASS is missing")
+        ensure(states["stale"]["labels"][3] == "旧文件·已过期",
+               "Previous ASS remains stale when it is not the latest certified subtitle export")
         ensure(states["stale"]["labels"][-1] == "旧版独立输出",
                "Legacy black MKV must not look like another current MKV")
         ensure(not errors, "Gradient/background browser JS error: " + repr(errors))
