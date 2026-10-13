@@ -1739,7 +1739,7 @@ async def api_preview_archive_bundle_background(request: Request):
             raise ValueError("Background preview must be an object")
         if str(data.get("expected_project_root") or "") != str(config.root):
             raise ValueError("MKV preview project context changed")
-                image = decode_bundle_background(data.get("background_image_base64"))
+        image = decode_bundle_background(data.get("background_image_base64"))
         if image is None and data.get("reuse_saved_background") is True:
             image = load_previous_bundle_image(output)
         raw_spec = data.get("background_spec")
@@ -1772,7 +1772,7 @@ async def api_output_archive_bundle(request: Request):
             raise ValueError("MKV configuration must be a JSON object")
         if str(data.get("expected_project_root") or "") != str(config.root):
             raise ValueError("MKV export project context changed")
-                image = decode_bundle_background(data.get("background_image_base64"))
+        image = decode_bundle_background(data.get("background_image_base64"))
         if image is None and data.get("reuse_saved_background") is True:
             image = load_previous_bundle_image(output)
         raw_spec = data.get("background_spec")
