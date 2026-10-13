@@ -4971,7 +4971,8 @@ function fillProject(p){
   // Existing products remain inspectable after interrupted rebuilds, with their
   // own freshness labels; never hide the last-known-good MKV merely because
   // the newest project build is incomplete.
-  const anyProduct=Object.entries(finalProducts).some(([name,item])=>
+  const availableProducts=p.output_groups?.final_products||p.outputs||{};
+  const anyProduct=Object.entries(availableProducts).some(([name,item])=>
     name!=='chapter_flac/'&&!!item?.exists);
   document.getElementById('finishedOutputs').classList.toggle('hidden',!has&&!anyProduct);
   const usage=[];
