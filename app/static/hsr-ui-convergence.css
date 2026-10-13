@@ -338,3 +338,34 @@ body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrTouchSliderTog
 #subtitleLayoutPreviewCard #hsrFontImportShortcut:focus-visible{
   outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
 }
+
+/* Effects results and alignment prerequisites are immediately visible in the
+   shared workbench. These reuse existing actions and never invent media state. */
+#subtitleLayoutPreviewCard .hsr-effect-operation-status{
+  display:flex;align-items:flex-start;gap:6px 12px;flex-wrap:wrap;
+  margin:6px 12px 10px;padding:10px 12px;
+  border:1px solid var(--layout-border);border-radius:7px;
+  color:var(--layout-text);font-size:12px;line-height:1.5;
+}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status strong{flex:0 0 auto;font-weight:750}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status span{flex:1 1 220px;min-width:0;overflow-wrap:anywhere}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status[data-phase="failed"]{
+  border-color:var(--bad);
+}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status[data-phase="ready"]{
+  border-color:var(--layout-evidence-accent);
+}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness{
+  margin:10px 12px;padding:12px 13px;
+  border:1px solid var(--layout-border);border-radius:7px;
+  background:var(--layout-section);min-width:0;
+}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness>strong{display:block;font-size:13px;margin-bottom:6px}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness>p{line-height:1.55;margin:5px 0;overflow-wrap:anywhere}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness .actions{display:flex;gap:6px;flex-wrap:wrap}
+#subtitleLayoutPreviewCard .hsr-karaoke-readiness button{min-height:42px}
+@media(max-width:759px){
+  #subtitleLayoutPreviewCard .hsr-effect-operation-status{margin:5px 8px 8px;padding:8px}
+  #subtitleLayoutPreviewCard .hsr-karaoke-readiness{margin:8px;padding:10px}
+  #subtitleLayoutPreviewCard .hsr-karaoke-readiness .actions button{flex:1 1 135px}
+}
