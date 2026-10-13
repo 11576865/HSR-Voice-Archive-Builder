@@ -23,7 +23,7 @@ HSR 是语音与字幕档案构建器，不承担通用 Matroska Remux。完整 
 先研究成熟项目的成功与公开失效，再确定 HSR 要保留的极小子集：
 
 - [Kdenlive Cairogradient](https://docs.kdenlive.org/en/effects_and_filters/video_effects/generate/cairogradient.html)：成熟线性／径向模式、两个端点、颜色控制；HSR 不需要照搬全部 blend-mode 复杂度。
-- [Shotcut gradient 用户报错](https://forum.shotcut.org/t/gradient-filter-flickering-in-preview-and-export/38003)：混合模式曾导致预览与导出闪烁，后已修复；HSR 不引入渐变动画和混合合成层，固定 `seed=1,speed=0`。
+- [Shotcut gradient 用户报错](https://forum.shotcut.org/t/gradient-filter-flickering-in-preview-and-export/38003)：混合模式曾导致预览与导出闪烁，后已修复；HSR 不引入渐变动画和混合合成层，固定 `seed=1,speed=0.00001`。
 - [FFmpeg gradients 源码](https://www.ffmpeg.org/doxygen/8.1/vsrc__gradients_8c_source.html)：现成的线性／径向生成源；HSR 使用 FFmpeg 原生 source，拒绝另写绘图引擎。
 - [FFmpeg 滤镜文档](https://ffmpeg.org/ffmpeg-filters.html)：8-bit 渐变可能产生色带，`gradfun` 是播放用算法、不适合在有损编码前宣称可消除色带；本工程不声称无色带。
 - [Shotcut release notes](https://shotcut.org/download/releasenotes/)：渐变调色选择器、跨系统缺少控件曾有回归；HSR 的生产 HTML 和真实 Chromium 控件检查均应受 CI 保护。
