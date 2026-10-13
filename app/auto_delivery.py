@@ -70,9 +70,11 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
                 output, include_fonts=now["attach_project_fonts"], settings=now,
             ) != snapshot:
                 raise RuntimeError("自动 MKV 更新的输入已变化，等待下一轮任务检查")
+            from .subtitles import subtitle_render_config
             prepare_complete_sources(
                 output, source_language=config.source_text_language,
                 target_language=config.target_language,
+                render_config=subtitle_render_config(config),
             )
             spec = now["background_spec"]
             background = (
