@@ -150,10 +150,12 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     ass = bool(ass_sig and ass_sig["size"] > 0)
     srt = bool(srt_sig and srt_sig["size"] > 0)
     subtitle = read_subtitle_export_health(output)
-    srt_current = bool(srt and subtitle.get("state") == "current"
-                       and subtitle.get("artifacts_current"))
-    ass_current = bool(ass and srt_current and subtitle.get("ass_required"))
-    subtitles_current = ass_current
+    # SRT has independent provenance even if someone edited/deleted ASS.
+    # The full MKV still requires the joint subtitle receipt to be current.
+    srt_current = bool(srt and subtitle.get("srt_current"))
+    ass_current = bool(ass and subtitle.get("ass_current"))
+    subtitles_current = bool(srt_current and ass_current
+                             and subtitle.get("artifacts_current"))
     build_busy = (output / ".build_in_progress").exists()
     prerequisites = {
         "continuous_flac": flac,
