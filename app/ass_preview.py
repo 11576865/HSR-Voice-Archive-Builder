@@ -14,6 +14,7 @@ from pathlib import Path
 from subtitle_layout.ass_writer import write_ass
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
+from .archive_bundle_exporter import image_extension, MAX_BACKGROUND_BYTES
 
 
 @dataclass
@@ -203,6 +204,28 @@ def normalize_preview_background_color(value: object) -> str:
     return value.lower()
 
 
+def _validate_preview_background_image(path: Path) -> None:
+    """Validate actual decoded picture dimensions before passing to FFmpeg."""
+    ffprobe = shutil.which("ffprobe")
+    if not ffprobe:
+        raise RuntimeError("Background image preview requires FFprobe")
+    try:
+        result = subprocess.run(
+            [ffprobe, "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_type,width,height",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=10, check=False,
+        )
+        info = json.loads(result.stdout) if result.returncode == 0 else {}
+        video = (info.get("streams") or [])[0]
+        width, height = int(video["width"]), int(video["height"])
+    except (IndexError, KeyError, TypeError, ValueError, OverflowError,
+            subprocess.TimeoutExpired) as exc:
+        raise ValueError("Background image cannot be decoded") from exc
+    if not 16 <= width <= 3840 or not 16 <= height <= 2160:
+        raise ValueError("Background image exceeds supported 3840×2160 dimensions")
+
+
 def render_ass_preview_video(
     *,
     english_text: str,
@@ -217,9 +240,10 @@ def render_ass_preview_video(
     source_start_seconds: float = 0.0,
     include_source_audio: bool = True,
     background_color: str = "#000000",
+    background_image_bytes: bytes | None = None,
     font_dir: Path | None = None,
 ) -> bytes:
-    """Render genuine ASS motion over black or an explicitly supplied local video.
+    """Render genuine ASS motion over color, validated image, or local video.
 
     Source bytes are ephemeral and never written to project storage. When
     requested, the source audio track is trimmed together with source picture.
@@ -233,6 +257,13 @@ def render_ass_preview_video(
     start = float(source_start_seconds)
     if not math.isfinite(start) or not 0 <= start <= 600:
         raise ValueError("Preview source offset must be between 0 and 600 seconds")
+    if background_image_bytes is not None:
+        if source_video_bytes is not None:
+            raise ValueError("Choose one video or one background image, not both")
+        if (not isinstance(background_image_bytes, bytes)
+                or not 0 < len(background_image_bytes) <= MAX_BACKGROUND_BYTES):
+            raise ValueError("Background image exceeds the 4 MiB maximum")
+        image_extension(background_image_bytes)
     if source_video_bytes is not None and (
         not isinstance(source_video_bytes, bytes)
         or not 0 < len(source_video_bytes) <= MAX_PREVIEW_SOURCE_BYTES
@@ -270,6 +301,14 @@ def render_ass_preview_video(
             # Normalize the user image without stretching its aspect ratio.
             video_filters = ("scale=960:540:force_original_aspect_ratio=decrease,"
                              f"pad=960:540:(ow-iw)/2:(oh-ih)/2:color={ffmpeg_color},setsar=1,fps=24,")
+        elif background_image_bytes is not None:
+            image_path = root / ("selected-background" + image_extension(background_image_bytes))
+            image_path.write_bytes(background_image_bytes)
+            _validate_preview_background_image(image_path)
+            source_args = ["-loop", "1", "-framerate", "24", "-i", str(image_path)]
+            video_filters = ("scale=960:540:force_original_aspect_ratio=decrease,"
+                             f"pad=960:540:(ow-iw)/2:(oh-ih)/2:color={ffmpeg_color},"
+                             "setsar=1,fps=24,")
         else:
             source_args = [
                 "-f", "lavfi", "-i",
