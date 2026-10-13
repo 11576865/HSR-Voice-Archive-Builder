@@ -175,6 +175,8 @@ def create_project(
     review_official_target: bool = False,
 ) -> ProjectConfig:
     root = normalize_root(root)
+    if delivery_mode not in {"complete", "flac_only"}:
+        raise ValueError("Unsupported delivery mode")
     if not name.strip():
         raise ValueError("Project name is required")
     if not index_csv.strip():
@@ -265,6 +267,8 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
             continue
         setattr(config, key, value)
     config.generate_ass = config.delivery_mode == "complete"
+    if config.delivery_mode == "flac_only":
+        config.generate_chapter_flac = False
     root = normalize_root(Path(config.root))
     for key in ("index_csv", "wav_source", "output_dir", "state_dir", "bilingual_csv", "chs_source", "glossary_path", "reference_source", "update_candidates"):
         setattr(config, key, _portable_path(root, getattr(config, key)))
