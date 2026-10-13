@@ -4773,6 +4773,7 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   if(!browser)return;
   browser.innerHTML='';
   const cards=[], bundleState=p?.bundle_export||{}, prerequisites=bundleState.prerequisites||{};
+  const flacOnly=p?.config?.delivery_mode==='flac_only';
   const outputs=name=>finalProducts[name]||outputMap[name]||{};
   const bundle=outputs('HSR_Voice_Archive_Bundle.mkv');
   const master=outputs('continuous.flac'),srt=outputs('HSR_Voice_Archive.srt'),ass=outputs('HSR_Voice_Archive.ass');
@@ -4791,7 +4792,7 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   const bundleDescription='默认完整播放封装：黑色或自定义背景视频 + 一条 FLAC 音轨 + 可切换的 SRT、ASS 双字幕轨 + 可选字体；'+
     (bundleState.message||'请先生成连续 FLAC 和 ASS/SRT。')+
     (bundleState.blockers?.length?' 前置条件：'+bundleState.blockers.join('；'):'');
-  cards.push(artifactCard({
+  if(!flacOnly)cards.push(artifactCard({
     title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',status:mkvStatus,
     desc:bundleDescription,path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
     actions:[bundleState.can_generate===false
@@ -4808,14 +4809,14 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
     desc:'无损母版音频；完整 MKV 直接复制此 FLAC 音轨，而不是反向生成音频。',
     path:master.path,size:master.size_bytes,exists:!!master.exists
   }));
-  cards.push(artifactCard({
+  if(!flacOnly)cards.push(artifactCard({
     title:'HSR_Voice_Archive.srt',kind:'subtitle',
     status:srt.exists&&!srtCurrent?'stale':null,
     desc:'独立文本字幕成品；与 ASS 由同一字幕源导出。'+(!srtCurrent?' 当前 SRT 未通过独立字幕回执校验。':''),
     path:srt.path,size:srt.size_bytes,exists:!!srt.exists,
     actions:[{label:'字幕校对',action:()=>showWorkspace('review')}]
   }));
-  cards.push(artifactCard({
+  if(!flacOnly)cards.push(artifactCard({
     title:'HSR_Voice_Archive.ass',kind:'subtitle',
     status:ass.exists&&!assCurrent?'stale':null,
     desc:'独立样式字幕，也是完整 MKV 的可开关软字幕输入；修改后需重新封装 MKV。',
@@ -4930,6 +4931,8 @@ function syncArchiveBundleProjectState(project,force=false){
     reuse.disabled=!settings.image_saved;
     reuse.title=settings.image_saved?'沿用当前项目内已校验保存的图片':'当前项目暂无可复用的背景图片';
   }
+  const bundlePanel=document.getElementById('archiveBundlePanel');
+  if(bundlePanel)bundlePanel.classList.toggle('hidden',p?.config?.delivery_mode==='flac_only');
   const state=document.getElementById('bundleFreshnessStatus');
   if(state){
     state.textContent=(settings.message||'请先打开项目。')+
