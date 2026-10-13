@@ -38,6 +38,14 @@ HSR 是语音与字幕档案构建器，不承担通用 Matroska Remux。完整 
 
 图片背景的 **16 MiB** 限制跨上传控件、两个服务端、Base64 解码、项目保存和 FFmpeg 预览共用；JSON 请求总量最多 **24 MiB**，FastAPI 根据实际接收字节数限流，Lite 根据 Content-Length 限制。原有 8192 单边、2400 万像素的真实图像安全限制保持不变，字幕特效里的图片预览也使用 16 MiB。并非允许无限大图片或取消解码限制。
 
+## 独立字幕与 MKV 的不同验收条件
+
+当前项目即使只完成独立 SRT 导出，SRT 也可以凭自己的字幕导出回执保持「当前有效」；但生成完整 MKV 必须另外有已验证的 ASS 软字幕、连续 FLAC、非空的 SRT 和处于空闲状态的项目。两者不能共用一个「字幕是否有效」布尔量来标记各个成品。
+
+`bundle_export_status.prerequisites` 因而分别暴露 `srt_current`、`ass_current`、`subtitles_current`、`continuous_flac` 和 `build_idle`，其中 `subtitles_current` 表示**用于完整 MKV 的 ASS/SRT 就绪**，不是「SRT 单独无效」。成品列表独立标记 SRT 和 ASS。只有所有生成前提都满足时 `can_generate` 才为真。已发布 MKV 的 `state=current` 也必须满足这些前提。
+
+`project_summary.output_groups.playback_bundle` 的完整 MKV 项会直接给出来自同一次回执计算的 `freshness`、`needs_rebuild`、`can_generate`、`depends_on` 和 `blockers`，旧版黑屏 MKV 单独标为 `legacy_independent_video`。这避免客户端将「磁盘上存在文件」误解为「成品仍代表最新来源」，同时不破坏旧 `final_products` 接口结构。
+
 ## 验收合同
 
 1. `normalize_bundle_background()` 拒绝非法模式、注入型颜色／方向／分辨率／画质。
