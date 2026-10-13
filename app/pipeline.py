@@ -1502,8 +1502,8 @@ def build_project_v02(
         "make_flac": make_flac,
         "chapter_order": chapter_order,
         "generate_chapter_flac": bool(generate_chapter_flac),
-        "generate_ass": generate_ass,
-        "delivery_mode": delivery_mode,
+        # Packaging and subtitle format selection must not invalidate voice
+        # audio/translation stages; only voice content and timeline do so.
         "translate_missing": translate_missing,
         "review_official_target": bool(review_official_target),
         "translation_route": translation_route,
@@ -1513,6 +1513,14 @@ def build_project_v02(
         # target text. Audio files remain on disk and are not re-downloaded.
         "incremental_official_target_version": 2,
     })
+    from .delivery_artifacts import (
+        FLAC, OUTPUT, extract_flac_from_mkv, publish_flac_only,
+        recover_previous_audio_report, seal_complete_delivery,
+    )
+    # Inspect the preceding checkpoint BEFORE the current scan stage may
+    # overwrite it. An unchanged audio stream can be recovered from the MKV
+    # without recompressing the original WAVs after a delivery-mode switch.
+    recovered_audio_report = recover_previous_audio_report(state_dir, input_state, out_dir)
     resumed_stages: list[str] = []
     rebuilt_stages: list[str] = []
     if load_stage(state_dir, STAGE_FILES["scan"], "scan", input_fingerprint) is not None:
@@ -1537,6 +1545,8 @@ def build_project_v02(
     ) as td:
         work = Path(td)
         wav_root: Path | None = None
+        if make_flac and not (out_dir / FLAC).is_file() and recovered_audio_report:
+            extract_flac_from_mkv(out_dir)
         metadata = _stage_entries(load_stage(
             state_dir, STAGE_FILES["metadata"], "metadata", input_fingerprint
         ))
@@ -1804,6 +1814,15 @@ def build_project_v02(
                 input_fingerprint,
                 artifact_root=out_dir,
             )
+            if audio is None and recovered_audio_report and (out_dir / FLAC).is_file():
+                # The former artifact has the same source fingerprint but was
+                # intentionally removed after verified MKV publication, or the
+                # profile previously had a different delivery fingerprint.
+                audio = {"report": recovered_audio_report}
+                save_stage(
+                    state_dir, STAGE_FILES["audio"], "audio", input_fingerprint,
+                    audio, artifacts=[out_dir / FLAC], artifact_root=out_dir,
+                )
             if audio is not None and isinstance(audio.get("report"), dict):
                 report.update(audio["report"])
                 resumed_stages.append("audio")
@@ -1918,7 +1937,7 @@ def build_project_v02(
             artifact_root=out_dir,
         )
     if delivery_mode == "complete":
-        # Publish the full product only after the independent FLAC and both
+        # Publish the full product only after the working FLAC and both
         # subtitle receipts were generated. Failed FFmpeg mux must not replace
         # an earlier valid MKV or claim that the full delivery completed.
         from .archive_bundle_backgrounds import RESOLUTIONS
@@ -1945,6 +1964,9 @@ def build_project_v02(
                 progress=lambda current, total, message: progress(
                     "bundle", message, current, max(1, total)),
             )
+        seal_complete_delivery(out_dir)
+    elif delivery_mode == "flac_only":
+        publish_flac_only(out_dir)
     return report
 
 
