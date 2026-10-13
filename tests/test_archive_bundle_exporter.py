@@ -235,6 +235,32 @@ class BundleRealFFmpegTests(unittest.TestCase):
                         expected_font_names={"different.ttf"},
                     )
 
+    def test_failed_publication_restores_previous_mkv_and_receipt(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter.export(audio, ass, output, require_current_ass=True)
+            from app.archive_bundle_lifecycle import RECEIPT
+            previous_mkv = output.read_bytes()
+            previous_receipt = (root / RECEIPT).read_bytes()
+            replace = Path.replace
+            def deny_publishing(self, target):
+                if self.name == "bundle.mkv":
+                    raise OSError("simulated atomic publication failure")
+                return replace(self, target)
+            with patch.object(Path, "replace", new=deny_publishing):
+                with self.assertRaisesRegex(OSError, "simulated"):
+                    exporter.export(
+                        audio, ass, output, require_current_ass=True,
+                        background_color="#424242",
+                    )
+            self.assertEqual(previous_mkv, output.read_bytes())
+            self.assertEqual(previous_receipt, (root / RECEIPT).read_bytes())
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+
     def test_saved_background_is_reused_after_new_flac_and_mkv_atomic_replace(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
