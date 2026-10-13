@@ -328,3 +328,13 @@ body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrStudioFocusTog
 body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrTouchSliderToggle:focus-visible{
   outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
 }
+
+/* Font recovery is a first-class action, not buried behind Inspector scrolling. */
+#subtitleLayoutPreviewCard #hsrFontImportShortcut{
+  min-height:40px;padding:7px 10px;border:1px solid var(--layout-border);
+  border-radius:6px;background:var(--layout-section);color:var(--layout-text);
+  font-size:12px;font-weight:700;
+}
+#subtitleLayoutPreviewCard #hsrFontImportShortcut:focus-visible{
+  outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
+}
