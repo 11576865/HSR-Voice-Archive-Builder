@@ -4,6 +4,7 @@ import base64
 import binascii
 import json
 import math
+import re
 import shutil
 import subprocess
 import tempfile
@@ -193,6 +194,15 @@ def _validate_preview_source(path: Path, start: float, duration: float) -> None:
         raise ValueError("Selected preview window extends beyond source")
 
 
+def normalize_preview_background_color(value: object) -> str:
+    """Return a safe #RRGGBB background; reject arbitrary FFmpeg expressions."""
+    if value is None or value == "":
+        return "#000000"
+    if not isinstance(value, str) or not re.fullmatch(r"#[0-9a-fA-F]{6}", value):
+        raise ValueError("Background color must be #RRGGBB")
+    return value.lower()
+
+
 def render_ass_preview_video(
     *,
     english_text: str,
@@ -206,6 +216,7 @@ def render_ass_preview_video(
     source_video_bytes: bytes | None = None,
     source_start_seconds: float = 0.0,
     include_source_audio: bool = True,
+    background_color: str = "#000000",
     font_dir: Path | None = None,
 ) -> bytes:
     """Render genuine ASS motion over black or an explicitly supplied local video.
@@ -214,6 +225,8 @@ def render_ass_preview_video(
     requested, the source audio track is trimmed together with source picture.
     The result is a preview clip, not a production media export.
     """
+    background_color = normalize_preview_background_color(background_color)
+    ffmpeg_color = "0x" + background_color[1:]
     duration = float(duration_seconds)
     if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
         raise ValueError("Dynamic preview duration must be between 0.5 and 8 seconds")
@@ -256,11 +269,11 @@ def render_ass_preview_video(
             source_args = ["-ss", f"{start:.3f}", "-i", str(source_path)]
             # Normalize the user image without stretching its aspect ratio.
             video_filters = ("scale=960:540:force_original_aspect_ratio=decrease,"
-                             "pad=960:540:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,")
+                             f"pad=960:540:(ow-iw)/2:(oh-ih)/2:color={ffmpeg_color},setsar=1,fps=24,")
         else:
             source_args = [
                 "-f", "lavfi", "-i",
-                f"color=c=black:s=960x540:r=24:d={duration:.3f}",
+                f"color=c={ffmpeg_color}:s=960x540:r=24:d={duration:.3f}",
             ]
             video_filters = ""
         command = [
