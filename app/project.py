@@ -688,17 +688,17 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
                 "kind": "file",
             }
 
+    # The final product listing contains ONE default deliverable. Working
+    # sources and legacy artifacts remain queryable separately for diagnostics.
     final_product_names = (
-        "continuous.flac",
-        "HSR_Voice_Archive.srt",
-        "HSR_Voice_Archive.ass",
-        "HSR_Voice_Archive_Black.mkv",
-        "HSR_Voice_Archive_Bundle.mkv",
-        *tuple(
-            name
-            for name in outputs
-            if name == "chapter_flac/" or name.startswith("chapter_flac/")
-        ),
+        ("continuous.flac",) if config.delivery_mode == "flac_only"
+        else ("HSR_Voice_Archive_Bundle.mkv",)
+    ) + tuple(name for name in outputs
+              if (name == "chapter_flac/" or name.startswith("chapter_flac/"))
+              and outputs[name]["exists"])
+    independent_names = ("continuous.flac", "HSR_Voice_Archive.srt",
+                         "HSR_Voice_Archive.ass") + tuple(
+        name for name in outputs if name.startswith("chapter_flac/")
     )
     archive_record_names = tuple(
         name for name in outputs if name not in final_product_names
@@ -708,15 +708,13 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         "final_products": {
             name: outputs[name] for name in final_product_names
         },
-        # A single combined playable MKV depends on independently retained
-        # FLAC/ASS/SRT, while the historical black MKV is a separate legacy
-        # output rather than a second current bundle.
+        # Complete MKV no longer depends on permanently retained independent
+        # audio/subtitles; they are transient working sources or explicit exports.
         "playback_bundle": {
             "HSR_Voice_Archive_Bundle.mkv": outputs["HSR_Voice_Archive_Bundle.mkv"],
         },
         "independent_products": {
-            name: outputs[name] for name in final_product_names
-            if name not in {"HSR_Voice_Archive_Bundle.mkv", "HSR_Voice_Archive_Black.mkv"}
+            name: outputs[name] for name in independent_names
         },
         "legacy_outputs": {
             "HSR_Voice_Archive_Black.mkv": outputs["HSR_Voice_Archive_Black.mkv"],
