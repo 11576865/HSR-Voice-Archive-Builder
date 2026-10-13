@@ -163,8 +163,20 @@ class RealSourceFootageProof(unittest.TestCase):
             }
             overlay = render_ass_preview_video(
                 english_text="Subtitle visible", chinese_text="HSR", **opts)
-            clean = render_ass_preview_video(
-                english_text="", chinese_text="", **opts)
+            # The ASS writer properly rejects all-empty dialogue: build a
+            # visually identical clean baseline with the same FFmpeg settings.
+            clean_path = root / "clean.mp4"
+            subprocess.run([
+                ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+                "-ss", "0.200", "-i", str(root / "input.mp4"),
+                "-vf", ("scale=960:540:force_original_aspect_ratio=decrease,"
+                        "pad=960:540:(ow-iw)/2:(oh-ih)/2,setsar=1,fps=24,"
+                        "format=yuv420p"),
+                "-an", "-c:v", "libx264", "-preset", "ultrafast",
+                "-crf", "22", "-movflags", "+faststart",
+                "-t", "1.500", str(clean_path),
+            ], check=True, capture_output=True, timeout=35)
+            clean = clean_path.read_bytes()
             self.assertGreater(len(overlay), 1000)
             for name, encoded in (("overlay", overlay), ("clean", clean)):
                 target = root / (name + ".mp4")
