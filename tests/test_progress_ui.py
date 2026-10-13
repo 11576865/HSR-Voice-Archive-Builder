@@ -260,7 +260,7 @@ class QuickBuildUiTests(unittest.TestCase):
         lite_server_py = (Path(__file__).resolve().parents[1] / "app" / "lite_server.py").read_text(encoding="utf-8")
         self.assertIn("media-src 'self' blob:", server_py)
         self.assertIn("media-src 'self' blob:", lite_server_py)
-        self.assertIn("body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})", html)
+        self.assertIn("expected_final_chs:expectedText", html)
         self.assertNotIn('id="subUseOfficialBtn"', html)
         self.assertNotIn('id="subUseApiBtn"', html)
         self.assertIn('id="subResetBtn"', html)
@@ -967,7 +967,7 @@ class TestProgressUI(unittest.TestCase):
         self.assertIn("停止输入约 1 秒后自动保存", html)
         self.assertIn("源文件：", html)
         self.assertIn(
-            "body:JSON.stringify({subtitles:[{id:sentId,final_chs:sentText}]})",
+            "expected_final_chs:expectedText",
             html,
         )
         self.assertNotIn("confirmed:!!targetSub.confirmed", html)
