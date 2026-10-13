@@ -797,6 +797,30 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
         depends_on=bundle_health["depends_on"],
         blockers=bundle_health["blockers"],
     )
+    # Independent products share files with the bundle but not its
+    # freshness state. In particular, an ASS-only modification cannot
+    # invalidate unchanged SRT, or vice versa.
+    independent = output_groups["independent_products"]
+    subtitle_readiness = bundle_health["prerequisites"]
+    for name, key in (("HSR_Voice_Archive.srt", "srt_current"),
+                      ("HSR_Voice_Archive.ass", "ass_current")):
+        product = independent[name]
+        certified = bool(subtitle_readiness[key])
+        product.update(
+            role="independent_subtitle",
+            current=certified,
+            freshness="current" if certified else "stale" if product["exists"] else "missing",
+            used_in_bundle=name.endswith(".ass"),
+        )
+    audio = independent["continuous.flac"]
+    audio.update(
+        role="independent_lossless_master",
+        # Existence/size is only a preflight, not an independent audio
+        # provenance receipt or FFprobe proof.
+        freshness="unverified" if audio["exists"] else "missing",
+        ready_for_bundle=bool(subtitle_readiness["continuous_flac"]),
+        used_in_bundle=True,
+    )
     legacy = output_groups["legacy_outputs"]["HSR_Voice_Archive_Black.mkv"]
     legacy.update(role="legacy_independent_video", freshness="unverified")
     return {
