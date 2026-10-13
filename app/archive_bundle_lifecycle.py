@@ -93,7 +93,13 @@ def _image_asset(output: Path, receipt: dict[str, Any]) -> Path | None:
     image = output / name
     if image.is_symlink() or not image.is_file() or not 0 < image.stat().st_size <= MAX_IMAGE_BYTES:
         raise ValueError("保存的 MKV 背景图片缺失或无效，请重新选择图片")
-    if hashlib.sha256(image.read_bytes()).hexdigest() != digest:
+    # Stream the 16 MiB content-addressed asset rather than allocating another
+    # full copy for every project dashboard refresh (especially on Termux).
+    hasher = hashlib.sha256()
+    with image.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            hasher.update(chunk)
+    if hasher.hexdigest() != digest:
         raise ValueError("保存的 MKV 背景图片校验不通过，请重新选择图片")
     return image
 
@@ -135,9 +141,14 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     """
     settings = previous_bundle_settings(output)
     target = output / OUTPUT
-    flac = _signature(output / "continuous.flac") is not None
-    ass = _signature(output / "HSR_Voice_Archive.ass") is not None
-    srt = _signature(output / "HSR_Voice_Archive.srt") is not None
+    # An empty file exists, but cannot be a usable FLAC or subtitle product.
+    # This is only a cheap dashboard preflight, not an FFprobe codec guarantee.
+    flac_sig = _signature(output / "continuous.flac")
+    ass_sig = _signature(output / "HSR_Voice_Archive.ass")
+    srt_sig = _signature(output / "HSR_Voice_Archive.srt")
+    flac = bool(flac_sig and flac_sig["size"] > 0)
+    ass = bool(ass_sig and ass_sig["size"] > 0)
+    srt = bool(srt_sig and srt_sig["size"] > 0)
     subtitle = read_subtitle_export_health(output)
     subtitles_current = bool(subtitle.get("state") == "current"
                              and subtitle.get("artifacts_current") and subtitle.get("ass_required"))
@@ -151,9 +162,9 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     }
     blockers = []
     if not flac:
-        blockers.append("缺少连续 FLAC，请先完成档案构建")
+        blockers.append("连续 FLAC 缺失或为空，请先完成档案构建")
     if not ass or not srt or not subtitles_current:
-        blockers.append("ASS/SRT 未完成或已过期，请先生成最新字幕")
+        blockers.append("ASS/SRT 缺失、为空或已过期，请先生成最新字幕")
     if build_busy:
         blockers.append("项目正在构建，完成后再封装")
     result: dict[str, Any] = {
