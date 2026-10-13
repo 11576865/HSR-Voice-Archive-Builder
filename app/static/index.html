@@ -3282,6 +3282,18 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         </div>
         <div id="artifactBrowser" class="artifact-browser"></div>
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
+        <details id="archiveBundlePanel" class="hsr-archive-bundle">
+          <summary>完整 MKV · FLAC 音频轨 + 可开关 ASS 软字幕轨 + 字体附件</summary>
+          <p class="small muted">独立于旧黑屏 MKV。字幕不会烧录进画面，播放器可自行开关；需先构建 continuous.flac 并生成 ASS。项目字体附件仅来自「排版」中已导入的字体。</p>
+          <div class="hsr-bundle-options">
+            <label for="bundleBackgroundColor">视频底色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label for="bundleBackgroundImage">背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
+            <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
+          </div>
+          <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
+            <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
+          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">输出为 HSR_Voice_Archive_Bundle.mkv。图片不会持久保存到项目，FLAC 保持无损，ASS 是软字幕轨，字体是独立附件。生成时不会删除已有独立成品。</p>
+        </details>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
         <summary>Archive / Build Records（档案与构建记录）</summary>
@@ -4604,6 +4616,7 @@ const outputDescriptions={
   'HSR_Voice_Archive.ass':'与连续 FLAC 共用 Timeline 的正式字幕',
   'HSR_Voice_Archive.srt':'与 ASS 同一时间轴的通用 SRT 字幕',
   'HSR_Voice_Archive_Black.mkv':'黑色视频轨与连续 FLAC 的播放容器（不含字幕）',
+    'HSR_Voice_Archive_Bundle.mkv':'单文件 MKV：连续 FLAC 音轨、ASS 软字幕轨、项目字体附件、视频背景',
   'timeline_resolved.json':'按 PCM 采样位置解析后的统一时间轴',
   'manifest.json':'完整的机器可读档案，保存语音、文本、来源与时间',
   'manifest.csv':'便于在表格软件中查看和整理的档案清单',
@@ -4680,6 +4693,15 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
     actions:ass.exists
       ? [{label:'排版工作台',action:()=>showWorkspace('layout')}]
       : [{label:'生成 ASS',primary:true,action:startAssExport},{label:'排版设置',action:()=>showWorkspace('layout')}]
+  }));
+  const bundle=outputMap['HSR_Voice_Archive_Bundle.mkv']||{};
+  cards.push(artifactCard({
+    title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',
+    desc:'完整封装 · 连续 FLAC + 可选择 ASS 软字幕 + 项目字体附件；支持纯色或本地背景图。',
+    path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
+    actions:[{label:bundle.exists?'重新封装 MKV':'生成完整 MKV',primary:!bundle.exists,
+      action:()=>{document.getElementById('archiveBundlePanel').open=true;
+                  document.getElementById('archiveBundlePanel').scrollIntoView({block:'center'});}}]
   }));
   const mkv=outputMap['HSR_Voice_Archive_Black.mkv']||{};
   cards.push(artifactCard({
