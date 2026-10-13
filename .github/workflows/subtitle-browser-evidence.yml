@@ -1,6 +1,25 @@
 name: HSR subtitle browser evidence
 
 on:
+  # Main-first user feedback requires browser/media acceptance on direct main
+  # updates, not only on PRs which this project no longer uses by default.
+  push:
+    branches: [main]
+    paths:
+      - "app/static/**"
+      - "app/ass_preview.py"
+      - "app/archive_bundle_*.py"
+      - "app/project.py"
+      - "app/project_fonts.py"
+      - "app/server.py"
+      - "app/lite_server.py"
+      - "app/subtitles.py"
+      - "app/subtitle_timing.py"
+      - "tests/browser_*.py"
+      - "tests/test_archive_bundle_*.py"
+      - "tests/test_hsr_ui_*.py"
+      - "tests/test_hsr_local_footage_preview.py"
+      - ".github/workflows/subtitle-browser-evidence.yml"
   pull_request:
     paths:
       - "app/static/index.html"
@@ -26,6 +45,12 @@ on:
       - "tests/test_hsr_preview_background_color.py"
       - ".github/workflows/subtitle-browser-evidence.yml"
   workflow_dispatch:
+
+# Rapid, directly visible main commits must not accumulate outdated
+# Chromium installations or produce misleading evidence on obsolete heads.
+concurrency:
+  group: hsr-browser-evidence-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
