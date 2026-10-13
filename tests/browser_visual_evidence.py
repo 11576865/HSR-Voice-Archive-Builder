@@ -254,7 +254,8 @@ def desktop_check(browser, base_url, output, report):
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
     # Default work area must be two-column and keep the duplicate list closed.
-    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(), "Batch QA affordance missing")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_hidden(),
+           "Layout-only batch QA control appears in Effects")
     ensure(page.locator("#layoutCorpusRail").is_hidden(), "Second full subtitle explorer still dominates UI")
     ensure(page.locator("#layoutTrialTextDetails").get_attribute("open") is None,
            "Manual text authoring should not be a second visible editor")
