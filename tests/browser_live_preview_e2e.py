@@ -24,7 +24,7 @@ from playwright.sync_api import sync_playwright
 
 from app.server import app
 from tests.browser_visual_evidence import (
-    SUBTITLES, ensure, load_studio, make_router, screenshot,
+    SUBTITLES, ensure, make_router, screenshot,
 )
 
 
@@ -51,6 +51,34 @@ def probe(ffprobe: str, target: Path) -> dict:
         "-of", "json", str(target),
     ], check=True, capture_output=True, text=True, timeout=15)
     return json.loads(result.stdout)
+
+
+def wait_for_live_state(page, evaluate_fn: str, label: str,
+                        timeout_seconds: float = 30.0) -> None:
+    """Use page.evaluate callable, not wait_for_function's CSP-blocked eval."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if page.evaluate(evaluate_fn):
+            return
+        page.wait_for_timeout(100)
+    raise AssertionError("Timed out waiting for " + label)
+
+
+def load_studio_under_production_csp(page) -> None:
+    wait_for_live_state(
+        page, "() => typeof showWorkspace === 'function' && typeof loadLayoutStressSample === 'function'",
+        "workbench boot",
+    )
+    page.evaluate("""() => {
+        currentProject = {name:'visual-fixture',root:'/qa/fixture',config:{
+            source_text_language:'en',target_language:'zh-CN',
+            subtitle_chs_font:'Arial',subtitle_primary_font:'Arial'
+        }};
+        showWorkspace('layout',{scroll:false});
+    }""")
+    page.locator('[data-timeline-cue]').nth(2).wait_for(state="attached", timeout=20000)
+    page.locator("#studioEffectsTab").click()
+    ensure(page.locator("#previewVideoBtn").is_visible(), "Effect preview hidden")
 
 
 def run(output: Path) -> None:
@@ -97,7 +125,7 @@ def run(output: Path) -> None:
                             mock(route)
                     page.route("**/api/**", route_api)
                     page.goto(f"http://127.0.0.1:{port}/", wait_until="domcontentloaded")
-                    load_studio(page)
+                    load_studio_under_production_csp(page)
                     page.locator("#effectFootageFile").set_input_files({
                         "name": "recorded-source.webm", "mimeType": "video/webm",
                         "buffer": fixture,
@@ -147,17 +175,18 @@ def run(output: Path) -> None:
                     ], check=True, capture_output=True, timeout=15).stdout
                     ensure(len(raw_audio) > 1000 and any(raw_audio),
                            "The output audio track did not decode to audible samples")
-                    page.wait_for_function("""() => {
+                    wait_for_live_state(page, """() => {
                         const player=document.getElementById('libassVideoPreview');
                         const proof=document.querySelector('.layout-preview-evidence');
-                        return player.readyState>=2 && proof.dataset.previewEvidence==='video-footage';
-                    }""", timeout=45000)
+                        return player && player.readyState>=2 &&
+                          proof?.dataset.previewEvidence==='video-footage';
+                    }""", "decoded ASS-on-source video", 45.0)
                     player = page.locator("#libassVideoPreview")
                     ensure(player.is_visible(), "Live composited clip not visible")
                     player.evaluate("(video)=>{video.pause(); video.currentTime=0.7;}")
-                    page.wait_for_function("""() =>
+                    wait_for_live_state(page, """() =>
                         document.getElementById('libassVideoPreview').currentTime >= 0.65
-                    """)
+                    """, "video seeking", 15.0)
                     screenshot(page, output, "live_ffmpeg_libass_source_audio")
                     ensure(not errors, "Browser runtime errors: " + " / ".join(errors))
                     report = {
