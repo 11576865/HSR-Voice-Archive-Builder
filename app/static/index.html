@@ -3284,15 +3284,17 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
         <details id="archiveBundlePanel" class="hsr-archive-bundle">
           <summary>完整 MKV · FLAC 音频轨 + 可开关 ASS 软字幕轨 + 字体附件</summary>
-          <p class="small muted">独立于旧黑屏 MKV。字幕不会烧录进画面，播放器可自行开关；需先构建 continuous.flac 并生成 ASS。项目字体附件仅来自「排版」中已导入的字体。</p>
+          <p class="small muted">使用最新连续 FLAC、已验证 ASS 和项目字体重新生成完整 MKV；旧文件保留到新文件生成并验收通过，再安全替换。字幕不会烧录进画面。</p>
+          <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 是否需要重新生成。</p>
           <div class="hsr-bundle-options">
             <label for="bundleBackgroundColor">视频底色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
-            <label for="bundleBackgroundImage">背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
+            <label for="bundleBackgroundImage">更换背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
+            <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装时保存的背景图片（上传新图则优先使用新图；取消勾选则使用纯色）</label>
             <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
           </div>
           <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
             <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
-          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">输出为 HSR_Voice_Archive_Bundle.mkv。图片不会持久保存到项目，FLAC 保持无损，ASS 是软字幕轨，字体是独立附件。生成时不会删除已有独立成品。</p>
+          <p class="small muted" id="bundleOutputStatus" role="status" aria-live="polite">成功封装时保存背景设置及图片到项目，供下次重新生成复用；FLAC 保持无损，ASS 是软字幕轨。生成失败不覆盖旧完整 MKV。</p>
         </details>
       </div>
       <details id="archiveOutputs" style="margin-top:14px">
@@ -4725,9 +4727,14 @@ function renderArtifactBrowser(p,finalProducts,outputMap){
   const bundle=outputMap['HSR_Voice_Archive_Bundle.mkv']||{};
   cards.push(artifactCard({
     title:'HSR_Voice_Archive_Bundle.mkv',kind:'video',
-    desc:'完整封装 · 连续 FLAC + 可选择 ASS 软字幕 + 项目字体附件；支持纯色或本地背景图。',
+    desc:'完整封装 · 连续 FLAC + 可选择 ASS 软字幕 + 项目字体附件；'+
+      (p?.bundle_export?.state==='stale'?'旧 MKV 已过期，需重新生成。':
+       p?.bundle_export?.state==='unverified'?'旧 MKV 尚无来源校验记录，请重新生成。':
+       p?.bundle_export?.state==='current'?'当前文件与来源一致。':'支持纯色或本地背景图。'),
     path:bundle.path,size:bundle.size_bytes,exists:!!bundle.exists,
-    actions:[{label:bundle.exists?'重新封装 MKV':'生成完整 MKV',primary:!bundle.exists,
+    actions:[{label:!bundle.exists?'生成完整 MKV':
+      p?.bundle_export?.needs_rebuild?'重新生成并替换 MKV':'重新封装 MKV',
+      primary:!bundle.exists||!!p?.bundle_export?.needs_rebuild,
       action:()=>{document.getElementById('archiveBundlePanel').open=true;
                   document.getElementById('archiveBundlePanel').scrollIntoView({block:'center'});}}]
   }));
@@ -4798,6 +4805,36 @@ function renderProjectOverview(p){
   document.getElementById('overviewAttention').innerHTML=attention.map(([label,value,cls])=>'<div class="overview-line"><span>'+label+'</span><span class="'+cls+'">'+value+'</span></div>').join('');
 }
 
+let bundleFormProjectRoot=null;
+function syncArchiveBundleProjectState(project,force=false){
+  const root=project?.root||null;
+  const settings=project?.bundle_export||{};
+  const color=document.getElementById('bundleBackgroundColor');
+  const reuse=document.getElementById('bundleReuseBackground');
+  const fonts=document.getElementById('bundleIncludeFonts');
+  const input=document.getElementById('bundleBackgroundImage');
+  if(root!==bundleFormProjectRoot||force){
+    if(color)color.value=settings.background_color||'#000000';
+    if(reuse)reuse.checked=!!settings.image_saved;
+    if(fonts)fonts.checked=settings.attach_project_fonts!==false;
+    if(input)input.value='';
+    bundleFormProjectRoot=root;
+  }
+  if(reuse){
+    reuse.disabled=!settings.image_saved;
+    reuse.title=settings.image_saved?'沿用当前项目内已校验保存的图片':'当前项目暂无可复用的背景图片';
+  }
+  const state=document.getElementById('bundleFreshnessStatus');
+  if(state){
+    state.textContent=settings.message||'请先打开项目。';
+    state.className='small '+(settings.state==='current'?'status-ok':
+      settings.state==='stale'||settings.state==='unverified'?'status-warn':'muted');
+  }
+  const action=document.getElementById('exportArchiveBundleBtn');
+  if(action)action.textContent=settings.state==='current'?'重新生成并替换完整 MKV':
+    settings.state==='stale'||settings.state==='unverified'?'重新生成并替换旧 MKV':
+    '生成并逐轨验证完整 MKV';
+}
 function fillProject(p){
   const priorProjectKey=currentProject?.root||currentProject?.name||null;
   const nextProjectKey=p?.root||p?.name||null;
@@ -4809,6 +4846,7 @@ function fillProject(p){
     activeSubIndex=0;
   }
   currentProject=p;
+  syncArchiveBundleProjectState(p);
   for(const button of workspaceButtons){
     if(['review','export','update'].includes(button.dataset.workspaceTarget))button.disabled=!p;
   }
@@ -5412,6 +5450,7 @@ async function watchJob(id){
             const result=x.job.result||{};
             if(status){status.textContent='完整 MKV 逐轨验收通过：FLAC + ASS + 视频；字体附件 '+Number(result.font_attachments||0)+' 个。'+(result.output||'');status.className='small status-ok'}
             setRunReport('完整 MKV 逐轨验收通过',completedReport(x.job),false);
+            bundleFormProjectRoot=null;
           }else if(x.job.kind==='black-video-export'){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='黑屏 MKV 已生成。';
@@ -5590,6 +5629,7 @@ async function startArchiveBundle(){
         expected_project_root:currentProject.root,
         background_color:document.getElementById('bundleBackgroundColor')?.value||'#000000',
         background_image_base64,
+        reuse_saved_background:!file&&!!document.getElementById('bundleReuseBackground')?.checked,
         attach_project_fonts:!!document.getElementById('bundleIncludeFonts')?.checked
       })
     });
