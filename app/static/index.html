@@ -315,7 +315,7 @@ body[data-workspace="review"] .card,body[data-workspace="layout"] .card{backgrou
 @media(max-width:1000px){.update-stats{grid-template-columns:repeat(3,minmax(0,1fr))}}
 @media(max-width:640px){.update-toolbar{grid-template-columns:1fr}.update-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.update-change-diff{grid-template-columns:1fr}.update-review-head{flex-direction:column}}
 body[data-workspace="project"] #subtitleLayoutPreviewCard,body[data-workspace="project"] #subtitleReviewCard,body[data-workspace="project"] #gptSovitsCard,body[data-workspace="project"] #updateCard{display:none!important}
-body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
+body:not([data-workspace="project"]) #primaryStack>section:first-child,body:not([data-workspace="project"]):not([data-workspace="export"]) #archiveCard,body:not([data-workspace="project"]) #sideStack,body:not([data-workspace="project"]) #mobileProgressSlot{display:none!important}
 body[data-workspace="review"] #subtitleLayoutPreviewCard,body[data-workspace="review"] #gptSovitsCard,body[data-workspace="review"] #updateCard{display:none!important}
 body[data-workspace="layout"] #subtitleReviewCard,body[data-workspace="layout"] #gptSovitsCard,body[data-workspace="layout"] #updateCard{display:none!important}
 body[data-workspace="export"] #subtitleReviewCard,body[data-workspace="export"] #subtitleLayoutPreviewCard,body[data-workspace="export"] #updateCard{display:none!important}
@@ -2938,6 +2938,13 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 .hsr-footage-picker>input,.hsr-footage-picker>button,.hsr-footage-picker>p{min-width:0;max-width:100%}
 .hsr-footage-picker>p{grid-column:1/-1;margin:0}
 @media(max-width:759px){.hsr-footage-picker{grid-template-columns:1fr}}
+
+/* HSR MKV background: task-scoped, responsive controls. */
+#archiveBundlePanel .hsr-bundle-options{display:grid;grid-template-columns:repeat(auto-fit,minmax(210px,1fr));gap:10px}
+#archiveBundlePanel .hsr-bundle-options label{min-width:0}
+#archiveBundlePanel .hsr-bundle-options label[hidden]{display:none!important}
+#archiveBundlePanel .hsr-bundle-options input[type=color]{width:66px;min-height:36px}
+#archiveBundlePanel .hsr-bundle-options select{max-width:100%}
 </style>
 <link rel="stylesheet" href="/static/hsr-ui-convergence.css">
 </head>
@@ -3287,10 +3294,44 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <p class="small muted">使用最新连续 FLAC、已验证 ASS 和项目字体重新生成完整 MKV；旧文件保留到新文件生成并验收通过，再安全替换。字幕不会烧录进画面。</p>
           <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 是否需要重新生成。</p>
           <div class="hsr-bundle-options">
-            <label for="bundleBackgroundColor">视频底色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label for="bundleBackgroundMode">背景类型
+              <select id="bundleBackgroundMode">
+                <option value="color">纯色</option>
+                <option value="linear">线性渐变</option>
+                <option value="radial">径向渐变</option>
+                <option value="soft">柔和渐变</option>
+                <option value="image">项目图片</option>
+              </select>
+            </label>
+            <label for="bundleBackgroundColor">底色／图片补边色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientFirst">起始颜色 <input id="bundleGradientFirst" type="color" value="#243350" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientSecond">结束颜色 <input id="bundleGradientSecond" type="color" value="#0d1729" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientThird">柔和过渡色 <input id="bundleGradientThird" type="color" value="#3e4269" /></label>
+            <label class="bundle-gradient-option" for="bundleGradientDirection">渐变方向
+              <select id="bundleGradientDirection">
+                <option value="diagonal">对角线</option><option value="horizontal">水平</option><option value="vertical">垂直</option>
+              </select>
+            </label>
+            <label for="bundleVideoResolution">背景视频分辨率
+              <select id="bundleVideoResolution">
+                <option value="720p">1280 × 720 · 标准</option>
+                <option value="1080p">1920 × 1080 · 高清</option>
+              </select>
+            </label>
+            <label for="bundleVideoQuality">编码画质
+              <select id="bundleVideoQuality">
+                <option value="standard">标准（CRF 28）</option>
+                <option value="high">高画质（CRF 19）</option>
+              </select>
+            </label>
             <label for="bundleBackgroundImage">更换背景图片（可选 PNG/JPEG/WebP，最多 4 MiB）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
             <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装时保存的背景图片（上传新图则优先使用新图；取消勾选则使用纯色）</label>
             <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
+          </div>
+          <div class="box" style="max-width:640px">
+            <div class="actions"><button type="button" id="bundlePreviewBtn" class="secondary">真实 FFmpeg 背景预览</button></div>
+            <img id="bundleBackgroundPreview" alt="FFmpeg 生成的背景画面预览" style="width:100%;aspect-ratio:16/9;object-fit:contain;background:#090e19;border-radius:8px;display:none" />
+            <p class="small muted" id="bundlePreviewStatus" role="status" aria-live="polite">预览由 FFmpeg 生成 640 × 360 背景帧；最终 H.264 画质请以 MKV 成品为准。</p>
           </div>
           <div class="actions"><button type="button" id="exportArchiveBundleBtn" class="success">生成并逐轨验证完整 MKV</button>
             <button type="button" class="secondary" id="bundleOpenLayoutBtn">打开排版 / 导入字体</button></div>
@@ -4144,7 +4185,7 @@ const workspacePrimaryPanels={
   project:new Set(['projectCard']),
   review:new Set(['subtitleReviewCard']),
   layout:new Set(['subtitleLayoutPreviewCard']),
-  export:new Set(['gptSovitsCard']),
+  export:new Set(['gptSovitsCard','archiveCard']),
   update:new Set(['updateCard'])
 };
 let autoPinnedPanelKey=null;
@@ -4818,8 +4859,22 @@ function syncArchiveBundleProjectState(project,force=false){
     if(reuse)reuse.checked=!!settings.image_saved;
     if(fonts)fonts.checked=settings.attach_project_fonts!==false;
     if(input)input.value='';
+    const bg=settings.background_spec||{};
+    const set=(id,value)=>{const el=document.getElementById(id);if(el)el.value=value};
+    set('bundleBackgroundMode',bg.mode||settings.background_kind||'color');
+    set('bundleGradientFirst',bg.first||'#243350');
+    set('bundleGradientSecond',bg.second||'#0d1729');
+    set('bundleGradientThird',bg.third||'#3e4269');
+    set('bundleGradientDirection',bg.direction||'diagonal');
+    set('bundleVideoResolution',bg.resolution||'720p');
+    set('bundleVideoQuality',bg.quality||'standard');
     bundleFormProjectRoot=root;
+    const preview=document.getElementById('bundleBackgroundPreview');
+    if(preview){preview.src='';preview.style.display='none'}
+    const status=document.getElementById('bundlePreviewStatus');
+    if(status)status.textContent='点击真实 FFmpeg 预览，确认渐变效果与颜色。';
   }
+  syncBundleBackgroundControls();
   if(reuse){
     reuse.disabled=!settings.image_saved;
     reuse.title=settings.image_saved?'沿用当前项目内已校验保存的图片':'当前项目暂无可复用的背景图片';
@@ -5602,6 +5657,87 @@ document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormD
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
+const bundleControls=['bundleBackgroundMode','bundleBackgroundColor','bundleGradientFirst',
+  'bundleGradientSecond','bundleGradientThird','bundleGradientDirection',
+  'bundleVideoResolution','bundleVideoQuality','bundleBackgroundImage','bundleReuseBackground'];
+let bundlePreviewGeneration=0;
+function syncBundleBackgroundControls(){
+  const mode=document.getElementById('bundleBackgroundMode')?.value||'color';
+  for(const id of ['bundleGradientFirst','bundleGradientSecond']){
+    const el=document.getElementById(id);if(el?.closest('label'))el.closest('label').hidden=!['linear','radial','soft'].includes(mode);
+  }
+  const third=document.getElementById('bundleGradientThird');
+  if(third?.closest('label'))third.closest('label').hidden=mode!=='soft';
+  const direction=document.getElementById('bundleGradientDirection');
+  if(direction?.closest('label'))direction.closest('label').hidden=mode!=='linear';
+  for(const id of ['bundleBackgroundImage','bundleReuseBackground']){
+    const el=document.getElementById(id);if(el?.closest('label'))el.closest('label').hidden=mode!=='image';
+  }
+}
+function bundleBackgroundSpec(){
+  const get=id=>document.getElementById(id)?.value;
+  return {
+    mode:get('bundleBackgroundMode')||'color',
+    first:get('bundleGradientFirst')||'#243350',
+    second:get('bundleGradientSecond')||'#0d1729',
+    third:get('bundleGradientThird')||'#3e4269',
+    direction:get('bundleGradientDirection')||'diagonal',
+    resolution:get('bundleVideoResolution')||'720p',
+    quality:get('bundleVideoQuality')||'standard'
+  };
+}
+async function readBundleImage(file){
+  if(!file)return null;
+  if(!file.size||file.size>4*1024*1024)throw new Error('背景图片需在 4 MiB 以内');
+  return await new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error('无法读取本地背景图片'));
+    reader.onload=()=>{
+      const data=String(reader.result||''),idx=data.indexOf(',');
+      if(idx<0)reject(new Error('背景图片编码失败'));else resolve(data.slice(idx+1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
+async function bundleBackgroundPayload(){
+  const spec=bundleBackgroundSpec();
+  const file=spec.mode==='image'?(document.getElementById('bundleBackgroundImage')?.files?.[0]||null):null;
+  return {
+    expected_project_root:currentProject?.root,
+    background_color:document.getElementById('bundleBackgroundColor')?.value||'#000000',
+    background_spec:spec,
+    background_image_base64:await readBundleImage(file),
+    reuse_saved_background:spec.mode==='image'&&!file&&!!document.getElementById('bundleReuseBackground')?.checked,
+    attach_project_fonts:!!document.getElementById('bundleIncludeFonts')?.checked
+  };
+}
+async function previewBundleBackground(){
+  const button=document.getElementById('bundlePreviewBtn');
+  const status=document.getElementById('bundlePreviewStatus');
+  const image=document.getElementById('bundleBackgroundPreview');
+  if(!currentProject?.root){if(status)status.textContent='请先打开项目。';return}
+  const generation=++bundlePreviewGeneration,root=currentProject.root;
+  try{
+    if(button)button.disabled=true;
+    if(status){status.textContent='FFmpeg 正在生成实际背景画面…';status.className='small muted'}
+    const payload=await bundleBackgroundPayload();
+    const snapshot=JSON.stringify(bundleBackgroundSpec());
+    const response=await api('/api/output/archive-bundle/background-preview',{
+      method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(payload)
+    });
+    if(generation!==bundlePreviewGeneration||currentProject?.root!==root||
+       snapshot!==JSON.stringify(bundleBackgroundSpec()))return;
+    if(!response?.image_base64)throw new Error('预览接口没有返回 PNG');
+    if(image){image.src='data:image/png;base64,'+response.image_base64;image.style.display='block'}
+    if(status){status.textContent='FFmpeg 实际背景帧 · 640 × 360。成品 H.264 细节仍以 MKV 验收为准。';status.className='small status-ok'}
+  }catch(error){
+    if(generation===bundlePreviewGeneration){
+      if(image){image.src='';image.style.display='none'}
+      if(status){status.textContent='背景预览失败：'+shortError(error);status.className='small status-bad'}
+      setLog(String(error));
+    }
+  }finally{if(button)button.disabled=false}
+}
 async function startArchiveBundle(){
   const button=document.getElementById('exportArchiveBundleBtn');
   const status=document.getElementById('bundleOutputStatus');
@@ -5609,37 +5745,35 @@ async function startArchiveBundle(){
   try{
     button.disabled=true;
     if(status)status.textContent='正在核验 FLAC、ASS、背景与字体附件…';
-    const file=document.getElementById('bundleBackgroundImage')?.files?.[0]||null;
-    if(file&&(!file.size||file.size>4*1024*1024))throw new Error('背景图片需在 4 MiB 以内');
-    let background_image_base64=null;
-    if(file){
-      background_image_base64=await new Promise((resolve,reject)=>{
-        const reader=new FileReader();
-        reader.onerror=()=>reject(new Error('无法读取本地背景图片'));
-        reader.onload=()=>{
-          const data=String(reader.result||''),idx=data.indexOf(',');
-          if(idx<0)reject(new Error('背景图片编码失败'));else resolve(data.slice(idx+1));
-        };
-        reader.readAsDataURL(file);
-      });
-    }
+    const payload=await bundleBackgroundPayload();
     const j=await api('/api/output/archive-bundle',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({
-        expected_project_root:currentProject.root,
-        background_color:document.getElementById('bundleBackgroundColor')?.value||'#000000',
-        background_image_base64,
-        reuse_saved_background:!file&&!!document.getElementById('bundleReuseBackground')?.checked,
-        attach_project_fonts:!!document.getElementById('bundleIncludeFonts')?.checked
-      })
+      body:JSON.stringify(payload)
     });
-    if(status)status.textContent='完整 MKV 任务已创建；后台逐轨生成与 FFprobe 校验中…';
+    if(status)status.textContent='完整 MKV 任务已创建；FFmpeg 正在按当前背景模式封装并验证…';
     watchJob(j.job);
   }catch(x){
     if(status){status.textContent='完整 MKV 启动失败：'+shortError(x);status.className='small status-bad'}
     setLog(String(x));
   }finally{button.disabled=false}
 }
+document.getElementById('bundlePreviewBtn')?.addEventListener('click',previewBundleBackground);
+for(const id of bundleControls){
+  document.getElementById(id)?.addEventListener('change',()=>{
+    ++bundlePreviewGeneration;
+    syncBundleBackgroundControls();
+    const img=document.getElementById('bundleBackgroundPreview');
+    if(img){img.src='';img.style.display='none'}
+    const status=document.getElementById('bundlePreviewStatus');
+    if(status){status.textContent='背景参数已改变，请重新执行 FFmpeg 预览。';status.className='small muted'}
+  });
+}
+document.getElementById('bundleBackgroundImage')?.addEventListener('change',()=>{
+  if(document.getElementById('bundleBackgroundImage')?.files?.length){
+    document.getElementById('bundleBackgroundMode').value='image';
+    syncBundleBackgroundControls();
+  }
+});
 document.getElementById('exportArchiveBundleBtn')?.addEventListener('click',startArchiveBundle);
 document.getElementById('bundleOpenLayoutBtn')?.addEventListener('click',()=>showWorkspace('layout'));
 async function exportTranslationRecovery(){

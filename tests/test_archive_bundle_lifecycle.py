@@ -110,7 +110,7 @@ class BundleLifecycleTests(unittest.TestCase):
         html = (repo / "app/static/index.html").read_text(encoding="utf-8")
         self.assertIn('id="bundleFreshnessStatus"', html)
         self.assertIn('id="bundleReuseBackground"', html)
-        self.assertIn('reuse_saved_background:!file', html)
+        self.assertIn("reuse_saved_background:spec.mode==='image'&&!file", html)
         self.assertIn("bundleFormProjectRoot=null", html)
 
 
