@@ -3291,8 +3291,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
         <details id="archiveBundlePanel" class="hsr-archive-bundle">
           <summary>完整 MKV · FLAC 音频轨 + 可开关 ASS 软字幕轨 + 字体附件</summary>
-          <p class="small muted">使用最新连续 FLAC、已验证 ASS 和项目字体重新生成完整 MKV；旧文件保留到新文件生成并验收通过，再安全替换。字幕不会烧录进画面。</p>
-          <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 是否需要重新生成。</p>
+          <p class="small muted">完整 MKV 是最终播放封装：复制连续 FLAC 母版音轨、加入最新 ASS 可开关字幕、可选字体附件和背景。独立 FLAC、SRT、ASS 均保留供单独使用；旧版黑屏 MKV 不等同于本完整封装。旧 MKV 直到新文件逐轨验收通过才替换。</p>
+          <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 的来源一致性与生成前提。</p>
           <div class="hsr-bundle-options">
             <label for="bundleBackgroundMode">背景类型
               <select id="bundleBackgroundMode">
@@ -4715,7 +4715,7 @@ function copyTextValue(value){
 function artifactCard({title,kind,desc,path,size,exists=true,status=null,actions=[]}){
   const card=document.createElement('article');
   card.className='artifact-card '+(kind||'')+(exists?'':' missing')+(status==='stale'||status==='unverified'?' stale':'');
-  card.dataset.current=exists&&status!=='stale'&&status!=='unverified'?'true':'false';
+  card.dataset.current=exists&&!['stale','unverified','legacy'].includes(status)?'true':'false';
   const meta=[];
   if(exists&&size!==undefined)meta.push(bytes(size));
   if(path)meta.push(path);
@@ -4900,14 +4900,20 @@ function syncArchiveBundleProjectState(project,force=false){
   }
   const state=document.getElementById('bundleFreshnessStatus');
   if(state){
-    state.textContent=settings.message||'请先打开项目。';
+    state.textContent=(settings.message||'请先打开项目。')+
+      (settings.blockers?.length?' 生成前提：'+settings.blockers.join('；'):'');
     state.className='small '+(settings.state==='current'?'status-ok':
       settings.state==='stale'||settings.state==='unverified'?'status-warn':'muted');
   }
   const action=document.getElementById('exportArchiveBundleBtn');
-  if(action)action.textContent=settings.state==='current'?'重新生成并替换完整 MKV':
-    settings.state==='stale'||settings.state==='unverified'?'重新生成并替换旧 MKV':
-    '生成并逐轨验证完整 MKV';
+  if(action){
+    action.disabled=!!root&&settings.can_generate===false;
+    action.title=settings.can_generate===false?(settings.blockers||[]).join('；'):'';
+    action.textContent=settings.can_generate===false?'请先完成 FLAC 和 ASS/SRT':
+      settings.state==='current'?'重新生成并替换完整 MKV':
+      settings.state==='stale'||settings.state==='unverified'?'重新生成并替换旧 MKV':
+      '生成并逐轨验证完整 MKV';
+  }
 }
 function fillProject(p){
   const priorProjectKey=currentProject?.root||currentProject?.name||null;
@@ -5790,6 +5796,11 @@ for(const id of bundleControls){
     if(img){img.src='';img.style.display='none'}
     const status=document.getElementById('bundlePreviewStatus');
     if(status){status.textContent='背景参数已改变，请重新执行 FFmpeg 预览。';status.className='small muted'}
+    const freshness=document.getElementById('bundleFreshnessStatus');
+    if(freshness){
+      freshness.textContent='本次背景或视频参数已修改；当前已有 MKV 仍对应上次封装的设置。请重新生成后使用新背景。';
+      freshness.className='small status-warn';
+    }
   });
 }
 document.getElementById('bundleBackgroundImage')?.addEventListener('change',()=>{
