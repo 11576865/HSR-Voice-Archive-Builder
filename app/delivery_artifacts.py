@@ -218,3 +218,36 @@ def recover_previous_audio_report(state_dir: Path, current_inputs: dict,
         ) else None
     except (OSError, KeyError, TypeError, ValueError):
         return None
+
+
+def export_optional_track(output: Path, kind: Literal["flac", "srt", "ass"]) -> Path:
+    """Explicit user export, not a default retained part of the complete archive.
+
+    Downloads are materialized under exports/, never into the working source
+    paths, so user exports cannot invalidate a verified MKV source receipt.
+    """
+    if kind not in {"flac", "srt", "ass"}:
+        raise ValueError("Unsupported individual track export")
+    audio = output / FLAC
+    if kind == "flac" and audio.is_file() and not (output / OUTPUT).is_file():
+        return audio
+    receipt = _read_receipt(output)
+    if (not receipt or _signature(output / OUTPUT) != receipt.get("artifact")):
+        raise ValueError("Only a verified MKV can supply an independent export")
+    tracks = _probe(output / OUTPUT)
+    track_info = {
+        "flac": ("0:a:0", "flac", "flac", FLAC),
+        "ass": ("0:s:0", "ass", "ass", ASS),
+        "srt": ("0:s:1", "subrip", "srt", SRT),
+    }
+    stream_map, codec, fmt, name = track_info[kind]
+    expected = {"flac": ("audio", "flac"), "ass": ("subtitle", "ass"),
+                "srt": ("subtitle", "subrip")}
+    media_type, media_codec = expected[kind]
+    streams = [row for row in tracks if row.get("codec_type") == media_type]
+    index = 1 if kind == "srt" else 0
+    if index >= len(streams) or streams[index].get("codec_name") != media_codec:
+        raise ValueError("Requested track is not present in the verified MKV")
+    exported = output / "exports" / name
+    _copy_track(output / OUTPUT, exported, map_arg=stream_map, codec=codec, fmt=fmt)
+    return exported
