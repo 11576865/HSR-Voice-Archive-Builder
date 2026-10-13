@@ -54,6 +54,15 @@ class SubtitleExportReceiptTests(unittest.TestCase):
         (self.output / SRT_NAME).write_text("changed SRT\\n", encoding="utf-8")
         self.assertFalse(read_subtitle_export_health(self.output)["srt_current"])
 
+    def test_srt_tamper_keeps_independent_ass_current(self):
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        (self.output / SRT_NAME).write_text("changed SRT", encoding="utf-8")
+        health = read_subtitle_export_health(self.output)
+        self.assertEqual(health["state"], "stale")
+        self.assertFalse(health["artifacts_current"])
+        self.assertFalse(health["srt_current"])
+        self.assertTrue(health["ass_current"], "SRT-only change must not expire ASS")
+
     def test_srt_only_export_has_independent_freshness(self):
         (self.output / ASS_NAME).unlink()
         record_subtitle_export(self.output, state="current", ass_required=False)
