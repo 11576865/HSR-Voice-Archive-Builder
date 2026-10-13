@@ -172,13 +172,65 @@ class LocalFootageContractTests(unittest.TestCase):
                     )
                 self.assertEqual(result, b"encoded")
 
+
+    def test_static_image_ffmpeg_path_and_no_source_audio(self):
+        png = b"\x89PNG\r\n\x1a\n" + b"mock-image"
+        calls = []
+        def fake_run(cmd, **kwargs):
+            calls.append(cmd)
+            if cmd[0] == "ffprobe":
+                return subprocess.CompletedProcess(cmd, 0, json.dumps({
+                    "streams": [{"codec_type": "video", "width": 640, "height": 360}]
+                }), "")
+            self.assertIn("-loop", cmd)
+            self.assertEqual(cmd[cmd.index("-loop") + 1], "1")
+            self.assertIn("-framerate", cmd)
+            self.assertIn("-an", cmd)
+            self.assertNotIn("0:a:0?", cmd)
+            self.assertIn("subtitles=", cmd[cmd.index("-vf") + 1])
+            self.assertEqual(Path(cmd[cmd.index("-i") + 1]).read_bytes(), png)
+            Path(cmd[-1]).write_bytes(b"image-source-video-encoded")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
+             patch("app.ass_preview.write_ass"), \
+             patch("app.ass_preview.subprocess.run", side_effect=fake_run):
+            encoded = self.call(background_image_bytes=png, background_color="#2468ac")
+        self.assertEqual(encoded, b"image-source-video-encoded")
+        self.assertEqual(len(calls), 2)
+        for options in [
+            {"background_image_bytes": png, "source_video_bytes": b"clip"},
+            {"background_image_bytes": b"not-an-image"},
+            {"background_image_bytes": png + b"x" * (4 * 1024 * 1024)},
+        ]:
+            with self.subTest(options=str(options.keys())), self.assertRaises(ValueError):
+                self.call(**options)
+
+    def test_api_accepts_verified_background_image_identity(self):
+        client = TestClient(app, base_url="http://127.0.0.1:8765")
+        png = b"\x89PNG\r\n\x1a\n" + b"mock-image"
+        data = {"chinese_text": "你好", "english_text": "Hi",
+                "preview_background_image_base64": base64.b64encode(png).decode(),
+                "preview_background_color": "#2468ac", "preview_format": "webm"}
+        with patch("app.server.render_ass_preview_video", return_value=b"video") as render:
+            response = client.post("/api/subtitle-layout/render-preview-video",
+                                   json=data, headers={"X-HSR-Token": api_token()})
+        self.assertEqual(response.status_code, 200, response.text)
+        self.assertEqual(response.headers["x-hsr-preview-background"], "background-image")
+        self.assertEqual(render.call_args.kwargs["background_image_bytes"], png)
+        invalid = client.post("/api/subtitle-layout/render-preview-video",
+                              json={**data, "preview_background_image_base64":
+                                    base64.b64encode(b"bad-file").decode()},
+                              headers={"X-HSR-Token": api_token()})
+        self.assertEqual(invalid.status_code, 400)
+
     def test_ui_selected_video_is_explicit_and_not_persisted(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
         for literal in ('id="effectFootageFile"', 'id="effectFootageStart"',
                         'id="effectFootageClearBtn"', "effectFootageAsBase64",
                         "payload.source_video_base64", "payload.source_start_seconds",
                         "X-HSR-Preview-Background", "'video-footage'",
-                        'id="effectFootageAudio"', "payload.include_source_audio"):
+                        'id="effectFootageAudio"', "payload.include_source_audio",
+                        'id="effectBackgroundImageFile"', "payload.preview_background_image_base64"):
             self.assertIn(literal, html)
 
 
