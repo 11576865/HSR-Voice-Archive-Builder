@@ -45,7 +45,7 @@ class BackgroundColorTests(unittest.TestCase):
     def test_genuine_pixel_color_in_encoded_video(self):
         ffmpeg = shutil.which("ffmpeg")
         clip = render_ass_preview_video(
-            english_text="", chinese_text="", source_language="en", target_language="zh-CN",
+            english_text="Preview source", chinese_text="背景颜色验收", source_language="en", target_language="zh-CN",
             config=SubtitleRenderConfig(), duration_seconds=0.6,
             container_format="mp4", background_color="#234567")
         with tempfile.TemporaryDirectory() as td:
