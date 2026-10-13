@@ -3319,7 +3319,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
           <div class="layout-workbench-kicker" id="hsrStudioEyebrow">SUBTITLE LAYOUT</div><h2 id="hsrStudioTitle" style="margin-bottom:4px">字幕排版工作台</h2>
           <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
-        <div style="display:flex;gap:6px;align-items:center" id="previewHeaderBadges">
+        <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end" id="previewHeaderBadges">
+          <button type="button" id="hsrStudioFocusToggle" aria-pressed="false" title="进入独立可滚动的排版／特效工作台；按 Esc 或再次点击退出">专注工作台</button>
           <span id="previewScaleBadge" class="badge">100%</span>
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
@@ -4302,6 +4303,7 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   const navigation=++workspaceNavigationGeneration;
   const previousWorkspace=document.body.dataset.workspace;
   const visibleWorkspace=name==='effects'?'layout':name; // One canvas/state, separate primary task.
+  if(visibleWorkspace!=='layout')setHsrStudioFocusMode(false);
   // Do not show a stale Layout/Effects preview while Review is still saving.
   // A failed save leaves the user and the editable draft in Review.
   if(previousWorkspace==='review'&&visibleWorkspace==='layout'&&typeof currentSubtitle==='function'){
@@ -8234,6 +8236,30 @@ function setHsrAuditDrawer(open){
   toggle.setAttribute('aria-expanded',open?'true':'false');
   toggle.textContent=open?'收起批量检查':'批量排版检查';
 }
+function setHsrStudioFocusMode(enabled){
+  const root=document.getElementById('subtitleLayoutPreviewCard');
+  const toggle=document.getElementById('hsrStudioFocusToggle');
+  const active=!!enabled&&document.body.dataset.workspace==='layout';
+  if(!root||!toggle)return;
+  document.body.dataset.hsrStudioFocus=active?'true':'false';
+  root.classList.toggle('hsr-focus-active',active);
+  toggle.setAttribute('aria-pressed',active?'true':'false');
+  toggle.textContent=active?'退出专注模式':'专注工作台';
+  if(active){
+    const workbench=root.querySelector('.preview-workbench');
+    if(workbench)workbench.scrollTop=0;
+  }
+}
+document.getElementById('hsrStudioFocusToggle')?.addEventListener('click',()=>{
+  const next=document.body.dataset.hsrStudioFocus!=='true';
+  setHsrStudioFocusMode(next);
+});
+document.addEventListener('keydown',event=>{
+  if(event.key==='Escape'&&document.body.dataset.hsrStudioFocus==='true'){
+    setHsrStudioFocusMode(false);
+    document.getElementById('hsrStudioFocusToggle')?.focus({preventScroll:true});
+  }
+});
 document.getElementById('hsrTouchSliderToggle')?.addEventListener('click',()=>{
   const inspector=document.querySelector('#subtitleLayoutPreviewCard .preview-inspector');
   const toggle=document.getElementById('hsrTouchSliderToggle');
