@@ -31,7 +31,8 @@ class BundleInputValidationTests(unittest.TestCase):
                       else '@app.post("/api/output/archive-bundle")')
             start = code.index(marker)
             block = code[start: start + 4200]
-            self.assertIn("require_current_bundle_subtitles(output)", block, name)
+            self.assertIn("prepare_complete_sources(", block, name)
+            self.assertIn("seal_complete_delivery(output)", block, name)
             self.assertIn("require_current_ass=True", block, name)
 
     def test_unverified_or_nonass_receipts_are_refused(self):
