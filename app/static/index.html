@@ -2838,25 +2838,11 @@ body[data-workspace="layout"] .preview-workbench{
 .layout-cue-clock{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin:14px 0 12px}
 .layout-cue-clock span{padding:9px 10px;border-radius:7px;background:var(--layout-section);font-size:11px;color:var(--layout-muted)}
 .layout-cue-clock strong{display:block;font:700 14px/1.5 ui-monospace,Consolas,monospace;color:var(--layout-text);margin-top:2px}
-.layout-cue-scrub label{display:flex;align-items:center;justify-content:space-between;font-size:11px;font-weight:650;color:var(--layout-muted)}
-.layout-cue-scrub input{width:100%;margin:7px 0!important}
-.layout-cue-scrub p{font-size:10px;color:var(--layout-muted);margin:2px 0 14px;line-height:1.5}
 .layout-cue-grid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1.15fr);gap:12px;align-items:stretch}
 .layout-cue-source,.layout-cue-translation{min-width:0}
 .layout-cue-field-label{display:block;font-size:11px;font-weight:700;color:var(--layout-muted);margin:0 0 7px}
 .layout-cue-source p{font-size:13px;line-height:1.65;margin:0;padding:10px 12px;background:var(--layout-section);border:1px solid var(--layout-border);border-radius:7px;min-height:92px;white-space:pre-wrap;overflow-wrap:anywhere}
 .layout-cue-translation textarea{font-size:13px;line-height:1.65;resize:vertical;min-height:92px!important;width:100%;border-radius:7px!important}
-.layout-cue-actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-top:12px}
-.layout-cue-actions button{min-height:37px!important;padding:7px 12px!important;font-size:12px!important}
-.layout-cue-actions button:disabled{opacity:.5!important}
-#layoutCueSaveBtn{background:var(--layout-evidence-accent)!important;color:#0b1924!important;border-color:transparent!important}
-#layoutCueCharCount{margin-left:auto;font-size:11px;color:var(--layout-muted)}
-.layout-cue-audio{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:7px 12px;align-items:center;padding:12px 0 0;margin-top:12px;border-top:1px solid var(--layout-border)}
-.layout-cue-audio-meta{display:flex;flex-direction:column;gap:4px;min-width:0;font-size:11px}
-.layout-cue-audio-meta strong{font-size:12px}
-.layout-cue-audio-meta span{color:var(--layout-muted);overflow-wrap:anywhere}
-#layoutCueAudioLoadBtn{min-height:34px!important;padding:6px 12px!important;font-size:11px!important}
-#layoutCueAudio{grid-column:1/-1;width:100%;height:36px}
 .layout-cue-save-note{font-size:11px;line-height:1.5;color:var(--layout-muted);margin:11px 0 0}
 @media(max-width:1050px){.layout-cue-grid{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:759px){
@@ -2866,10 +2852,6 @@ body[data-workspace="layout"] .preview-workbench{
 }
 
 
-.layout-cue-waveform-wrap{grid-column:1/-1;min-width:0;border-radius:7px;border:1px solid var(--layout-border);background:var(--layout-section);padding:7px 9px 8px}
-#layoutCueWaveform{display:block;width:100%;height:90px;cursor:crosshair;touch-action:manipulation;outline-offset:4px}
-#layoutCueWaveform:focus-visible{outline:2px solid var(--layout-evidence-accent)}
-#layoutCueWaveformHelp{display:block;margin-top:3px;font-size:10px;line-height:1.5;color:var(--layout-muted)}
 
 
 /* The stage now includes an actual cue editor and waveform: its column must
@@ -2949,19 +2931,8 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 .layout-export-health button{min-height:36px!important;padding:7px 11px!important;font-size:11px!important;flex-shrink:0}
 @media(max-width:759px){.layout-export-health{padding:11px}}
 
-.layout-cue-text-conflict{margin-top:10px;padding:11px 13px;background:var(--layout-section);border:1px solid var(--layout-border);border-left:3px solid var(--layout-evidence-warning);border-radius:7px;color:var(--layout-text)}
-.layout-cue-text-conflict[hidden]{display:none!important}
-.layout-cue-text-conflict strong{font-size:12px}
-.layout-cue-text-conflict p{margin:5px 0 10px;color:var(--layout-muted);font-size:11px;line-height:1.5}
-.layout-cue-text-conflict-actions{display:flex;gap:7px;flex-wrap:wrap}
-.layout-cue-text-conflict button{min-height:34px!important;padding:6px 10px!important;font-size:11px!important}
 
-/* Workbench ownership: hide legacy editing controls regardless of older display overrides. */
-#subtitleLayoutPreviewCard .layout-cue-actions[hidden],
-#subtitleLayoutPreviewCard .layout-cue-audio[hidden],
-#subtitleLayoutPreviewCard .layout-cue-scrub[hidden],
-#subtitleLayoutPreviewCard #layoutCueTextConflict{display:none!important}
-#subtitleLayoutPreviewCard .layout-cue-actions[hidden]{display:none!important}
+/* Ownership rule: the visible Layout cue only projects Review's persisted text. */
 /* A single primary workspace nav now owns Layout/Effects switching. */
 #subtitleLayoutPreviewCard[data-studio-mode="style"] [data-studio-scope="effects"],
 #subtitleLayoutPreviewCard[data-studio-mode="effects"] [data-studio-scope="style"],
@@ -7285,9 +7256,9 @@ function renderLayoutCueEditor(){
   const sub=layoutCueRow(layoutCueActiveId),state=layoutCueState(sub);
   const selected=!!sub;
   const title=document.getElementById('layoutCueHeading');
-  if(title)title.textContent=selected?'字幕 #'+sub.id+' · 逐条编辑':'请选择字幕条目';
+  if(title)title.textContent=selected?'字幕 #'+sub.id+' · 显示时间':'请选择字幕条目';
   const source=document.getElementById('layoutCueSourceText');
-  if(source)source.textContent=selected?String(sub.source_text||'（缺少源台词）'):'从左侧选取条目后显示原文。';
+  if(source)source.textContent=selected?String(sub.source_text||'（缺少源台词）'):'从时间轴或批量排版检查选择字幕后显示原文。';
   const start=document.getElementById('layoutCueStart'),end=document.getElementById('layoutCueEnd'),duration=document.getElementById('layoutCueDuration');
   if(start)start.textContent=selected?formatClockTime(sub.start):'--:--.-';
   if(end)end.textContent=selected?formatClockTime(sub.end):'--:--.-';
@@ -7299,7 +7270,7 @@ function renderLayoutCueEditor(){
   renderLayoutCueTiming();
 }
 function layoutCueSelect(sub){
-  if(!sub){layoutCueActiveId=null;layoutCueClearAudio();renderLayoutCueEditor();return;}
+  if(!sub){layoutCueActiveId=null;renderLayoutCueEditor();return;}
   if(String(layoutCueActiveId)!==String(sub.id)){
       const note=document.getElementById('layoutCueTimingStatus');
     if(note)note.dataset.committed='';
@@ -7315,11 +7286,9 @@ function layoutCueSelect(sub){
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){
     status.textContent=!layoutCorpusPersistable
-      ? '尚未构建真实字幕清单：当前是示例或未就绪字幕，只能预览，不能保存。请先完成项目构建。'
-      : state.draft!==state.saved
-      ? '条目 #'+sub.id+' 有尚未保存的正文草稿；切换其他条目后仍会在本次会话保留。'
-      : '条目 #'+sub.id+' 已载入；正文请在「校对」中修改，当前工作台只编辑显示时间、排版和特效。';
-    status.className='layout-cue-save-note '+(state.draft!==state.saved?'status-warn':'');
+      ? '项目尚未构建：当前仅可预览，不能保存显示时间。'
+      : '条目 #'+sub.id+' 已载入；正文及原始 WAV 请在「校对」中操作，此处仅修改显示时间、排版和特效。';
+    status.className='layout-cue-save-note';
   }
   return state;
 }
