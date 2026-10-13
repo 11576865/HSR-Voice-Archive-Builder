@@ -13,7 +13,7 @@ from typing import Any
 
 from .builder import atomic_write_text
 from .project_fonts import font_asset_directory
-from .subtitle_export_status import read_subtitle_export_health
+from .subtitle_export_status import read_subtitle_export_health, _inputs as _subtitle_inputs
 from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, MODES, normalize_bundle_background
 
 RECEIPT = "archive_bundle_receipt.json"
@@ -135,15 +135,19 @@ def load_previous_bundle_image(output: Path) -> bytes:
 
 
 def bundle_export_status(output: Path) -> dict[str, Any]:
-    """Only the combined MKV is derived; independent FLAC and subtitle deliverables remain.
+    """Validate the sealed MKV without requiring redundant standalone media files.
 
-    A file existing on disk does not imply readiness for a *new* bundle build.
-    Surface source prerequisites separately from last-published MKV freshness.
+    Legacy (unsealed) bundles continue to require their original inputs. Sealed
+    bundles instead bind their subtitle receipt's source hashes and the current
+    font identities to the verified container identity.
     """
     settings = previous_bundle_settings(output)
     target = output / OUTPUT
     # An empty file exists, but cannot be a usable FLAC or subtitle product.
     # This is only a cheap dashboard preflight, not an FFprobe codec guarantee.
+    receipt = _read_receipt(output)
+    sealed = bool(receipt and receipt.get("sealed") is True)
+    bundle_intact = bool(receipt and _signature(target) == receipt.get("artifact"))
     flac_sig = _signature(output / "continuous.flac")
     ass_sig = _signature(output / "HSR_Voice_Archive.ass")
     srt_sig = _signature(output / "HSR_Voice_Archive.srt")
@@ -157,9 +161,32 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     ass_current = bool(ass and subtitle.get("ass_current"))
     subtitles_current = bool(srt_current and ass_current
                              and subtitle.get("artifacts_current"))
+    seal_inputs_current = False
+    if sealed and bundle_intact:
+        try:
+            record = json.loads((output / "subtitle_export_receipt.json").read_text("utf-8"))
+            seal_inputs_current = bool(
+                record.get("state") == "current"
+                and record.get("ass_required") is True
+                and record.get("inputs") == _subtitle_inputs(output)
+                and _signature(output / "subtitle_export_receipt.json")
+                    == receipt["sources"].get("subtitle_receipt")
+            )
+        except (OSError, TypeError, ValueError, KeyError):
+            seal_inputs_current = False
+        if seal_inputs_current:
+            # Missing standalone outputs are intentional in MKV-only mode.
+            # An *existing* edited output is checked against its publication
+            # identity and is not silently accepted as a new verified source.
+            srt_current = (srt_current if srt else True)
+            ass_current = (ass_current if ass else True)
+            subtitles_current = bool(srt_current and ass_current)
+    audio_available = flac or (sealed and bundle_intact)
     build_busy = (output / ".build_in_progress").exists()
     prerequisites = {
-        "continuous_flac": flac,
+        "continuous_flac": audio_available,
+        "independent_flac": flac,
+        "embedded_flac": bool(sealed and bundle_intact),
         "ass": ass,
         "srt": srt,
         "srt_current": srt_current,
@@ -168,8 +195,8 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
         "build_idle": not build_busy,
     }
     blockers = []
-    if not flac:
-        blockers.append("连续 FLAC 缺失或为空，请先完成档案构建")
+    if not audio_available:
+        blockers.append("既没有独立 FLAC，也没有已验证 MKV 音轨，请先完成档案构建")
     if not srt_current:
         blockers.append("独立 SRT 缺失、为空或已过期，请先更新字幕")
     if not ass_current:
@@ -185,7 +212,6 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     }
     if not target.is_file() or target.is_symlink():
         return result
-    receipt = _read_receipt(output)
     if receipt is None:
         result.update(state="unverified", message="存在旧 MKV，但缺少本次来源校验记录；建议重新生成。")
         return result
@@ -196,19 +222,34 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
             raise ValueError("项目构建进行中，旧 MKV 不代表最新结果")
         if _signature(target) != receipt["artifact"]:
             raise ValueError("MKV 文件已被修改或替换")
-        if _sources(output, receipt["attach_project_fonts"]) != receipt["sources"]:
-            raise ValueError("连续 FLAC、ASS、SRT 或字体已变化")
-        health = read_subtitle_export_health(output)
-        if not (health.get("state") == "current"
-                and health.get("artifacts_current") and health.get("ass_required")):
-            raise ValueError("ASS/SRT 的项目导出状态不是最新")
+        if sealed:
+            current = _sources(output, receipt["attach_project_fonts"])
+            original = receipt["sources"]
+            if current["fonts"] != original["fonts"]:
+                raise ValueError("字体发生变化")
+            if not seal_inputs_current:
+                raise ValueError("字幕来源或导出回执发生变化")
+            for name in ("flac", "srt", "ass"):
+                if current[name] is not None and current[name] != original[name]:
+                    # A materialized FLAC extracted from the MKV can have a
+                    # different file header yet the same compressed stream;
+                    # it becomes an input only after a fresh export receipt.
+                    raise ValueError("额外独立来源与已封装版本不一致：" + name)
+        else:
+            if _sources(output, receipt["attach_project_fonts"]) != receipt["sources"]:
+                raise ValueError("连续 FLAC、ASS、SRT 或字体已变化")
+            health = read_subtitle_export_health(output)
+            if not (health.get("state") == "current"
+                    and health.get("artifacts_current") and health.get("ass_required")):
+                raise ValueError("ASS/SRT 的项目导出状态不是最新")
         if receipt["background"].get("kind") == "image":
             _image_asset(output, receipt)
     except (OSError, ValueError, TypeError) as exc:
         result.update(state="stale", message="旧 MKV 已过期：" + str(exc) + "；请重新生成。")
         return result
     result.update(state="current", needs_rebuild=False,
-                  message="完整 MKV 已通过来源一致性检查。")
+                  message=("MKV 已验证；独立 FLAC/SRT/ASS 按需导出。"
+                           if sealed else "完整 MKV 已通过来源一致性检查。"))
     return result
 
 
