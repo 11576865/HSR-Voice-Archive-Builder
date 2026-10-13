@@ -178,6 +178,20 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertEqual(status["state"], "current")
         self.assertEqual(status["image_saved"], True)
 
+    def test_standalone_srt_is_current_even_when_ass_is_not_exported(self):
+        # An SRT-only export is a valid independent output, but cannot create
+        # an MKV with selectable ASS until the ASS generation step completes.
+        (self.root / "HSR_Voice_Archive.ass").unlink()
+        record_subtitle_export(self.root, state="current", ass_required=False)
+        state = bundle_export_status(self.root)
+        self.assertTrue(state["prerequisites"]["srt_current"])
+        self.assertFalse(state["prerequisites"]["ass_current"])
+        self.assertFalse(state["prerequisites"]["subtitles_current"])
+        self.assertFalse(state["can_generate"])
+        self.assertEqual(state["state"], "stale")
+        self.assertTrue((self.root / "HSR_Voice_Archive.srt").is_file())
+        self.assertTrue((self.root / OUTPUT).is_file())
+
     def test_project_api_bundle_product_has_same_source_state_as_receipt(self):
         config = ProjectConfig(1, "test", str(self.root), "index.csv", "wavs")
         initial = project_summary(config)
@@ -217,6 +231,8 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertIn("独立于完整 MKV", html)
         self.assertIn("status:mkvStatus", html)
         self.assertIn("settings.can_generate===false", html)
+        self.assertIn("status:srt.exists&&!srtCurrent?'stale':null", html)
+        self.assertIn("status:ass.exists&&!assCurrent?'stale':null", html)
         # Prevent a TDZ ReferenceError while the existing project view is
         # revealing old successful outputs from a partially rebuilt project.
         self.assertIn("const availableProducts=p.output_groups?.final_products||p.outputs||{}", html)
