@@ -294,3 +294,37 @@ body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.
 #subtitleLayoutPreviewCard .hsr-touch-control{
   display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;
 }
+
+
+/* The focused editor exposes in-place Layout/Effects task switching without
+   hiding the only navigation behind the fullscreen card. */
+#subtitleLayoutPreviewCard .hsr-focus-task-nav{display:none}
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav{
+  display:flex!important;flex:0 0 auto;align-items:center;gap:8px;flex-wrap:wrap;
+  padding:6px 12px;border-bottom:1px solid var(--layout-border);
+  background:var(--surface-secondary);
+}
+#subtitleLayoutPreviewCard .hsr-focus-task-nav button{
+  min-height:40px;padding:7px 12px;border-radius:6px;
+  border:1px solid var(--layout-border);font-size:12px;
+}
+#subtitleLayoutPreviewCard .hsr-focus-task-nav button[aria-current="page"]{
+  border-color:var(--layout-evidence-accent);font-weight:750;
+}
+@media(max-width:759px){
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline{
+    padding:7px 10px!important;
+  }
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline h2{
+    font-size:16px!important;
+  }
+  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav{
+    padding:4px 8px;gap:6px;
+  }
+}
+/* Focus and touch contexts must maintain keyboard focus and visible controls. */
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav :focus-visible,
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrStudioFocusToggle:focus-visible,
+body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrTouchSliderToggle:focus-visible{
+  outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
+}
