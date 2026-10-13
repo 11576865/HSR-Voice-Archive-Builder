@@ -134,6 +134,26 @@ class RealGradientEvidence(unittest.TestCase):
                 corners[mode] = (left, right)
             self.assertNotEqual(corners["linear"], corners["radial"])
 
+    def test_real_1080p_high_quality_soft_background_stream(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            exporter = ArchiveBundleExporter(width=1920, height=1080)
+            spec = normalize_bundle_background({
+                "mode": "soft", "resolution": "1080p", "quality": "high",
+                "first": "#2b4266", "second": "#112337", "third": "#645c8e",
+            })
+            target = root / "HSR_Voice_Archive_Bundle.mkv"
+            result = exporter.export(audio, ass, target,
+                                     background_spec=spec, require_current_ass=True)
+            self.assertEqual(result["resolution"], "1920x1080")
+            self.assertEqual(result["video_quality"], "high")
+            probe = exporter._probe(target)
+            video = next(x for x in probe["streams"] if x["codec_type"] == "video")
+            self.assertEqual((video["width"], video["height"]), (1920, 1080))
+            self.assertEqual(video["codec_name"], "h264")
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+
     def test_missing_ffmpeg_gradient_filter_does_not_destroy_previous_mkv(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
