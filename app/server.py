@@ -933,6 +933,7 @@ def api_quick_build(
     reference_language: str = Form("auto"),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
+    delivery_mode: str = Form("complete"),
     translate_missing: bool = Form(True),
     review_official_target: bool = Form(False),
 ):
@@ -958,6 +959,7 @@ def api_quick_build(
             group_gap=max(0.0, group_gap),
             chapter_order=chapter_order,
             generate_chapter_flac=generate_chapter_flac,
+            delivery_mode=delivery_mode,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
         )
@@ -985,6 +987,7 @@ def api_quick_build(
                 make_flac=config.make_flac,
                 chapter_order=config.chapter_order,
                 generate_chapter_flac=config.generate_chapter_flac,
+                delivery_mode=config.delivery_mode,
                 translate_missing=config.translate_missing,
                 translation_model=config.translation_model,
                 translation_batch_size=config.translation_batch_size,
@@ -1038,6 +1041,7 @@ def api_project_create(
     remote_character: str = Form(""),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
+    delivery_mode: str = Form("complete"),
     translate_missing: bool = Form(True),
     review_official_target: bool = Form(False),
 ):
@@ -1059,6 +1063,7 @@ def api_project_create(
             remote_character=remote_character,
             chapter_order=chapter_order,
             generate_chapter_flac=generate_chapter_flac,
+            delivery_mode=delivery_mode,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
         )
@@ -1207,6 +1212,7 @@ def api_project_save(
     make_flac: bool = Form(False),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
+    delivery_mode: str = Form("complete"),
     translate_missing: bool = Form(False),
     review_official_target: bool = Form(False),
     translation_model: str = Form(""),
@@ -1239,6 +1245,7 @@ def api_project_save(
             make_flac=make_flac,
             chapter_order=chapter_order,
             generate_chapter_flac=generate_chapter_flac,
+            delivery_mode=delivery_mode,
             translate_missing=translate_missing,
             review_official_target=review_official_target,
             translation_model=translation_model.strip() or translation_default_model(),
@@ -1283,6 +1290,7 @@ def api_project_build():
                 make_flac=config.make_flac,
                 chapter_order=config.chapter_order,
                 generate_chapter_flac=config.generate_chapter_flac,
+                delivery_mode=config.delivery_mode,
                 translate_missing=config.translate_missing,
                 translation_model=config.translation_model,
                 translation_batch_size=config.translation_batch_size,
