@@ -152,6 +152,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
 def record_bundle_publication(
     output: Path, *, background_color: str, background_image: bytes | None,
     image_extension: str | None, include_fonts: bool,
+    artifact: Path | None = None,
 ) -> None:
     """Persist replayable inputs and provenance after verified atomic MKV publish.
 
@@ -184,7 +185,7 @@ def record_bundle_publication(
               "image_name": name, "sha256": digest, "extension": image_extension}
     receipt = {
         "schema_version": 1,
-        "artifact": _signature(output / OUTPUT),
+        "artifact": _signature(artifact if artifact is not None else output / OUTPUT),
         "sources": _sources(output, include_fonts),
         "background": bg,
         "attach_project_fonts": bool(include_fonts),
