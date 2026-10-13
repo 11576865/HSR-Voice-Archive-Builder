@@ -1828,10 +1828,11 @@ def build_project_v02(
                         "chapter_flac_unassigned_count": 0,
                     })
 
-                # A previous black MKV contains the old FLAC. Invalidate it
-                # only after the replacement FLAC has encoded and verified.
+                # Legacy black-only MKV has no source receipt; invalidate it
+                # after the new FLAC was validated. The full Bundle MKV DOES
+                # carry a source receipt: preserve its bytes as a stale artifact
+                # until a newly verified bundle replaces it atomically.
                 (out_dir / "HSR_Voice_Archive_Black.mkv").unlink(missing_ok=True)
-                (out_dir / "HSR_Voice_Archive_Bundle.mkv").unlink(missing_ok=True)
                 report.update(audio_report)
                 save_stage(
                     state_dir,
