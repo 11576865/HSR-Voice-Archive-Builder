@@ -740,10 +740,18 @@ async def api_subtitle_layout_render_preview(request: Request):
 @app.post("/api/subtitle-layout/render-preview-video")
 async def api_subtitle_layout_render_preview_video(request: Request):
     try:
+        max_body = 8 * 1024 * 1024
         size = request.headers.get("content-length")
-        if size is not None and int(size) > 8 * 1024 * 1024:
+        if size is not None and int(size) > max_body:
             raise ValueError("Preview JSON body exceeds 8 MiB")
-        data = await request.json()
+        # Enforce the bound on actual streamed bytes, not a potentially absent
+        # or misleading Content-Length header.
+        body = bytearray()
+        async for chunk in request.stream():
+            if len(body) + len(chunk) > max_body:
+                raise ValueError("Preview JSON body exceeds 8 MiB")
+            body.extend(chunk)
+        data = json.loads(body)
         if not isinstance(data, dict):
             raise ValueError("Subtitle preview payload must be an object")
         config = preview_config_from_payload(data)
