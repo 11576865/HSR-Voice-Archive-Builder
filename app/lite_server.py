@@ -1464,7 +1464,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Output directory is not configured")
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV preview project context changed")
-                        image = decode_bundle_background(data.get("background_image_base64"))
+            image = decode_bundle_background(data.get("background_image_base64"))
             if image is None and data.get("reuse_saved_background") is True:
                 image = load_previous_bundle_image(output)
             raw_spec = data.get("background_spec")
@@ -1488,7 +1488,7 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Output directory is not configured")
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV export project context changed")
-                        image = decode_bundle_background(data.get("background_image_base64"))
+            image = decode_bundle_background(data.get("background_image_base64"))
             if image is None and data.get("reuse_saved_background") is True:
                 image = load_previous_bundle_image(output)
             raw_spec = data.get("background_spec")
