@@ -1517,6 +1517,24 @@ def build_project_v02(
         FLAC, OUTPUT, extract_flac_from_mkv, publish_flac_only,
         recover_previous_audio_report, seal_complete_delivery,
     )
+    # A sealed complete MKV is the finished product, not an intermediate
+    # missing FLAC/ASS/SRT. The per-stage artifact receipts for those deleted
+    # working files naturally fail, but an *unchanged* input generation with a
+    # validated final checkpoint must not re-encode hours of video on every
+    # redundant Build click. Keep chapter audio mode out of this shortcut.
+    if (delivery_mode == "complete" and make_flac and not generate_chapter_flac
+            and not (out_dir / ".build_in_progress").exists()):
+        from .archive_bundle_lifecycle import bundle_export_status
+        previous_final = load_stage(
+            state_dir, STAGE_FILES["final"], "final_report", input_fingerprint,
+            artifact_root=out_dir,
+        )
+        if (previous_final is not None
+                and bundle_export_status(out_dir)["state"] == "current"
+                and isinstance(previous_final.get("report"), dict)):
+            progress("final", "输入未变化，复用已验证完整 MKV（无需重新编码）", 6, 6)
+            return dict(previous_final["report"])
+
     # Inspect the preceding checkpoint BEFORE the current scan stage may
     # overwrite it. An unchanged audio stream can be recovered from the MKV
     # without recompressing the original WAVs after a delivery-mode switch.
