@@ -707,6 +707,9 @@ def touch_safety_check(browser, base_url, report):
            "Direct touch numeric editor failed to update authoritative range value")
     ensure(page.locator("#prevChsSizeVal").inner_text().strip().startswith("52"),
            "Touch value did not update live preview parameter feedback")
+    page.locator("#prevPresetDefault").click()
+    ensure(number.input_value()=="48",
+           "Preset restored range but left the touch numeric editor stale")
     ensure(page.locator("#hsrTouchSliderToggle").count()==0,
            "Global slider locking control has returned")
     report["touch_numeric"]={"before":before,"after":page.locator("#prevChsSize").input_value()}
