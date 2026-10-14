@@ -9,6 +9,7 @@ from unittest.mock import patch
 
 from app.auto_delivery import _ATTEMPTS, maybe_queue_complete_mkv
 from app.project import ProjectConfig
+from app.pipeline import build_project_v02
 
 
 class AutoCompleteDeliveryTests(unittest.TestCase):
@@ -18,6 +19,33 @@ class AutoCompleteDeliveryTests(unittest.TestCase):
     def _config(self, root: Path, mode: str = "complete"):
         return SimpleNamespace(delivery_mode=mode, root=str(root), name="Dahlia",
                                output_dir="output")
+
+    def test_identical_sealed_full_build_reuses_mkv_without_opening_audio(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            index = root / "index.csv"
+            index.write_text("index,group,filename,english,sha256\\n1,scene,a.wav,Hello,\\n",
+                             encoding="utf-8")
+            wavs = root / "wavs"
+            wavs.mkdir()
+            (wavs / "a.wav").write_bytes(b"source identity checked but not opened")
+            events = []
+            # A final checkpoint AND source-verified sealed bundle must be
+            # present; a mere MKV filename is insufficient to skip rebuilding.
+            with (patch("app.pipeline.load_stage", return_value={
+                      "report": {"count_total": 1, "origin": "verified-cache"}}) as cache,
+                  patch("app.archive_bundle_lifecycle.bundle_export_status",
+                        return_value={"state": "current"}),
+                  patch("app.pipeline.ensure_dir_or_extract", side_effect=AssertionError(
+                      "WAV extraction must not run on identical complete inputs"))):
+                result = build_project_v02(
+                    index, wavs, root / "output", state_dir=root / ".state",
+                    delivery_mode="complete", translate_missing=False,
+                    progress_callback=lambda *args: events.append(args),
+                )
+            self.assertEqual(result["origin"], "verified-cache")
+            self.assertEqual([x[0] for x in events], ["prepare", "final"])
+            self.assertEqual(cache.call_args.args[2], "final_report")
 
     def test_project_profile_defaults_to_full_mkv_and_both_subtitles(self):
         # Requiring ProjectConfig avoids a fragile static HTML-only contract.
