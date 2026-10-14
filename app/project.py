@@ -59,6 +59,7 @@ class ProjectConfig:
     subtitle_margin_horizontal_percent: float = 0.03
     subtitle_margin_vertical_percent: float = 0.05
     subtitle_min_central_gap: float = 20.0
+    subtitle_primary_region_share: float = 0.60
     subtitle_enable_karaoke: bool = False
     subtitle_karaoke_mode: str = "k"
     subtitle_enable_translucent_card: bool = False
