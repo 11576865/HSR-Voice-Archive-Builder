@@ -28,15 +28,23 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertNotIn('setHsrTouchSliderLock',html)
         self.assertNotIn('.hsr-touch-sliders-unlocked',css)
         self.assertIn('function initHsrTouchNumericEditors()',html)
-        self.assertIn('range.insertAdjacentElement(\'afterend\',editor)',html)
+        self.assertIn("range.insertAdjacentElement('afterend',stepper)",html)
         self.assertIn("editor.addEventListener('change'",html)
-        self.assertIn('touch-action:pan-y',css)
+        self.assertIn("editor.dispatchEvent(new Event('change',{bubbles:true}))",html)
+        self.assertIn("touch-action:manipulation",css)
+        self.assertIn(".layout-timeline-navigation input[type=\"range\"]{",css)
+        self.assertIn("display:none!important;",css)
         self.assertIn('@media(pointer:coarse)',css)
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
         self.assertIn("section.open=first;", self.html)
         self.assertIn("root.dataset.lastInspectorMode=next;", self.html)
+
+    def test_inspector_sections_are_exclusive_without_long_persistent_scroll(self):
+        self.assertEqual(self.html.count('name="hsr-style-parameter-groups"'),4)
+        self.assertEqual(self.html.count('name="hsr-effects-parameter-groups"'),3)
+        self.assertIn('grid-template-rows:minmax(155px,44%) minmax(175px,56%)',self.css)
 
     def test_karaoke_input_is_explained_without_invented_alignment(self):
         self.assertIn('id="hsrAlignmentHelp"', self.html)
