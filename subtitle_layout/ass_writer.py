@@ -409,6 +409,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             base_primary_size=int(cfg.base_primary_size),
             safe_area=safe_area,
             min_central_gap=float(cfg.min_central_gap),
+            primary_region_share=float(cfg.primary_region_share),
             chs_font_path=chs_font_path,
             primary_font_path=primary_font_path,
         )
