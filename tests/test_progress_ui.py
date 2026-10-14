@@ -383,7 +383,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("browserPreviewFontName(", html)
         self.assertIn('id="previewBackgroundMode"', html)
         self.assertIn('<option value="image">本地图片</option>', html)
-        self.assertIn('id="previewBackgroundFile" type="file"', html)
+        self.assertIn('id="previewBackgroundMode" type="hidden"', html)
         self.assertIn("URL.createObjectURL(file)", html)
         self.assertIn("URL.revokeObjectURL(previewBackgroundObjectUrl)", html)
         self.assertIn("不改变项目图、ASS 或最终 MKV 背景", html)
@@ -449,7 +449,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("平滑淡入淡出", html)
         self.assertNotIn("淡入淡出 / 动态进入", html)
         self.assertIn('class="preview-stage" id="previewCanvasContainer"', html)
-        self.assertIn('class="preview-workbench studio-v3-workbench"', html)
+        self.assertIn('class="preview-workbench studio-v3-workbench studio-v4-workbench"', html)
         self.assertIn('class="preview-inspector studio-v3-inspector" id="studioV3Inspector" aria-label="字幕样式与特效参数"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
