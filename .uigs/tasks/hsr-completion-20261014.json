@@ -3,7 +3,7 @@
   "task_id": "hsr-completion-20261014",
   "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
   "status": "in_progress",
-  "current_bounded_work_unit": "PR #162 merged into main at 36c1321fe684247329f2b2f6bde7793e4a4cd9a0. Fixed auto-MKV failure retry poisoning (job-aware exponential backoff), no-op sealed MKV redundant recode, FLAC-only old black-MKV leftover and symlinked exports/ destination. Exact branch head passed Python 3.11–3.13/Termux and real FFmpeg/libass/Chromium CI.",
+  "current_bounded_work_unit": "HSR PR #162 four bug fixes landed and passed exact branch/head plus merged-main Python 3.11–3.13/Termux + FFmpeg/libass/Chromium CI. Current unresolved acceptance: Android physical device, player behavior and >=1h archive runtime; PR #159 and remaining branch semantic integration are separate pending work.",
   "completed_units": [
     {
       "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
@@ -55,10 +55,16 @@
         "chromium_ffmpeg": "success #38507803734",
         "physical_android": "pending"
       }
+    },
+    {
+      "summary": "Post-merge main CI verified on PR #162 squash commit 36c1321fe684247329f2b2f6bde7793e4a4cd9a0",
+      "validation": {
+        "python_termux": "success #38508011822",
+        "chromium_ffmpeg": "success #38508011823"
+      }
     }
   ],
   "next_units": [
-    "Confirm exact merged-main HSR subtitle browser evidence CI #38508011823 on 36c1321fe684247329f2b2f6bde7793e4a4cd9a0 (main Python CI #38508011822 already passed).",
     "Confirm existing Android project migration: next successful build retires old independent FLAC/SRT/ASS/Black MKV; opening project alone does not remove user files.",
     "Exercise 1h+ voice archives and actual Android/Termux apps with target player/font/banding combinations (Issue #158).",
     "Verify documented fail-closed behavior for external manual edits of FLAC/SRT/ASS; do not auto-certify unrelated files.",
