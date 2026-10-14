@@ -265,10 +265,13 @@ class ArchiveBundleExporter:
             cmd += ["-t", f"{duration:.3f}", "-progress", "pipe:1", "-nostats", str(temporary)]
             if progress:
                 progress(0, total_ms, "正在封装连续 FLAC、可开关 ASS 字幕与字体附件")
-            # Popen owns stdout/stderr pipes; its context manager closes both
-            # reliably on success, encode failure, or a raised progress callback.
-            with subprocess.Popen(cmd, stdout=subprocess.PIPE,
-                                  stderr=subprocess.PIPE, text=True) as proc:
+            # Read FFmpeg progress on stdout. Its stderr must NOT be a pipe
+            # left unread until stdout reaches EOF: if the pipe buffer fills,
+            # FFmpeg blocks and the UI sees a permanently frozen job.
+            # A temporary log file preserves diagnostics without that deadlock.
+            with tempfile.TemporaryFile(mode="w+t", encoding="utf-8") as errors, \
+                 subprocess.Popen(cmd, stdout=subprocess.PIPE,
+                                  stderr=errors, text=True) as proc:
                 try:
                     assert proc.stdout is not None
                     for line in proc.stdout:
@@ -280,8 +283,10 @@ class ArchiveBundleExporter:
                                 continue
                             if progress:
                                 progress(position, total_ms, "正在生成完整 MKV")
-                    stderr = proc.stderr.read() if proc.stderr is not None else ""
-                    if proc.wait() != 0:
+                    code = proc.wait()
+                    errors.seek(0)
+                    stderr = errors.read()
+                    if code != 0:
                         raise RuntimeError("完整 MKV 封装失败：" + stderr.strip()[-1500:])
                 except BaseException:
                     # Never leave a background FFmpeg writer running after an
