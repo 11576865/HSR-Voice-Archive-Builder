@@ -44,6 +44,7 @@ class SubtitleRenderConfig:
     margin_horizontal_percent: float = 0.03
     margin_vertical_percent: float = 0.05
     min_central_gap: float = 20.0
+    primary_region_share: float = 0.60
 
     @classmethod
     def plain_text_preset(cls) -> SubtitleRenderConfig:
