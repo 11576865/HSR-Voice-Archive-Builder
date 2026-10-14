@@ -3470,7 +3470,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </aside>
         <div class="layout-preview-region" aria-label="字幕画布与预览依据">
           <div class="preview-stage" id="previewCanvasContainer">
-          <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
+          <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
           <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
           <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
           <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
@@ -3484,6 +3484,22 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <span>布局失败：</span>
             <span id="previewCollisionReason">CENTRAL_COLLISION</span>
           </div>
+          </div>
+          <div class="hsr-stage-background-toolbar" role="group" aria-label="工作台视觉参考背景">
+            <label for="previewBackgroundMode">预览参考背景
+              <select id="previewBackgroundMode">
+                <option value="reference" selected>红云参考图（默认）</option>
+                <option value="gradient">中性渐变</option>
+                <option value="black">纯黑</option>
+                <option value="grid">明暗网格</option>
+                <option value="image">本地图片</option>
+              </select>
+            </label>
+            <div id="previewBackgroundFileWrap" class="hidden">
+              <label for="previewBackgroundFile">本地参考图片</label>
+              <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
+            </div>
+            <span class="hsr-stage-background-explainer">便于辨认描边、阴影和运动；不改变项目图、ASS 或最终 MKV 背景。</span>
           </div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
@@ -3649,7 +3665,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
   <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
 </div>
-<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色，不影响最终 MKV。</div>
 
         <div class="preview-controls" id="previewControls">
           <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
@@ -3853,22 +3869,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔</label>
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文本包围盒</label>
           </div>
-          <div class="preview-background-controls">
-            <div>
-              <label for="previewBackgroundMode">工作台背景</label>
-              <select id="previewBackgroundMode">
-                <option value="gradient">中性渐变</option>
-                <option value="black">纯黑</option>
-                <option value="grid">明暗网格</option>
-                <option value="image">本地图片</option>
-              </select>
-            </div>
-            <div id="previewBackgroundFileWrap" class="hidden">
-              <label for="previewBackgroundFile">本地参考图片</label>
-              <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
-            </div>
-            <div class="small muted">背景仅存在于当前浏览器会话，用于判断可读性；不会上传、保存到项目或进入 ASS/MKV。</div>
-          </div>
+
         </details>
         </aside>
       </div>
@@ -6860,17 +6861,21 @@ function openFontBrowser(targetId){
 
 function applyPreviewBackground(){
   const stage=document.getElementById('previewCanvasContainer');
-  const mode=document.getElementById('previewBackgroundMode')?.value||'gradient';
+  const mode=document.getElementById('previewBackgroundMode')?.value||'reference';
   const image=document.getElementById('previewBackgroundImage');
   const grid=document.getElementById('previewBackgroundGrid');
   const wrap=document.getElementById('previewBackgroundFileWrap');
   if(!stage||!image||!grid)return;
   stage.classList.remove('preview-bg-gradient','preview-bg-black','preview-bg-image');
   grid.classList.toggle('hidden',mode!=='grid');
-  image.classList.toggle('hidden',mode!=='image'||!previewBackgroundObjectUrl);
+  if(mode==='reference'&&image.getAttribute('src')!=='/static/assets/studio-red-clouds.webp')
+    image.src='/static/assets/studio-red-clouds.webp';
+  else if(mode==='image'&&previewBackgroundObjectUrl&&image.src!==previewBackgroundObjectUrl)
+    image.src=previewBackgroundObjectUrl;
+  image.classList.toggle('hidden',!(mode==='reference'||(mode==='image'&&!!previewBackgroundObjectUrl)));
   if(wrap)wrap.classList.toggle('hidden',mode!=='image');
   if(mode==='black')stage.classList.add('preview-bg-black');
-  else if(mode==='image')stage.classList.add('preview-bg-image');
+  else if(mode==='image'||mode==='reference')stage.classList.add('preview-bg-image');
   else stage.classList.add('preview-bg-gradient');
 }
 
@@ -6883,6 +6888,7 @@ function loadPreviewBackgroundFile(file){
   image.src=previewBackgroundObjectUrl;
   image.classList.remove('hidden');
   applyPreviewBackground();
+  invalidateLibassPreview();
 }
 
 let previewDebounceTimer = null;
@@ -7021,7 +7027,8 @@ function libassPreviewPayload(){
     target_language:currentProject?.config?.target_language||'zh-CN',
     word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
     preview_duration_seconds:previewDuration,
-    preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
+    preview_timestamp:Math.max(0.01,previewDuration*previewPercent),
+    use_studio_reference_background:document.getElementById('previewBackgroundMode')?.value==='reference'
   };
 }
 
@@ -8809,6 +8816,7 @@ async function renderHsrEffectVideo(){
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
   const backgroundImage=effectBackgroundImageFile;
+  const usesReference=!footage&&!backgroundImage&&document.getElementById('previewBackgroundMode')?.value==='reference';
   const footageStart=document.getElementById('effectFootageStart')?.value||'0';
   const footageAudio=!!document.getElementById('effectFootageAudio')?.checked;
   const backgroundColor=document.getElementById('effectPreviewBackgroundColor')?.value||'#000000';
@@ -8830,6 +8838,7 @@ async function renderHsrEffectVideo(){
     payload.source_start_seconds=effectFootageOffset();
     payload.include_source_audio=!!footage&&footageAudio;
     payload.preview_background_color=backgroundColor;
+    payload.use_studio_reference_background=usesReference;
     if(footage)payload.source_video_base64=await effectFootageAsBase64(footage);
     else if(backgroundImage){
       if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
@@ -8856,7 +8865,7 @@ async function renderHsrEffectVideo(){
     if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
     setHsrEffectOperation('decoding','处理主机已返回视频，正在等待浏览器解码第一帧。');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
-    if(actualBackground && actualBackground!==(footage?'local-footage':backgroundImage?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
+    if(actualBackground && actualBackground!==(footage?'local-footage':(backgroundImage||usesReference)?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
       throw new Error('服务器响应的背景来源与当前选择不一致');
     }
     const video=document.getElementById('libassVideoPreview');
@@ -8883,7 +8892,7 @@ async function renderHsrEffectVideo(){
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
+    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
@@ -8910,7 +8919,7 @@ document.getElementById('fontBrowserSearch')?.addEventListener('input',(event)=>
   clearTimeout(fontBrowserTimer);
   fontBrowserTimer=setTimeout(()=>loadFontBrowser(event.target.value||''),180);
 });
-document.getElementById('previewBackgroundMode')?.addEventListener('change',applyPreviewBackground);
+document.getElementById('previewBackgroundMode')?.addEventListener('change',()=>{applyPreviewBackground();invalidateLibassPreview();});
 document.getElementById('previewBackgroundFile')?.addEventListener('change',(event)=>{
   try{loadPreviewBackgroundFile(event.target.files?.[0]||null)}
   catch(error){setLog(String(error))}
