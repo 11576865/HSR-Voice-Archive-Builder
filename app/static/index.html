@@ -3633,7 +3633,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
 
         <div class="preview-controls" id="previewControls">
-          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
             <summary><span>文字与字体</span><small>Font & type</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3673,7 +3673,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
             <summary><span>位置与安全区</span><small>Position</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3696,7 +3696,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-compact" open data-studio-scope="style">
+          <details class="layout-inspector-section layout-section-compact" open data-studio-scope="style" name="hsr-style-parameter-groups">
             <summary><span>预设</span><small>Presets</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3709,7 +3709,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
             <summary><span>外观与可读性</span><small>Readability</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3740,7 +3740,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects" name="hsr-effects-parameter-groups">
             <summary><span>动效</span><small>Motion</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3777,7 +3777,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects" name="hsr-effects-parameter-groups">
             <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3805,7 +3805,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects" name="hsr-effects-parameter-groups">
             <summary><span>档案增强</span><small>Archive HUD</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -8623,21 +8623,44 @@ function initHsrTouchNumericEditors(){
     editor.step=range.step||'any';
     const label=inspector.querySelector('label[for="'+range.id+'"]');
     editor.setAttribute('aria-label',(label?.textContent?.trim()||range.getAttribute('aria-label')||range.id)+'（数值调整）');
+    const stepper=document.createElement('div');
+    stepper.className='hsr-touch-stepper';
+    const minus=document.createElement('button');
+    minus.type='button';
+    minus.textContent='−';
+    minus.setAttribute('aria-label',editor.getAttribute('aria-label')+' 减少');
+    const plus=document.createElement('button');
+    plus.type='button';
+    plus.textContent='+';
+    plus.setAttribute('aria-label',editor.getAttribute('aria-label')+' 增加');
+    stepper.append(minus,editor,plus);
+    range.insertAdjacentElement('afterend',stepper);
     const sync=()=>{
       if(document.activeElement!==editor)editor.value=range.value;
       editor.disabled=range.disabled;
+      minus.disabled=range.disabled||Number(range.value)<=Number(range.min);
+      plus.disabled=range.disabled||Number(range.value)>=Number(range.max);
     };
-    range.insertAdjacentElement('afterend',editor);
     editor.addEventListener('change',()=>{
       const proposed=Number(editor.value);
-      if(editor.value.trim()===''||!Number.isFinite(proposed)){sync();return;}
+      if(editor.value.trim()===''||!Number.isFinite(proposed)){editor.value=range.value;return;}
       const min=Number(range.min),max=Number(range.max);
       const bounded=Math.min(max,Math.max(min,proposed));
       range.value=String(bounded);
       range.dispatchEvent(new Event('input',{bubbles:true}));
       range.dispatchEvent(new Event('change',{bubbles:true}));
       editor.value=range.value;
+      sync();
     });
+    for(const [button,direction] of [[minus,-1],[plus,1]]){
+      button.addEventListener('click',()=>{
+        if(range.disabled)return;
+        const step=Number(range.step)||1;
+        const precision=(String(range.step).split('.')[1]||'').length;
+        editor.value=String(Number((Number(range.value)+direction*step).toFixed(Math.min(6,precision))));
+        editor.dispatchEvent(new Event('change',{bubbles:true}));
+      });
+    }
     range.addEventListener('input',sync);
     range.addEventListener('change',sync);
     new MutationObserver(sync).observe(range,{attributes:true,attributeFilter:['disabled','min','max','step']});
