@@ -48,7 +48,7 @@ class MkvRefreshRecoveryTests(unittest.TestCase):
         self.assertIn("function displayCueSeconds(value)", script)
         self.assertIn("n.toFixed(3)", script)
         self.assertIn("input.value=state?displayCueSeconds(value):''", script)
-        self.assertIn("input.value=displayCueSeconds(timing.start)", script)
+        self.assertIn("startInput.value=displayCueSeconds(timing.start)", script)
         self.assertIn("const desiredStart=reset?state.sourceStart:Number(state.start)", script)
 
 
