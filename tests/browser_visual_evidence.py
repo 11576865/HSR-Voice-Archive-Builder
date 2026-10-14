@@ -712,13 +712,13 @@ def touch_safety_check(browser, base_url, report):
     # Presets belong to a different section, so open it intentionally.
     style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
     ensure(style_sections.count()==4,"Style must expose four exclusive parameter groups")
-    page.locator('details[name="hsr-style-parameter-groups"]').nth(2).locator("summary").click()
+    page.locator('details[name="hsr-style-parameter-groups"]').nth(2).locator(":scope > summary").click()
     ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
            "Multiple long style sections remained expanded after category switch")
     page.locator("#prevPresetDefault").click()
     ensure(number.input_value()=="48",
            "Preset restored range but left the touch numeric editor stale")
-    page.locator('details[name="hsr-style-parameter-groups"]').first.locator("summary").click()
+    page.locator('details[name="hsr-style-parameter-groups"]').first.locator(":scope > summary").click()
     ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
            "Returning to typography created multiple long expanded sections")
     ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),
