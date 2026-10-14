@@ -2947,6 +2947,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #archiveBundlePanel .hsr-bundle-options select{max-width:100%}
 </style>
 <link rel="stylesheet" href="/static/hsr-ui-convergence.css">
+<link rel="stylesheet" href="/static/studio-v3.css">
 <style>
 /* Archive owns build status; Export owns the single full artifact inventory. */
 body[data-workspace="project"] #archiveCard{display:none!important}
@@ -3468,7 +3469,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div id="layoutAuditStatus" role="status" aria-live="polite" class="layout-rail-audit-status">按需运行版面检查；高压力筛选仅是字数估计。</div>
           </div>
         </aside>
-        <main class="layout-preview-region studio-v3-main" aria-label="字幕画布、时间轴与条目编辑">
+        <div class="layout-preview-region studio-v3-main" aria-label="字幕画布、时间轴与条目编辑">
           <div class="studio-v3-visual" id="studioV3Visual" aria-label="字幕预览舞台">
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
@@ -3626,7 +3627,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
 <p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只显示当前正文；字幕正文与原始 WAV 的唯一操作入口位于「校对」。字幕显示时间仍可在上方单独调整。</p>
           </section>
           </div>
-        </main>
+        </div>
 
         <aside class="preview-inspector studio-v3-inspector" id="studioV3Inspector" aria-label="字幕样式与特效参数">
           <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span>
