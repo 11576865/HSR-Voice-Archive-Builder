@@ -463,6 +463,8 @@ def desktop_check(browser, base_url, output, report):
     # Programmatic task switches must not strand keyboard focus in a newly
     # inert subtree or on the layout-only (now hidden) drawer opener.
     page.locator('#studioStyleTab').click()
+    ensure(page.locator("#layoutTimelinePanel").is_visible(),
+           "Layout timeline remains inaccessible despite expanded timing disclosure")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
