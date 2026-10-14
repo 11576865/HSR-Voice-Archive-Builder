@@ -13,7 +13,7 @@ from app.archive_bundle_lifecycle import (
     OUTPUT, PREFERENCES, bundle_export_status, previous_bundle_settings,
 )
 from app.delivery_artifacts import (
-    ASS, FLAC, SRT, export_optional_track, extract_flac_from_mkv,
+    ASS, FLAC, SRT, LEGACY_BLACK, export_optional_track, extract_flac_from_mkv,
     publish_flac_only, seal_complete_delivery,
 )
 from app.subtitle_export_status import record_subtitle_export
@@ -66,7 +66,11 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
                 self.assertEqual(track.parent,root / "exports")
             self.assertFalse((root / FLAC).exists())
             self.assertEqual(bundle_export_status(root)["state"],"current")
+            # An old subtitle-free black MKV must not survive an explicit
+            # switch to the sole FLAC deliverable.
+            (root / LEGACY_BLACK).write_bytes(b"legacy black output")
             audio=publish_flac_only(root)
+            self.assertFalse((root / LEGACY_BLACK).exists())
             self.assertTrue(audio.is_file())
             self.assertFalse(mkv.exists())
             self.assertFalse((root / ASS).exists())
@@ -92,6 +96,18 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
                                   if s.get("codec_name")=="flac"]),1)
             self.assertFalse((root / FLAC).exists())
             self.assertGreater(compressed,1000)
+
+    def test_explicit_export_rejects_symlinked_output_folder(self):
+        with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
+            root=Path(td)
+            self.create_inputs(root)
+            ArchiveBundleExporter(width=320,height=180).export(
+                root/FLAC,root/ASS,root/OUTPUT,require_current_ass=True)
+            seal_complete_delivery(root)
+            (root / "exports").symlink_to(Path(outside),target_is_directory=True)
+            with self.assertRaisesRegex(ValueError,"symlink"):
+                export_optional_track(root,"flac")
+            self.assertFalse(list(Path(outside).iterdir()))
 
     def test_refuses_unsafe_seal_and_keeps_previous_inputs(self):
         with tempfile.TemporaryDirectory() as td:
