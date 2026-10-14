@@ -314,7 +314,10 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#previewBackgroundMode").is_hidden(),
            "Preview has only one fixed red-clouds background")
     ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
-           "Karaoke generation/import remains hidden in an advanced disclosure")
+           "Karaoke word-alignment disclosure is unavailable")
+    ensure(not page.locator("#hsrKaraokeReadiness").evaluate("(el)=>el.open"),
+           "Karaoke diagnostics must not occupy the default Inspector")
+    page.locator("#hsrKaraokeReadiness > summary").click()
     for action in ("#refreshWordAlignmentBtn","#importWordAlignmentBtn"):
         ensure(page.locator(action).is_visible(),"Missing visible Karaoke recovery: "+action)
     page.evaluate("() => loadWordAlignmentDiagnostics()")
