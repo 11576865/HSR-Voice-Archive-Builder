@@ -21,6 +21,7 @@ from .subtitle_timing import (
 from .word_alignment import apply_cached_word_alignments
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
+from .project_fonts import project_font_for_family
 
 
 @dataclass
@@ -266,6 +267,9 @@ def _subtitle_adapters(
 
 def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
     """Build the single render configuration used by ASS export."""
+    output = resolve_project_path(config, config.output_dir)
+    chs_path = project_font_for_family(output, config.subtitle_chs_font) if output else None
+    primary_path = project_font_for_family(output, config.subtitle_primary_font) if output else None
     return SubtitleRenderConfig(
         enable_karaoke=bool(config.subtitle_enable_karaoke),
         karaoke_mode=(
@@ -293,6 +297,8 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         archive_hud_opacity=max(0.1, min(1.0, float(config.subtitle_archive_hud_opacity))),
         chs_font=validate_ass_font_name(config.subtitle_chs_font or "汉仪旗黑"),
         primary_font=validate_ass_font_name(config.subtitle_primary_font or "Noto Sans"),
+        chs_font_path=str(chs_path) if chs_path else None,
+        primary_font_path=str(primary_path) if primary_path else None,
         base_chs_size=max(12, min(120, int(config.subtitle_chs_size))),
         base_primary_size=max(12, min(120, int(config.subtitle_primary_size))),
         margin_horizontal_percent=max(
