@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "goal": "Resolve Android/Termux background-image MKV progress after page refresh and improve HSR subtitle Layout/Effects studio using the user's two portrait/landscape screen recordings as real-world evidence.",
-  "status": "in_progress_checkpoint",
+  "status": "durable_pr_open_pending_external_validation",
   "current_bounded_work_unit": {
     "id": "WU-01",
     "name": "Reconnect existing MKV job on browser reload; drain FFmpeg stderr; bound subtitle time display",
@@ -68,8 +68,8 @@
     }
   ],
   "branch": "fix/hsr-workbench-reconnect-20261015",
-  "pull_request": null,
-  "latest_durable_commit": "c5160b37fea4218bd18d273662633e018ff35cff",
+  "pull_request": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/166",
+  "latest_durable_commit": "e1e4513da192f8449173ad4dd508fc92c622df02",
   "external_validation": {
     "ci": "pending",
     "actual_android_termux_refresh_during_encode": "pending",
