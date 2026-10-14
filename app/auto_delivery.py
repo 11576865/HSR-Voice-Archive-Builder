@@ -10,6 +10,7 @@ from __future__ import annotations
 import hashlib
 import json
 import threading
+import time
 from pathlib import Path
 
 from .archive_bundle_backgrounds import RESOLUTIONS
@@ -19,12 +20,17 @@ from .archive_bundle_lifecycle import (
     _sources, bundle_export_status, load_previous_bundle_image,
     previous_bundle_settings,
 )
-from .jobs import create_job
+from .jobs import create_job, get_job
 from .project import ProjectConfig, resolve_project_path
 from .project_fonts import font_asset_directory
 
 _LOCK = threading.Lock()
-_ATTEMPTS: dict[str, str] = {}
+# source fingerprint, job id, last attempt monotonic time, consecutive failures.
+# A failed job must not permanently poison the source generation, nor may
+# frequent UI polls create an expensive infinite FFmpeg retry loop.
+_ATTEMPTS: dict[str, tuple[str, str, float, int]] = {}
+RETRY_BASE_SECONDS = 60.0
+RETRY_MAX_SECONDS = 3600.0
 
 
 def _input_identity(output: Path, *, include_fonts: bool, settings: dict) -> str:
@@ -57,8 +63,20 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
         output, include_fonts=settings["attach_project_fonts"], settings=settings,
     )
     with _LOCK:
-        if _ATTEMPTS.get(key) == snapshot:
-            return None
+        prior = _ATTEMPTS.get(key)
+        failures = 0
+        if prior is not None and prior[0] == snapshot:
+            _, prior_job_id, last_attempt, failures = prior
+            job_status = get_job(prior_job_id)
+            state = (job_status or {}).get("state")
+            if state in {"queued", "running", "succeeded", "awaiting_input"}:
+                return None
+            # Job journals can be pruned, but the same source must not be
+            # retried every few seconds while a UI is polling /api/status.
+            failures += 1
+            delay = min(RETRY_MAX_SECONDS, RETRY_BASE_SECONDS * (2 ** min(failures - 1, 6)))
+            if time.monotonic() - last_attempt < delay:
+                return None
 
         def run(report_progress):
             # Revalidate immediately before launching an expensive encoding job.
@@ -106,7 +124,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
             )
         except RuntimeError:
             return None
-        _ATTEMPTS[key] = snapshot
+        _ATTEMPTS[key] = (snapshot, job.id, time.monotonic(), failures)
         if len(_ATTEMPTS) > 128:
             _ATTEMPTS.pop(next(iter(_ATTEMPTS)))
         return job.id
