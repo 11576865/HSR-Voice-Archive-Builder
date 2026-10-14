@@ -41,7 +41,7 @@ class ReferenceBackgroundTests(unittest.TestCase):
         self.assertIn('use_studio_reference_background:', html)
         self.assertIn('payload.use_studio_reference_background=usesReference;', html)
         self.assertIn('usesReference?\'红云参考图 + ASS\'', html)
-        self.assertIn("const mode='reference';", html)
+        self.assertIn("image.src='/static/assets/studio-red-clouds.webp';", html)
         self.assertIn("invalidateLibassPreview();", html)
         self.assertIn("Final delivery settings remain independent", html)
         self.assertIn("position:relative!important", css)
