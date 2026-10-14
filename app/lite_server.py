@@ -14,7 +14,7 @@ from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
+from .ass_preview import decode_preview_source_video, load_studio_reference_background, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .credentials import (
     translation_default_model, credentials_status,
     save_translation_credentials, test_saved_translation_credentials,
@@ -734,6 +734,7 @@ class Handler(BaseHTTPRequestHandler):
                 duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
                 timestamp=_float(data.get("preview_timestamp"), 1.0),
                 font_dir=_active_project_font_dir(),
+                use_studio_reference_background=_bool(data.get("use_studio_reference_background")),
             )
             self._send_bytes(
                 200,
@@ -758,6 +759,8 @@ class Handler(BaseHTTPRequestHandler):
             fmt = str(data.get("preview_format") or "mp4").lower()
             source_bytes = decode_preview_source_video(data.get("source_video_base64"))
             background_image = decode_bundle_background(data.get("preview_background_image_base64"))
+            if _bool(data.get("use_studio_reference_background")) and source_bytes is None and background_image is None:
+                background_image = load_studio_reference_background()
             background_color = normalize_preview_background_color(data.get("preview_background_color"))
             video = render_ass_preview_video(
                 english_text=data.get("english_text", ""),
