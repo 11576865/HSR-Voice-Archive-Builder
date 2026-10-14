@@ -131,7 +131,10 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             assert body.get("preview_format") == "webm", "Chromium must negotiate VP8"
             has_source = "source_video_base64" in body
             has_image = "preview_background_image_base64" in body
+            has_reference = body.get("use_studio_reference_background") is True
             assert not (has_source and has_image), "Background input sources must be exclusive"
+            if has_reference:
+                assert not has_source and not has_image, "Bundled image must yield to selected user media"
             if has_source:
                 assert base64.b64decode(body["source_video_base64"], validate=True) == video_bytes
                 assert body.get("source_start_seconds") == 0.2
@@ -143,7 +146,7 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             route.fulfill(status=200, content_type="video/webm", body=video_bytes,
                           headers={"X-HSR-Preview-Background":
                                    "local-footage" if has_source else
-                                   "background-image" if has_image else "black"})
+                                   "background-image" if has_image or has_reference else "black"})
             return
         if path.endswith("/api/status"):
             payload = {
@@ -297,6 +300,14 @@ def desktop_check(browser, base_url, output, report):
            "WhisperX generation claimed availability in an unconfigured fixture")
     ensure(page.locator("#hsrEffectOperationStatus").is_visible(),
            "Effects operation status is not visible beside the stage")
+    ensure(page.locator("#previewBackgroundMode").input_value()=="reference",
+           "Studio did not default to user red-clouds reference")
+    page.wait_for_function("""() => {
+      const i=document.getElementById('previewBackgroundImage');
+      return i && i.complete && i.naturalWidth===640 && i.naturalHeight===360;
+    }""",timeout=10000)
+    ensure(page.locator("#previewBackgroundImage").is_visible(),
+           "Red-clouds image is missing from the actual stage")
     screenshot(page, output, "desktop_clean_effects_workspace")
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
