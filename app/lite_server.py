@@ -1498,9 +1498,11 @@ class Handler(BaseHTTPRequestHandler):
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV preview project context changed")
             image = decode_bundle_background(data.get("background_image_base64"))
-            if image is None and data.get("reuse_saved_background") is True:
+            if image is None and _bool(data.get("reuse_saved_background")):
                 image = load_previous_bundle_image(output)
             raw_spec = data.get("background_spec")
+            if isinstance(raw_spec, str) and raw_spec.strip():
+                raw_spec = json.loads(raw_spec)
             spec = normalize_bundle_background(raw_spec if raw_spec is not None else {
                 "mode": "image" if image is not None else "color",
             })
@@ -1522,9 +1524,11 @@ class Handler(BaseHTTPRequestHandler):
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV export project context changed")
             image = decode_bundle_background(data.get("background_image_base64"))
-            if image is None and data.get("reuse_saved_background") is True:
+            if image is None and _bool(data.get("reuse_saved_background")):
                 image = load_previous_bundle_image(output)
             raw_spec = data.get("background_spec")
+            if isinstance(raw_spec, str) and raw_spec.strip():
+                raw_spec = json.loads(raw_spec)
             spec = normalize_bundle_background(raw_spec if raw_spec is not None else {
                 "mode": "image" if image is not None else "color",
             })
