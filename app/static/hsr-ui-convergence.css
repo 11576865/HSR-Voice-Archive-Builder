@@ -1,4 +1,4 @@
-/* HSR studio convergence. Sole new layout authority, after legacy inline CSS. */
+/* Legacy shared studio control/accessibility utilities; V3 owns geometry. */
 #subtitleLayoutPreviewCard > .hsr-studio-toolbar {
   display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;
   gap:12px;padding:11px 18px;border-bottom:1px solid var(--layout-border);
@@ -18,29 +18,7 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
 /* Layout's specialist diagnostics must not remain visible in Effects if a
    future call path forgets to close the drawer. The JS owns the ARIA state. */
 #subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail{display:none!important}
-@media(min-width:1361px) {
- body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open) {
-   display:grid;grid-template-columns:minmax(0,1fr) clamp(350px,27vw,460px);
-   align-items:start;
- }
- body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.layout-preview-region {
-   grid-area:1 / 1 / 2 / 2;min-width:0;
- }
- body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.preview-inspector {
-   grid-area:1 / 2 / 2 / 3;min-width:0;width:100%;
- }
-}
-@media(min-width:760px) and (max-width:1360px){
- body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open) {
-   display:grid;grid-template-columns:minmax(0,1fr);
- }
- body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.layout-preview-region {
-   grid-area:1 / 1 / 2 / 2;
- }
- body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.preview-inspector {
-   grid-area:2 / 1 / 3 / 2;width:100%;
- }
-}
+/* Studio V3 owns this geometry in studio-v3.css. */
 #subtitleLayoutPreviewCard .hsr-preview-trial {
  margin:9px 13px;border:1px solid var(--layout-border);border-radius:8px;
  background:var(--layout-section);color:var(--layout-text);
@@ -73,61 +51,7 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
  #subtitleLayoutPreviewCard .hsr-export-advanced{align-self:stretch}
 }
 
-/* Layout and Effects share one bounded workbench on EVERY pointer class.
-   No alternative full-screen focus mode is required. The document should
-   not become an unbounded sequence of parameter controls. */
-body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
-  display:grid!important;
-  height:clamp(340px,calc(100dvh - 210px),880px)!important;
-  max-height:calc(100dvh - 120px)!important;
-  min-height:0!important;
-  overflow:hidden!important;
-  position:relative!important;
-  align-items:stretch!important;
-}
-body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region,
-body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.preview-inspector{
-  min-width:0!important;min-height:0!important;
-  width:100%!important;height:100%!important;max-height:100%!important;
-  overflow-x:hidden!important;overflow-y:auto!important;
-  overscroll-behavior-y:contain;scrollbar-gutter:stable;
-  position:relative!important;top:auto!important;
-}
-@media(min-width:980px){
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
-    grid-template-columns:minmax(0,1fr) minmax(300px,min(36vw,430px))!important;
-    grid-template-rows:minmax(0,1fr)!important;
-  }
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
-    grid-area:1 / 1 / 2 / 2!important;
-  }
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.preview-inspector{
-    grid-area:1 / 2 / 2 / 3!important;
-  }
-}
-@media(max-width:979px){
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
-    grid-template-columns:minmax(0,1fr)!important;
-    grid-template-rows:minmax(0,44%) minmax(0,56%)!important;
-    height:max(340px,calc(100dvh - 196px))!important;
-  }
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
-    grid-area:1 / 1 / 2 / 2!important;
-  }
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.preview-inspector{
-    grid-area:2 / 1 / 3 / 2!important;
-    border-top:1px solid var(--layout-border);
-  }
-}
-/* QA is a bounded drawer within the workbench, not another expanded page. */
-body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench.audit-open>.layout-corpus-rail{
-  display:flex!important;position:absolute!important;top:0!important;bottom:0!important;
-  left:0!important;width:min(340px,100%)!important;height:100%!important;
-  max-height:100%!important;overflow:hidden!important;z-index:15;
-  box-shadow:6px 0 22px rgba(0,0,0,.24);
-}
-#subtitleLayoutPreviewCard>.layout-workflow-strip,
-#subtitleLayoutPreviewCard>p.small.muted{display:none!important}
+/* Studio V3 owns this geometry in studio-v3.css. */
 /* Touch: numeric fields are explicit intentional edits; upward/downward
    scrolling cannot hit an invisible/unlocked range control. Mouse/keyboard
    users retain the existing sliders and undo behavior. */
@@ -270,116 +194,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench.audi
 }
 
 
-/* WU-02: evidence-based stage/inspector composition on portrait and tablet.
-   Preview and Inspector are independently scrollable. Do not stick the scene
-   inside the timeline's own scroll pane: an overlapping sticky stage intercepts
-   touch/pointerdown on timeline drag handles after scroll-into-view.
-   Reference scenery is NOT the project/MKV delivery background. */
-body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
-  background:#0d111a!important;
-  scroll-padding-top:1rem;
-}
-body[data-workspace="layout"] #subtitleLayoutPreviewCard .layout-preview-region>.preview-stage{
-  position:relative!important;
-  top:auto!important;
-  z-index:1;
-  width:min(100%, calc(50dvh * 16 / 9))!important;
-  max-width:100%!important;
-  margin-inline:auto!important;
-  aspect-ratio:16/9!important;
-  overflow:hidden!important;
-  border:1px solid var(--layout-border)!important;
-  border-radius:0!important;
-  background:#141723;
-  box-shadow:0 6px 22px rgba(0,0,0,.32)!important;
-}
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar{
-  display:flex;
-  align-items:center;
-  flex-wrap:wrap;
-  gap:6px 12px;
-  padding:9px 13px;
-  background:var(--layout-inspector);
-  color:var(--layout-text);
-  border-bottom:1px solid var(--layout-border);
-  position:relative;
-  z-index:1;
-}
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar label{
-  display:flex;align-items:center;gap:9px;
-  min-width:0;margin:0;
-  font-size:12px;font-weight:700;
-}
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar select{
-  min-height:36px;max-width:min(230px,58vw);
-  font-size:12px;
-}
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar #previewBackgroundFileWrap{
-  min-width:0;flex:1 1 215px;
-}
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar #previewBackgroundFileWrap[hidden],
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar #previewBackgroundFileWrap.hidden{display:none!important}
-#subtitleLayoutPreviewCard .hsr-stage-background-toolbar #previewBackgroundFile{
-  max-width:100%;font-size:12px;
-}
-#subtitleLayoutPreviewCard .hsr-stage-background-explainer{
-  flex:1 1 200px;min-width:0;
-  font-size:11px;color:var(--layout-muted);line-height:1.4;
-}
-#subtitleLayoutPreviewCard .hsr-cue-timing-disclosure{
-  border:1px solid var(--layout-border);
-  border-radius:8px;
-  margin:10px 0 12px;
-  background:var(--layout-section);
-}
-#subtitleLayoutPreviewCard .hsr-cue-timing-disclosure>summary{
-  cursor:pointer;display:flex;align-items:center;
-  justify-content:space-between;flex-wrap:wrap;gap:5px;
-  min-height:42px;padding:10px 12px;
-  font-size:12px;font-weight:700;
-}
-#subtitleLayoutPreviewCard .hsr-cue-timing-disclosure>summary span{
-  color:var(--layout-muted);font-size:10px;font-weight:500;
-}
-#subtitleLayoutPreviewCard .hsr-cue-timing-disclosure .layout-timing-editor{
-  margin:0;border:0;border-top:1px solid var(--layout-border);
-  border-radius:0;background:transparent;
-}
-#subtitleLayoutPreviewCard .layout-cue-clock{margin:8px 0}
-#subtitleLayoutPreviewCard .layout-cue-editor{padding:12px 14px 16px}
-#subtitleLayoutPreviewCard .layout-cue-source p,
-#subtitleLayoutPreviewCard .hsr-cue-readonly{
-  max-height:100px;overflow-y:auto;overscroll-behavior:contain;
-}
-@media(max-width:979px){
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
-    grid-template-rows:minmax(0,46%) minmax(0,54%)!important;
-  }
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .layout-preview-region>.preview-stage{
-    width:min(100%, calc(42dvh * 16 / 9))!important;
-    /* The compact pane must be able to scroll to timeline handles. */
-    position:relative!important;top:auto!important;
-  }
-  #subtitleLayoutPreviewCard .hsr-stage-background-explainer{flex-basis:100%}
-}
-@media(max-width:600px){
-  #subtitleLayoutPreviewCard .hsr-stage-background-toolbar{
-    gap:7px;padding:8px 10px;
-  }
-  #subtitleLayoutPreviewCard .hsr-stage-background-toolbar label{
-    flex:1 1 100%;justify-content:space-between;
-  }
-  #subtitleLayoutPreviewCard .hsr-stage-background-toolbar select{
-    width:min(60vw,245px);
-  }
-  #subtitleLayoutPreviewCard .hsr-stage-background-explainer{
-    font-size:10px;
-  }
-  #subtitleLayoutPreviewCard .layout-cue-grid{grid-template-columns:minmax(0,1fr)}
-  #subtitleLayoutPreviewCard .layout-cue-clock strong{font-size:12px}
-}
-
-
+/* Studio V3 owns this geometry in studio-v3.css. */
 /* Effects: keep effect parameters immediately under the render/save actions.
    Optional media uploads no longer occupy a full Inspector viewport by default. */
 #subtitleLayoutPreviewCard .hsr-preview-media-disclosure{
