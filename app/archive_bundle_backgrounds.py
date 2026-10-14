@@ -18,9 +18,9 @@ QUALITIES = {"standard": 28, "high": 19}
 DEFAULT_COLORS = ("#243350", "#0d1729", "#3e4269")
 
 # Shared limits for MKV export, saved image reuse, and subtitle/image previews.
-# A 16 MiB Base64 upload is ~21.34 MiB; the 24 MiB JSON cap includes metadata.
-MAX_IMAGE_BYTES = 16 * 1024 * 1024
-MAX_BUNDLE_JSON_BYTES = 24 * 1024 * 1024
+# A 64 MiB Base64 image can use ~85.34 MiB in JSON; leave bounded headroom.
+MAX_IMAGE_BYTES = 64 * 1024 * 1024
+MAX_BUNDLE_JSON_BYTES = 96 * 1024 * 1024
 
 
 def normalize_bundle_background(raw: object) -> dict[str, str]:
