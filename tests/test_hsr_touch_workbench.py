@@ -12,12 +12,13 @@ class TouchWorkbenchTests(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.html = (ROOT / "app/static/index.html").read_text(encoding="utf-8")
-        cls.css = (ROOT / "app/static/hsr-ui-convergence.css").read_text(encoding="utf-8")
+        cls.css = ((ROOT / "app/static/hsr-ui-convergence.css").read_text(encoding="utf-8") + "\n" +
+                   (ROOT / "app/static/studio-v3.css").read_text(encoding="utf-8"))
 
     def test_default_bounded_viewport_across_desktop_and_touch(self):
-        self.assertIn('height:clamp(340px,calc(100dvh - 210px),880px)',self.css)
-        self.assertIn('height:max(340px,calc(100dvh - 196px))',self.css)
-        self.assertIn('overscroll-behavior-y:contain',self.css)
+        self.assertIn('height:clamp(470px,calc(100dvh - 184px),1020px)',self.css)
+        self.assertIn('height:max(420px,calc(100dvh - 168px))',self.css)
+        self.assertIn('overscroll-behavior:contain',self.css)
         self.assertIn('grid-template-columns',self.css)
         self.assertNotIn('body[data-hsr-studio-focus="true"]',self.css)
         self.assertNotIn('setHsrStudioFocusMode(true)',self.html)
@@ -45,7 +46,7 @@ class TouchWorkbenchTests(unittest.TestCase):
     def test_inspector_sections_are_exclusive_without_long_persistent_scroll(self):
         self.assertEqual(self.html.count('name="hsr-style-parameter-groups"'),4)
         self.assertEqual(self.html.count('name="hsr-effects-parameter-groups"'),3)
-        self.assertIn('grid-template-rows:minmax(0,44%) minmax(0,56%)',self.css)
+        self.assertIn('grid-template-rows:minmax(0,51%) minmax(0,49%)',self.css)
 
     def test_karaoke_input_is_explained_without_invented_alignment(self):
         self.assertIn('id="hsrAlignmentHelp"', self.html)
