@@ -3,7 +3,7 @@
   "task_id": "hsr-completion-20261014",
   "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
   "status": "in_progress",
-  "current_bounded_work_unit": "UI convergence completed for Layout and Effects: PR #163 merged at 3298a4e1d3a15236ca2468388a756b0981797d8f after exact-head Python 3.11–3.13/Termux and true Chromium/FFmpeg/libass browser checks. Main push CI running; Android tablet physical acceptance and unrelated archival branch PR #159 pending.",
+  "current_bounded_work_unit": "HSR Layout/Effects viewport and touch UI convergence merged via PR #163. Exact PR and merged-main Python/Termux and real Chromium/FFmpeg/libass CI all passed; mobile/landscape responsive screenshot evidence is fixture-based, physical Android acceptance remains pending. Other archival branch PR #159 and historical branch review remain separate unfinished work.",
   "completed_units": [
     {
       "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
@@ -72,10 +72,17 @@
         "chromium_libass": "success #38510573359",
         "physical_android": "pending"
       }
+    },
+    {
+      "summary": "PR #163 merged-main regressions passed on exact merge commit 3298a4e1d3a15236ca2468388a756b0981797d8f",
+      "validation": {
+        "python_termux": "success #38510790132",
+        "chromium_ffmpeg": "success #38510790129",
+        "android_hardware": "pending"
+      }
     }
   ],
   "next_units": [
-    "Confirm exact merged-main PR #163 CI: tests #38510790132 and HSR subtitle browser evidence #38510790129, branch-head accepted.",
     "Confirm existing Android project migration: next successful build retires old independent FLAC/SRT/ASS/Black MKV; opening project alone does not remove user files.",
     "Exercise 1h+ voice archives and actual Android/Termux apps with target player/font/banding combinations (Issue #158).",
     "Verify documented fail-closed behavior for external manual edits of FLAC/SRT/ASS; do not auto-certify unrelated files.",
