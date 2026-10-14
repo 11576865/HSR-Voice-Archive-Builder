@@ -3666,7 +3666,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
               <button id="projectFontImportBtn" class="secondary" type="button">导入并保存字体</button>
-              <button id="projectFontRefreshBtn" class="secondary" type="button">查看已导入字体</button>
+              <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
               <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
@@ -3693,6 +3693,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevCentralGapVal" class="small muted">20 px</span>
             </div>
             <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
+            <div class="studio-region-share">
+              <label for="prevPrimaryShare">原文／中文字幕垂直区域</label>
+              <output id="prevPrimaryShareVal" for="prevPrimaryShare">60% / 40%</output>
+            </div>
+            <input type="range" id="prevPrimaryShare" min="20" max="80" value="60" step="1"
+                   aria-label="原文字幕高度占比，剩余部分自动分给中文字幕">
             <div style="display:flex;justify-content:space-between">
               <label for="prevMarginH" style="margin:0">水平安全边距</label>
               <span id="prevMarginHVal" class="small muted">3 % (58px)</span>
@@ -3707,7 +3713,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-compact" open data-studio-scope="style" name="hsr-style-parameter-groups">
+          <details class="layout-inspector-section layout-section-compact" hidden inert aria-hidden="true" data-studio-scope="style" name="hsr-style-parameter-groups">
             <summary><span>预设</span><small>Presets</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -7258,7 +7264,7 @@ async function importWordAlignmentFile(file){
 
 
 const layoutStyleControlIds=[
-  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV',
+  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV',
   'prevEnableKaraoke','prevKaraokeMode','prevEnableCard','prevEnableOutline',
   'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
@@ -7331,6 +7337,7 @@ function subtitleSettingsPayload(){
     margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '3') / 100,
     margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
     min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
+    primary_region_share: Number(document.getElementById('prevPrimaryShare')?.value||60)/100,
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
     karaoke_mode: document.getElementById('prevKaraokeMode')?.value || 'k',
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
@@ -7370,6 +7377,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.03)*100);
   set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
   set('prevCentralGap',config.subtitle_min_central_gap??20);
+  set('prevPrimaryShare',Math.round(Number(config.subtitle_primary_region_share??0.60)*100));
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
   set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
   check('prevEnableCard',config.subtitle_enable_translucent_card);
@@ -8416,6 +8424,9 @@ async function updateLayoutPreview() {
   const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '48', 10);
   const priSize = parseInt(document.getElementById('prevPriSize')?.value || '42', 10);
   const centralGap = parseFloat(document.getElementById('prevCentralGap')?.value || '20');
+  const primaryShare = Number(document.getElementById('prevPrimaryShare')?.value||60);
+  const shareLabel=document.getElementById('prevPrimaryShareVal');
+  if(shareLabel)shareLabel.textContent=primaryShare+'% / '+(100-primaryShare)+'%';
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
@@ -8468,6 +8479,7 @@ async function updateLayoutPreview() {
         margin_left_percent: marginH / 100.0,
         margin_top_percent: marginV / 100.0,
         min_central_gap: centralGap,
+        primary_region_share:primaryShare/100,
         chs_font: chsFont,
         primary_font: priFont,
         source_language: currentProject?.config?.source_text_language || 'en',
@@ -9090,7 +9102,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 });
 
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -9141,6 +9153,7 @@ function applySubtitlePreset(name){
     document.getElementById('prevChsSize').value=48;
     document.getElementById('prevPriSize').value=42;
     document.getElementById('prevCentralGap').value=20;
+    document.getElementById('prevPrimaryShare').value=60;
     document.getElementById('prevMarginH').value=3;
     document.getElementById('prevMarginV').value=5;
     document.getElementById('prevEnableKinetic').checked=true;
