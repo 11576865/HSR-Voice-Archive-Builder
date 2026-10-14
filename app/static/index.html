@@ -8277,6 +8277,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
 }
 
 async function updateLayoutPreview() {
+  syncHsrTouchNumericEditors();
   const generation=++geometryPreviewGeneration;
   if(geometryPreviewController)geometryPreviewController.abort();
   const controller=typeof AbortController==='function'?new AbortController():null;
@@ -8577,6 +8578,7 @@ function setHsrStudioMode(mode){
     });
     root.dataset.lastInspectorMode=next;
   }
+  syncHsrTouchNumericEditors();
   invalidateLibassPreview();
 }
 // Layout and Effects are first-class workspace destinations; the primary nav
@@ -8598,6 +8600,13 @@ function setHsrAuditDrawer(open){
    ranges remain the authoritative controls on fine-pointer desktops. On
    coarse pointers, the same values are edited with bounded number fields:
    a vertical scroll cannot accidentally drag a range track. */
+function syncHsrTouchNumericEditors(){
+  document.querySelectorAll('#subtitleLayoutPreviewCard .preview-inspector input[type="range"]').forEach(range=>{
+    const editor=document.getElementById(range.id+'TouchNumber');
+    if(editor&&document.activeElement!==editor)editor.value=range.value;
+    if(editor)editor.disabled=range.disabled;
+  });
+}
 function initHsrTouchNumericEditors(){
   const inspector=document.querySelector('#subtitleLayoutPreviewCard .preview-inspector');
   if(!inspector)return;
