@@ -3431,7 +3431,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       <div class="layout-workflow-strip" aria-label="字幕制作工作流">
         <span><b>01</b> 调整样式与几何</span><span><b>02</b> 实际渲染检视</span><span><b>03</b> 保存与生成</span>
       </div>
-      <div class="preview-workbench">
+      <div class="preview-workbench studio-v3-workbench" data-studio-pane="inspector">
 
         <aside class="layout-corpus-rail" id="layoutCorpusRail" aria-label="批量排版检查与问题字幕定位" aria-hidden="true" inert>
           <div class="layout-rail-title">
@@ -3468,7 +3468,24 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div id="layoutAuditStatus" role="status" aria-live="polite" class="layout-rail-audit-status">按需运行版面检查；高压力筛选仅是字数估计。</div>
           </div>
         </aside>
-        <div class="layout-preview-region" aria-label="字幕画布与预览依据">
+        <main class="layout-preview-region studio-v3-main" aria-label="字幕画布、时间轴与条目编辑">
+          <div class="studio-v3-visual" id="studioV3Visual" aria-label="字幕预览舞台">
+          <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
+            <div class="preview-actions">
+                  <div class="actions" style="margin:0">
+                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
+                    <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
+                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
+<button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
+                    <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
+                  </div>
+                  <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
+                    <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
+                    <button type="button" id="layoutStyleRedoBtn" disabled title="恢复撤销的样式参数修改；仅当前工作台会话">↷ 重做样式</button>
+                  </div>
+                  <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
+                </div>
+          </div>
           <div class="preview-stage" id="previewCanvasContainer">
           <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
           <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
@@ -3501,6 +3518,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
             <span class="hsr-stage-background-explainer">便于辨认描边、阴影和运动；不改变项目图、ASS 或最终 MKV 背景。</span>
           </div>
+          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
             <span id="hsrEffectOperationDetail">点击「播放动态特效」生成可播放视频；完成后结果出现在上方画布。</span>
@@ -3519,6 +3537,13 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
             <button id="layoutExportHealthRetryBtn" type="button" hidden>重新生成 ASS/SRT</button>
           </div>
+          </div>
+          <nav class="studio-v3-pane-nav" aria-label="移动端工作台编辑区域" role="tablist">
+            <button type="button" role="tab" id="studioV3TimelineTab" data-studio-pane-target="timeline" aria-controls="layoutTimelinePanel" aria-selected="false">时间轴</button>
+            <button type="button" role="tab" id="studioV3CueTab" data-studio-pane-target="cue" aria-controls="layoutCueEditorPanel" aria-selected="false">当前字幕</button>
+            <button type="button" role="tab" id="studioV3InspectorTab" data-studio-pane-target="inspector" aria-controls="studioV3Inspector" aria-selected="true">参数</button>
+          </nav>
+          <div class="studio-v3-editors" id="studioV3Editors" aria-label="连续字幕与显示时间编辑">
           <section class="layout-timeline" aria-label="连续字幕显示时间轴" id="layoutTimelinePanel">
             <div class="layout-timeline-top">
               <div><span class="layout-eyebrow">SUBTITLE TIMELINE</span><h3>字幕显示时间轴</h3></div>
@@ -3600,9 +3625,10 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <button type="button" id="layoutOpenProofreadingBtn" class="secondary">在校对中编辑当前字幕与试听原始语音</button>
 <p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只显示当前正文；字幕正文与原始 WAV 的唯一操作入口位于「校对」。字幕显示时间仍可在上方单独调整。</p>
           </section>
-        </div>
+          </div>
+        </main>
 
-        <aside class="preview-inspector" aria-label="字幕样式参数与操作">
+        <aside class="preview-inspector studio-v3-inspector" id="studioV3Inspector" aria-label="字幕样式与特效参数">
           <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span>
           </div>
   <details id="layoutTrialTextDetails" class="hsr-preview-trial">
@@ -3624,21 +3650,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
   </details>
 
-        <div class="preview-actions">
-                  <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
-                    <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
-                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
-<button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
-                    <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
-                  </div>
-                  <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
-                    <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
-                    <button type="button" id="layoutStyleRedoBtn" disabled title="恢复撤销的样式参数修改；仅当前工作台会话">↷ 重做样式</button>
-                  </div>
-                  <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
-                </div>
-                <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
+                
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色，不影响最终 MKV。</div>
 
 
@@ -8667,10 +8679,40 @@ function renderCanvasSubtitleOverlay(data) {
 }
 
 // Separate workbench projections sharing a single authoritative project/style state.
+function setStudioV3Pane(pane,{focus=false}={}){
+  const shell=document.querySelector('#subtitleLayoutPreviewCard .studio-v3-workbench');
+  if(!shell)return;
+  const value=['timeline','cue','inspector'].includes(pane)?pane:'inspector';
+  shell.dataset.studioPane=value;
+  for(const button of shell.querySelectorAll('[data-studio-pane-target]')){
+    const active=button.dataset.studioPaneTarget===value;
+    button.setAttribute('aria-selected',active?'true':'false');
+    button.tabIndex=active?0:-1;
+    if(focus&&active)button.focus({preventScroll:true});
+  }
+  if(focus&&window.matchMedia('(max-width:679px)').matches){
+    const target=value==='inspector'?document.getElementById('studioV3Inspector'):
+      document.getElementById(value==='timeline'?'layoutTimelinePanel':'layoutCueEditorPanel');
+    target?.scrollIntoView({block:'nearest',behavior:'smooth'});
+  }
+}
+document.querySelectorAll('#subtitleLayoutPreviewCard [data-studio-pane-target]').forEach(button=>{
+  button.addEventListener('click',()=>setStudioV3Pane(button.dataset.studioPaneTarget,{focus:true}));
+  button.addEventListener('keydown',event=>{
+    if(!['ArrowLeft','ArrowRight'].includes(event.key))return;
+    const buttons=[...document.querySelectorAll('#subtitleLayoutPreviewCard [data-studio-pane-target]')];
+    const index=buttons.indexOf(event.currentTarget);
+    const next=(index+(event.key==='ArrowRight'?1:buttons.length-1))%buttons.length;
+    event.preventDefault();
+    setStudioV3Pane(buttons[next].dataset.studioPaneTarget,{focus:true});
+  });
+});
+
 function setHsrStudioMode(mode){
   const root=document.getElementById('subtitleLayoutPreviewCard');
   if(!root)return;
   const next=mode==='effects'?'effects':'style';
+  setStudioV3Pane(next==='effects'?'timeline':'inspector');
   // QA belongs to Layout. Switching into Effects must collapse the optional
   // rail, clear inert/ARIA state consistently, and keep keyboard focus visible.
   if(next==='effects'){
