@@ -255,7 +255,9 @@ def load_studio(page):
            "Effects is not a primary destination")
     ensure(page.locator("#studioStyleTab").get_attribute("aria-current") is None,
            "Layout and Effects both selected")
-    ensure(page.locator("#layoutTimelineViewport").is_visible(), "Effects timeline hidden")
+    ensure(not page.locator("#layoutTimelineViewport").is_visible() and
+           not page.locator("#studioV4Timing").evaluate("(node)=>node.open"),
+           "Effects should start with the full image, not an expanded timeline")
     ensure(page.locator("#previewVideoBtn").is_visible(), "Playable effect preview action hidden")
     ensure(page.locator("#layoutCueFinalText").count() == 0,
            "Duplicate final text editor still exists in DOM")
