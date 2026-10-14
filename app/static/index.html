@@ -7608,6 +7608,12 @@ function layoutTimingCheck(state){
     return '字幕显示时间的每个边界最多偏离原始音频时间 5 秒。';
   return '';
 }
+// Human-facing milliseconds only; preserve the unrounded underlying cue timing
+// until the user edits it, so opening the inspector never changes a subtitle.
+function displayCueSeconds(value){
+  const n=Number(value);
+  return Number.isFinite(n)?n.toFixed(3).replace(/0+$/,'').replace(/\.$/,''):'';
+}
 function renderLayoutCueTiming(){
   const sub=layoutCueRow(layoutCueActiveId),state=layoutTimingState(sub);
   const valid=!!sub&&layoutCorpusPersistable;
@@ -7620,7 +7626,7 @@ function renderLayoutCueTiming(){
     const input=document.getElementById(id);
     if(!input)continue;
     input.disabled=!valid;
-    if(document.activeElement!==input)input.value=state?String(value):'';
+    if(document.activeElement!==input)input.value=state?displayCueSeconds(value):'';
   }
   for(const btn of document.querySelectorAll('[data-timing-nudge]'))btn.disabled=!valid||!!state?.saving;
   const save=document.getElementById('layoutCueTimingSaveBtn');
@@ -7678,8 +7684,8 @@ function layoutCueRevertTimingDraft(){
   state.start=state.savedStart;
   state.end=state.savedEnd;
   const editorStart=document.getElementById('layoutCueTimingStart'),editorEnd=document.getElementById('layoutCueTimingEnd');
-  if(editorStart)editorStart.value=String(state.start);
-  if(editorEnd)editorEnd.value=String(state.end);
+  if(editorStart)editorStart.value=displayCueSeconds(state.start);
+  if(editorEnd)editorEnd.value=displayCueSeconds(state.end);
   invalidateLibassPreview();
   renderLayoutCueTiming();
   renderLayoutCorpusRail();
@@ -7833,8 +7839,8 @@ function layoutCueSelect(sub){
   const state=layoutCueState(sub);
   const timing=layoutTimingState(sub);
   const startInput=document.getElementById('layoutCueTimingStart'),endInput=document.getElementById('layoutCueTimingEnd');
-  if(startInput)startInput.value=String(timing.start);
-  if(endInput)endInput.value=String(timing.end);
+  if(startInput)startInput.value=displayCueSeconds(timing.start);
+  if(endInput)endInput.value=displayCueSeconds(timing.end);
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){
