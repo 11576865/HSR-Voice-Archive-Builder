@@ -4,17 +4,20 @@ import base64
 import binascii
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
 import tempfile
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
+from xml.sax.saxutils import escape as escape_xml
 
 from subtitle_layout.ass_writer import write_ass
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
 from .archive_bundle_exporter import image_extension, MAX_BACKGROUND_BYTES
+from .project_fonts import project_font_for_family
 
 
 @dataclass
@@ -72,6 +75,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
             0.0, min(0.40, float(data.get("margin_vertical_percent", 0.05)))
         ),
         min_central_gap=max(0.0, min(200.0, float(data.get("min_central_gap", 20.0)))),
+        primary_region_share=max(0.20, min(0.80, float(data.get("primary_region_share", 0.60)))),
     )
 
 
@@ -87,6 +91,85 @@ def load_studio_reference_background() -> bytes:
     if not data or len(data) > 1_048_576 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
         raise RuntimeError("工作台默认参考背景损坏")
     return data
+
+
+def _project_font_config(config: SubtitleRenderConfig, font_dir: Path | None) -> SubtitleRenderConfig:
+    """Resolve uploaded font files BEFORE measuring subtitle layout geometry."""
+    if font_dir is None or not font_dir.is_dir():
+        return config
+    chs = project_font_for_family(font_dir.parent, config.chs_font)
+    primary = project_font_for_family(font_dir.parent, config.primary_font)
+    return replace(
+        config,
+        chs_font_path=str(chs) if chs else config.chs_font_path,
+        primary_font_path=str(primary) if primary else config.primary_font_path,
+    )
+
+
+def _project_font_environment(config: SubtitleRenderConfig, font_dir: Path | None,
+                              temporary_dir: Path, *, english: str, chinese: str) -> dict[str, str] | None:
+    """Prefer project fonts in an isolated Fontconfig configuration."""
+    if font_dir is None or not font_dir.is_dir():
+        return None
+    imported = [
+        project_font_for_family(font_dir.parent, family)
+        for text, family in ((chinese, config.chs_font), (english, config.primary_font))
+        if str(text or "").strip()
+    ]
+    if not any(path is not None for path in imported):
+        return None
+    candidates = [
+        os.environ.get("FONTCONFIG_FILE", ""),
+        str(Path(os.environ.get("PREFIX", "/nonexistent")) / "etc/fonts/fonts.conf"),
+        "/etc/fonts/fonts.conf", "/usr/local/etc/fonts/fonts.conf",
+    ]
+    original = next((Path(name) for name in candidates if name and Path(name).is_file()), None)
+    includes = (f'<include ignore_missing="yes">{escape_xml(str(original))}</include>'
+                if original else "")
+    config_path = temporary_dir / "project-fontconfig.xml"
+    config_path.write_text(
+        '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+        '<fontconfig><dir>' + escape_xml(str(font_dir.resolve()))
+        + '</dir>' + includes + '</fontconfig>', encoding="utf-8",
+    )
+    env = os.environ.copy()
+    env["FONTCONFIG_FILE"] = str(config_path)
+    return env
+
+
+def _assert_project_font_selected(
+    log: str, config: SubtitleRenderConfig, font_dir: Path | None,
+    *, english: str, chinese: str, env: dict[str, str] | None = None,
+) -> None:
+    """Verify Fontconfig resolves the uploaded file, not a system fallback."""
+    if font_dir is None or not font_dir.is_dir():
+        return
+    selections = [line.casefold() for line in log.splitlines()
+                  if "fontselect:" in line.casefold()]
+    for used, family in ((chinese, config.chs_font), (english, config.primary_font)):
+        if not str(used or "").strip():
+            continue
+        expected = project_font_for_family(font_dir.parent, family)
+        if expected is None:
+            continue
+        matcher = shutil.which("fc-match")
+        if not matcher:
+            raise RuntimeError("无法确认项目字体：处理主机缺少 fontconfig 的 fc-match，请安装后重试。")
+        completed = subprocess.run(
+            [matcher, "-f", "%{file}\\n", "--", family],
+            env=env, capture_output=True, text=True, timeout=8, check=False,
+        )
+        actual = completed.stdout.splitlines()[0].strip() if completed.stdout else ""
+        if (completed.returncode != 0 or not actual
+                or Path(actual).resolve() != expected.resolve()):
+            raise RuntimeError(
+                f"导入字体 {family} 被回退为 {actual or '未知字体'}，"
+                f"而非导入文件 {expected.name}；请检查字体族名、字体文件和字形。"
+            )
+        if not any(f"fontselect: ({family.casefold()}," in line for line in selections):
+            raise RuntimeError(
+                f"无法从 libass 字体选择日志确认 {family}；不把未验证的回退字体视为成功。"
+            )
 
 
 def render_ass_preview_png(
@@ -115,6 +198,7 @@ def render_ass_preview_png(
         display_end_seconds=duration,
         word_alignments=word_alignments,
     )
+    config = _project_font_config(config, font_dir)
     with tempfile.TemporaryDirectory(prefix="hsr-ass-preview-") as td:
         root = Path(td)
         ass_path = root / "preview.ass"
@@ -128,6 +212,9 @@ def render_ass_preview_png(
             overflow_report_path=root / "overflow.json",
         )
         escaped_ass = _escape_subtitles_filter_path(ass_path)
+        font_env = _project_font_environment(
+            config, font_dir, root, english=english_text, chinese=chinese_text,
+        )
         if use_studio_reference_background:
             image_path = root / "reference.webp"
             image_path.write_bytes(load_studio_reference_background())
@@ -143,7 +230,7 @@ def render_ass_preview_png(
             "-y",
             "-hide_banner",
             "-loglevel",
-            "error",
+            "info",
             *source_args,
             "-ss",
             f"{render_timestamp:.3f}",
@@ -159,10 +246,14 @@ def render_ass_preview_png(
             text=True,
             timeout=20,
             check=False,
+            env=font_env,
         )
         if completed.returncode != 0 or not png_path.is_file() or png_path.stat().st_size == 0:
             detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
             raise RuntimeError(f"FFmpeg/libass 预览失败: {detail[:1200]}")
+        _assert_project_font_selected(completed.stderr, config, font_dir,
+                                      english=english_text, chinese=chinese_text,
+                                      env=font_env)
         return png_path.read_bytes()
 
 
@@ -310,6 +401,7 @@ def render_ass_preview_video(
         display_end_seconds=duration,
         word_alignments=word_alignments,
     )
+    config = _project_font_config(config, font_dir)
     with tempfile.TemporaryDirectory(prefix="hsr-effect-video-") as td:
         root = Path(td)
         ass_path = root / "preview.ass"
@@ -322,6 +414,9 @@ def render_ass_preview_video(
             overflow_report_path=root / "overflow.json",
         )
         escaped_ass = _escape_subtitles_filter_path(ass_path)
+        font_env = _project_font_environment(
+            config, font_dir, root, english=english_text, chinese=chinese_text,
+        )
         if source_video_bytes is not None:
             source_path = root / "selected-local-footage"
             source_path.write_bytes(source_video_bytes)
@@ -345,7 +440,7 @@ def render_ass_preview_video(
             ]
             video_filters = ""
         command = [
-            ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+            ffmpeg, "-y", "-hide_banner", "-loglevel", "info",
             *source_args, "-vf",
             video_filters + f"subtitles='{escaped_ass}':original_size=1920x1080" +
             (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else "") +
@@ -374,7 +469,8 @@ def render_ass_preview_video(
         command += ["-t", f"{duration:.3f}", str(result_path)]
         try:
             completed = subprocess.run(
-                command, capture_output=True, text=True, timeout=50, check=False
+                command, capture_output=True, text=True, timeout=50, check=False,
+                env=font_env
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("FFmpeg/libass preview timed out") from exc
@@ -382,6 +478,9 @@ def render_ass_preview_video(
                 or result_path.stat().st_size == 0):
             detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
             raise RuntimeError(f"FFmpeg/libass preview failed: {detail[:1200]}")
+        _assert_project_font_selected(completed.stderr, config, font_dir,
+                                      english=english_text, chinese=chinese_text,
+                                      env=font_env)
         if result_path.stat().st_size > 16 * 1024 * 1024:
             raise RuntimeError("Dynamic preview exceeds 16 MiB output limit")
         return result_path.read_bytes()

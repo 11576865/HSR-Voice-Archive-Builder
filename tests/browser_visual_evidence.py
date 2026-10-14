@@ -314,7 +314,10 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#previewBackgroundMode").is_hidden(),
            "Preview has only one fixed red-clouds background")
     ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
-           "Karaoke generation/import remains hidden in an advanced disclosure")
+           "Karaoke word-alignment disclosure is unavailable")
+    ensure(not page.locator("#hsrKaraokeReadiness").evaluate("(el)=>el.open"),
+           "Karaoke diagnostics must not occupy the default Inspector")
+    page.locator("#hsrKaraokeReadiness > summary").click()
     for action in ("#refreshWordAlignmentBtn","#importWordAlignmentBtn"):
         ensure(page.locator(action).is_visible(),"Missing visible Karaoke recovery: "+action)
     page.evaluate("() => loadWordAlignmentDiagnostics()")
@@ -460,6 +463,8 @@ def desktop_check(browser, base_url, output, report):
     # Programmatic task switches must not strand keyboard focus in a newly
     # inert subtree or on the layout-only (now hidden) drawer opener.
     page.locator('#studioStyleTab').click()
+    ensure(page.locator("#layoutTimelinePanel").is_visible(),
+           "Layout timeline remains inaccessible despite expanded timing disclosure")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
@@ -775,17 +780,20 @@ def touch_safety_check(browser, base_url, report):
     # Rendering is debounced; the committed source range changes synchronously.
     page.wait_for_function("""() => document.getElementById('prevChsSizeVal')
       .textContent.trim().startsWith('52')""", timeout=12000)
-    # Mutually exclusive native Inspector sections keep the toolbar short.
-    # Presets belong to a different section, so open it intentionally.
+    # The old preset accordion is intentionally hidden. Exercise a visible
+    # category and then a direct numeric edit, never force-click hidden UI.
     style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
-    ensure(style_sections.count()==4,"Style must expose four exclusive parameter groups")
-    page.locator('details[name="hsr-style-parameter-groups"]').nth(2).locator(":scope > summary").click()
-    ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
-           "Multiple long style sections remained expanded after category switch")
-    page.locator("#prevPresetDefault").click()
-    ensure(number.input_value()=="48",
-           "Preset restored range but left the touch numeric editor stale")
-    page.locator('details[name="hsr-style-parameter-groups"]').first.locator(":scope > summary").click()
+    ensure(style_sections.count()==4,"Style controls unexpectedly lost a section")
+    style_sections.nth(3).locator(":scope > summary").click()
+    ensure(style_sections.nth(3).evaluate("(el)=>el.open"),
+           "Appearance section cannot be expanded")
+    # Font size lives under Typography: return to that visible accordion
+    # before exercising its numeric input.
+    style_sections.first.locator(":scope > summary").click()
+    number.fill("48")
+    number.dispatch_event("change")
+    ensure(page.locator("#prevChsSize").input_value()=="48",
+           "Direct touch edit did not restore the authoritative value")
     ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
            "Returning to typography created multiple long expanded sections")
     ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),

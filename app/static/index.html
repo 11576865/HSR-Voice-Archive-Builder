@@ -3665,8 +3665,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <input id="projectFontFile" type="file" accept=".ttf,.otf,.ttc,font/ttf,font/otf" />
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
-              <button id="projectFontImportBtn" class="secondary" type="button">导入并保存字体</button>
-              <button id="projectFontRefreshBtn" class="secondary" type="button">查看已导入字体</button>
+              <button id="projectFontImportBtn" class="secondary" type="button" disabled>导入并保存字体</button>
+              <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
               <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
@@ -3693,6 +3693,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevCentralGapVal" class="small muted">20 px</span>
             </div>
             <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
+            <div class="studio-region-share">
+              <label for="prevPrimaryShare">原文／中文字幕垂直区域</label>
+              <output id="prevPrimaryShareVal" for="prevPrimaryShare">60% / 40%</output>
+            </div>
+            <input type="range" id="prevPrimaryShare" min="20" max="80" value="60" step="1"
+                   aria-label="原文字幕高度占比，剩余部分自动分给中文字幕">
             <div style="display:flex;justify-content:space-between">
               <label for="prevMarginH" style="margin:0">水平安全边距</label>
               <span id="prevMarginHVal" class="small muted">3 % (58px)</span>
@@ -3707,7 +3713,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-compact" open data-studio-scope="style" name="hsr-style-parameter-groups">
+          <details class="layout-inspector-section layout-section-compact" hidden inert aria-hidden="true" data-studio-scope="style" name="hsr-style-parameter-groups">
             <summary><span>预设</span><small>Presets</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3746,7 +3752,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevCardOpacityVal" class="small muted">62%</span>
             </div>
             <input type="range" id="prevCardOpacity" min="0" max="100" value="62" step="1">
-            <div class="small muted inspector-help"><code>\blur</code> 只柔化 ASS 字形、描边和轮廓，不会模糊底层视频画面。</div>
+            <div class="small muted inspector-help">描边、阴影、柔化、底板和动态效果以「实际 ASS 渲染」为准；快速几何画布只用于核对字幕位置和换行，不模拟这些字形特效。</div>
           </section>
             </div>
           </details>
@@ -3836,9 +3842,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
         </div>
-<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
-  <strong>卡拉 OK · 词级时间准备</strong>
-  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
+<details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
+  <summary>词级时间 <small>可选 · 生成或导入</small></summary>
   <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
@@ -3848,9 +3853,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
             <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-</section>
+</details>
 <details class="hsr-preview-media-disclosure" data-studio-scope="effects">
-  <summary>预览视频、图片与底色 <small>可选素材</small></summary>
+  <summary>自选预览素材 <small>高级选项</small></summary>
   <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
@@ -6805,11 +6810,23 @@ async function refreshProjectFontList(){
       const button=document.createElement('button');
       button.type='button';button.className='secondary';
       button.textContent=item.family+' · '+Math.round(Number(item.bytes||0)/1024)+' KiB';
-      button.onclick=()=>{
+      button.onclick=async()=>{
         const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
         const input=document.getElementById(target);
-        if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
-        ensureHostFontLoaded(item.family).catch(()=>{});
+        const status=document.getElementById('projectFontImportStatus');
+        const projectAtStart=currentProject?.root;
+        try{
+          button.disabled=true;
+          const name=await ensureHostFontLoaded(item.family);
+          if(!hostFontFaces.has(item.family)||name===item.family)
+            throw new Error('浏览器未能加载此字体，尚未应用');
+          if(!currentProject||currentProject.root!==projectAtStart)return;
+          if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
+          if(!(await saveSubtitleLayoutSettings()))throw new Error('字体选择未成功保存，请检查上方状态');
+          if(status){status.textContent='已应用并保存 '+item.family+'；建议点击实际 ASS 渲染确认字形。';status.className='small status-ok';}
+        }catch(error){
+          if(status){status.textContent='应用项目字体失败：'+shortError(error);status.className='small status-bad';}
+        }finally{button.disabled=false;}
       };
       list.appendChild(button);
     }
@@ -6871,6 +6888,11 @@ async function importCurrentProjectFont(){
   }
 }
 document.getElementById('projectFontImportBtn')?.addEventListener('click',importCurrentProjectFont);
+document.getElementById('projectFontFile')?.addEventListener('change',event=>{
+  const file=event.target.files?.[0];
+  const button=document.getElementById('projectFontImportBtn');
+  if(button)button.disabled=!file;
+});
 document.getElementById('projectFontRefreshBtn')?.addEventListener('click',refreshProjectFontList);
 document.getElementById('projectFontImporter')?.addEventListener('toggle',event=>{
   if(event.target.open)refreshProjectFontList();
@@ -7153,13 +7175,14 @@ async function loadWordAlignmentDiagnostics(){
         providerStatus.className='small status-ok';
       }else{
         const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
-        providerStatus.textContent='本地对齐器不可用：缺少 '+missingPackages+'。可选安装：python -m pip install whisperx';
+        providerStatus.textContent='此设备当前不能本地生成词级时间：缺少 '+missingPackages+'。可以在支持 WhisperX/PyTorch 的处理主机生成后，导入与本项目匹配的 JSON。';
         providerStatus.className='small muted';
       }
     }
     if(generateButton){
       generateButton.disabled=!provider.available;
-      generateButton.title=provider.available?'只为当前缺失/无效条目生成可靠词级时间':'需要处理主机安装 WhisperX；不会自动安装大型依赖';
+      generateButton.hidden=!provider.available;
+      generateButton.title=provider.available?'为当前缺失或无效的条目生成逐词时间':'此设备无法运行 WhisperX/PyTorch，请导入匹配的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
@@ -7170,7 +7193,7 @@ async function loadWordAlignmentDiagnostics(){
     }else if(usable<=0){
       setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
         ?'可以直接点击「本地生成缺失时间」。'
-        :'处理主机缺少 WhisperX；可在主机安装，或导入由其他工具生成的匹配 JSON。'),'warning');
+        :'当前处理环境没有可运行的本地词级对齐器；请从其他支持的环境生成匹配 JSON 后导入。'),'warning');
       status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
     }else{
@@ -7219,7 +7242,7 @@ async function generateLocalWordAlignments(){
     setLog(String(err));
     await loadWordAlignmentDiagnostics();
   }finally{
-    if(button&&!button.title.includes('需要处理主机安装'))button.disabled=false;
+    if(button&&!button.hidden)button.disabled=false;
   }
 }
 
@@ -7258,7 +7281,7 @@ async function importWordAlignmentFile(file){
 
 
 const layoutStyleControlIds=[
-  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV',
+  'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV',
   'prevEnableKaraoke','prevKaraokeMode','prevEnableCard','prevEnableOutline',
   'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
@@ -7331,6 +7354,7 @@ function subtitleSettingsPayload(){
     margin_horizontal_percent: parseFloat(document.getElementById('prevMarginH')?.value || '3') / 100,
     margin_vertical_percent: parseFloat(document.getElementById('prevMarginV')?.value || '5') / 100,
     min_central_gap: parseFloat(document.getElementById('prevCentralGap')?.value || '20'),
+    primary_region_share: Number(document.getElementById('prevPrimaryShare')?.value||60)/100,
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
     karaoke_mode: document.getElementById('prevKaraokeMode')?.value || 'k',
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
@@ -7370,6 +7394,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevMarginH',Number(config.subtitle_margin_horizontal_percent??0.03)*100);
   set('prevMarginV',Number(config.subtitle_margin_vertical_percent??0.05)*100);
   set('prevCentralGap',config.subtitle_min_central_gap??20);
+  set('prevPrimaryShare',Math.round(Number(config.subtitle_primary_region_share??0.60)*100));
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
   set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
   check('prevEnableCard',config.subtitle_enable_translucent_card);
@@ -8416,6 +8441,9 @@ async function updateLayoutPreview() {
   const chsSize = parseInt(document.getElementById('prevChsSize')?.value || '48', 10);
   const priSize = parseInt(document.getElementById('prevPriSize')?.value || '42', 10);
   const centralGap = parseFloat(document.getElementById('prevCentralGap')?.value || '20');
+  const primaryShare = Number(document.getElementById('prevPrimaryShare')?.value||60);
+  const shareLabel=document.getElementById('prevPrimaryShareVal');
+  if(shareLabel)shareLabel.textContent=primaryShare+'% / '+(100-primaryShare)+'%';
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
@@ -8468,6 +8496,7 @@ async function updateLayoutPreview() {
         margin_left_percent: marginH / 100.0,
         margin_top_percent: marginV / 100.0,
         min_central_gap: centralGap,
+        primary_region_share:primaryShare/100,
         chs_font: chsFont,
         primary_font: priFont,
         source_language: currentProject?.config?.source_text_language || 'en',
@@ -8613,8 +8642,11 @@ function renderPreviewCanvasSvg(data, options) {
 
   svg.innerHTML = elements.join('');
 
-  // Lightweight HTML5 Canvas Subtitle Rendering
-  renderCanvasSubtitleOverlay(data);
+  // Exactly one browser geometry text renderer: SVG. The legacy Canvas
+  // renderer painted the very same lines a second time (different metrics),
+  // producing visibly doubled/ghosted glyphs after a font change.
+  const overlay=document.getElementById('assCanvasPreview');
+  overlay?.getContext('2d')?.clearRect(0,0,overlay.width,overlay.height);
 }
 
 function renderCanvasSubtitleOverlay(data) {
@@ -9087,7 +9119,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 });
 
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -9104,6 +9136,8 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
     invalidateLibassPreview();
     updateLayoutPreview();
     if(id==='prevEnableKaraoke'){
+      const panel=document.getElementById('hsrKaraokeReadiness');
+      if(panel&&document.getElementById('prevEnableKaraoke')?.checked)panel.open=true;
       loadWordAlignmentDiagnostics();
       loadLayoutStressSample();
     }
@@ -9138,6 +9172,7 @@ function applySubtitlePreset(name){
     document.getElementById('prevChsSize').value=48;
     document.getElementById('prevPriSize').value=42;
     document.getElementById('prevCentralGap').value=20;
+    document.getElementById('prevPrimaryShare').value=60;
     document.getElementById('prevMarginH').value=3;
     document.getElementById('prevMarginV').value=5;
     document.getElementById('prevEnableKinetic').checked=true;

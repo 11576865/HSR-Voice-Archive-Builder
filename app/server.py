@@ -148,6 +148,11 @@ def _progress_event_sse(job: dict, full_payload: bool = True, heartbeat_log: boo
     return f"event: progress\ndata: {data}\n\n"
 
 
+def _preview_project_font_path(family: str) -> Path | None:
+    font_dir = _active_preview_font_dir()
+    return project_font_for_family(font_dir.parent, family) if font_dir else None
+
+
 def _active_preview_font_dir() -> Path | None:
     try:
         config = _active_config()
@@ -692,6 +697,9 @@ async def api_subtitle_layout_settings(request: Request):
             subtitle_min_central_gap=max(
                 0.0, min(200.0, float(data.get("min_central_gap", config.subtitle_min_central_gap)))
             ),
+            subtitle_primary_region_share=max(0.20, min(0.80, float(data.get(
+                "primary_region_share", config.subtitle_primary_region_share
+            )))),
             subtitle_enable_karaoke=as_bool("enable_karaoke", config.subtitle_enable_karaoke),
             subtitle_karaoke_mode=(str(data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").lower() if str(data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").lower() in {"k", "kf", "clip"} else "k"),
             subtitle_enable_translucent_card=as_bool(
@@ -770,8 +778,11 @@ async def api_subtitle_layout_preview(request: Request):
             margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.03),
             margin_top_percent=float(data.get("margin_top_percent") if data.get("margin_top_percent") is not None else 0.05),
             min_central_gap=float(data.get("min_central_gap") if data.get("min_central_gap") is not None else 20.0),
+            primary_region_share=max(0.20, min(0.80, float(data.get("primary_region_share") or 0.60))),
             chs_font=str(data.get("chs_font") or "汉仪旗黑"),
             primary_font=str(data.get("primary_font") or "Noto Sans"),
+            chs_font_path=(str(p) if (p := _preview_project_font_path(str(data.get("chs_font") or "汉仪旗黑"))) else None),
+            primary_font_path=(str(p) if (p := _preview_project_font_path(str(data.get("primary_font") or "Noto Sans"))) else None),
         )
         return JSONResponse(result)
     except Exception as exc:

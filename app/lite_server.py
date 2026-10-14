@@ -155,6 +155,11 @@ def _stringify_json_form(data: dict[str, object]) -> dict[str, str]:
     return result
 
 
+def _preview_project_font_path(family: str) -> Path | None:
+    font_dir = _active_project_font_dir()
+    return project_font_for_family(font_dir.parent, family) if font_dir else None
+
+
 def _active_project_font_dir() -> Path | None:
     try:
         config = _active_config()
@@ -651,6 +656,9 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_min_central_gap=max(
                     0.0, min(200.0, _float(data.get("min_central_gap"), config.subtitle_min_central_gap))
                 ),
+                subtitle_primary_region_share=max(0.20, min(0.80, _float(
+                    data.get("primary_region_share"), config.subtitle_primary_region_share
+                ))),
                 subtitle_enable_karaoke=_bool(data.get("enable_karaoke", str(config.subtitle_enable_karaoke))),
                 subtitle_karaoke_mode=((data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() if (data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").strip().lower() in {"k", "kf", "clip"} else "k"),
                 subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
@@ -707,8 +715,11 @@ class Handler(BaseHTTPRequestHandler):
                 margin_left_percent=margin_left_percent,
                 margin_top_percent=margin_top_percent,
                 min_central_gap=min_central_gap,
+                primary_region_share=max(0.20, min(0.80, _float(data.get("primary_region_share"), 0.60))),
                 chs_font=data.get("chs_font") or "汉仪旗黑",
                 primary_font=data.get("primary_font") or "Noto Sans",
+                chs_font_path=(str(p) if (p := _preview_project_font_path(data.get("chs_font") or "汉仪旗黑")) else None),
+                primary_font_path=(str(p) if (p := _preview_project_font_path(data.get("primary_font") or "Noto Sans")) else None),
             )
             self._json(result)
             return
