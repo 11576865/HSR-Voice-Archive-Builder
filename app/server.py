@@ -1851,6 +1851,7 @@ async def api_output_archive_bundle(request: Request):
             ).export(
                 source, subtitle, target, fonts_dir=font_asset_directory(output),
                 include_fonts=include_fonts, background_color=color, background_image=image, background_spec=spec,
+                include_chapter_flac=config.generate_chapter_flac,
                 require_current_ass=True,
                 progress=lambda current, total, msg: report_progress("encode", msg, current, total),
             )
