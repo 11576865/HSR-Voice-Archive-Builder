@@ -1,4 +1,4 @@
-"""Source-product/bundle contract and safe 16 MiB background upload regression."""
+"""Source-product/bundle contract and bounded 64 MiB background uploads."""
 from __future__ import annotations
 
 import base64
@@ -45,12 +45,15 @@ class BackgroundUploadBudgetTests(unittest.TestCase):
             self.assertTrue(bundle_export_status(root)["can_generate"])
 
     def test_image_limit_boundary_and_rejected_oversized_decode(self):
-        self.assertEqual(MAX_IMAGE_BYTES, 16 * 1024 * 1024)
-        self.assertEqual(MAX_BUNDLE_JSON_BYTES, 24 * 1024 * 1024)
-        valid = PNG_HEADER + b"a" * (MAX_IMAGE_BYTES - len(PNG_HEADER))
-        self.assertEqual(len(decode_bundle_background(base64.b64encode(valid).decode("ascii"))), MAX_IMAGE_BYTES)
-        with self.assertRaisesRegex(ValueError, "16 MiB"):
-            decode_bundle_background(base64.b64encode(valid + b"x").decode("ascii"))
+        self.assertEqual(MAX_IMAGE_BYTES, 64 * 1024 * 1024)
+        self.assertEqual(MAX_BUNDLE_JSON_BYTES, 96 * 1024 * 1024)
+        # Exercise the exact decode boundary without allocating >200 MiB
+        # for a 64 MiB raw image and its Base64/string copies in CI.
+        with patch("app.archive_bundle_exporter.MAX_BACKGROUND_BYTES", 32):
+            valid = PNG_HEADER + b"a" * (32 - len(PNG_HEADER))
+            self.assertEqual(decode_bundle_background(base64.b64encode(valid).decode("ascii")), valid)
+            with self.assertRaisesRegex(ValueError, "64 MiB"):
+                decode_bundle_background(base64.b64encode(valid + b"x").decode("ascii"))
 
     def test_lite_json_payload_budget_is_endpoint_specific(self):
         def request(path, payload):
@@ -91,11 +94,11 @@ class FastApiArchiveBodyBudgetTests(unittest.IsolatedAsyncioTestCase):
         body = json.dumps({"background_image_base64": "X" * (9 * 1024 * 1024)}).encode()
         got = await _read_bounded_bundle_json(FakeRequest(body))
         self.assertEqual(len(got["background_image_base64"]), 9 * 1024 * 1024)
-        with self.assertRaisesRegex(ValueError, "24 MiB"):
+        with self.assertRaisesRegex(ValueError, "96 MiB"):
             await _read_bounded_bundle_json(FakeRequest(body, content_length=MAX_BUNDLE_JSON_BYTES + 1))
         # Forged/missing Content-Length cannot evade the streamed-byte limit.
         too_big = b"X" * (MAX_BUNDLE_JSON_BYTES + 1)
-        with self.assertRaisesRegex(ValueError, "24 MiB"):
+        with self.assertRaisesRegex(ValueError, "96 MiB"):
             await _read_bounded_bundle_json(FakeRequest(too_big))
 
 
@@ -269,8 +272,8 @@ class BundleAsDerivedDeliverableTests(unittest.TestCase):
         self.assertIn("Object.entries(availableProducts)", html)
         self.assertIn("status:mkv.exists?", html)
         self.assertIn("旧工程遗留黑屏 MKV", html)
-        self.assertIn("16*1024*1024", html)
-        self.assertIn("最多 16 MiB", html)
+        self.assertIn("64*1024*1024", html)
+        self.assertIn("最多 64 MiB", html)
         self.assertNotIn("最多 4 MiB", html)
 
 
