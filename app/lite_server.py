@@ -211,7 +211,7 @@ class Handler(BaseHTTPRequestHandler):
     def _read_body(self) -> bytes:
         length = _int(self.headers.get("Content-Length", "0"), 0)
         endpoint = urlsplit(self.path).path
-        max_body = (36 * 1024 * 1024 if endpoint == "/api/subtitle-layout/render-preview-video" else
+        max_body = (96 * 1024 * 1024 if endpoint == "/api/subtitle-layout/render-preview-video" else
                     18 * 1024 * 1024 if endpoint == "/api/subtitle-layout/import-font" else
                     MAX_BUNDLE_JSON_BYTES if endpoint in (
                         "/api/output/archive-bundle",
