@@ -15,7 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
-from .credentials import translation_default_model
+from .credentials import (
+    translation_default_model, credentials_status,
+    save_translation_credentials, test_saved_translation_credentials,
+)
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
@@ -887,6 +890,50 @@ def api_status():
         "jobs": recent_jobs(20),
         "runtime": dependency_status(),
     }
+
+
+@app.get("/api/translation/credentials")
+def api_translation_credentials():
+    """Expose configuration status, never the stored API key."""
+    return {"ok": True, **credentials_status()}
+
+
+@app.post("/api/translation/credentials")
+async def api_save_translation_credentials(request: Request):
+    try:
+        raw = await request.body()
+        if len(raw) > 8192:
+            raise ValueError("翻译 API 配置请求过大")
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("翻译 API 配置必须为对象")
+        save_translation_credentials(
+            str(data.get("provider") or "custom"),
+            str(data.get("base_url") or ""),
+            str(data.get("api_key") or ""),
+            str(data.get("model") or ""),
+        )
+        return {"ok": True, **credentials_status(), "tested": False}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/translation/test")
+async def api_test_translation_credentials(request: Request):
+    try:
+        raw = await request.body()
+        if len(raw) > 4096:
+            raise ValueError("API 检测请求过大")
+        data = json.loads(raw) if raw else {}
+        if not isinstance(data, dict):
+            raise ValueError("API 检测参数格式错误")
+        result = await run_in_threadpool(
+            test_saved_translation_credentials,
+            model=str(data.get("model") or ""), timeout=20.0,
+        )
+        return result
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.get("/api/quick/candidates")
