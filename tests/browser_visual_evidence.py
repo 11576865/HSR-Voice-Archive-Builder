@@ -556,8 +556,9 @@ def mobile_check(browser, base_url, output, report, width, height, label):
           document.querySelector('.preview-workbench .layout-preview-region')).overflowY""") == "auto",
                f"{label}: cue/timeline must scroll inside clipped preview pane")
     else:
-        ensure(cue["y"] + cue["height"] <= inspector["y"] + 8,
-               f"{label}: tablet Effects inspector overlaps cue editor")
+        preview_pane = rect(page, ".preview-workbench .layout-preview-region")
+        ensure(preview_pane["y"] + preview_pane["height"] <= inspector["y"] + 8,
+               f"{label}: tablet preview scroll pane overlaps inspector")
         ensure(inspector["width"] >= width * 0.72,
                f"{label}: tablet inspector too narrow for controls")
     ensure(vp["width"] > width*(0.6 if width < 760 else 0.38), f"{label}: timeline too narrow")
