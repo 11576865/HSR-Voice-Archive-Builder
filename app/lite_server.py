@@ -15,7 +15,10 @@ from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
-from .credentials import translation_default_model
+from .credentials import (
+    translation_default_model, credentials_status,
+    save_translation_credentials, test_saved_translation_credentials,
+)
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
@@ -382,6 +385,9 @@ class Handler(BaseHTTPRequestHandler):
                 "runtime": dependency_status(),
             })
             return
+        if path == "/api/translation/credentials":
+            self._json({"ok": True, **credentials_status()})
+            return
         if path == "/api/recovery/export":
             config = _active_config()
             data, filename, _summary = build_text_recovery(config)
@@ -571,6 +577,18 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/translation/credentials":
+            save_translation_credentials(
+                data.get("provider", "custom"), data.get("base_url", ""),
+                data.get("api_key", ""), data.get("model", ""),
+            )
+            self._json({"ok": True, **credentials_status(), "tested": False})
+            return
+        if path == "/api/translation/test":
+            self._json(test_saved_translation_credentials(
+                model=data.get("model", ""), timeout=20.0,
+            ))
+            return
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             assert_project_idle(config.root)
