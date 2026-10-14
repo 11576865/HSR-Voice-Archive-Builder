@@ -3637,7 +3637,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
   <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤16 MiB）</label>
+  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
   <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
   <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
   <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
@@ -3647,7 +3647,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤16 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
 </div>
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
 
@@ -8794,7 +8794,7 @@ async function renderHsrEffectVideo(){
     else if(backgroundImage){
       if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
         throw new Error('背景图片只支持 PNG、JPEG 或 WebP');
-      if(!backgroundImage.size||backgroundImage.size>16*1024*1024)
+      if(!backgroundImage.size||backgroundImage.size>64*1024*1024)
         throw new Error('背景图片必须在 16 MiB 以内');
       payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
     }
