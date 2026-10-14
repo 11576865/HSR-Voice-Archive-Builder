@@ -108,7 +108,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.pre
 @media(max-width:979px){
   body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
     grid-template-columns:minmax(0,1fr)!important;
-    grid-template-rows:minmax(155px,44%) minmax(175px,56%)!important;
+    grid-template-rows:minmax(0,44%) minmax(0,56%)!important;
     height:max(340px,calc(100dvh - 196px))!important;
   }
   body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
