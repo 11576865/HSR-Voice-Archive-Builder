@@ -3560,6 +3560,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span>终点 <strong id="layoutCueEnd">--:--.-</strong></span>
               <span>时长 <strong id="layoutCueDuration">--</strong></span>
             </div>
+            <details class="hsr-cue-timing-disclosure">
+              <summary>按需调整显示时间 <span>开始／结束 · 最大偏移 5 秒</span></summary>
             <section class="layout-timing-editor" aria-label="非破坏性字幕显示时间编辑">
               <div class="layout-timing-head">
                 <strong>字幕显示时间</strong>
@@ -3587,6 +3589,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               </div>
               <p id="layoutCueTimingStatus" role="status" aria-live="polite">调整仅影响导出的字幕显示时间，不移动 WAV 或更改原始音频时间轴。单侧最多偏离 5 秒。</p>
             </section>
+            </details>
             <div class="layout-cue-grid">
               <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
               <div class="layout-cue-translation">
