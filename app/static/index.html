@@ -3400,17 +3400,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end" id="previewHeaderBadges">
-          <button type="button" id="hsrStudioFocusToggle" aria-pressed="false" title="在独立视口内编辑；可随时返回普通页面">退出专注模式</button>
-          <button type="button" id="hsrFontImportShortcut" title="打开当前项目的字体导入，不依赖系统字体安装">导入字体</button>
-          <button id="hsrTouchSliderToggle" type="button" aria-pressed="false" aria-controls="previewControls" title="触屏滚动时锁定所有工作台滑块">解锁滑块调节</button>
           <span id="previewScaleBadge" class="badge">100%</span>
           <span id="previewStatusBadge" class="badge" style="color:var(--ok)">正常</span>
         </div>
-      </div>
-      <div class="hsr-focus-task-nav" id="hsrStudioFocusTasks" aria-label="专注模式工作区切换">
-        <button type="button" data-hsr-focus-task="layout">排版</button>
-        <button type="button" data-hsr-focus-task="effects">特效</button>
-        <button type="button" id="hsrFocusReturnToTasks">返回全部工作区</button>
       </div>
       <p class="small muted">字幕工作流：快速计算版面 → 用 FFmpeg/libass 核对最终字形 → 保存样式或生成 ASS。几何求解状态不等于渲染验收。</p>
       <div class="hsr-studio-toolbar" role="group" aria-label="排版问题工具" data-studio-scope="style">
@@ -3575,7 +3567,6 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         <aside class="preview-inspector" aria-label="字幕样式参数与操作">
           <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span>
           </div>
-            <p id="hsrTouchSliderHint" class="small muted" role="status">触屏滑块默认锁定：滚动不改参数。需要调整时使用工作台顶部「解锁滑块调节」，每次触摸调整完成会自动重新锁定。</p>
   <details id="layoutTrialTextDetails" class="hsr-preview-trial">
     <summary>手动试调字幕文本（不会修改项目字幕）</summary>
     <div class="row preview-copy-fields">
@@ -4436,12 +4427,6 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
      typeof layoutSampleRequestGeneration==='number')layoutSampleRequestGeneration++;
   document.body.dataset.workspace=visibleWorkspace;
   document.body.dataset.workspaceTask=name;
-  if(visibleWorkspace!=='layout')setHsrStudioFocusMode(false);
-  setHsrTouchSliderLock(true);
-  document.querySelectorAll('[data-hsr-focus-task]').forEach(button=>{
-    if(button.dataset.hsrFocusTask===name)button.setAttribute('aria-current','page');
-    else button.removeAttribute('aria-current');
-  });
   for(const button of workspaceButtons){
     if(button.dataset.workspaceTarget===name)button.setAttribute('aria-current','page');
     else button.removeAttribute('aria-current');
@@ -4450,8 +4435,6 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(panelCollapseMode==='auto')requestAnimationFrame(()=>applyAutoPanelState(visibleWorkspace));
   if(visibleWorkspace==='layout'){
     setHsrStudioMode(name==='effects'?'effects':'style');
-    // The editor opens as a task viewport, not another long browser page.
-    setHsrStudioFocusMode(true);
   }
   if(visibleWorkspace==='layout'&&previousWorkspace!=='layout'&&typeof updateLayoutPreview==='function'){
     const projectKey=currentProject?.root||currentProject?.name||null;
@@ -8566,9 +8549,7 @@ function setHsrStudioMode(mode){
     // Both the rail and its top-level opener become hidden in Effects.
     // Move focus before the layout-only toolbar disappears.
     if(hadQaFocus){
-      const target=document.body.dataset.hsrStudioFocus==='true'
-        ?document.querySelector('[data-hsr-focus-task="effects"]')
-        :document.getElementById('studioEffectsTab');
+      const target=document.getElementById('studioEffectsTab');
       target?.focus();
     }
   }
@@ -8613,76 +8594,48 @@ function setHsrAuditDrawer(open){
   toggle.setAttribute('aria-expanded',open?'true':'false');
   toggle.textContent=open?'收起批量检查':'批量排版检查';
 }
-/* A single focus workspace; task navigation reuses showWorkspace and does
-   not create a second source of subtitle data or renderer state. */
-function setHsrStudioFocusMode(enabled){
-  const root=document.getElementById('subtitleLayoutPreviewCard');
-  const button=document.getElementById('hsrStudioFocusToggle');
-  if(!root||!button)return;
-  const active=!!enabled&&document.body.dataset.workspace==='layout';
-  const before=document.body.dataset.hsrStudioFocus==='true';
-  document.body.dataset.hsrStudioFocus=active?'true':'false';
-  root.classList.toggle('hsr-focus-active',active);
-  button.setAttribute('aria-pressed',active?'true':'false');
-  button.textContent=active?'退出专注模式':'进入专注模式';
-  if(active&&!before){
-    const view=root.querySelector('.preview-workbench');
-    if(view)view.scrollTop=0;
-  }
-  if(!active&&before)window.scrollTo({top:0,behavior:'instant'});
-}
-document.getElementById('hsrFontImportShortcut')?.addEventListener('click',()=>{
-  // Reuse the same project-owned font importer; Effects does not clone it.
-  if(document.body.dataset.workspaceTask!=='layout')showWorkspace('layout',{scroll:false});
-  const importer=document.getElementById('projectFontImporter');
-  const group=importer?.closest('details.layout-inspector-section');
-  if(group)group.open=true;
-  if(importer)importer.open=true;
-  requestAnimationFrame(()=>{
-    importer?.scrollIntoView({block:'nearest',behavior:'instant'});
-    document.getElementById('projectFontFile')?.focus({preventScroll:true});
-  });
-});
-document.getElementById('hsrStudioFocusToggle')?.addEventListener('click',()=>{
-  setHsrStudioFocusMode(document.body.dataset.hsrStudioFocus!=='true');
-});
-document.getElementById('hsrFocusReturnToTasks')?.addEventListener('click',()=>setHsrStudioFocusMode(false));
-document.querySelectorAll('[data-hsr-focus-task]').forEach(button=>
-  button.addEventListener('click',()=>showWorkspace(button.dataset.hsrFocusTask,{scroll:false})));
-document.addEventListener('keydown',event=>{
-  if(event.key==='Escape'&&document.body.dataset.hsrStudioFocus==='true'){
-    setHsrStudioFocusMode(false);
-    document.getElementById('hsrStudioFocusToggle')?.focus({preventScroll:true});
-  }
-});
-/* Touch ranges must be explicitly armed. One completed touch gesture
-   automatically returns the entire workbench to scroll-safe mode. */
-function setHsrTouchSliderLock(locked){
-  const root=document.getElementById('subtitleLayoutPreviewCard');
-  const inspector=root?.querySelector('.preview-inspector');
-  const toggle=document.getElementById('hsrTouchSliderToggle');
-  const help=document.getElementById('hsrTouchSliderHint');
-  if(!root||!inspector||!toggle)return;
-  const unlocked=!locked;
-  root.classList.toggle('hsr-touch-sliders-unlocked',unlocked);
-  inspector.classList.toggle('hsr-touch-sliders-unlocked',unlocked);
-  toggle.setAttribute('aria-pressed',unlocked?'true':'false');
-  toggle.textContent=unlocked?'锁定滑块（防误触）':'解锁滑块调节';
-  if(help)help.textContent=unlocked
-    ?'可调整一项滑块；触摸手势结束后会自动锁定。'
-    :'滑块已锁定：上下滚动不会改动数值。键盘仍可调整。';
-}
-document.getElementById('hsrTouchSliderToggle')?.addEventListener('click',()=>{
-  const root=document.getElementById('subtitleLayoutPreviewCard');
-  setHsrTouchSliderLock(!!root?.classList.contains('hsr-touch-sliders-unlocked'));
-});
-for(const eventName of ['pointerup','pointercancel']){
-  document.getElementById('subtitleLayoutPreviewCard')?.addEventListener(eventName,event=>{
-    if(event.pointerType!=='touch')return;
-    if(event.target?.closest?.('input[type="range"]'))setHsrTouchSliderLock(true);
+/* Touch inputs should be directly editable without a global lock. Native
+   ranges remain the authoritative controls on fine-pointer desktops. On
+   coarse pointers, the same values are edited with bounded number fields:
+   a vertical scroll cannot accidentally drag a range track. */
+function initHsrTouchNumericEditors(){
+  const inspector=document.querySelector('#subtitleLayoutPreviewCard .preview-inspector');
+  if(!inspector)return;
+  inspector.querySelectorAll('input[type="range"]').forEach(range=>{
+    if(!range.id||range.dataset.touchNumericAttached==='true')return;
+    range.dataset.touchNumericAttached='true';
+    const editor=document.createElement('input');
+    editor.type='number';
+    editor.id=range.id+'TouchNumber';
+    editor.className='hsr-touch-number';
+    editor.inputMode='decimal';
+    editor.min=range.min;
+    editor.max=range.max;
+    editor.step=range.step||'any';
+    const label=inspector.querySelector('label[for="'+range.id+'"]');
+    editor.setAttribute('aria-label',(label?.textContent?.trim()||range.getAttribute('aria-label')||range.id)+'（数值调整）');
+    const sync=()=>{
+      if(document.activeElement!==editor)editor.value=range.value;
+      editor.disabled=range.disabled;
+    };
+    range.insertAdjacentElement('afterend',editor);
+    editor.addEventListener('change',()=>{
+      const proposed=Number(editor.value);
+      if(editor.value.trim()===''||!Number.isFinite(proposed)){sync();return;}
+      const min=Number(range.min),max=Number(range.max);
+      const bounded=Math.min(max,Math.max(min,proposed));
+      range.value=String(bounded);
+      range.dispatchEvent(new Event('input',{bubbles:true}));
+      range.dispatchEvent(new Event('change',{bubbles:true}));
+      editor.value=range.value;
+    });
+    range.addEventListener('input',sync);
+    range.addEventListener('change',sync);
+    new MutationObserver(sync).observe(range,{attributes:true,attributeFilter:['disabled','min','max','step']});
+    sync();
   });
 }
-
+initHsrTouchNumericEditors();
 document.getElementById('layoutAuditDrawerToggle')?.addEventListener('click',()=>{
   const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
   setHsrAuditDrawer(!root?.classList.contains('audit-open'));
