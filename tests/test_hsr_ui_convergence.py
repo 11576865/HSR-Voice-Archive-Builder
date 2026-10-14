@@ -7,7 +7,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = ROOT / "app/static/index.html"
-CSS = ROOT / "app/static/studio-v3.css"
+CSS = ROOT / "app/static/studio-v4.css"
 SHARED_CSS = ROOT / "app/static/hsr-ui-convergence.css"
 
 
@@ -22,7 +22,7 @@ class HsrUiConvergence(unittest.TestCase):
         doc = self.html
         self.assertEqual(doc.count('id="studioStyleTab"'), 1)
         self.assertEqual(doc.count('id="studioEffectsTab"'), 1)
-        self.assertLess(doc.index('id="studioStyleTab"'), doc.index('class="preview-workbench studio-v3-workbench"'))
+        self.assertLess(doc.index('id="studioStyleTab"'), doc.index('class="preview-workbench studio-v3-workbench studio-v4-workbench"'))
         self.assertLess(doc.index('id="studioEffectsTab"'), doc.index('class="preview-workbench studio-v3-workbench"'))
         self.assertIn('id="hsrInspectorTitle"', doc)
         self.assertIn("?'特效参数':'排版参数'", doc)
@@ -80,9 +80,9 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertEqual(self.html.count('href="/static/hsr-ui-convergence.css"'), 1)
         self.assertNotIn(r"\\n#subtitleLayoutPreviewCard", self.html)
         self.assertNotIn(r"\n#subtitleLayoutPreviewCard", self.html)
-        self.assertEqual(self.html.count('href="/static/studio-v3.css"'), 1)
-        self.assertIn("@media(max-width:1100px)", self.css)
-        self.assertIn("@media(max-width:679px)", self.css)
+        self.assertEqual(self.html.count('href="/static/studio-v4.css"'), 1)
+        self.assertIn("@media(max-width:1020px)", self.css)
+        self.assertIn("@media(max-width:600px)", self.css)
         self.assertIn("studio-v3-command-bar", self.css)
         self.assertNotIn("grid-template-columns:minmax(0,1fr) clamp(390px", self.css)
 
@@ -111,8 +111,8 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertNotIn('setHsrStudioFocusMode(',doc)
         self.assertNotIn('setHsrTouchSliderLock(',doc)
         self.assertNotIn('data-hsr-studio-focus=',css)
-        self.assertIn('body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench {',css)
-        self.assertIn('height:clamp(470px,calc(100dvh - 184px),1020px)',css)
+        self.assertIn('body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench{',css)
+        self.assertIn('height:auto!important',css)
         self.assertIn('@media(max-width:679px)',css)
         self.assertIn('overflow-y:auto!important',css)
         self.assertIn('id="projectFontImporter"',doc)
