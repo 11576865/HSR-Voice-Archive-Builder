@@ -159,6 +159,15 @@ def run(output: Path) -> None:
                     page.route("**/api/**", route_api)
                     page.goto(f"http://127.0.0.1:{port}/", wait_until="domcontentloaded")
                     load_studio_under_production_csp(page)
+                    # WU-02 keeps optional footage inputs collapsed. This
+                    # browser acceptance follows the actual UI disclosure
+                    # rather than editing an invisible input via automation.
+                    picker = page.locator(".hsr-preview-media-disclosure")
+                    ensure(not picker.evaluate("(el)=>el.open"),
+                           "Optional footage picker unexpectedly starts expanded")
+                    picker.locator(":scope > summary").click()
+                    ensure(page.locator("#effectFootageStart").is_visible(),
+                           "Expanded footage picker does not expose offset control")
                     page.locator("#effectFootageFile").set_input_files({
                         "name": "recorded-source.webm", "mimeType": "video/webm",
                         "buffer": fixture,
