@@ -39,6 +39,9 @@ class SubtitleRenderConfig:
     # Layout settings are shared by preview and ASS export.
     chs_font: str = "汉仪旗黑"
     primary_font: str = "Noto Sans"
+    # Resolved project font files, never client-supplied paths.
+    chs_font_path: str | None = None
+    primary_font_path: str | None = None
     base_chs_size: int = 48
     base_primary_size: int = 42
     margin_horizontal_percent: float = 0.03
