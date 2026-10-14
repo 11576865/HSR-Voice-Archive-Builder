@@ -95,7 +95,7 @@ def _image_asset(output: Path, receipt: dict[str, Any]) -> Path | None:
     image = output / name
     if image.is_symlink() or not image.is_file() or not 0 < image.stat().st_size <= MAX_IMAGE_BYTES:
         raise ValueError("保存的 MKV 背景图片缺失或无效，请重新选择图片")
-    # Stream the 16 MiB content-addressed asset rather than allocating another
+    # Stream the content-addressed asset rather than allocating another
     # full copy for every project dashboard refresh (especially on Termux).
     hasher = hashlib.sha256()
     with image.open("rb") as handle:
@@ -136,11 +136,17 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
                 "attach_project_fonts": True,
                 "background_spec": normalize_bundle_background(None)}
     bg = receipt["background"]
+    image_saved = False
+    if bg.get("kind") == "image":
+        try:
+            image_saved = _image_asset(output, receipt) is not None
+        except (OSError, ValueError):
+            image_saved = False
     return {
         "known": True,
         "background_color": str(bg.get("color") or "#000000"),
         "background_kind": bg.get("kind") or "color",
-        "image_saved": bg.get("kind") == "image",
+        "image_saved": image_saved,
         "attach_project_fonts": receipt["attach_project_fonts"],
         "background_spec": normalize_bundle_background(bg.get("spec") or {
             "mode": bg.get("kind") or "color",
