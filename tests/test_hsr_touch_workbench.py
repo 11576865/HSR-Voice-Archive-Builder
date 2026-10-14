@@ -45,7 +45,7 @@ class TouchWorkbenchTests(unittest.TestCase):
     def test_inspector_sections_are_exclusive_without_long_persistent_scroll(self):
         self.assertEqual(self.html.count('name="hsr-style-parameter-groups"'),4)
         self.assertEqual(self.html.count('name="hsr-effects-parameter-groups"'),3)
-        self.assertIn('grid-template-rows:minmax(155px,44%) minmax(175px,56%)',self.css)
+        self.assertIn('grid-template-rows:minmax(0,44%) minmax(0,56%)',self.css)
 
     def test_karaoke_input_is_explained_without_invented_alignment(self):
         self.assertIn('id="hsrAlignmentHelp"', self.html)
