@@ -94,7 +94,7 @@ def load_studio_reference_background() -> bytes:
 
 
 def _project_font_config(config: SubtitleRenderConfig, font_dir: Path | None) -> SubtitleRenderConfig:
-    """Resolve the authoritative imported files before layout measurement."""
+    """Resolve uploaded font files BEFORE measuring subtitle layout geometry."""
     if font_dir is None or not font_dir.is_dir():
         return config
     chs = project_font_for_family(font_dir.parent, config.chs_font)
@@ -102,13 +102,13 @@ def _project_font_config(config: SubtitleRenderConfig, font_dir: Path | None) ->
     return replace(
         config,
         chs_font_path=str(chs) if chs else config.chs_font_path,
-        primary_font_path=strdef _project_font_environment(config: SubtitleRenderConfig, font_dir: Path | None,
-                              temporary_dir: Path, *, english: str, chinese: str) -> dict[str, str] | None:
-    """Prefer project fonts in an isolated Fontconfig configuration.
+        primary_font_path=str(primary) if primary else config.primary_font_path,
+    )
 
-    fontsdir loads imported files, but alone doesn't guarantee a matching
-    family wins over an already-installed system family of the same name.
-    """
+
+def _project_font_environment(config: SubtitleRenderConfig, font_dir: Path | None,
+                              temporary_dir: Path, *, english: str, chinese: str) -> dict[str, str] | None:
+    """Prefer project fonts in an isolated Fontconfig configuration."""
     if font_dir is None or not font_dir.is_dir():
         return None
     imported = [
@@ -141,10 +141,7 @@ def _assert_project_font_selected(
     log: str, config: SubtitleRenderConfig, font_dir: Path | None,
     *, english: str, chinese: str, env: dict[str, str] | None = None,
 ) -> None:
-    """Verify fontconfig resolved to the uploaded file, not a system fallback.
-
-    libass fontselect logs face names, not necessarily filesystem paths.
-    """
+    """Verify Fontconfig resolves the uploaded file, not a system fallback."""
     if font_dir is None or not font_dir.is_dir():
         return
     selections = [line.casefold() for line in log.splitlines()
@@ -172,10 +169,6 @@ def _assert_project_font_selected(
         if not any(f"fontselect: ({family.casefold()}," in line for line in selections):
             raise RuntimeError(
                 f"无法从 libass 字体选择日志确认 {family}；不把未验证的回退字体视为成功。"
-            )
-
-
-       + "请检查字体文件中的实际字族名和中文字形；不把回退结果标记为成功。"
             )
 
 
