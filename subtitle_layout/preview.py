@@ -78,6 +78,8 @@ def preview_subtitle_layout(
     primary_region_share: float = 0.60,
     chs_font: str = "汉仪旗黑",
     primary_font: str = "Noto Sans",
+    chs_font_path: str | None = None,
+    primary_font_path: str | None = None,
 ) -> dict[str, Any]:
     """Return browser-preview geometry from the exact ASS layout solver."""
 
@@ -86,8 +88,8 @@ def preview_subtitle_layout(
     min_central_gap = max(0.0, min(200.0, float(min_central_gap)))
     chs_font = validate_ass_font_name(chs_font)
     primary_font = validate_ass_font_name(primary_font)
-    chs_font_path = resolve_font_path(chs_font)
-    primary_font_path = resolve_font_path(primary_font)
+    chs_font_path = chs_font_path or resolve_font_path(chs_font)
+    primary_font_path = primary_font_path or resolve_font_path(primary_font)
 
     safe_area = SafeArea(
         canvas_width=1920,
