@@ -386,7 +386,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="previewBackgroundFile" type="file"', html)
         self.assertIn("URL.createObjectURL(file)", html)
         self.assertIn("URL.revokeObjectURL(previewBackgroundObjectUrl)", html)
-        self.assertIn("背景仅存在于当前浏览器会话", html)
+        self.assertIn("不改变项目图、ASS 或最终 MKV 背景", html)
         self.assertNotIn("bgGradient", html)
         self.assertIn("img-src 'self' data: blob:", server_py)
         self.assertIn("img-src 'self' data: blob:", lite_server_py)

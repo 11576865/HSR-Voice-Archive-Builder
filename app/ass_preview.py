@@ -75,6 +75,20 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
     )
 
 
+STUDIO_REFERENCE_BACKGROUND = Path(__file__).resolve().parent / "static" / "assets" / "studio-red-clouds.webp"
+
+
+def load_studio_reference_background() -> bytes:
+    """Bundled diagnostic image, never an input to project export."""
+    image = STUDIO_REFERENCE_BACKGROUND
+    if not image.is_file() or image.is_symlink():
+        raise RuntimeError("工作台默认参考背景文件缺失")
+    data = image.read_bytes()
+    if not data or len(data) > 1_048_576 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
+        raise RuntimeError("工作台默认参考背景损坏")
+    return data
+
+
 def render_ass_preview_png(
     *,
     english_text: str,
@@ -86,6 +100,7 @@ def render_ass_preview_png(
     duration_seconds: float = 3.0,
     timestamp: float = 1.0,
     font_dir: Path | None = None,
+    use_studio_reference_background: bool = False,
 ) -> bytes:
     """Render one representative subtitle frame through FFmpeg/libass."""
     ffmpeg = shutil.which("ffmpeg")
@@ -113,20 +128,27 @@ def render_ass_preview_png(
             overflow_report_path=root / "overflow.json",
         )
         escaped_ass = _escape_subtitles_filter_path(ass_path)
+        if use_studio_reference_background:
+            image_path = root / "reference.webp"
+            image_path.write_bytes(load_studio_reference_background())
+            source_args = ["-loop", "1", "-framerate", "1", "-i", str(image_path)]
+            picture_filter = ("scale=1920:1080:force_original_aspect_ratio=decrease,"
+                              "pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,setsar=1,")
+        else:
+            source_args = ["-f", "lavfi", "-i",
+                           f"color=c=black:s=1920x1080:r=1:d={max(3.0, duration):.3f}"]
+            picture_filter = ""
         command = [
             ffmpeg,
             "-y",
             "-hide_banner",
             "-loglevel",
             "error",
-            "-f",
-            "lavfi",
-            "-i",
-            f"color=c=black:s=1920x1080:r=1:d={max(3.0, duration):.3f}",
+            *source_args,
             "-ss",
             f"{render_timestamp:.3f}",
             "-vf",
-            f"subtitles='{escaped_ass}'" + (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else ""),
+            picture_filter + f"subtitles='{escaped_ass}'" + (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else ""),
             "-frames:v",
             "1",
             str(png_path),

@@ -1,0 +1,94 @@
+{
+  "schema_version": 1,
+  "goal": "Resolve Android/Termux background-image MKV progress after page refresh and improve HSR subtitle Layout/Effects studio using the user's two portrait/landscape screen recordings as real-world evidence.",
+  "status": "wu02_studio_rework_committed_pending_external_validation",
+  "current_bounded_work_unit": {
+    "id": "WU-02",
+    "name": "Actual reference-image preview and evidence-led Layout/Effects composition",
+    "status": "source_and_media_committed_pending_ci_and_browser_acceptance",
+    "product_paths": [
+      "app/static/assets/studio-red-clouds.webp",
+      "app/ass_preview.py",
+      "app/static/index.html",
+      "app/static/hsr-ui-convergence.css",
+      "app/server.py",
+      "app/lite_server.py",
+      "tests/test_hsr_studio_reference_background.py",
+      "tests/browser_visual_evidence.py"
+    ]
+  },
+  "video_evidence": [
+    {
+      "filename": "Screenrecorder-2026-10-15-03-49-46-4.mp4",
+      "duration_seconds": 20.52,
+      "frame": "1282x1920 portrait",
+      "findings": [
+        "Effect studio first viewport is consumed by cue display timing and parameter controls; media preview is not continuously visible while editing.",
+        "Cue start/end inputs expose excessively long floating point seconds (e.g., 40.48533333333333).",
+        "Long, read-only source and translated text take substantial vertical space; repeated scrolling disconnects controls from visual effect."
+      ]
+    },
+    {
+      "filename": "Screenrecorder-2026-10-15-03-53-57-228.mp4",
+      "duration_seconds": 18.44,
+      "frame": "1920x1282 landscape",
+      "findings": [
+        "Preview and Inspector coexist, but dense bilingual rendered text takes most of the visual stage; poor space for legibility evaluation.",
+        "Inspector controls dominate height and contain repeated similarly weighted operations; editing text can be far from the preview.",
+        "Horizontal/tablet composition should prioritize stage, adjust inspector width, and preserve artifact/preview status near its action."
+      ]
+    }
+  ],
+  "supported_root_causes": [
+    "After page reload refresh() read /api/status once and renderJobs(s.jobs), but never reattached watchJob(ongoing.id); a frozen page-visible progress value does not by itself demonstrate backend FFmpeg halted.",
+    "ArchiveBundleExporter invoked Popen with stdout=PIPE and stderr=PIPE, drained stdout to EOF before reading stderr; a full stderr pipe can block FFmpeg. This is a real possibility, not proven to be the exact device freeze cause.",
+    "Time input rendering used String(raw_float), exposing binary timeline fractions without formatting."
+  ],
+  "completed_units": [
+    "WU-01 source-level fix: reconnect in-flight job by existing id with single-poll guard and stale-progress warning, no new export side effect",
+    "WU-01 source-level fix: FFmpeg stderr goes to bounded-lifecycle temporary file, eliminating unread pipe backpressure",
+    "WU-01 source-level fix: display cue input times with at most 3 fractional digits, retain precise underlying timing until explicit edit",
+    "Added source-level regression contracts",
+    "WU-02: original user red-cloud picture compressed to real 640×360 WebP asset (5,858 bytes; Git blob SHA 2c6332e1d1f7661cb8181708a358e8e7e2aac885) instead of storing only a local sandbox file",
+    "WU-02: expose reference/gradient/black/grid/local image switcher directly beneath canvas, default to reference; project and final MKV background remain independent",
+    "WU-02: route real FFmpeg/libass still and video reference rendering in both FastAPI and Android/Termux Lite; preserve opted-in user video/image precedence and provenance checking",
+    "WU-02: improve mobile/tablet bounded stage/inspector and constrain cue editor, keeping timeline scrollable on touch; collapse cue time edit until requested",
+    "WU-02: move motion parameters ahead of optional video/image source controls, provide a disclosure for optional media; preserve Karaoke readiness and action status",
+    "WU-02: add real FFmpeg picture-versus-black regression and Chromium image-decoding/browser-disclosure checks"
+  ],
+  "next_units": [
+    {
+      "id": "WU-02",
+      "status": "implementation_committed_pending_actual_browser_and_device_evidence",
+      "goal": "Studio composition: viewport/responsive stage–inspector–cue hierarchy; maintain actual 16:9 preview and essential status visible during portrait and tablet interaction, avoid keyboard occlusion, no regression to cue editing"
+    },
+    {
+      "id": "WU-03",
+      "status": "partial: inspector density and responsive canvas addressed; full UX validation pending",
+      "goal": "Layout inspector simplification: prioritize font, size, gap, safe area, preview, save; convert advanced technical settings to progressive disclosure; strengthen overflow/scale feedback on the canvas"
+    },
+    {
+      "id": "WU-04",
+      "status": "partial: actual reference image and optional media disclosure addressed; actual video/interaction evidence pending",
+      "goal": "Effects authoring: separate dynamic video preview, effect parameters, save and export; accessible controls and feedback with real FFmpeg/libass evidence"
+    },
+    {
+      "id": "WU-05",
+      "status": "pending",
+      "goal": "Android physical device: reproduce image-to-MKV export, refresh mid-encode, confirm same task id continues and completes, stable output/receipt and usable playback; verify portrait and landscape with fresh screenshots"
+    }
+  ],
+  "branch": "fix/hsr-workbench-reconnect-20261015",
+  "pull_request": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/166",
+  "latest_durable_commit": "019476f4b900b2936894d09999840783e764a0ce",
+  "external_validation": {
+    "ci": "pending exact PR head",
+    "actual_android_termux_refresh_during_encode": "pending device",
+    "portrait_landscape_browser_evidence": "pending GitHub browser job"
+  },
+  "blockers": [
+    "No access to user's live Termux process or logs; on-device cause for reported freeze cannot be isolated beyond identified software defects.",
+    "Project-level visual acceptance requires browser/device screenshot after changes."
+  ],
+  "updated_at": "2026-10-15T04:13:00+08:00"
+}

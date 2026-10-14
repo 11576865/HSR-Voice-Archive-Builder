@@ -10,11 +10,13 @@ import argparse
 import base64
 import json
 import math
+import mimetypes
 import os
 import subprocess
 import tempfile
 from pathlib import Path
 import threading
+from urllib.parse import unquote, urlsplit
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from playwright.sync_api import sync_playwright
@@ -58,13 +60,24 @@ class QuietHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def do_GET(self):
-        if self.path.startswith("/static/hsr-ui-convergence.css"):
-            css=(ROOT / "app/static/hsr-ui-convergence.css").read_bytes()
+        # Mirror both production servers' /static mount. The old fixture
+        # special-cased just the stylesheet, accidentally returning HTTP 404
+        # for the newly bundled diagnostic WebP image.
+        path = unquote(urlsplit(self.path).path)
+        if path.startswith("/static/"):
+            static_root = (ROOT / "app" / "static").resolve()
+            requested = (static_root / path[len("/static/"):]).resolve()
+            if not requested.is_relative_to(static_root) or not requested.is_file():
+                self.send_error(404, "Static resource does not exist")
+                return
+            media_type = mimetypes.guess_type(str(requested))[0] or "application/octet-stream"
+            payload = requested.read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", "text/css; charset=utf-8")
-            self.send_header("Content-Length", str(len(css)))
+            self.send_header("Content-Type", media_type)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
-            self.wfile.write(css)
+            self.wfile.write(payload)
             return
         if self.path.startswith("/app/static/index.html"):
             # Match the production FastAPI template injection; serving raw
@@ -131,7 +144,10 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             assert body.get("preview_format") == "webm", "Chromium must negotiate VP8"
             has_source = "source_video_base64" in body
             has_image = "preview_background_image_base64" in body
+            has_reference = body.get("use_studio_reference_background") is True
             assert not (has_source and has_image), "Background input sources must be exclusive"
+            if has_reference:
+                assert not has_source and not has_image, "Bundled image must yield to selected user media"
             if has_source:
                 assert base64.b64decode(body["source_video_base64"], validate=True) == video_bytes
                 assert body.get("source_start_seconds") == 0.2
@@ -143,7 +159,7 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             route.fulfill(status=200, content_type="video/webm", body=video_bytes,
                           headers={"X-HSR-Preview-Background":
                                    "local-footage" if has_source else
-                                   "background-image" if has_image else "black"})
+                                   "background-image" if has_image or has_reference else "black"})
             return
         if path.endswith("/api/status"):
             payload = {
@@ -297,6 +313,29 @@ def desktop_check(browser, base_url, output, report):
            "WhisperX generation claimed availability in an unconfigured fixture")
     ensure(page.locator("#hsrEffectOperationStatus").is_visible(),
            "Effects operation status is not visible beside the stage")
+    ensure(page.locator("#previewBackgroundMode").input_value()=="reference",
+           "Studio did not default to user red-clouds reference")
+    try:
+        page.wait_for_function("""() => {
+          const i=document.getElementById('previewBackgroundImage');
+          return i && i.complete && i.naturalWidth===640 && i.naturalHeight===360;
+        }""",timeout=10000)
+    except Exception as exc:
+        image_details = page.evaluate("""() => {
+          const img=document.getElementById('previewBackgroundImage');
+          return img && {
+            src: img.currentSrc, complete: img.complete,
+            naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight
+          };
+        }""")
+        response = page.request.get(page.url.split("/app/static/index.html")[0] +
+                                    "/static/assets/studio-red-clouds.webp")
+        raise AssertionError(
+            f"Reference WebP did not decode: {image_details}; HTTP {response.status}; "
+            f"type={response.headers.get('content-type')}; bytes={len(response.body())}"
+        ) from exc
+    ensure(page.locator("#previewBackgroundImage").is_visible(),
+           "Red-clouds image is missing from the actual stage")
     screenshot(page, output, "desktop_clean_effects_workspace")
     # This is a real Chromium decoded-video interaction, but the API response
     # is a deterministic MP4 fixture. Backend libass video is checked separately.
@@ -328,6 +367,11 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
     page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
     screenshot(page, output, "desktop_effect_video_playback")
+    # Optional media input lives in a deliberate disclosure. Keep the first
+    # viewport for the active motion controls, not an entire file picker.
+    ensure(not page.locator(".hsr-preview-media-disclosure").evaluate("(el) => el.open"),
+           "Optional video upload settings should start collapsed")
+    page.locator(".hsr-preview-media-disclosure > summary").click()
     # An image must reach the actual video endpoint, rather than being used
     # merely as decorative background in the browser's geometry preview.
     png=b"\x89PNG\r\n\x1a\n"+b"browser-fixture"
@@ -463,6 +507,9 @@ def desktop_check(browser, base_url, output, report):
     ensure(not writes, "Pointer drag persisted timing without explicit save")
     ensure(page.locator("#layoutCueTimingSaveBtn").is_enabled(), "Save not offered for changed draft")
     screenshot(page, output, "desktop_studio_unsaved_drag")
+    # The time controls are deliberately disclosed, not permanently stacked
+    # ahead of the Effects preview; expand before a real user click.
+    page.locator(".hsr-cue-timing-disclosure > summary").click()
     page.locator("#layoutCueTimingSaveBtn").click()
     page.wait_for_function("document.getElementById('layoutCueTimingSaveBtn').disabled === true")
     ensure(len(writes) == 1 and abs(writes[0]["end"] - 7.4) < 0.05, "Saved timing mismatch")

@@ -13,7 +13,7 @@ from starlette.concurrency import run_in_threadpool
 from fastapi.staticfiles import StaticFiles
 
 from .builder import atomic_write_text, ensure_dir_or_extract
-from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
+from .ass_preview import decode_preview_source_video, load_studio_reference_background, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
 from .credentials import (
     translation_default_model, credentials_status,
@@ -802,6 +802,7 @@ async def api_subtitle_layout_render_preview(request: Request):
             duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
             timestamp=float(data.get("preview_timestamp") or 1.0),
             font_dir=_active_preview_font_dir(),
+            use_studio_reference_background=data.get("use_studio_reference_background") is True,
         )
         return Response(
             content=png,
@@ -840,6 +841,8 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         fmt = str(data.get("preview_format") or "mp4").lower()
         source_bytes = decode_preview_source_video(data.get("source_video_base64"))
         background_image = decode_bundle_background(data.get("preview_background_image_base64"))
+        if data.get("use_studio_reference_background") is True and not source_bytes and background_image is None:
+            background_image = load_studio_reference_background()
         background_color = normalize_preview_background_color(data.get("preview_background_color"))
         video = await run_in_threadpool(
             render_ass_preview_video,

@@ -3470,7 +3470,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </aside>
         <div class="layout-preview-region" aria-label="字幕画布与预览依据">
           <div class="preview-stage" id="previewCanvasContainer">
-          <img id="previewBackgroundImage" class="hidden" alt="" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
+          <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
           <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
           <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
           <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
@@ -3484,6 +3484,22 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <span>布局失败：</span>
             <span id="previewCollisionReason">CENTRAL_COLLISION</span>
           </div>
+          </div>
+          <div class="hsr-stage-background-toolbar" role="group" aria-label="工作台视觉参考背景">
+            <label for="previewBackgroundMode">预览参考背景
+              <select id="previewBackgroundMode">
+                <option value="reference" selected>红云参考图（默认）</option>
+                <option value="gradient">中性渐变</option>
+                <option value="black">纯黑</option>
+                <option value="grid">明暗网格</option>
+                <option value="image">本地图片</option>
+              </select>
+            </label>
+            <div id="previewBackgroundFileWrap" class="hidden">
+              <label for="previewBackgroundFile">本地参考图片</label>
+              <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
+            </div>
+            <span class="hsr-stage-background-explainer">便于辨认描边、阴影和运动；不改变项目图、ASS 或最终 MKV 背景。</span>
           </div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
@@ -3544,6 +3560,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span>终点 <strong id="layoutCueEnd">--:--.-</strong></span>
               <span>时长 <strong id="layoutCueDuration">--</strong></span>
             </div>
+            <details class="hsr-cue-timing-disclosure">
+              <summary>按需调整显示时间 <span>开始／结束 · 最大偏移 5 秒</span></summary>
             <section class="layout-timing-editor" aria-label="非破坏性字幕显示时间编辑">
               <div class="layout-timing-head">
                 <strong>字幕显示时间</strong>
@@ -3571,6 +3589,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               </div>
               <p id="layoutCueTimingStatus" role="status" aria-live="polite">调整仅影响导出的字幕显示时间，不移动 WAV 或更改原始音频时间轴。单侧最多偏离 5 秒。</p>
             </section>
+            </details>
             <div class="layout-cue-grid">
               <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
               <div class="layout-cue-translation">
@@ -3609,7 +3628,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
-                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="使用当前特效生成最长 8 秒视频；选择短视频后叠加到本地素材上，否则使用黑底">播放动态特效</button>
+                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
 <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
                     <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
                   </div>
@@ -3620,36 +3639,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
-<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
-  <strong>卡拉 OK · 词级时间准备</strong>
-  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
-  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
-            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
-            <div class="actions" style="margin-top:6px">
-              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
-              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
-              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
-            </div>
-            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-</section>
-<div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
-  <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
-  <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
-  <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
-  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
-  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
-  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
-  <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
-  <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
-  <label for="effectFootageStart">源视频起始位置（秒）</label>
-  <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
-  <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
-  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
-</div>
-<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色，不影响最终 MKV。</div>
+
 
         <div class="preview-controls" id="previewControls">
           <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
@@ -3844,6 +3835,41 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
         </div>
+<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
+  <strong>卡拉 OK · 词级时间准备</strong>
+  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
+  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
+            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
+              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
+              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
+            </div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
+</section>
+<details class="hsr-preview-media-disclosure" data-studio-scope="effects">
+  <summary>预览视频、图片与底色 <small>可选素材</small></summary>
+  <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
+  <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
+  <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
+  <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
+  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
+  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
+  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
+  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
+  <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
+  <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
+  <label for="effectFootageStart">源视频起始位置（秒）</label>
+  <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
+  <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
+  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
+  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+</div>
+
+</details>
+
+
 
 
         <details class="preview-advanced" data-studio-scope="style">
@@ -3853,22 +3879,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔</label>
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文本包围盒</label>
           </div>
-          <div class="preview-background-controls">
-            <div>
-              <label for="previewBackgroundMode">工作台背景</label>
-              <select id="previewBackgroundMode">
-                <option value="gradient">中性渐变</option>
-                <option value="black">纯黑</option>
-                <option value="grid">明暗网格</option>
-                <option value="image">本地图片</option>
-              </select>
-            </div>
-            <div id="previewBackgroundFileWrap" class="hidden">
-              <label for="previewBackgroundFile">本地参考图片</label>
-              <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
-            </div>
-            <div class="small muted">背景仅存在于当前浏览器会话，用于判断可读性；不会上传、保存到项目或进入 ASS/MKV。</div>
-          </div>
+
         </details>
         </aside>
       </div>
@@ -4509,6 +4520,8 @@ if(location.search){history.replaceState(null,'',location.pathname)}
 const headers=()=>token?{'X-HSR-Token':token}:{};
 const log=document.getElementById('log');
 let currentProject=null,pollTimer=null;
+// A page reload must reattach to the server-owned job, not just draw one snapshot.
+let watchedJobId=null,jobPollGeneration=0;
 function syncProgressPlacement(){
   const card=document.getElementById('progressCard');
   const sideStack=document.getElementById('sideStack');
@@ -5525,12 +5538,23 @@ async function refresh(){
     document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失')+(rt.translation_api_key_configured?' · '+(rt.translation_provider||'AI')+' API ✓':'');
     if(rt.warnings?.length && !currentProject){setLog(rt.warnings.join('\n'))}
     fillProject(s.project);renderProjectSwitcher(s.recent_projects||[]);renderJobs(s.jobs);
+    const ongoing=(s.jobs||[]).find(job=>['queued','running'].includes(job.state));
+    if(ongoing&&ongoing.id!==watchedJobId){
+      // Browser refresh destroys timers, NOT the backend's active FFmpeg job.
+      // Reconnect to its actual ID without accidentally launching another mux.
+      void watchJob(ongoing.id);
+    }
   }catch(e){setLog(String(e));document.getElementById('mode').textContent='后端连接失败';showDiagnosticLog();}
 }
 async function watchJob(id){
+  if(!id||watchedJobId===id)return;
+  const generation=++jobPollGeneration;
+  watchedJobId=id;
   clearTimeout(pollTimer);
   let failures=0;
+  let lastCurrent=-1,lastAdvance=Date.now();
   const poll=async()=>{
+    if(generation!==jobPollGeneration)return;
     let terminal=false;
     let x=null;
     let lastError=null;
@@ -5551,9 +5575,25 @@ async function watchJob(id){
       if(textBox)textBox.textContent='进度连接暂时中断，正在自动重试…';
       if(failures>=3)setLog('进度轮询暂时失败：'+shortError(lastError)+'\n程序仍会自动重试。');
     }else{
+      if(generation!==jobPollGeneration)return;
       failures=0;
       try{
         renderJobs([x.job]);
+        if(x.job.state==='running'&&x.job.kind==='archive-bundle-export'){
+          const current=Number(x.job.progress_current||0);
+          if(current!==lastCurrent){lastCurrent=current;lastAdvance=Date.now()}
+          const elapsed=Date.now()-lastAdvance;
+          const status=document.getElementById('bundleOutputStatus');
+          if(status){
+            if(elapsed>90000){
+              status.textContent='MKV 编码进度超过 90 秒没有变化。后台任务仍显示运行中，请检查 FFmpeg 状态；刷新页面不会重新启动任务。';
+              status.className='small status-warn';
+            }else{
+              status.textContent='正在封装 MKV：'+jobProgressPercent(x.job)+'% · 后台任务已连接；页面刷新不会中断编码。';
+              status.className='small muted';
+            }
+          }
+        }
         if(x.job.state==='succeeded'){
           terminal=true;
           if(x.job.kind==='remote-update-check'){
@@ -5627,9 +5667,14 @@ async function watchJob(id){
         if(failures>=3)setLog('进度轮询暂时失败：'+shortError(e)+'\n程序仍会自动重试。');
       }
     }
+    if(generation!==jobPollGeneration)return;
     if(!terminal){
       const delay=failures?Math.min(4000,700*Math.pow(2,Math.min(failures,3))):700;
       pollTimer=setTimeout(poll,delay);
+    }else{
+      watchedJobId=null;
+      clearTimeout(pollTimer);
+      pollTimer=null;
     }
   };
   await poll();
@@ -6826,17 +6871,21 @@ function openFontBrowser(targetId){
 
 function applyPreviewBackground(){
   const stage=document.getElementById('previewCanvasContainer');
-  const mode=document.getElementById('previewBackgroundMode')?.value||'gradient';
+  const mode=document.getElementById('previewBackgroundMode')?.value||'reference';
   const image=document.getElementById('previewBackgroundImage');
   const grid=document.getElementById('previewBackgroundGrid');
   const wrap=document.getElementById('previewBackgroundFileWrap');
   if(!stage||!image||!grid)return;
   stage.classList.remove('preview-bg-gradient','preview-bg-black','preview-bg-image');
   grid.classList.toggle('hidden',mode!=='grid');
-  image.classList.toggle('hidden',mode!=='image'||!previewBackgroundObjectUrl);
+  if(mode==='reference'&&image.getAttribute('src')!=='/static/assets/studio-red-clouds.webp')
+    image.src='/static/assets/studio-red-clouds.webp';
+  else if(mode==='image'&&previewBackgroundObjectUrl&&image.src!==previewBackgroundObjectUrl)
+    image.src=previewBackgroundObjectUrl;
+  image.classList.toggle('hidden',!(mode==='reference'||(mode==='image'&&!!previewBackgroundObjectUrl)));
   if(wrap)wrap.classList.toggle('hidden',mode!=='image');
   if(mode==='black')stage.classList.add('preview-bg-black');
-  else if(mode==='image')stage.classList.add('preview-bg-image');
+  else if(mode==='image'||mode==='reference')stage.classList.add('preview-bg-image');
   else stage.classList.add('preview-bg-gradient');
 }
 
@@ -6849,6 +6898,7 @@ function loadPreviewBackgroundFile(file){
   image.src=previewBackgroundObjectUrl;
   image.classList.remove('hidden');
   applyPreviewBackground();
+  invalidateLibassPreview();
 }
 
 let previewDebounceTimer = null;
@@ -6987,7 +7037,8 @@ function libassPreviewPayload(){
     target_language:currentProject?.config?.target_language||'zh-CN',
     word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
     preview_duration_seconds:previewDuration,
-    preview_timestamp:Math.max(0.01,previewDuration*previewPercent)
+    preview_timestamp:Math.max(0.01,previewDuration*previewPercent),
+    use_studio_reference_background:document.getElementById('previewBackgroundMode')?.value==='reference'
   };
 }
 
@@ -7574,6 +7625,12 @@ function layoutTimingCheck(state){
     return '字幕显示时间的每个边界最多偏离原始音频时间 5 秒。';
   return '';
 }
+// Human-facing milliseconds only; preserve the unrounded underlying cue timing
+// until the user edits it, so opening the inspector never changes a subtitle.
+function displayCueSeconds(value){
+  const n=Number(value);
+  return Number.isFinite(n)?n.toFixed(3).replace(/0+$/,'').replace(/\.$/,''):'';
+}
 function renderLayoutCueTiming(){
   const sub=layoutCueRow(layoutCueActiveId),state=layoutTimingState(sub);
   const valid=!!sub&&layoutCorpusPersistable;
@@ -7586,7 +7643,7 @@ function renderLayoutCueTiming(){
     const input=document.getElementById(id);
     if(!input)continue;
     input.disabled=!valid;
-    if(document.activeElement!==input)input.value=state?String(value):'';
+    if(document.activeElement!==input)input.value=state?displayCueSeconds(value):'';
   }
   for(const btn of document.querySelectorAll('[data-timing-nudge]'))btn.disabled=!valid||!!state?.saving;
   const save=document.getElementById('layoutCueTimingSaveBtn');
@@ -7644,8 +7701,8 @@ function layoutCueRevertTimingDraft(){
   state.start=state.savedStart;
   state.end=state.savedEnd;
   const editorStart=document.getElementById('layoutCueTimingStart'),editorEnd=document.getElementById('layoutCueTimingEnd');
-  if(editorStart)editorStart.value=String(state.start);
-  if(editorEnd)editorEnd.value=String(state.end);
+  if(editorStart)editorStart.value=displayCueSeconds(state.start);
+  if(editorEnd)editorEnd.value=displayCueSeconds(state.end);
   invalidateLibassPreview();
   renderLayoutCueTiming();
   renderLayoutCorpusRail();
@@ -7799,8 +7856,8 @@ function layoutCueSelect(sub){
   const state=layoutCueState(sub);
   const timing=layoutTimingState(sub);
   const startInput=document.getElementById('layoutCueTimingStart'),endInput=document.getElementById('layoutCueTimingEnd');
-  if(startInput)startInput.value=String(timing.start);
-  if(endInput)endInput.value=String(timing.end);
+  if(startInput)startInput.value=displayCueSeconds(timing.start);
+  if(endInput)endInput.value=displayCueSeconds(timing.end);
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
   if(status){
@@ -8769,6 +8826,7 @@ async function renderHsrEffectVideo(){
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
   const backgroundImage=effectBackgroundImageFile;
+  const usesReference=!footage&&!backgroundImage&&document.getElementById('previewBackgroundMode')?.value==='reference';
   const footageStart=document.getElementById('effectFootageStart')?.value||'0';
   const footageAudio=!!document.getElementById('effectFootageAudio')?.checked;
   const backgroundColor=document.getElementById('effectPreviewBackgroundColor')?.value||'#000000';
@@ -8784,18 +8842,19 @@ async function renderHsrEffectVideo(){
     if(button)button.disabled=true;
     setPreviewEvidence('rendering',footage?'正在把当前 ASS 效果叠加到选定的真实本地视频…':'正在渲染真实连续视频；单帧图片不作为本操作的成功结果。');
     if(status)status.textContent=footage?'正在读取本地视频并使用 FFmpeg/libass 合成…':
-      backgroundImage?'正在将本地背景图片逐帧合成真实字幕视频…':'正在 FFmpeg/libass 合成自选纯色背景动态字幕…';
+      backgroundImage?'正在将本地背景图片逐帧合成真实字幕视频…':usesReference?'正在以红云参考图合成动态字幕视频…':'正在 FFmpeg/libass 合成自选纯色背景动态字幕…';
     const player=document.getElementById('libassVideoPreview');
     payload.preview_format=player?.canPlayType?.('video/webm; codecs="vp8"')?'webm':'mp4';
     payload.source_start_seconds=effectFootageOffset();
     payload.include_source_audio=!!footage&&footageAudio;
     payload.preview_background_color=backgroundColor;
+    payload.use_studio_reference_background=usesReference;
     if(footage)payload.source_video_base64=await effectFootageAsBase64(footage);
     else if(backgroundImage){
       if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
         throw new Error('背景图片只支持 PNG、JPEG 或 WebP');
       if(!backgroundImage.size||backgroundImage.size>64*1024*1024)
-        throw new Error('背景图片必须在 16 MiB 以内');
+        throw new Error('背景图片必须在 64 MiB 以内');
       payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
     }
     if(!stillCurrent())return;
@@ -8816,7 +8875,7 @@ async function renderHsrEffectVideo(){
     if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
     setHsrEffectOperation('decoding','处理主机已返回视频，正在等待浏览器解码第一帧。');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
-    if(actualBackground && actualBackground!==(footage?'local-footage':backgroundImage?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
+    if(actualBackground && actualBackground!==(footage?'local-footage':(backgroundImage||usesReference)?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
       throw new Error('服务器响应的背景来源与当前选择不一致');
     }
     const video=document.getElementById('libassVideoPreview');
@@ -8843,7 +8902,7 @@ async function renderHsrEffectVideo(){
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
+    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
@@ -8870,7 +8929,7 @@ document.getElementById('fontBrowserSearch')?.addEventListener('input',(event)=>
   clearTimeout(fontBrowserTimer);
   fontBrowserTimer=setTimeout(()=>loadFontBrowser(event.target.value||''),180);
 });
-document.getElementById('previewBackgroundMode')?.addEventListener('change',applyPreviewBackground);
+document.getElementById('previewBackgroundMode')?.addEventListener('change',()=>{applyPreviewBackground();invalidateLibassPreview();});
 document.getElementById('previewBackgroundFile')?.addEventListener('change',(event)=>{
   try{loadPreviewBackgroundFile(event.target.files?.[0]||null)}
   catch(error){setLog(String(error))}
