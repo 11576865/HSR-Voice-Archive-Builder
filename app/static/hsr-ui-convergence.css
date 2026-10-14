@@ -73,64 +73,88 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
  #subtitleLayoutPreviewCard .hsr-export-advanced{align-self:stretch}
 }
 
-#subtitleLayoutPreviewCard #hsrTouchSliderToggle,
-#subtitleLayoutPreviewCard #hsrTouchSliderHint{display:none}
-/* Operational viewport: keep long Inspector/Cue panels from expanding the
-   browser document indefinitely. Internal regions scroll independently. */
-@media (min-width:1100px) and (min-height:600px) and (pointer:fine) {
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open){
-    height:clamp(440px,calc(100dvh - 225px),1100px)!important;
-    max-height:calc(100dvh - 120px)!important;
-    min-height:0!important;
-    overflow:hidden!important;
-    align-items:stretch!important;
+/* Layout and Effects share one bounded workbench on EVERY pointer class.
+   No alternative full-screen focus mode is required. The document should
+   not become an unbounded sequence of parameter controls. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
+  display:grid!important;
+  height:clamp(340px,calc(100dvh - 210px),880px)!important;
+  max-height:calc(100dvh - 120px)!important;
+  min-height:0!important;
+  overflow:hidden!important;
+  position:relative!important;
+  align-items:stretch!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region,
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.preview-inspector{
+  min-width:0!important;min-height:0!important;
+  width:100%!important;height:100%!important;max-height:100%!important;
+  overflow-x:hidden!important;overflow-y:auto!important;
+  overscroll-behavior-y:contain;scrollbar-gutter:stable;
+  position:relative!important;top:auto!important;
+}
+@media(min-width:980px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
+    grid-template-columns:minmax(0,1fr) minmax(300px,min(36vw,430px))!important;
+    grid-template-rows:minmax(0,1fr)!important;
   }
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.layout-preview-region,
-  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open)>.preview-inspector{
-    height:100%!important;
-    max-height:100%!important;
-    min-height:0!important;
-    overflow-y:auto!important;
-    overflow-x:hidden!important;
-    overscroll-behavior-y:contain;
-    scrollbar-gutter:stable;
-    position:relative!important;
-    top:auto!important;
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
+    grid-area:1 / 1 / 2 / 2!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.preview-inspector{
+    grid-area:1 / 2 / 2 / 3!important;
   }
 }
-/* On touch devices a compact Inspector remains reachable without turning the
-   whole page into a column of dozens of permanent sliders. */
-@media (pointer:coarse){
-  #subtitleLayoutPreviewCard .preview-inspector{
-    max-height:min(70dvh,720px)!important;
-    overflow-y:auto!important;
-    overscroll-behavior-y:contain;
-    scrollbar-gutter:stable;
+@media(max-width:979px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench{
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:minmax(0,44%) minmax(0,56%)!important;
+    height:max(340px,calc(100dvh - 196px))!important;
   }
-  #subtitleLayoutPreviewCard .preview-inspector:not(.hsr-touch-sliders-unlocked) input[type="range"]{
-    pointer-events:none!important;
-    touch-action:pan-y;
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
+    grid-area:1 / 1 / 2 / 2!important;
   }
-  #subtitleLayoutPreviewCard .preview-inspector.hsr-touch-sliders-unlocked input[type="range"]{
-    pointer-events:auto!important;
-    touch-action:none;
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.preview-inspector{
+    grid-area:2 / 1 / 3 / 2!important;
+    border-top:1px solid var(--layout-border);
   }
-  #subtitleLayoutPreviewCard #hsrTouchSliderToggle{
-    display:inline-flex!important;
-    min-height:40px;
-    padding:7px 10px;
-    align-items:center;
-    justify-content:center;
-    border:1px solid var(--layout-border);
-    background:var(--layout-section);
-    color:var(--layout-text);
+}
+/* QA is a bounded drawer within the workbench, not another expanded page. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench.audit-open>.layout-corpus-rail{
+  display:flex!important;position:absolute!important;top:0!important;bottom:0!important;
+  left:0!important;width:min(340px,100%)!important;height:100%!important;
+  max-height:100%!important;overflow:hidden!important;z-index:15;
+  box-shadow:6px 0 22px rgba(0,0,0,.24);
+}
+#subtitleLayoutPreviewCard>.layout-workflow-strip,
+#subtitleLayoutPreviewCard>p.small.muted{display:none!important}
+/* Touch: numeric fields are explicit intentional edits; upward/downward
+   scrolling cannot hit an invisible/unlocked range control. Mouse/keyboard
+   users retain the existing sliders and undo behavior. */
+#subtitleLayoutPreviewCard .hsr-touch-stepper{display:none}
+@media(pointer:coarse){
+  #subtitleLayoutPreviewCard .preview-inspector input[type="range"]{display:none!important}
+  #subtitleLayoutPreviewCard .preview-inspector .hsr-touch-stepper{
+    display:grid!important;grid-template-columns:46px minmax(0,1fr) 46px;
+    align-items:center;gap:6px;margin:5px 0 11px;
   }
-  #subtitleLayoutPreviewCard #hsrTouchSliderHint{
-    display:block;
-    padding:7px 12px;
-    margin:0;
-    color:var(--layout-muted);
-    font-size:11px;
+  #subtitleLayoutPreviewCard .hsr-touch-number{
+    display:block!important;min-height:44px;width:100%;min-width:0;
+    padding:8px 10px;font-size:16px;text-align:center;
+    border:1px solid var(--layout-border);border-radius:6px;
+    background:var(--layout-section);color:var(--layout-text);
+  }
+  #subtitleLayoutPreviewCard .hsr-touch-stepper button{
+    min-height:44px;min-width:44px;padding:5px;
+    border:1px solid var(--layout-border);border-radius:6px;
+    background:var(--layout-section);color:var(--layout-text);
+    touch-action:manipulation;
+  }
+  #subtitleLayoutPreviewCard .hsr-touch-stepper button:disabled{opacity:.35}
+  /* Timeline can already be moved by explicit previous/next buttons and
+     the viewport selector. A range slider adds no necessary touch task. */
+  #subtitleLayoutPreviewCard .layout-timeline-navigation input[type="range"]{
+    display:none!important;
   }
 }
 #subtitleLayoutPreviewCard .hsr-alignment-help{
@@ -212,131 +236,6 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
 @media(max-width:760px){
   #archiveBundlePanel .hsr-bundle-options{grid-template-columns:minmax(0,1fr)}
   #archiveBundlePanel .hsr-bundle-options .check{grid-column:auto}
-}
-
-/* Optional focus viewport: the browser document stops being the editor's
-   infinite scroll surface. Only the active task panels scroll. */
-#subtitleLayoutPreviewCard #hsrStudioFocusToggle{
-  min-height:40px;min-width:110px;padding:7px 10px;
-  border:1px solid var(--layout-border);border-radius:7px;
-  color:var(--layout-text);background:var(--layout-section);
-  font-size:12px;font-weight:700;
-}
-#subtitleLayoutPreviewCard #hsrStudioFocusToggle[aria-pressed="true"]{
-  border-color:var(--layout-evidence-accent);
-}
-body[data-hsr-studio-focus="true"]{
-  overflow:hidden!important;overscroll-behavior:none;
-}
-body[data-workspace="layout"][data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active{
-  position:fixed!important;inset:0!important;z-index:990!important;
-  display:flex!important;flex-direction:column!important;
-  height:100dvh!important;max-height:100dvh!important;
-  width:100dvw!important;max-width:100dvw!important;
-  margin:0!important;padding:0!important;border-radius:0!important;
-  overflow:hidden!important;
-}
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline{
-  flex:0 0 auto;min-height:0!important;
-}
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>p.small.muted,
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.layout-workflow-strip{
-  display:none!important;
-}
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.hsr-studio-toolbar,
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.layout-export-health{
-  flex:0 0 auto;max-height:20dvh;overflow-y:auto;
-}
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench{
-  flex:1 1 0%!important;min-height:0!important;max-height:none!important;
-  height:auto!important;overflow-y:auto!important;overflow-x:hidden!important;
-  overscroll-behavior:contain;scrollbar-gutter:stable;
-}
-@media(min-width:1100px) and (pointer:fine){
-  body[data-workspace="layout"][data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench:not(.audit-open){
-    display:grid!important;
-    grid-template-columns:minmax(0,1fr) clamp(350px,27vw,460px)!important;
-    align-items:stretch!important;
-  }
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench:not(.audit-open)>.layout-preview-region,
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench:not(.audit-open)>.preview-inspector{
-    position:relative!important;top:auto!important;
-    height:100%!important;max-height:100%!important;min-height:0!important;
-    overflow-y:auto!important;overflow-x:hidden!important;
-    overscroll-behavior:contain;
-  }
-}
-@media(max-width:1099px), (pointer:coarse){
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench{
-    display:block!important;
-  }
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench>.layout-preview-region,
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.preview-workbench>.preview-inspector{
-    position:relative!important;top:auto!important;
-    width:100%!important;max-height:none!important;height:auto!important;
-    overflow:visible!important;
-  }
-}
-
-
-/* Touch scroll ownership extends to every range in the shared studio, not
-   only the Inspector: the timeline corpus scrollbar is a range as well.
-   A deliberately armed edit is auto-disarmed after one touch gesture. */
-@media (pointer:coarse){
-  #subtitleLayoutPreviewCard:not(.hsr-touch-sliders-unlocked) .layout-timeline-navigation input[type="range"]{
-    pointer-events:none!important;touch-action:pan-y;
-  }
-  #subtitleLayoutPreviewCard.hsr-touch-sliders-unlocked .layout-timeline-navigation input[type="range"]{
-    pointer-events:auto!important;touch-action:none;
-  }
-}
-/* Toolbar control remains reachable without scrolling deep inside Inspector. */
-#subtitleLayoutPreviewCard .hsr-touch-control{
-  display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;
-}
-
-
-/* The focused editor exposes in-place Layout/Effects task switching without
-   hiding the only navigation behind the fullscreen card. */
-#subtitleLayoutPreviewCard .hsr-focus-task-nav{display:none}
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav{
-  display:flex!important;flex:0 0 auto;align-items:center;gap:8px;flex-wrap:wrap;
-  padding:6px 12px;border-bottom:1px solid var(--layout-border);
-  background:var(--surface-secondary);
-}
-#subtitleLayoutPreviewCard .hsr-focus-task-nav button{
-  min-height:40px;padding:7px 12px;border-radius:6px;
-  border:1px solid var(--layout-border);font-size:12px;
-}
-#subtitleLayoutPreviewCard .hsr-focus-task-nav button[aria-current="page"]{
-  border-color:var(--layout-evidence-accent);font-weight:750;
-}
-@media(max-width:759px){
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline{
-    padding:7px 10px!important;
-  }
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard.hsr-focus-active>.topline h2{
-    font-size:16px!important;
-  }
-  body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav{
-    padding:4px 8px;gap:6px;
-  }
-}
-/* Focus and touch contexts must maintain keyboard focus and visible controls. */
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard .hsr-focus-task-nav :focus-visible,
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrStudioFocusToggle:focus-visible,
-body[data-hsr-studio-focus="true"] #subtitleLayoutPreviewCard #hsrTouchSliderToggle:focus-visible{
-  outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
-}
-
-/* Font recovery is a first-class action, not buried behind Inspector scrolling. */
-#subtitleLayoutPreviewCard #hsrFontImportShortcut{
-  min-height:40px;padding:7px 10px;border:1px solid var(--layout-border);
-  border-radius:6px;background:var(--layout-section);color:var(--layout-text);
-  font-size:12px;font-weight:700;
-}
-#subtitleLayoutPreviewCard #hsrFontImportShortcut:focus-visible{
-  outline:2px solid var(--layout-evidence-accent);outline-offset:2px;
 }
 
 /* Effects results and alignment prerequisites are immediately visible in the
