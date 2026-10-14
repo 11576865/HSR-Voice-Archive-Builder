@@ -7176,13 +7176,14 @@ async function loadWordAlignmentDiagnostics(){
         providerStatus.className='small status-ok';
       }else{
         const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
-        providerStatus.textContent='本地对齐器不可用：缺少 '+missingPackages+'。可选安装：python -m pip install whisperx';
+        providerStatus.textContent='此设备当前不能本地生成词级时间：缺少 '+missingPackages+'。可以在支持 WhisperX/PyTorch 的处理主机生成后，导入与本项目匹配的 JSON。';
         providerStatus.className='small muted';
       }
     }
     if(generateButton){
       generateButton.disabled=!provider.available;
-      generateButton.title=provider.available?'只为当前缺失/无效条目生成可靠词级时间':'需要处理主机安装 WhisperX；不会自动安装大型依赖';
+      generateButton.hidden=!provider.available;
+      generateButton.title=provider.available?'为当前缺失或无效的条目生成逐词时间':'此设备无法运行 WhisperX/PyTorch，请导入匹配的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
@@ -7193,7 +7194,7 @@ async function loadWordAlignmentDiagnostics(){
     }else if(usable<=0){
       setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
         ?'可以直接点击「本地生成缺失时间」。'
-        :'处理主机缺少 WhisperX；可在主机安装，或导入由其他工具生成的匹配 JSON。'),'warning');
+        :'当前处理环境没有可运行的本地词级对齐器；请从其他支持的环境生成匹配 JSON 后导入。'),'warning');
       status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
     }else{
@@ -7242,7 +7243,7 @@ async function generateLocalWordAlignments(){
     setLog(String(err));
     await loadWordAlignmentDiagnostics();
   }finally{
-    if(button&&!button.title.includes('需要处理主机安装'))button.disabled=false;
+    if(button&&!button.hidden)button.disabled=false;
   }
 }
 
