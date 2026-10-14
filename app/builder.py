@@ -522,9 +522,9 @@ def build_entries(
     bilingual_csv: Path,
     chs_lab_root: Path,
     wav_root: Path,
-    same_group_gap: float = 1.50,
-    group_gap: float = 3.00,
-    intro_gap: float = 9.0,
+    same_group_gap: float = 2.50,
+    group_gap: float = 5.00,
+    intro_gap: float = 10.0,
     reference_lab_root: Path | None = None,
     reference_language: str = "auto",
     source_text_language: str = "en",
@@ -1194,9 +1194,9 @@ def build_chapter_flac_collection(
     wav_root: Path,
     output_dir: Path,
     *,
-    intro_gap: float = 9.0,
-    same_group_gap: float = 1.50,
-    group_gap: float = 3.00,
+    intro_gap: float = 10.0,
+    same_group_gap: float = 2.50,
+    group_gap: float = 5.00,
     compression_level: int = 8,
 ) -> dict[str, object]:
     """Build and atomically publish one verified continuous FLAC per major group."""
@@ -1347,8 +1347,8 @@ def build_project(
     chs_source: Path,
     wav_source: Path,
     out_dir: Path,
-    same_group_gap: float = 1.50,
-    group_gap: float = 3.00,
+    same_group_gap: float = 2.50,
+    group_gap: float = 5.00,
     make_flac: bool = True,
 ) -> dict[str, object]:
     out_dir.mkdir(parents=True, exist_ok=True)
@@ -1380,8 +1380,8 @@ if __name__ == "__main__":
     p.add_argument("--chs", type=Path, required=True, help="Chinese LAB directory / zip / 7z")
     p.add_argument("--wavs", type=Path, required=True, help="WAV directory / zip / 7z")
     p.add_argument("--out", type=Path, required=True)
-    p.add_argument("--same-gap", type=float, default=1.50)
-    p.add_argument("--group-gap", type=float, default=3.00)
+    p.add_argument("--same-gap", type=float, default=2.50)
+    p.add_argument("--group-gap", type=float, default=5.00)
     p.add_argument("--no-flac", action="store_true")
     a = p.parse_args()
     print(json.dumps(build_project(

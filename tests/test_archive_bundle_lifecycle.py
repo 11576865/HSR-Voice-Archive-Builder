@@ -124,12 +124,15 @@ class BundleLifecycleTests(unittest.TestCase):
                       else '@app.post("/api/output/archive-bundle")')
             pos = code.index(anchor)
             section = code[pos:pos + 1850]
-            self.assertIn('data.get("reuse_saved_background") is True', section, path)
+            reuse_check = ('_bool(data.get("reuse_saved_background"))'
+                           if path.endswith("lite_server.py")
+                           else 'data.get("reuse_saved_background") is True')
+            self.assertIn(reuse_check, section, path)
             self.assertIn('load_previous_bundle_image(output)', section, path)
         html = (repo / "app/static/index.html").read_text(encoding="utf-8")
         self.assertIn('id="bundleFreshnessStatus"', html)
         self.assertIn('id="bundleReuseBackground"', html)
-        self.assertIn("reuse_saved_background:spec.mode==='image'&&!file", html)
+        self.assertIn("reuse_saved_background:reuse", html)
         self.assertIn("bundleFormProjectRoot=null", html)
 
 

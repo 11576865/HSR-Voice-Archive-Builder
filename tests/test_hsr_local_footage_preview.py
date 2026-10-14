@@ -200,10 +200,14 @@ class LocalFootageContractTests(unittest.TestCase):
         for options in [
             {"background_image_bytes": png, "source_video_bytes": b"clip"},
             {"background_image_bytes": b"not-an-image"},
-            {"background_image_bytes": png + b"x" * (16 * 1024 * 1024)},
         ]:
             with self.subTest(options=str(options.keys())), self.assertRaises(ValueError):
                 self.call(**options)
+        # Exercise the strict size guard without allocating an entire 64 MiB
+        # image in unit tests; the real shared limit has its own contract test.
+        with patch("app.ass_preview.MAX_BACKGROUND_BYTES", len(png)):
+            with self.assertRaises(ValueError):
+                self.call(background_image_bytes=png + b"x")
 
     def test_api_accepts_verified_background_image_identity(self):
         client = TestClient(app, base_url="http://127.0.0.1:8765")

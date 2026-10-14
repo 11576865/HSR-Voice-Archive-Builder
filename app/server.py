@@ -15,7 +15,10 @@ from fastapi.staticfiles import StaticFiles
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
 from .gpt_sovits_routes import router as gpt_sovits_router, configure_project_resolver
-from .credentials import translation_default_model
+from .credentials import (
+    translation_default_model, credentials_status,
+    save_translation_credentials, test_saved_translation_credentials,
+)
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
@@ -816,7 +819,7 @@ async def api_subtitle_layout_render_preview(request: Request):
 @app.post("/api/subtitle-layout/render-preview-video")
 async def api_subtitle_layout_render_preview_video(request: Request):
     try:
-        max_body = 36 * 1024 * 1024
+        max_body = 96 * 1024 * 1024
         size = request.headers.get("content-length")
         if size is not None and int(size) > max_body:
             raise ValueError("Preview JSON body exceeds 36 MiB")
@@ -889,6 +892,50 @@ def api_status():
     }
 
 
+@app.get("/api/translation/credentials")
+def api_translation_credentials():
+    """Expose configuration status, never the stored API key."""
+    return {"ok": True, **credentials_status()}
+
+
+@app.post("/api/translation/credentials")
+async def api_save_translation_credentials(request: Request):
+    try:
+        raw = await request.body()
+        if len(raw) > 8192:
+            raise ValueError("翻译 API 配置请求过大")
+        data = json.loads(raw)
+        if not isinstance(data, dict):
+            raise ValueError("翻译 API 配置必须为对象")
+        save_translation_credentials(
+            str(data.get("provider") or "custom"),
+            str(data.get("base_url") or ""),
+            str(data.get("api_key") or ""),
+            str(data.get("model") or ""),
+        )
+        return {"ok": True, **credentials_status(), "tested": False}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/translation/test")
+async def api_test_translation_credentials(request: Request):
+    try:
+        raw = await request.body()
+        if len(raw) > 4096:
+            raise ValueError("API 检测请求过大")
+        data = json.loads(raw) if raw else {}
+        if not isinstance(data, dict):
+            raise ValueError("API 检测参数格式错误")
+        result = await run_in_threadpool(
+            test_saved_translation_credentials,
+            model=str(data.get("model") or ""), timeout=20.0,
+        )
+        return result
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
 @app.get("/api/quick/candidates")
 def api_quick_candidates():
     try:
@@ -930,9 +977,9 @@ def api_quick_build(
     project_name: str = Form(""),
     translation_token_budget: int = Form(0),
     translation_budget_usd: float = Form(0.0),
-    intro_gap: float = Form(9.0),
-    same_group_gap: float = Form(1.50),
-    group_gap: float = Form(3.00),
+    intro_gap: float = Form(10.0),
+    same_group_gap: float = Form(2.50),
+    group_gap: float = Form(5.00),
     reference_source: str = Form(""),
     audio_language: str = Form("auto"),
     source_text_language: str = Form("en"),
@@ -1213,9 +1260,9 @@ def api_project_save(
     update_candidates: str = Form(""),
     remote_character: str = Form(""),
     remote_index_url: str = Form(""),
-    intro_gap: float = Form(9.0),
-    same_group_gap: float = Form(1.50),
-    group_gap: float = Form(3.00),
+    intro_gap: float = Form(10.0),
+    same_group_gap: float = Form(2.50),
+    group_gap: float = Form(5.00),
     make_flac: bool = Form(False),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),
@@ -1744,11 +1791,11 @@ async def _read_bounded_bundle_json(request: Request) -> dict:
     """Enforce upload budget on bytes received, not Content-Length alone."""
     length = request.headers.get("content-length")
     if length is not None and int(length) > MAX_BUNDLE_JSON_BYTES:
-        raise ValueError("MKV background JSON request exceeds 24 MiB")
+        raise ValueError("MKV background JSON request exceeds 96 MiB")
     raw = bytearray()
     async for chunk in request.stream():
         if len(raw) + len(chunk) > MAX_BUNDLE_JSON_BYTES:
-            raise ValueError("MKV background JSON request exceeds 24 MiB")
+            raise ValueError("MKV background JSON request exceeds 96 MiB")
         raw.extend(chunk)
     data = json.loads(raw)
     if not isinstance(data, dict):
@@ -1851,6 +1898,7 @@ async def api_output_archive_bundle(request: Request):
             ).export(
                 source, subtitle, target, fonts_dir=font_asset_directory(output),
                 include_fonts=include_fonts, background_color=color, background_image=image, background_spec=spec,
+                include_chapter_flac=config.generate_chapter_flac,
                 require_current_ass=True,
                 progress=lambda current, total, msg: report_progress("encode", msg, current, total),
             )
@@ -1900,8 +1948,8 @@ def legacy_build(
     chs_source: str = Form(""),
     wav_source: str = Form(...),
     output_dir: str = Form(...),
-    same_gap: float = Form(1.50),
-    group_gap: float = Form(3.00),
+    same_gap: float = Form(2.50),
+    group_gap: float = Form(5.00),
     make_flac: bool = Form(False),
     chapter_order: bool = Form(False),
     generate_chapter_flac: bool = Form(False),

@@ -15,7 +15,10 @@ from urllib.parse import parse_qs, urlsplit
 
 from .builder import atomic_write_text, ensure_dir_or_extract
 from .ass_preview import decode_preview_source_video, normalize_preview_background_color, preview_config_from_payload, render_ass_preview_png, render_ass_preview_video
-from .credentials import translation_default_model
+from .credentials import (
+    translation_default_model, credentials_status,
+    save_translation_credentials, test_saved_translation_credentials,
+)
 from .black_video_exporter import BlackVideoExporter
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
@@ -208,7 +211,7 @@ class Handler(BaseHTTPRequestHandler):
     def _read_body(self) -> bytes:
         length = _int(self.headers.get("Content-Length", "0"), 0)
         endpoint = urlsplit(self.path).path
-        max_body = (36 * 1024 * 1024 if endpoint == "/api/subtitle-layout/render-preview-video" else
+        max_body = (96 * 1024 * 1024 if endpoint == "/api/subtitle-layout/render-preview-video" else
                     18 * 1024 * 1024 if endpoint == "/api/subtitle-layout/import-font" else
                     MAX_BUNDLE_JSON_BYTES if endpoint in (
                         "/api/output/archive-bundle",
@@ -381,6 +384,9 @@ class Handler(BaseHTTPRequestHandler):
                 "jobs": recent_jobs(20),
                 "runtime": dependency_status(),
             })
+            return
+        if path == "/api/translation/credentials":
+            self._json({"ok": True, **credentials_status()})
             return
         if path == "/api/recovery/export":
             config = _active_config()
@@ -571,6 +577,18 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/translation/credentials":
+            save_translation_credentials(
+                data.get("provider", "custom"), data.get("base_url", ""),
+                data.get("api_key", ""), data.get("model", ""),
+            )
+            self._json({"ok": True, **credentials_status(), "tested": False})
+            return
+        if path == "/api/translation/test":
+            self._json(test_saved_translation_credentials(
+                model=data.get("model", ""), timeout=20.0,
+            ))
+            return
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             assert_project_idle(config.root)
@@ -919,9 +937,9 @@ class Handler(BaseHTTPRequestHandler):
                 config,
                 translation_token_budget=max(0, _int(data.get("translation_token_budget"), 0)),
                 translation_budget_usd=max(0.0, _float(data.get("translation_budget_usd"), 0.0)),
-                intro_gap=max(0.0, _float(data.get("intro_gap"), 9.0)),
-                same_group_gap=max(0.0, _float(data.get("same_group_gap"), 1.50)),
-                group_gap=max(0.0, _float(data.get("group_gap"), 3.00)),
+                intro_gap=max(0.0, _float(data.get("intro_gap"), 10.0)),
+                same_group_gap=max(0.0, _float(data.get("same_group_gap"), 2.50)),
+                group_gap=max(0.0, _float(data.get("group_gap"), 5.00)),
                 chapter_order=_bool(data.get("chapter_order")),
                 generate_chapter_flac=_bool(data.get("generate_chapter_flac")),
                 delivery_mode=data.get("delivery_mode", "complete"),
@@ -1132,9 +1150,9 @@ class Handler(BaseHTTPRequestHandler):
                 update_candidates=data.get("update_candidates", "").strip(),
                 remote_character=data.get("remote_character", "").strip(),
                 remote_index_url=data.get("remote_index_url", "").strip() or config.remote_index_url,
-                intro_gap=max(0.0, _float(data.get("intro_gap"), 9.0)),
-                same_group_gap=max(0.0, _float(data.get("same_group_gap"), 1.50)),
-                group_gap=_float(data.get("group_gap"), 3.00),
+                intro_gap=max(0.0, _float(data.get("intro_gap"), 10.0)),
+                same_group_gap=max(0.0, _float(data.get("same_group_gap"), 2.50)),
+                group_gap=_float(data.get("group_gap"), 5.00),
                 make_flac=_bool(data.get("make_flac")),
                 chapter_order=_bool(data.get("chapter_order")),
                 generate_chapter_flac=_bool(data.get("generate_chapter_flac")),
@@ -1480,9 +1498,11 @@ class Handler(BaseHTTPRequestHandler):
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV preview project context changed")
             image = decode_bundle_background(data.get("background_image_base64"))
-            if image is None and data.get("reuse_saved_background") is True:
+            if image is None and _bool(data.get("reuse_saved_background")):
                 image = load_previous_bundle_image(output)
             raw_spec = data.get("background_spec")
+            if isinstance(raw_spec, str) and raw_spec.strip():
+                raw_spec = json.loads(raw_spec)
             spec = normalize_bundle_background(raw_spec if raw_spec is not None else {
                 "mode": "image" if image is not None else "color",
             })
@@ -1504,9 +1524,11 @@ class Handler(BaseHTTPRequestHandler):
             if str(data.get("expected_project_root") or "") != str(config.root):
                 raise ValueError("MKV export project context changed")
             image = decode_bundle_background(data.get("background_image_base64"))
-            if image is None and data.get("reuse_saved_background") is True:
+            if image is None and _bool(data.get("reuse_saved_background")):
                 image = load_previous_bundle_image(output)
             raw_spec = data.get("background_spec")
+            if isinstance(raw_spec, str) and raw_spec.strip():
+                raw_spec = json.loads(raw_spec)
             spec = normalize_bundle_background(raw_spec if raw_spec is not None else {
                 "mode": "image" if image is not None else "color",
             })
@@ -1535,7 +1557,8 @@ class Handler(BaseHTTPRequestHandler):
                 ).export(
                     source, subtitle, target, fonts_dir=font_asset_directory(output),
                     include_fonts=include_fonts, background_color=color, background_image=image, background_spec=spec,
-                require_current_ass=True,
+                    include_chapter_flac=config.generate_chapter_flac,
+                    require_current_ass=True,
                     progress=lambda current, total, msg: report_progress("encode", msg, current, total),
                 )
                 seal_complete_delivery(output)

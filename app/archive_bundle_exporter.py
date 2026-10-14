@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Callable
 
 from .project_fonts import font_asset_directory, list_project_fonts
+from .chapter_audio_tracks import chapter_audio_tracks
 from .subtitle_export_status import read_subtitle_export_health
 from .archive_bundle_lifecycle import RECEIPT, record_bundle_publication
 from .archive_bundle_backgrounds import (
@@ -37,13 +38,13 @@ def decode_bundle_background(encoded: object) -> bytes | None:
     if not encoded:
         return None
     if not isinstance(encoded, str) or len(encoded) > ((MAX_BACKGROUND_BYTES + 2) // 3) * 4 + 16:
-        raise ValueError("Background image exceeds the 16 MiB maximum")
+        raise ValueError("Background image exceeds the 64 MiB maximum")
     try:
         raw = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error) as exc:
         raise ValueError("Background image must be valid base64") from exc
     if not 0 < len(raw) <= MAX_BACKGROUND_BYTES:
-        raise ValueError("Background image must be 1 byte to 16 MiB")
+        raise ValueError("Background image must be 1 byte to 64 MiB")
     image_extension(raw)  # Reject misleading/unknown input before job creation.
     return raw
 
@@ -97,6 +98,7 @@ class ArchiveBundleExporter:
         background_color: str = "#000000",
         background_image: bytes | None = None,
         background_spec: dict[str, str] | None = None,
+        include_chapter_flac: bool = False,
         progress: ProgressCallback | None = None,
         require_current_ass: bool = False,
     ) -> dict[str, object]:
@@ -121,7 +123,7 @@ class ArchiveBundleExporter:
         })
         if background_image is not None:
             if not isinstance(background_image, bytes) or not 0 < len(background_image) <= MAX_BACKGROUND_BYTES:
-                raise ValueError("Background image exceeds the 16 MiB maximum")
+                raise ValueError("Background image exceeds the 64 MiB maximum")
             suffix = image_extension(background_image)
         else:
             suffix = None
@@ -145,9 +147,11 @@ class ArchiveBundleExporter:
                 if font.is_symlink() or not font.is_file():
                     raise ValueError("Invalid font attachment")
                 fonts.append((font, ATTACHMENT_MIME[font.suffix.lower()]))
+        chapters = chapter_audio_tracks(target.parent) if include_chapter_flac else []
         # Capture exact input identities before FFmpeg opens them: external
         # FLAC, ASS, or font changes can overlap even serialized output jobs.
         source_inputs = (audio, subtitles, *((srt,) if has_srt else ()),
+                         *(track for track, _ in chapters),
                          *(font for font, _ in fonts))
 
         def source_snapshot(path: Path) -> tuple[int, int, int, int]:
@@ -220,19 +224,25 @@ class ArchiveBundleExporter:
                     f"pad={self.width}:{self.height}:(ow-iw)/2:(oh-ih)/2:color={color},"
                     "setsar=1"
                 )
-            # One FLAC audio stream; ASS defaults to visible and SRT is a
-            # separately selectable text-subtitle fallback in Matroska.
+            # Main FLAC stays the default; each generated chapter is a separate
+            # selectable, stream-copied FLAC rather than a mixed audio bed.
             cmd += ["-i", str(audio), "-i", str(subtitles)]
             if has_srt:
                 cmd += ["-i", str(srt)]
+            for chapter_path, _ in chapters:
+                cmd += ["-i", str(chapter_path)]
             cmd += [
-                "-map", "0:v:0", "-map", "1:a:0", "-map", "2:s:0",
+                "-map", "0:v:0", "-map", "1:a:0",
+                *(part for n, _ in enumerate(chapters, start=3 + int(has_srt))
+                  for part in ("-map", f"{n}:a:0")),
+                "-map", "2:s:0",
                 *(['-map', '3:s:0'] if has_srt else []),
                 "-c:v", "libx264", "-preset", "ultrafast",
                 "-crf", str(QUALITIES[spec["quality"]]),
                 "-tune", "stillimage", "-pix_fmt", "yuv420p",
                 "-c:a", "copy", "-c:s:0", "ass",
                 "-metadata:s:a:0", "title=HSR continuous voice",
+                "-disposition:a:0", "default",
                 "-metadata:s:s:0", "title=HSR ASS subtitles",
                 "-disposition:s:0", "default",
             ]
@@ -242,6 +252,10 @@ class ArchiveBundleExporter:
                     "-metadata:s:s:1", "title=HSR SRT subtitles",
                     "-disposition:s:1", "0",
                 ]
+            for index, (_, group_id) in enumerate(chapters, start=1):
+                title = group_id.replace("\\r", " ").replace("\\n", " ")[:120]
+                cmd += [f"-metadata:s:a:{index}", f"title=HSR {title}",
+                        f"-disposition:a:{index}", "0"]
             if video_filter:
                 cmd += ["-vf", video_filter]
             for index, (font, mime) in enumerate(fonts):
@@ -279,6 +293,7 @@ class ArchiveBundleExporter:
                 temporary, expected_fonts=len(fonts), expected_duration=duration,
                 expected_font_names={font.name for font, _ in fonts},
                 expected_subtitles=2 if has_srt else 1,
+                expected_audio=1 + len(chapters),
             )
             assert_sources_unchanged()
             # A user may change the authoritative subtitle text during a long
@@ -303,7 +318,7 @@ class ArchiveBundleExporter:
                         target.parent, background_color=background_color,
                         background_image=background_image, image_extension=suffix,
                         include_fonts=include_fonts, artifact=temporary,
-                        background_spec=spec,
+                        background_spec=spec, include_chapter_flac=include_chapter_flac,
                     )
                     require_current_bundle_subtitles(target.parent)
                     assert_sources_unchanged()
@@ -321,7 +336,8 @@ class ArchiveBundleExporter:
         return {
             "output": str(target), "size_bytes": target.stat().st_size,
             "duration_seconds": duration,
-            "audio_codec": "flac", "subtitles_embedded": True,
+            "audio_codec": "flac", "audio_track_count": 1 + len(chapters),
+            "chapter_audio_track_count": len(chapters), "subtitles_embedded": True,
             "subtitle_codecs": ["ass", "subrip"] if has_srt else ["ass"],
             "subtitles_burned_in": False, "font_attachments": len(fonts),
             "background": spec["mode"] if spec["mode"] != "color" else background_color,
@@ -333,22 +349,23 @@ class ArchiveBundleExporter:
         self, output: Path, *, expected_fonts: int, expected_duration: float,
         expected_font_names: set[str] | None = None,
         expected_subtitles: int = 1,
+        expected_audio: int = 1,
     ) -> None:
         probe = self._probe(output)
         rows = probe.get("streams", [])
         types = [str(row.get("codec_type")) for row in rows]
-        if (types.count("video") != 1 or types.count("audio") != 1
+        if (types.count("video") != 1 or types.count("audio") != expected_audio
                 or types.count("subtitle") != expected_subtitles):
-            raise RuntimeError("MKV 校验失败：应恰好包含一个视频、FLAC 音频及要求数量的独立字幕轨")
+            raise RuntimeError("MKV 校验失败：视频、FLAC 音轨或独立字幕轨数量不一致")
         video = next(row for row in rows if row.get("codec_type") == "video")
         if (video.get("codec_name") != "h264"
                 or int(video.get("width") or 0) != self.width
                 or int(video.get("height") or 0) != self.height):
             raise RuntimeError("MKV 校验失败：H.264 背景视频轨的编码或尺寸不匹配")
-        audio = next(row for row in rows if row.get("codec_type") == "audio")
+        audio_tracks = [row for row in rows if row.get("codec_type") == "audio"]
         subtitles = [row for row in rows if row.get("codec_type") == "subtitle"]
         expected_codecs = ["ass", "subrip"] if expected_subtitles == 2 else ["ass"]
-        if (audio.get("codec_name") != "flac"
+        if (any(row.get("codec_name") != "flac" for row in audio_tracks)
                 or [row.get("codec_name") for row in subtitles] != expected_codecs):
             raise RuntimeError("MKV 校验失败：FLAC、ASS 或 SRT 轨道编码不正确")
         attachments = [row for row in rows if row.get("codec_type") == "attachment"]

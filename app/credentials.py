@@ -193,6 +193,37 @@ def clear_translation_credentials() -> None:
     CREDENTIALS_FILE.unlink(missing_ok=True)
 
 
+def test_saved_translation_credentials(
+    *, model: str = "", timeout: float = 20.0,
+) -> dict[str, object]:
+    """One explicit, uncached network smoke request; never return the API key.
+
+    Checking configuration presence is not proof that credentials, endpoint,
+    model and structured-output translation are actually usable.
+    """
+    if not 0 < timeout <= 30:
+        raise ValueError("API 连通性测试超时必须在 0 到 30 秒之间")
+    creds = load_translation_credentials()
+    if not creds.api_key:
+        raise ValueError("请先输入并保存自己的 API Key")
+    from .translator import OpenAIResponsesHTTPClient, ensure_translation_capability
+
+    chosen_model = str(model or creds.default_model).strip()
+    client = OpenAIResponsesHTTPClient(
+        creds.api_key, base_url=creds.base_url, provider=creds.provider,
+        timeout=timeout, max_retries=0,
+    )
+    result = ensure_translation_capability(
+        model=chosen_model, client=client, force=True,
+    )
+    return {
+        "ok": True, "provider": creds.provider, "base_url": creds.base_url,
+        "model": chosen_model, "schema_compatible": True,
+        "usage_supported": bool(result.get("usage_supported")),
+        "note": "已完成一次真实结构化翻译请求；可能产生少量 API 费用。此结果不保证未来请求始终成功。",
+    }
+
+
 def _configure(args: argparse.Namespace) -> None:
     provider = args.provider
     base_url = args.base_url or _default_base_url(provider)

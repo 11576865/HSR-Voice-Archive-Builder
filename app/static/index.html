@@ -3016,6 +3016,25 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
         <p class="small muted">“复制项目”会复制设置和程序生成的索引，但不复制 output 成品、.state 恢复状态或原始语音包，适合从同一素材派生另一套语言/参数。“删除项目”会清理程序管理的数据。</p>
       </div>
+      <details id="translationCredentialsPanel" class="hsr-translation-credentials">
+        <summary>AI API 翻译 · 配置与真实可用性检测</summary>
+        <p class="small muted">当官方中文缺失并启用 AI 翻译时，使用你提供的 API。输入个人 API Key、服务地址和模型，保存后发送一次真实的小样本翻译测试（可能产生少量费用）。密钥只保存在处理设备，不会回显。</p>
+        <form id="translationCredentialsForm">
+          <div class="row">
+            <label>API 服务<select id="translationProvider"><option value="openai">OpenAI</option><option value="custom">兼容 OpenAI Responses 的服务</option></select></label>
+            <label>Base URL <input id="translationBaseUrl" type="url" required placeholder="https://api.openai.com/v1"></label>
+          </div>
+          <div class="row">
+            <label>模型 ID <input id="translationApiModel" required placeholder="服务商支持的模型 ID"></label>
+            <label>你的 API Key <input id="translationApiKey" type="password" autocomplete="new-password" required placeholder="仅保存在当前设备"></label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary" id="translationSaveTestBtn">保存并检测 API</button>
+            <button type="button" id="translationRetestBtn">重新检测已保存配置</button>
+          </div>
+        </form>
+        <p id="translationApiStatus" class="small muted" role="status" aria-live="polite">正在读取 API 配置状态…</p>
+      </details>
       <div id="noProject">
         <h3>快速创建</h3>
         <p class="small muted">从本机 Download 目录选择语音包。扫描阶段只读取文件，不修改源包；索引、项目目录和 AI 翻译设置由程序自动准备。</p>
@@ -3036,7 +3055,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <select id="quickAudioLanguage">
               <option value="auto">自动 / 不限定</option><option value="en">English</option>
               <option value="zh-CN">简体中文</option><option value="ja">日本語</option>
-              <option value="ko">한국어</option><option value="ru">Русский</option>
+              <option value="ko">한국어</option>
             </select>
           </div>
           <div>
@@ -3067,7 +3086,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <select id="quickReferenceLanguage">
               <option value="auto">自动 / 未指定</option><option value="en">English</option>
               <option value="zh-CN">简体中文</option><option value="ja">日本語</option>
-              <option value="ko">한국어</option><option value="ru">Русский</option>
+              <option value="ko">한국어</option>
             </select>
           </div>
         </div>
@@ -3080,7 +3099,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   </select>
 </label>
         <label class="check"><input id="quickChapterOrder" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
-        <label class="check"><input id="quickChapterFlac" type="checkbox"> 额外生成按章节 / 大组拆分的连续 FLAC</label>
+        <label class="check"><input id="quickChapterFlac" type="checkbox"> 额外生成章节 / 大组 FLAC，并封入完整 MKV 作为独立可切换音轨</label>
         <label class="check"><input id="quickTranslateMissing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check"><input id="quickReviewOfficial" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <p class="small muted">这两项会随快速构建一起保存。关闭“官方中文对照复核”仍会采用官方中文文本；只是跳过英文与官方中文的快速语义比对，以及只针对高风险条目的 API 复核/重译。</p>
@@ -3090,11 +3109,11 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
         <pre id="quickPlan" class="quick-plan" role="status" aria-live="polite" aria-atomic="true">尚未扫描。</pre>
         <div class="row3">
-          <div><label>开头留白（秒）</label><input id="quickIntroGap" type="number" min="0" step="0.01" value="9.00"></div>
-          <div><label>同组语音间隔（秒）</label><input id="quickSameGroupGap" type="number" min="0" step="0.01" value="1.50"></div>
-          <div><label>不同分组间隔（秒）</label><input id="quickGroupGap" type="number" min="0" step="0.01" value="3.00"></div>
+          <div><label>开头留白（秒）</label><input id="quickIntroGap" type="number" min="0" step="0.01" value="10.00"></div>
+          <div><label>同组语音间隔（秒）</label><input id="quickSameGroupGap" type="number" min="0" step="0.01" value="2.50"></div>
+          <div><label>不同分组间隔（秒）</label><input id="quickGroupGap" type="number" min="0" step="0.01" value="5.00"></div>
         </div>
-        <p class="small muted">三个值由同一 Timeline 同时驱动连续 FLAC 与字幕时间轴；默认分别为 9 / 1.5 / 3 秒。</p>
+        <p class="small muted">三个值由同一 Timeline 同时驱动连续 FLAC 与字幕时间轴；默认分别为 10 / 2.5 / 5 秒。</p>
         <div id="quickAiBudget" class="hidden">
           <div class="row">
             <div><label>AI 翻译 Token 上限（0 = 不限）</label><input id="quickTokenBudget" type="number" min="0" step="1" value="0"></div>
@@ -3143,7 +3162,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   </select>
 </label>
         <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
-              <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
+              <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组 FLAC（完整 MKV 内新增可切换音轨，主音轨仍为默认）</label>
               <label class="check"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
               <label class="check"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
               <div class="actions"><button class="success">创建</button></div>
@@ -3195,10 +3214,10 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
         <div class="row">
           <div><label>主音频语言</label><select name="audio_language">
-            <option value="auto">自动 / 不限定</option><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="ru">Русский</option>
+            <option value="auto">自动 / 不限定</option><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option>
           </select></div>
           <div><label>翻译目标语言</label><select name="target_language">
-            <option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="ru">Русский</option>
+            <option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="en">English</option><option value="ja">日本語</option><option value="ko">한국어</option>
           </select></div>
         </div>
         <label class="check"><input type="checkbox" checked disabled> 生成连续 FLAC 并验证音频完整性（固定）</label>
@@ -3209,7 +3228,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   </select>
 </label>
         <label class="check"><input name="chapter_order" type="checkbox"> 主连续 FLAC 与字幕按章节顺序排序（而非默认排序）</label>
-        <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组连续 FLAC（不替代主 continuous.flac）</label>
+        <label class="check"><input name="generate_chapter_flac" type="checkbox"> 额外生成章节 / 大组 FLAC（完整 MKV 内新增可切换音轨，主音轨仍为默认）</label>
         <label class="check" id="advancedTranslateRow"><input name="translate_missing" type="checkbox" checked> 缺失中文字幕时调用已配置的 AI API 翻译</label>
         <label class="check" id="advancedReviewRow"><input name="review_official_target" type="checkbox"> 官方中文对照复核：只对疑似语义偏离的行调用 API 判定或重译</label>
         <div class="actions">
@@ -3257,9 +3276,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           <div class="row">
             <div><label>额外语言参考包（可选，不写入成品音频）</label><input name="reference_source"><p class="small muted">只读取同名 LAB 作为额外语义参考；不会加入连续 FLAC。</p></div>
-            <div><label>参考文本语言</label><select name="reference_language"><option value="auto">自动 / 未指定</option><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="ru">Русский</option></select></div>
+            <div><label>参考文本语言</label><select name="reference_language"><option value="auto">自动 / 未指定</option><option value="en">English</option><option value="zh-CN">简体中文</option><option value="ja">日本語</option><option value="ko">한국어</option></select></div>
           </div>
-          <label>主音频对应文本语言</label><select name="source_text_language"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ko">한국어</option><option value="ru">Русский</option></select>
+          <label>主音频对应文本语言</label><select name="source_text_language"><option value="en">English</option><option value="zh-CN">简体中文</option><option value="zh-TW">繁體中文</option><option value="ja">日本語</option><option value="ko">한국어</option></select>
           <p class="small muted">Quick Mode 会按 EN / CHS / JP / KR 自动选择索引；手动项目则按你的索引实际语言设置。</p>
           <label>术语覆盖层 CSV / JSON（可选）</label>
           <input name="glossary_path" placeholder="glossary.csv / glossary.json">
@@ -3315,8 +3334,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         <div id="artifactBrowser" class="artifact-browser"></div>
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
         <details id="archiveBundlePanel" class="hsr-archive-bundle">
-          <summary>默认完整 MKV · 黑色／自定义背景 + FLAC 音轨 + SRT／ASS 双字幕轨</summary>
-          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认黑色背景，可自定义背景；复制独立连续 FLAC 的唯一音轨，封入可切换 SRT 和 ASS 两条字幕轨及可选字体。原始 FLAC、SRT、ASS 独立保留；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
+          <summary>默认完整 MKV · 自定义背景 + 主／章节 FLAC 音轨 + SRT／ASS 双字幕轨</summary>
+          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认黑色背景，可自定义背景；复制主连续 FLAC（默认音轨）；启用章节 FLAC 时也封入每个章节的独立可切换音轨，并封入 SRT 和 ASS 两条字幕轨及可选字体。原始 FLAC、SRT、ASS 独立保留；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
           <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 的来源一致性与生成前提。</p>
           <div class="hsr-bundle-options">
             <label for="bundleBackgroundMode">背景类型
@@ -3328,7 +3347,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                 <option value="image">项目图片</option>
               </select>
             </label>
-            <label for="bundleBackgroundColor">底色／图片补边色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
+            <label for="bundleBackgroundColor">纯色背景颜色 <input id="bundleBackgroundColor" type="color" value="#000000" /></label>
             <label class="bundle-gradient-option" for="bundleGradientFirst">起始颜色 <input id="bundleGradientFirst" type="color" value="#243350" /></label>
             <label class="bundle-gradient-option" for="bundleGradientSecond">结束颜色 <input id="bundleGradientSecond" type="color" value="#0d1729" /></label>
             <label class="bundle-gradient-option" for="bundleGradientThird">柔和过渡色 <input id="bundleGradientThird" type="color" value="#3e4269" /></label>
@@ -3349,8 +3368,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                 <option value="high">高画质（CRF 19）</option>
               </select>
             </label>
-            <label for="bundleBackgroundImage">更换背景图片（PNG/JPEG/WebP，最多 16 MiB；仍检查解码像素）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
-            <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装时保存的背景图片（上传新图则优先使用新图；取消勾选则使用纯色）</label>
+            <label for="bundleBackgroundImage">选择项目背景图片（PNG/JPEG/WebP，最多 64 MiB；导入后由 FFmpeg 验证）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
+            <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装并校验的项目图片（首次使用请先选择上方图片）</label>
             <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
           </div>
           <div class="box" style="max-width:640px">
@@ -3618,7 +3637,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
   <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤16 MiB）</label>
+  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
   <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
   <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
   <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
@@ -3628,7 +3647,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤16 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
 </div>
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后请查看左侧／上方画布中的视频播放器。首次生成可能等待 FFmpeg；无视频素材时使用黑底。</div>
 
@@ -5656,9 +5675,9 @@ document.getElementById('quickBuildBtn').onclick=async()=>{try{
   d.set('generate_chapter_flac',document.getElementById('quickChapterFlac').checked?'true':'false');
   d.set('translate_missing',document.getElementById('quickTranslateMissing').checked?'true':'false');
   d.set('review_official_target',document.getElementById('quickReviewOfficial').checked?'true':'false');
-  d.set('intro_gap',document.getElementById('quickIntroGap').value||'9.00');
-  d.set('same_group_gap',document.getElementById('quickSameGroupGap').value||'1.50');
-  d.set('group_gap',document.getElementById('quickGroupGap').value||'3.00');
+  d.set('intro_gap',document.getElementById('quickIntroGap').value||'10.00');
+  d.set('same_group_gap',document.getElementById('quickSameGroupGap').value||'2.50');
+  d.set('group_gap',document.getElementById('quickGroupGap').value||'5.00');
   d.set('delivery_mode',document.getElementById('quickDeliveryMode')?.value||'complete');
   d.set('translation_token_budget',document.getElementById('quickTokenBudget').value||'0');
   d.set('translation_budget_usd',document.getElementById('quickUsdBudget').value||'0');
@@ -5698,6 +5717,57 @@ async function saveProject(){
   fillProject(j.project);
   return j.project;
 }
+let translationApiVerified=false;
+async function loadTranslationCredentialStatus(){
+  try{
+    const result=await api('/api/translation/credentials');
+    document.getElementById('translationProvider').value=result.provider==='openai'?'openai':'custom';
+    document.getElementById('translationBaseUrl').value=result.base_url||'https://api.openai.com/v1';
+    document.getElementById('translationApiModel').value=result.default_model||'';
+    const status=document.getElementById('translationApiStatus');
+    status.className='small muted';
+    status.textContent=result.configured
+      ? 'Key 已配置（'+(result.source||'本机')+'），尚未验证本次可用性；请点击「重新检测」。'
+      : '未配置 API Key。仅当官方中文缺失并启用 AI 翻译时才需要配置。';
+  }catch(error){document.getElementById('translationApiStatus').textContent='读取配置失败：'+shortError(error)}
+}
+document.getElementById('translationProvider')?.addEventListener('change',()=>{
+  if(document.getElementById('translationProvider').value==='openai')
+    document.getElementById('translationBaseUrl').value='https://api.openai.com/v1';
+});
+async function runTranslationApiTest(){
+  const status=document.getElementById('translationApiStatus'),button=document.getElementById('translationRetestBtn');
+  translationApiVerified=false;
+  try{
+    if(button)button.disabled=true;
+    status.className='small muted';status.textContent='正在发送真实基础翻译请求（超时 20 秒）…';
+    const result=await api('/api/translation/test',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:document.getElementById('translationApiModel').value.trim()})});
+    translationApiVerified=!!(result.ok&&result.schema_compatible);
+    status.className='small status-ok';
+    status.textContent='API 可用性检测通过：'+result.provider+' / '+result.model+'；结构化翻译响应有效（可能产生少量费用）。';
+  }catch(error){
+    status.className='small status-bad';
+    status.textContent='API 检测失败：'+shortError(error)+'。请检查 Key、Base URL、模型和 Responses 兼容性。';
+  }finally{if(button)button.disabled=false}
+}
+document.getElementById('translationCredentialsForm')?.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const button=document.getElementById('translationSaveTestBtn'),status=document.getElementById('translationApiStatus');
+  try{
+    button.disabled=true;
+    const d={provider:document.getElementById('translationProvider').value,
+      base_url:document.getElementById('translationBaseUrl').value.trim(),
+      model:document.getElementById('translationApiModel').value.trim(),
+      api_key:document.getElementById('translationApiKey').value.trim()};
+    await api('/api/translation/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    document.getElementById('translationApiKey').value='';
+    status.className='small muted';status.textContent='凭据已保存；正在检测实际可用性…';
+    await runTranslationApiTest();
+  }catch(error){status.className='small status-bad';status.textContent='保存 API 配置失败：'+shortError(error)}
+  finally{button.disabled=false}
+});
+document.getElementById('translationRetestBtn')?.addEventListener('click',runTranslationApiTest);
 document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
@@ -5716,6 +5786,8 @@ function syncBundleBackgroundControls(){
   }
   const third=document.getElementById('bundleGradientThird');
   if(third?.closest('label'))third.closest('label').hidden=mode!=='soft';
+  const color=document.getElementById('bundleBackgroundColor');
+  if(color?.closest('label'))color.closest('label').hidden=mode!=='color';
   const direction=document.getElementById('bundleGradientDirection');
   if(direction?.closest('label'))direction.closest('label').hidden=mode!=='linear';
   for(const id of ['bundleBackgroundImage','bundleReuseBackground']){
@@ -5736,7 +5808,7 @@ function bundleBackgroundSpec(){
 }
 async function readBundleImage(file){
   if(!file)return null;
-  if(!file.size||file.size>16*1024*1024)throw new Error('背景图片需在 16 MiB 以内');
+  if(!file.size||file.size>64*1024*1024)throw new Error('背景图片需为有效 PNG/JPEG/WebP，大小不超过 64 MiB');
   return await new Promise((resolve,reject)=>{
     const reader=new FileReader();
     reader.onerror=()=>reject(new Error('无法读取本地背景图片'));
@@ -5750,12 +5822,14 @@ async function readBundleImage(file){
 async function bundleBackgroundPayload(){
   const spec=bundleBackgroundSpec();
   const file=spec.mode==='image'?(document.getElementById('bundleBackgroundImage')?.files?.[0]||null):null;
+  const reuse=spec.mode==='image'&&!file&&!!document.getElementById('bundleReuseBackground')?.checked;
+  if(spec.mode==='image'&&!file&&!reuse)throw new Error('项目图片模式尚未选择图片。请先选取 PNG/JPEG/WebP，或勾选沿用已校验保存的图片。');
   return {
     expected_project_root:currentProject?.root,
     background_color:document.getElementById('bundleBackgroundColor')?.value||'#000000',
     background_spec:spec,
     background_image_base64:await readBundleImage(file),
-    reuse_saved_background:spec.mode==='image'&&!file&&!!document.getElementById('bundleReuseBackground')?.checked,
+    reuse_saved_background:reuse,
     attach_project_fonts:!!document.getElementById('bundleIncludeFonts')?.checked
   };
 }
@@ -5813,7 +5887,7 @@ for(const id of bundleControls){
     const img=document.getElementById('bundleBackgroundPreview');
     if(img){img.src='';img.style.display='none'}
     const status=document.getElementById('bundlePreviewStatus');
-    if(status){status.textContent='背景参数已改变，请重新执行 FFmpeg 预览。';status.className='small muted'}
+    if(status){const mode=document.getElementById('bundleBackgroundMode')?.value;status.textContent=mode==='image'&&!document.getElementById('bundleBackgroundImage')?.files?.length&&!document.getElementById('bundleReuseBackground')?.checked?'请先选择一张项目背景图片，再执行 FFmpeg 预览。':'背景参数已改变，请重新执行 FFmpeg 预览。';status.className='small muted'}
     const freshness=document.getElementById('bundleFreshnessStatus');
     if(freshness){
       freshness.textContent='本次背景或视频参数已修改；当前已有 MKV 仍对应上次封装的设置。请重新生成后使用新背景。';
@@ -5824,6 +5898,7 @@ for(const id of bundleControls){
 document.getElementById('bundleBackgroundImage')?.addEventListener('change',()=>{
   if(document.getElementById('bundleBackgroundImage')?.files?.length){
     document.getElementById('bundleBackgroundMode').value='image';
+    document.getElementById('bundleReuseBackground').checked=false;
     syncBundleBackgroundControls();
   }
 });
@@ -8719,7 +8794,7 @@ async function renderHsrEffectVideo(){
     else if(backgroundImage){
       if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
         throw new Error('背景图片只支持 PNG、JPEG 或 WebP');
-      if(!backgroundImage.size||backgroundImage.size>16*1024*1024)
+      if(!backgroundImage.size||backgroundImage.size>64*1024*1024)
         throw new Error('背景图片必须在 16 MiB 以内');
       payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
     }
@@ -9097,6 +9172,6 @@ document.getElementById('layoutStyleRedoBtn')?.addEventListener('click',()=>trav
 resetLayoutStyleHistory();
 
 document.getElementById('refreshBtn').onclick=refresh;
-refresh();loadQuickCandidates();
+refresh();loadQuickCandidates();loadTranslationCredentialStatus();
 </script>
 </body></html>

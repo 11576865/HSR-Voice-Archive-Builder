@@ -15,6 +15,7 @@ from .builder import atomic_write_text
 from .project_fonts import font_asset_directory
 from .subtitle_export_status import read_subtitle_export_health, _inputs as _subtitle_inputs
 from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, MODES, normalize_bundle_background
+from .chapter_audio_tracks import chapter_audio_tracks
 
 RECEIPT = "archive_bundle_receipt.json"
 PREFERENCES = "archive_bundle_preferences.json"
@@ -48,14 +49,22 @@ def _font_signatures(output: Path, enabled: bool) -> list[dict[str, Any]]:
     return records
 
 
-def _sources(output: Path, fonts: bool) -> dict[str, Any]:
-    return {
+def _sources(output: Path, fonts: bool, chapters: bool = False) -> dict[str, Any]:
+    sources = {
         "flac": _signature(output / "continuous.flac"),
         "ass": _signature(output / "HSR_Voice_Archive.ass"),
         "srt": _signature(output / "HSR_Voice_Archive.srt"),
         "subtitle_receipt": _signature(output / "subtitle_export_receipt.json"),
         "fonts": _font_signatures(output, fonts),
     }
+    if chapters:
+        paths = chapter_audio_tracks(output, verify_hashes=False)
+        sources["chapter_audio"] = {
+            "manifest": _signature(output / "chapter_flac" / "chapter_flac_manifest.json"),
+            "tracks": [{"name": path.name, "group_id": group,
+                        "file": _signature(path)} for path, group in paths],
+        }
+    return sources
 
 
 def _read_receipt(output: Path) -> dict[str, Any] | None:
@@ -95,7 +104,7 @@ def _image_asset(output: Path, receipt: dict[str, Any]) -> Path | None:
     image = output / name
     if image.is_symlink() or not image.is_file() or not 0 < image.stat().st_size <= MAX_IMAGE_BYTES:
         raise ValueError("保存的 MKV 背景图片缺失或无效，请重新选择图片")
-    # Stream the 16 MiB content-addressed asset rather than allocating another
+    # Stream the content-addressed asset rather than allocating another
     # full copy for every project dashboard refresh (especially on Termux).
     hasher = hashlib.sha256()
     with image.open("rb") as handle:
@@ -136,11 +145,17 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
                 "attach_project_fonts": True,
                 "background_spec": normalize_bundle_background(None)}
     bg = receipt["background"]
+    image_saved = False
+    if bg.get("kind") == "image":
+        try:
+            image_saved = _image_asset(output, receipt) is not None
+        except (OSError, ValueError):
+            image_saved = False
     return {
         "known": True,
         "background_color": str(bg.get("color") or "#000000"),
         "background_kind": bg.get("kind") or "color",
-        "image_saved": bg.get("kind") == "image",
+        "image_saved": image_saved,
         "attach_project_fonts": receipt["attach_project_fonts"],
         "background_spec": normalize_bundle_background(bg.get("spec") or {
             "mode": bg.get("kind") or "color",
@@ -246,10 +261,13 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
         if _signature(target) != receipt["artifact"]:
             raise ValueError("MKV 文件已被修改或替换")
         if sealed:
-            current = _sources(output, receipt["attach_project_fonts"])
+            current = _sources(output, receipt["attach_project_fonts"],
+                               bool(receipt.get("include_chapter_flac")))
             original = receipt["sources"]
             if current["fonts"] != original["fonts"]:
                 raise ValueError("字体发生变化")
+            if current.get("chapter_audio") != original.get("chapter_audio"):
+                raise ValueError("已封装章节音轨来源发生变化")
             if not seal_inputs_current:
                 raise ValueError("字幕来源或导出回执发生变化")
             for name in ("flac", "srt", "ass"):
@@ -259,7 +277,8 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
                     # it becomes an input only after a fresh export receipt.
                     raise ValueError("额外独立来源与已封装版本不一致：" + name)
         else:
-            if _sources(output, receipt["attach_project_fonts"]) != receipt["sources"]:
+            if _sources(output, receipt["attach_project_fonts"],
+                        bool(receipt.get("include_chapter_flac"))) != receipt["sources"]:
                 raise ValueError("连续 FLAC、ASS、SRT 或字体已变化")
             health = read_subtitle_export_health(output)
             if not (health.get("state") == "current"
@@ -281,6 +300,7 @@ def record_bundle_publication(
     image_extension: str | None, include_fonts: bool,
     artifact: Path | None = None,
     background_spec: dict[str, str] | None = None,
+    include_chapter_flac: bool = False,
 ) -> None:
     """Persist replayable inputs and provenance after verified atomic MKV publish.
 
@@ -319,7 +339,8 @@ def record_bundle_publication(
     receipt = {
         "schema_version": 1,
         "artifact": _signature(artifact if artifact is not None else output / OUTPUT),
-        "sources": _sources(output, include_fonts),
+        "sources": _sources(output, include_fonts, include_chapter_flac),
+        "include_chapter_flac": bool(include_chapter_flac),
         "background": bg,
         "attach_project_fonts": bool(include_fonts),
     }

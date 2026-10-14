@@ -1405,9 +1405,9 @@ def build_project_v02(
     out_dir: Path,
     bilingual_csv: Path | None = None,
     chs_source: Path | None = None,
-    same_group_gap: float = 1.50,
-    group_gap: float = 3.00,
-    intro_gap: float = 9.0,
+    same_group_gap: float = 2.50,
+    group_gap: float = 5.00,
+    intro_gap: float = 10.0,
     make_flac: bool = True,
     chapter_order: bool = False,
     generate_chapter_flac: bool = False,
@@ -1961,12 +1961,14 @@ def build_project_v02(
         from .archive_bundle_backgrounds import RESOLUTIONS
         from .archive_bundle_exporter import ArchiveBundleExporter
         from .archive_bundle_lifecycle import (
-            bundle_export_status, load_previous_bundle_image, previous_bundle_settings,
+            _read_receipt, bundle_export_status, load_previous_bundle_image, previous_bundle_settings,
         )
         from .project_fonts import font_asset_directory
         settings = previous_bundle_settings(out_dir)
         spec = settings["background_spec"]
-        if bundle_export_status(out_dir)["needs_rebuild"]:
+        existing_bundle = _read_receipt(out_dir)
+        if (bundle_export_status(out_dir)["needs_rebuild"] or
+                bool(existing_bundle and existing_bundle.get("include_chapter_flac")) != bool(generate_chapter_flac)):
             background = (load_previous_bundle_image(out_dir)
                           if spec["mode"] == "image" else None)
             width, height = RESOLUTIONS[spec["resolution"]]
@@ -1978,6 +1980,7 @@ def build_project_v02(
                 include_fonts=settings["attach_project_fonts"],
                 background_color=settings["background_color"],
                 background_image=background, background_spec=spec,
+                include_chapter_flac=generate_chapter_flac,
                 require_current_ass=True,
                 progress=lambda current, total, message: progress(
                     "bundle", message, current, max(1, total)),

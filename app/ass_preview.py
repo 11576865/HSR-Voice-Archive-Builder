@@ -269,7 +269,7 @@ def render_ass_preview_video(
             raise ValueError("Choose one video or one background image, not both")
         if (not isinstance(background_image_bytes, bytes)
                 or not 0 < len(background_image_bytes) <= MAX_BACKGROUND_BYTES):
-            raise ValueError("Background image exceeds the 16 MiB maximum")
+            raise ValueError("Background image exceeds the 64 MiB maximum")
         image_extension(background_image_bytes)
     if source_video_bytes is not None and (
         not isinstance(source_video_bytes, bytes)
