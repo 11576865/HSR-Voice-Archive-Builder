@@ -105,7 +105,7 @@ def render_background_preview(
     with tempfile.TemporaryDirectory(prefix=".hsr-bg-preview-") as td:
         if spec["mode"] == "image":
             if not image or len(image) > MAX_IMAGE_BYTES:
-                raise ValueError("Image preview requires a valid image under 16 MiB")
+                raise ValueError("Image preview requires a valid image under 64 MiB")
             from .archive_bundle_exporter import image_extension
             path = Path(td) / ("background" + image_extension(image))
             path.write_bytes(image)
