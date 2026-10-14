@@ -3,7 +3,7 @@
   "task_id": "hsr-completion-20261014",
   "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
   "status": "in_progress",
-  "current_bounded_work_unit": "HSR PR #162 four bug fixes landed and passed exact branch/head plus merged-main Python 3.11–3.13/Termux + FFmpeg/libass/Chromium CI. Current unresolved acceptance: Android physical device, player behavior and >=1h archive runtime; PR #159 and remaining branch semantic integration are separate pending work.",
+  "current_bounded_work_unit": "UI convergence completed for Layout and Effects: PR #163 merged at 3298a4e1d3a15236ca2468388a756b0981797d8f after exact-head Python 3.11–3.13/Termux and true Chromium/FFmpeg/libass browser checks. Main push CI running; Android tablet physical acceptance and unrelated archival branch PR #159 pending.",
   "completed_units": [
     {
       "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
@@ -62,9 +62,20 @@
         "python_termux": "success #38508011822",
         "chromium_ffmpeg": "success #38508011823"
       }
+    },
+    {
+      "summary": "PR #163: Layout/Effects default bounded workbench on desktop/tablet/phone, one global navigation, removed focus mode/slider locking/duplicate font shortcut, direct touch numeric stepper controls, single-open parameter groups and scroll-clipped QA; added portrait+landscape Chromium regression",
+      "pr": 163,
+      "merge_commit": "3298a4e1d3a15236ca2468388a756b0981797d8f",
+      "validation": {
+        "python_termux": "success #38510573277",
+        "chromium_libass": "success #38510573359",
+        "physical_android": "pending"
+      }
     }
   ],
   "next_units": [
+    "Confirm exact merged-main PR #163 CI: tests #38510790132 and HSR subtitle browser evidence #38510790129, branch-head accepted.",
     "Confirm existing Android project migration: next successful build retires old independent FLAC/SRT/ASS/Black MKV; opening project alone does not remove user files.",
     "Exercise 1h+ voice archives and actual Android/Termux apps with target player/font/banding combinations (Issue #158).",
     "Verify documented fail-closed behavior for external manual edits of FLAC/SRT/ASS; do not auto-certify unrelated files.",
@@ -73,7 +84,7 @@
   ],
   "branch": "main",
   "pr": null,
-  "latest_durable_commit": "36c1321fe684247329f2b2f6bde7793e4a4cd9a0",
+  "latest_durable_commit": "3298a4e1d3a15236ca2468388a756b0981797d8f",
   "external_validation": {
     "previous_head_main_tests": "passed",
     "previous_head_browser_libass": "passed",
