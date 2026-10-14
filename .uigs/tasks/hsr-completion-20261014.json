@@ -3,7 +3,7 @@
   "task_id": "hsr-completion-20261014",
   "goal": "Bring HSR Voice Archive Builder from a passing technical pipeline to a verifiably accepted local-first voice/subtitle archive product without merging it into ASS Workbench.",
   "status": "in_progress",
-  "current_bounded_work_unit": "Completed default single-deliverable media model: only sealed MKV as full-mode final; only one FLAC in explicit FLAC-only mode. PR #161 merged at ecd64df807341387c84bedd67636022bf99407f2 after exact-head Python/Termux/real FFmpeg/Chromium CI passed.",
+  "current_bounded_work_unit": "PR #162 merged into main at 36c1321fe684247329f2b2f6bde7793e4a4cd9a0. Fixed auto-MKV failure retry poisoning (job-aware exponential backoff), no-op sealed MKV redundant recode, FLAC-only old black-MKV leftover and symlinked exports/ destination. Exact branch head passed Python 3.11–3.13/Termux and real FFmpeg/libass/Chromium CI.",
   "completed_units": [
     {
       "summary": "Established main baseline, repository interfaces, product outputs, open issue and push-event CI evidence",
@@ -45,10 +45,20 @@
         "chromium_ffmpeg": "success 38463035650",
         "physical_android": "pending"
       }
+    },
+    {
+      "summary": "Bug repair PR #162: failed automatic MKV generation is eligible for bounded retry; unchanged verified complete MKV skips expensive audio/video recreation; explicit FLAC-only retires legacy Black MKV; opt-in exports reject symlinked parent directory",
+      "pr": 162,
+      "merge_commit": "36c1321fe684247329f2b2f6bde7793e4a4cd9a0",
+      "validation": {
+        "python_termux": "success #38507803735",
+        "chromium_ffmpeg": "success #38507803734",
+        "physical_android": "pending"
+      }
     }
   ],
   "next_units": [
-    "Validate PR #161 merged-main push CI against ecd64df807341387c84bedd67636022bf99407f2 (branch-head Python/Termux and real FFmpeg/Chromium already green).",
+    "Confirm exact merged-main HSR subtitle browser evidence CI #38508011823 on 36c1321fe684247329f2b2f6bde7793e4a4cd9a0 (main Python CI #38508011822 already passed).",
     "Confirm existing Android project migration: next successful build retires old independent FLAC/SRT/ASS/Black MKV; opening project alone does not remove user files.",
     "Exercise 1h+ voice archives and actual Android/Termux apps with target player/font/banding combinations (Issue #158).",
     "Verify documented fail-closed behavior for external manual edits of FLAC/SRT/ASS; do not auto-certify unrelated files.",
@@ -57,7 +67,7 @@
   ],
   "branch": "main",
   "pr": null,
-  "latest_durable_commit": "ecd64df807341387c84bedd67636022bf99407f2",
+  "latest_durable_commit": "36c1321fe684247329f2b2f6bde7793e4a4cd9a0",
   "external_validation": {
     "previous_head_main_tests": "passed",
     "previous_head_browser_libass": "passed",
