@@ -339,6 +339,11 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#libassVideoPreview").evaluate("(video) => {video.muted=true;video.currentTime=0.7;}")
     page.wait_for_function("document.getElementById('libassVideoPreview').currentTime >= 0.65")
     screenshot(page, output, "desktop_effect_video_playback")
+    # Optional media input lives in a deliberate disclosure. Keep the first
+    # viewport for the active motion controls, not an entire file picker.
+    ensure(not page.locator(".hsr-preview-media-disclosure").evaluate("(el) => el.open"),
+           "Optional video upload settings should start collapsed")
+    page.locator(".hsr-preview-media-disclosure > summary").click()
     # An image must reach the actual video endpoint, rather than being used
     # merely as decorative background in the browser's geometry preview.
     png=b"\x89PNG\r\n\x1a\n"+b"browser-fixture"
