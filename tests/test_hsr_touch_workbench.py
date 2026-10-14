@@ -29,6 +29,7 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertNotIn('.hsr-touch-sliders-unlocked',css)
         self.assertIn('function initHsrTouchNumericEditors()',html)
         self.assertIn("range.insertAdjacentElement('afterend',stepper)",html)
+        self.assertIn("stepper.append(minus,editor,plus)",html)
         self.assertIn("editor.addEventListener('change'",html)
         self.assertIn("editor.dispatchEvent(new Event('change',{bubbles:true}))",html)
         self.assertIn("touch-action:manipulation",css)
