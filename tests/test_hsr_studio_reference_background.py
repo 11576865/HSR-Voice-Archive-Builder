@@ -35,7 +35,7 @@ class ReferenceBackgroundTests(unittest.TestCase):
 
     def test_workbench_uses_reference_by_default_but_archive_export_does_not(self):
         html = (ROOT / "app/static/index.html").read_text("utf-8")
-        css = (ROOT / "app/static/studio-v3.css").read_text("utf-8")
+        css = (ROOT / "app/static/studio-v4.css").read_text("utf-8")
         self.assertIn('id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp"', html)
         self.assertIn('<option value="reference" selected>', html)
         self.assertIn('use_studio_reference_background:', html)
