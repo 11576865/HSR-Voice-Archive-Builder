@@ -785,11 +785,13 @@ def touch_safety_check(browser, base_url, report):
     style_sections.nth(3).locator(":scope > summary").click()
     ensure(style_sections.nth(3).evaluate("(el)=>el.open"),
            "Appearance section cannot be expanded")
+    # Font size lives under Typography: return to that visible accordion
+    # before exercising its numeric input.
+    style_sections.first.locator(":scope > summary").click()
     number.fill("48")
     number.dispatch_event("change")
     ensure(page.locator("#prevChsSize").input_value()=="48",
            "Direct touch edit did not restore the authoritative value")
-    page.locator('details[name="hsr-style-parameter-groups"]').first.locator(":scope > summary").click()
     ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
            "Returning to typography created multiple long expanded sections")
     ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),
