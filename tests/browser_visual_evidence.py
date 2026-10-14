@@ -705,8 +705,9 @@ def touch_safety_check(browser, base_url, report):
     number.dispatch_event("change")
     ensure(page.locator("#prevChsSize").input_value()=="52",
            "Direct touch numeric editor failed to update authoritative range value")
-    ensure(page.locator("#prevChsSizeVal").inner_text().strip().startswith("52"),
-           "Touch value did not update live preview parameter feedback")
+    # Rendering is debounced; the committed source range changes synchronously.
+    page.wait_for_function("""() => document.getElementById('prevChsSizeVal')
+      .textContent.trim().startsWith('52')""", timeout=12000)
     page.locator("#prevPresetDefault").click()
     ensure(number.input_value()=="48",
            "Preset restored range but left the touch numeric editor stale")
