@@ -65,7 +65,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     if chapter_enabled and not (output / "chapter_flac" / "chapter_flac_manifest.json").is_file():
         return None
     settings = previous_bundle_settings(output)
-    if settings["background_spec"]["mode"] == "image" and not settings["image_saved"]:
+    if settings.get("background_spec", {}).get("mode") == "image" and not settings.get("image_saved", False):
         return None
     key = str(config.root)
     try:
