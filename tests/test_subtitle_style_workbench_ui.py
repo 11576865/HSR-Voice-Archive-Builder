@@ -19,7 +19,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('id="hsrInspectorTitle"', html)
         self.assertIn('id="studioStyleTab"', html)
         self.assertIn('id="studioEffectsTab"', html)
-        self.assertIn('href="/static/studio-v3.css"', html)
+        self.assertIn('href="/static/studio-v4.css"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
             "grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);",
