@@ -3628,7 +3628,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="切换到浏览器几何求解结果；不是最终 ASS 渲染">几何预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
-                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="使用当前特效生成最长 8 秒视频；选择短视频后叠加到本地素材上，否则使用黑底">播放动态特效</button>
+                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
 <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
                     <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
                   </div>
@@ -3639,36 +3639,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
                 <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
-<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
-  <strong>卡拉 OK · 词级时间准备</strong>
-  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
-  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
-            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
-            <div class="actions" style="margin-top:6px">
-              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
-              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
-              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
-            </div>
-            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-</section>
-<div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
-  <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
-  <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
-  <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
-  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
-  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
-  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
-  <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
-  <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
-  <label for="effectFootageStart">源视频起始位置（秒）</label>
-  <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
-  <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
-  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
-</div>
 <div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色，不影响最终 MKV。</div>
+
 
         <div class="preview-controls" id="previewControls">
           <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
@@ -3863,6 +3835,41 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
         </div>
+<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
+  <strong>卡拉 OK · 词级时间准备</strong>
+  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
+  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
+            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
+              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
+              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
+            </div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
+</section>
+<details class="hsr-preview-media-disclosure" data-studio-scope="effects">
+  <summary>预览视频、图片与底色 <small>可选素材</small></summary>
+  <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
+  <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
+  <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
+  <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
+  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
+  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
+  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
+  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
+  <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
+  <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
+  <label for="effectFootageStart">源视频起始位置（秒）</label>
+  <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
+  <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
+  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
+  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+</div>
+
+</details>
+
+
 
 
         <details class="preview-advanced" data-studio-scope="style">
@@ -8835,7 +8842,7 @@ async function renderHsrEffectVideo(){
     if(button)button.disabled=true;
     setPreviewEvidence('rendering',footage?'正在把当前 ASS 效果叠加到选定的真实本地视频…':'正在渲染真实连续视频；单帧图片不作为本操作的成功结果。');
     if(status)status.textContent=footage?'正在读取本地视频并使用 FFmpeg/libass 合成…':
-      backgroundImage?'正在将本地背景图片逐帧合成真实字幕视频…':'正在 FFmpeg/libass 合成自选纯色背景动态字幕…';
+      backgroundImage?'正在将本地背景图片逐帧合成真实字幕视频…':usesReference?'正在以红云参考图合成动态字幕视频…':'正在 FFmpeg/libass 合成自选纯色背景动态字幕…';
     const player=document.getElementById('libassVideoPreview');
     payload.preview_format=player?.canPlayType?.('video/webm; codecs="vp8"')?'webm':'mp4';
     payload.source_start_seconds=effectFootageOffset();
@@ -8847,7 +8854,7 @@ async function renderHsrEffectVideo(){
       if(!/^image\/(png|jpeg|webp)$/i.test(backgroundImage.type||''))
         throw new Error('背景图片只支持 PNG、JPEG 或 WebP');
       if(!backgroundImage.size||backgroundImage.size>64*1024*1024)
-        throw new Error('背景图片必须在 16 MiB 以内');
+        throw new Error('背景图片必须在 64 MiB 以内');
       payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage);
     }
     if(!stillCurrent())return;
