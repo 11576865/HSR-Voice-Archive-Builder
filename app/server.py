@@ -1744,11 +1744,11 @@ async def _read_bounded_bundle_json(request: Request) -> dict:
     """Enforce upload budget on bytes received, not Content-Length alone."""
     length = request.headers.get("content-length")
     if length is not None and int(length) > MAX_BUNDLE_JSON_BYTES:
-        raise ValueError("MKV background JSON request exceeds 24 MiB")
+        raise ValueError("MKV background JSON request exceeds 96 MiB")
     raw = bytearray()
     async for chunk in request.stream():
         if len(raw) + len(chunk) > MAX_BUNDLE_JSON_BYTES:
-            raise ValueError("MKV background JSON request exceeds 24 MiB")
+            raise ValueError("MKV background JSON request exceeds 96 MiB")
         raw.extend(chunk)
     data = json.loads(raw)
     if not isinstance(data, dict):
