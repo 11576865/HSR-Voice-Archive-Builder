@@ -39,11 +39,11 @@ class StudioFontAndRegionTests(unittest.TestCase):
                 self.assertEqual(resolved.chs_font_path,str(path))
                 self.assertEqual(resolved.primary_font_path,None)
                 selected_log="fontselect: (ProjectChinese, 400, 0) -> ProjectChinese, 0, ProjectChinese"
-                result=type("MatchResult",(),{"stdout":str(path)+"\\n","returncode":0})()
+                result=type("MatchResult",(),{"stdout":str(path),"returncode":0})()
                 with patch("app.ass_preview.subprocess.run",return_value=result):
                     _assert_project_font_selected(selected_log,resolved,fonts,
                                                   english="",chinese="汉字")
-                bad=type("MatchResult",(),{"stdout":"/host/fallback.ttf\\n","returncode":0})()
+                bad=type("MatchResult",(),{"stdout":"/host/fallback.ttf","returncode":0})()
                 with patch("app.ass_preview.subprocess.run",return_value=bad):
                     with self.assertRaisesRegex(RuntimeError,"被回退"):
                         _assert_project_font_selected(selected_log,resolved,fonts,
