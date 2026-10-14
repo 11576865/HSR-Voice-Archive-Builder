@@ -3658,17 +3658,17 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <input id="prevPriFont" value="Noto Sans" autocomplete="off">
               <button type="button" class="secondary font-browse-btn" data-font-target="prevPriFont">浏览</button>
             </div>
-            <div id="fontResolveStatus" class="small muted inspector-help">“浏览”仅列出主机已经安装的字体。若实际 ASS 渲染发生字体回退，请在下面将自己的 TTF/OTF/TTC 导入当前项目，而不是只填写字体名。</div>
+            <div id="fontResolveStatus" class="small muted inspector-help">字体浏览包含项目字体和系统字体。导入后自动选用；以实际 FFmpeg/libass 字形为准。</div>
             <details id="projectFontImporter" class="hsr-project-font-importer">
-              <summary>导入字体到当前项目（真实 ASS 预览可用）</summary>
+              <summary>导入字体</summary>
               <label for="projectFontFile">本地字体文件 · TTF / OTF / TTC，最多 12 MiB</label>
               <input id="projectFontFile" type="file" accept=".ttf,.otf,.ttc,font/ttf,font/otf" />
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
-              <button id="projectFontImportBtn" class="secondary" type="button">导入并应用到当前试调</button>
+              <button id="projectFontImportBtn" class="secondary" type="button">导入并应用</button>
               <button id="projectFontRefreshBtn" class="secondary" type="button">查看已导入字体</button>
               <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
-              <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">仅使用你有权使用和再分发的字体。上传不会安装到系统字体目录；当前阶段用于项目真实预览，完整 MKV 附件封装将单独验收。</p>
+              <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevChsSize" style="margin:0">中文基础字号</label>
@@ -6755,12 +6755,16 @@ async function loadFontBrowser(query=''){
   try{
     const data=await api('/api/subtitle-layout/fonts?q='+encodeURIComponent(query)+'&limit=500');
     const families=data.families||[];
-    meta.textContent='找到 '+families.length+' 个字体 family。悬停或选择字体时会从处理主机按需加载真实字形。';
-    if(!families.length){list.innerHTML='<div class="update-empty">没有匹配字体。</div>';return}
+    const imported=await api('/api/subtitle-layout/project-fonts').then(x=>x.fonts||[]).catch(()=>[]);
+    const choices=[...new Set([...imported.map(x=>String(x.family||'')).filter(Boolean),...families])];
+    meta.textContent='项目字体 '+imported.length+' 个 · 系统字体 '+families.length+' 个。点击选择并加载真实字形。';
+    const filtered=choices.filter(name=>name.toLowerCase().includes(String(query||'').toLowerCase()));
+    if(!filtered.length){list.innerHTML='<div class="update-empty">没有匹配字体。</div>';return}
     list.innerHTML='';
-    for(const family of families){
+    for(const family of filtered){
       const button=document.createElement('button');
       button.type='button';button.className='font-browser-item';
+      if(imported.some(x=>x.family===family))button.dataset.projectFont='true';
       const name=document.createElement('span');name.textContent=family;
       const sample=document.createElement('span');sample.className='font-browser-sample';sample.textContent='Aa 中 123';
       sample.style.fontFamily='"'+family.replace(/"/g,'')+'", sans-serif';
@@ -6845,9 +6849,15 @@ async function importCurrentProjectFont(){
     hostFontFaces.delete(family); // A prior browser fallback is no longer authoritative.
     const field=document.getElementById(target);
     if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
-    await ensureHostFontLoaded(family,{quiet:true});
-    if(status){status.textContent='已导入并选择「'+family+'」。点击「实际 ASS 渲染」验证，不要只相信几何预览。';status.className='small status-ok';}
+    const resolved=await ensureHostFontLoaded(family,{quiet:true});
+    const loaded=hostFontFaces.get(family)?.state==='loaded'&&resolved!==family;
+    if(!loaded)throw new Error('字体已保存，但浏览器加载失败；字体不能被标记为可用，请检查格式');
+    if(status){status.textContent='已导入、加载并应用「'+family+'」作为'+(target==='prevChsFont'?'中文':'原文')+'字体。请使用实际 ASS 渲染核对字形。';status.className='small status-ok';}
+    const resolveStatus=document.getElementById('fontResolveStatus');
+    if(resolveStatus)resolveStatus.textContent='项目字体已加载：'+family+'。实际 ASS 字形仍需验证。';
     await refreshProjectFontList();
+    invalidateLibassPreview();
+    scheduleLayoutPreviewUpdate();
   }catch(error){
     if(status){status.textContent='字体导入失败：'+shortError(error);status.className='small status-bad';}
   }finally{
@@ -6872,34 +6882,12 @@ function openFontBrowser(targetId){
 
 function applyPreviewBackground(){
   const stage=document.getElementById('previewCanvasContainer');
-  const mode='reference';
   const image=document.getElementById('previewBackgroundImage');
-  const grid=document.getElementById('previewBackgroundGrid');
-  const wrap=document.getElementById('previewBackgroundFileWrap');
-  if(!stage||!image||!grid)return;
-  stage.classList.remove('preview-bg-gradient','preview-bg-black','preview-bg-image');
-  grid.classList.toggle('hidden',mode!=='grid');
-  if(mode==='reference'&&image.getAttribute('src')!=='/static/assets/studio-red-clouds.webp')
-    image.src='/static/assets/studio-red-clouds.webp';
-  else if(mode==='image'&&previewBackgroundObjectUrl&&image.src!==previewBackgroundObjectUrl)
-    image.src=previewBackgroundObjectUrl;
-  image.classList.toggle('hidden',!(mode==='reference'||(mode==='image'&&!!previewBackgroundObjectUrl)));
-  if(wrap)wrap.classList.toggle('hidden',mode!=='image');
-  if(mode==='black')stage.classList.add('preview-bg-black');
-  else if(mode==='image'||mode==='reference')stage.classList.add('preview-bg-image');
-  else stage.classList.add('preview-bg-gradient');
-}
-
-function loadPreviewBackgroundFile(file){
-  if(previewBackgroundObjectUrl){URL.revokeObjectURL(previewBackgroundObjectUrl);previewBackgroundObjectUrl=null}
-  if(!file){applyPreviewBackground();return}
-  if(!/^image\/(png|jpeg|webp)$/i.test(file.type||''))throw new Error('背景只支持 PNG、JPEG 或 WebP');
-  previewBackgroundObjectUrl=URL.createObjectURL(file);
-  const image=document.getElementById('previewBackgroundImage');
-  image.src=previewBackgroundObjectUrl;
+  if(!stage||!image)return;
+  image.src='/static/assets/studio-red-clouds.webp';
   image.classList.remove('hidden');
-  applyPreviewBackground();
-  invalidateLibassPreview();
+  stage.classList.remove('preview-bg-gradient','preview-bg-black');
+  stage.classList.add('preview-bg-image');
 }
 
 let previewDebounceTimer = null;
