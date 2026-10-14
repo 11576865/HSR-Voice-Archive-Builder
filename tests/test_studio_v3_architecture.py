@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app/static/index.html").read_text(encoding="utf-8")
-CSS = (ROOT / "app/static/studio-v3.css").read_text(encoding="utf-8")
+CSS = (ROOT / "app/static/studio-v4.css").read_text(encoding="utf-8")
 SHARED = (ROOT / "app/static/hsr-ui-convergence.css").read_text(encoding="utf-8")
 
 
@@ -22,7 +22,7 @@ class StudioV3ArchitectureTests(unittest.TestCase):
             "layoutAuditDrawerToggle", "layoutCorpusRail",
         ):
             self.assertEqual(HTML.count(f'id="{ident}"'), 1, ident)
-        self.assertIn('class="preview-workbench studio-v3-workbench"', HTML)
+        self.assertIn('class="preview-workbench studio-v3-workbench studio-v4-workbench"', HTML)
         self.assertIn('class="studio-v3-command-bar"', HTML)
         self.assertLess(HTML.index('id="studioV3Visual"'), HTML.index('id="studioV3Editors"'))
         self.assertLess(HTML.index('id="studioV3Editors"'), HTML.index('id="studioV3Inspector"'))
@@ -52,11 +52,11 @@ class StudioV3ArchitectureTests(unittest.TestCase):
         self.assertEqual(HTML.count('id="studioEffectsTab"'), 1)
 
     def test_new_layout_isolated_and_no_old_breakpoint_ownership(self):
-        self.assertEqual(HTML.count('href="/static/studio-v3.css"'), 1)
-        self.assertIn("Studio V3", CSS)
+        self.assertEqual(HTML.count('href="/static/studio-v4.css"'), 1)
+        self.assertIn("Studio V4", CSS)
         self.assertIn("grid-template-columns:minmax(0,1fr)", CSS)
         self.assertIn(".studio-v3-editors", CSS)
-        self.assertIn(".studio-v3-visual .preview-stage", CSS)
+        self.assertIn(".studio-v3-visual>.preview-stage", CSS)
         self.assertIn("overscroll-behavior:contain", CSS)
         self.assertNotIn("height:clamp(340px,calc(100dvh - 210px),880px)", SHARED)
         self.assertNotIn("grid-template-rows:minmax(0,44%)", SHARED)
