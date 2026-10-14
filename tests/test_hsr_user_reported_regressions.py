@@ -79,10 +79,12 @@ class UserReportedSetupRegressions(unittest.TestCase):
             "custom", "https://translation.example/v1", "very-secret-key",
             "compatible-model", "local",
         )
-        with patch("app.credentials.load_translation_credentials", return_value=fake), \\
-             patch("app.translator.OpenAIResponsesHTTPClient") as client, \\
-             patch("app.translator.ensure_translation_capability",
-                   return_value={"ok": True, "usage_supported": True}) as run:
+        with (
+            patch("app.credentials.load_translation_credentials", return_value=fake),
+            patch("app.translator.OpenAIResponsesHTTPClient") as client,
+            patch("app.translator.ensure_translation_capability",
+                  return_value={"ok": True, "usage_supported": True}) as run,
+        ):
             outcome = check_api(timeout=4)
         self.assertTrue(outcome["schema_compatible"])
         self.assertNotIn("very-secret-key", json.dumps(outcome))
