@@ -226,13 +226,13 @@ def load_studio(page):
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
     # A separate effects workbench owns timing, Karaoke and playable preview.
     # The style view intentionally hides those controls.
-    ensure(page.locator('[data-hsr-focus-task="layout"]').is_visible(), "Focused Layout task missing")
-    ensure(page.locator('[data-hsr-focus-task="effects"]').is_visible(), "Focused Effects task missing")
+    ensure(page.locator('#studioStyleTab').is_visible(), "Focused Layout task missing")
+    ensure(page.locator('#studioEffectsTab').is_visible(), "Focused Effects task missing")
     ensure(not page.locator("#layoutTimelineViewport").is_visible(), "Style shows effect timeline")
     subtitleRequests = []
     page.on("request", lambda request: subtitleRequests.append(request.url)
             if "/subtitles?selector=all" in request.url else None)
-    page.locator('[data-hsr-focus-task="effects"]').click()
+    page.locator('#studioEffectsTab').click()
     page.wait_for_timeout(150)
     ensure(not subtitleRequests, "Layout -> Effects caused a second subtitle corpus fetch")
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
@@ -269,9 +269,9 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#layoutCorpusRail").is_hidden(), "Second full subtitle explorer still dominates UI")
     ensure(page.locator("#layoutTrialTextDetails").get_attribute("open") is None,
            "Manual text authoring should not be a second visible editor")
-    ensure(page.locator('[data-hsr-focus-task="effects"]').bounding_box()["y"] <
-           page.locator(".preview-workbench").bounding_box()["y"],
-           "Focused Layout / Effects task navigation is not above the editing surface")
+    ensure(page.locator('#studioEffectsTab').count() == 1 and
+           page.locator('#studioStyleTab').count() == 1,
+           "Layout and Effects must have one primary navigation entry each")
     ensure(page.locator("#layoutCueFinalText").count() == 0,
            "Duplicated final text textarea is still mounted")
     shell = page.locator("#subtitleLayoutPreviewCard .preview-workbench").bounding_box()
@@ -358,7 +358,7 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#libassVideoPreview").is_visible(), "Uploaded-footage preview was not decoded")
     ensure("本地画面" in page.locator("#videoPreviewStatus").inner_text(), "Local footage provenance missing")
     screenshot(page, output, "desktop_local_footage_preview")
-    page.locator('[data-hsr-focus-task="layout"]').click()
+    page.locator('#studioStyleTab').click()
     ensure(page.locator("#libassVideoPreview").is_hidden(), "Layout retained stale video")
     ensure(page.locator('#studioStyleTab').get_attribute('aria-current') == 'page',
            "Primary nav did not select Layout")
@@ -375,18 +375,20 @@ def desktop_check(browser, base_url, output, report):
     rail = rect(page, ".preview-workbench .layout-corpus-rail")
     stage_with_qa = rect(page, ".preview-workbench .layout-preview-region")
     qa_inspector = rect(page, ".preview-workbench .preview-inspector")
-    ensure(rail["x"] + rail["width"] <= stage_with_qa["x"] + 8,
-           "Desktop optional QA rail overlaps the Layout stage")
+    workbench_box=rect(page,"#subtitleLayoutPreviewCard .preview-workbench")
+    ensure(rail["x"] >= workbench_box["x"]-3 and
+           rail["x"]+rail["width"] <= workbench_box["x"]+workbench_box["width"]+3,
+           "Optional QA drawer must stay within the bounded task surface")
     ensure(stage_with_qa["x"] + stage_with_qa["width"] <= qa_inspector["x"] + 8,
            "Desktop QA inspector overlaps the Layout stage")
-    page.locator('[data-hsr-focus-task="effects"]').click()
+    page.locator('#studioEffectsTab').click()
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
            "Effects not selected in the primary navigation")
     ensure(page.locator("#studioStyleTab").get_attribute("aria-current") is None,
            "Two top-level workspace tabs selected")
     ensure(page.evaluate("document.body.dataset.workspace") == "layout",
            "Effects forked the canvas layout surface")
-    ensure(page.evaluate("document.body.dataset.workspaceTask") == "effects",
+    ensure(page.evaluate("document.body.dataset.workspaceTask") == "studioEffectsTab",
            "Effects task identity lost")
     ensure(page.locator("#layoutTimelineViewport").is_visible(),
            "Top-level Effects lost the timeline")
@@ -400,18 +402,18 @@ def desktop_check(browser, base_url, output, report):
            "QA opener did not reset when leaving Layout")
     # Programmatic task switches must not strand keyboard focus in a newly
     # inert subtree or on the layout-only (now hidden) drawer opener.
-    page.locator('[data-hsr-focus-task="layout"]').click()
+    page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
     page.locator("#layoutCorpusSearch").focus()
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
-    ensure(page.evaluate("document.activeElement?.dataset.hsrFocusTask") == "effects",
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
            "Moving from focused QA rail to Effects lost visible keyboard focus")
-    page.locator('[data-hsr-focus-task="layout"]').click()
+    page.locator('#studioStyleTab').click()
     page.locator("#layoutAuditDrawerToggle").focus()
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
-    ensure(page.evaluate("document.activeElement?.dataset.hsrFocusTask") == "effects",
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
            "Layout QA opener retained hidden focus after switching to Effects")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Focused QA rail did not close when entering Effects")
@@ -510,7 +512,7 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     ensure(page.locator("#layoutAuditDrawerToggle").is_hidden(),
            f"{label}: layout-only batch QA leaks into Effects")
     screenshot(page, output, f"{label}_clean_studio")
-    page.locator('[data-hsr-focus-task="layout"]').click()
+    page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
            f"{label}: Layout batch QA action unavailable")
     page.locator("#layoutAuditDrawerToggle").click()
@@ -530,7 +532,7 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     # focused controls must transfer focus to the visible Effects tab.
     page.locator("#layoutAuditDrawerToggle").focus()
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
-    ensure(page.evaluate("document.activeElement?.dataset.hsrFocusTask") == "effects",
+    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
            f"{label}: focus stranded on now-hidden QA opener")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            f"{label}: layout QA rail leaks into Effects")
@@ -637,7 +639,7 @@ def shared_corpus_request_check(browser, base_url, report):
 
 
 def focused_studio_viewport_check(browser, base_url, output, report):
-    """The default subtitle task must be viewport-contained, navigable, and reversible."""
+    """Both tasks are bounded in the ordinary page: no focus/fullscreen mode."""
     measured=[]
     for width,height,mobile in [(1600,900,False),(768,1024,True),(390,844,True)]:
         page=browser.new_page(viewport={"width":width,"height":height},
@@ -647,97 +649,67 @@ def focused_studio_viewport_check(browser, base_url, output, report):
         page.on("pageerror",lambda error:errors.append(str(error)))
         page.goto(base_url,wait_until="domcontentloaded")
         load_studio(page)
-        view=page.evaluate("""() => {
-          const root=document.getElementById('subtitleLayoutPreviewCard');
-          const rect=root.getBoundingClientRect();
-          const task=root.querySelector('.preview-workbench');
-          return {
-            bodyOverflow:getComputedStyle(document.body).overflow,
-            position:getComputedStyle(root).position,
-            focus:document.body.dataset.hsrStudioFocus,
-            top:rect.top,height:rect.height,width:rect.width,
-            innerHeight:window.innerHeight,innerWidth:window.innerWidth,
-            taskHeight:task.clientHeight,taskScroll:task.scrollHeight,
-            actionsVisible:!!root.querySelector('#hsrStudioFocusTasks'),
-          };
-        }""")
-        ensure(view["focus"]=="true" and view["position"]=="fixed",
-               f"{width}: user still edits document rather than task viewport: {view}")
-        ensure(view["bodyOverflow"]=="hidden", f"{width}: body not scroll-locked: {view}")
-        ensure(abs(view["top"])<=2 and
-               abs(view["height"]-view["innerHeight"])<=2 and
-               abs(view["width"]-view["innerWidth"])<=2,
-               f"{width}: focus card does not fill viewport: {view}")
-        ensure(view["taskHeight"]>120, f"{width}: viewport left no editor space: {view}")
-        ensure(page.locator('[data-hsr-focus-task="layout"]').is_visible() and
-               page.locator('[data-hsr-focus-task="effects"]').is_visible(),
-               f"{width}: focused task nav is unavailable")
-        # The visible recovery action navigates to the *existing* project font
-        # importer rather than cloning or installing fonts globally.
-        page.locator("#hsrFontImportShortcut").click()
-        ensure(page.evaluate("document.body.dataset.workspaceTask")=="layout",
-               f"{width}: project font shortcut did not navigate to Layout")
-        ensure(page.locator("#projectFontImporter").get_attribute("open") is not None,
-               f"{width}: font importer was not disclosed")
-        ensure(page.locator("#projectFontFile").is_visible(),
-               f"{width}: native font picker remains hidden")
-        page.locator('[data-hsr-focus-task="effects"]').click()
-        page.screenshot(path=str(output/f"focused_studio_{width}.png"),full_page=False)
-        page.keyboard.press("Escape")
-        ensure(page.evaluate("document.body.dataset.hsrStudioFocus")=="false",
-               f"{width}: Escape did not restore document navigation")
-        ensure(page.locator("#hsrStudioFocusToggle").get_attribute("aria-pressed")=="false",
-               f"{width}: focus toggle state did not reset")
-        page.locator("#studioStyleTab").click()
-        ensure(page.evaluate("document.body.dataset.hsrStudioFocus")=="true",
-               f"{width}: returning from normal workspace did not restore focused task")
-        ensure(not errors, f"{width}: JavaScript error in focused task: {errors}")
-        measured.append({"width":width,"height":height,"view":view})
+        for destination in ("effects","layout"):
+            page.locator("#studioEffectsTab" if destination=="effects" else "#studioStyleTab").click()
+            view=page.evaluate("""() => {
+              const root=document.getElementById('subtitleLayoutPreviewCard');
+              const task=root.querySelector('.preview-workbench');
+              const stage=task.querySelector('.layout-preview-region');
+              const tools=task.querySelector('.preview-inspector');
+              return {
+                rootPosition:getComputedStyle(root).position,
+                taskHeight:task.clientHeight,taskScroll:task.scrollHeight,
+                stageHeight:stage.clientHeight,toolsHeight:tools.clientHeight,
+                stageOverflow:getComputedStyle(stage).overflowY,
+                toolsOverflow:getComputedStyle(tools).overflowY,
+                innerHeight:window.innerHeight,
+                focusControls:!!document.getElementById('hsrStudioFocusToggle'),
+                lockControls:!!document.getElementById('hsrTouchSliderToggle'),
+              };
+            }""")
+            ensure(view["rootPosition"]!="fixed" and not view["focusControls"] and
+                   not view["lockControls"],f"{width}: hidden modal/focus lock remains: {view}")
+            ensure(260 <= view["taskHeight"] <= max(view["innerHeight"],340),
+                   f"{width}: workbench is unbounded: {view}")
+            ensure(view["stageOverflow"]=="auto" and view["toolsOverflow"]=="auto",
+                   f"{width}: content is not independently scrollable: {view}")
+            ensure(view["stageHeight"]<=view["taskHeight"]+3 and
+                   view["toolsHeight"]<=view["taskHeight"]+3,
+                   f"{width}: canvas/inspector escaped bounded frame: {view}")
+            measured.append({"width":width,"height":height,"task":destination,"view":view})
+        ensure(not errors,f"{width}: JS errors in bounded workbench: {errors}")
+        page.screenshot(path=str(output/f"bounded_studio_{width}.png"),full_page=False)
         page.close()
-    report["focused_studio"]=measured
+    report["bounded_studio"]=measured
 
 
 def touch_safety_check(browser, base_url, report):
     page=browser.new_page(viewport={"width":390,"height":844},
                           device_scale_factor=1,is_mobile=True,has_touch=True)
-    rows=[dict(x) for x in SUBTITLES]
-    page.route("**/api/**",make_router(rows,[]))
+    page.route("**/api/**",make_router([dict(row) for row in SUBTITLES],[]))
     page.goto(base_url,wait_until="domcontentloaded")
     load_studio(page)
-    # Explicitly access Layout's typography Inspector.
-    page.locator('[data-hsr-focus-task="layout"]').click()
-    page.locator("#prevChsSize").scroll_into_view_if_needed()
-    locked=page.evaluate("""() => ({
-      pointer:getComputedStyle(document.getElementById('prevChsSize')).pointerEvents,
-      button:document.getElementById('hsrTouchSliderToggle').getAttribute('aria-pressed'),
-      inspectorHeight:document.querySelector('.preview-inspector').getBoundingClientRect().height
-    })""")
-    ensure(locked["pointer"]=="none" and locked["button"]=="false",
-           f"Touch slide-to-scroll must not modify range values: {locked}")
-    ensure(page.evaluate("document.body.dataset.hsrStudioFocus") == "true",
-           "Mobile editor did not default to bounded focus viewport")
-    page.locator("#hsrTouchSliderToggle").click()
-    unlocked=page.evaluate("""() => ({
-      pointer:getComputedStyle(document.getElementById('prevChsSize')).pointerEvents,
-      button:document.getElementById('hsrTouchSliderToggle').getAttribute('aria-pressed')
-    })""")
-    ensure(unlocked["pointer"]=="auto" and unlocked["button"]=="true",
-           f"Explicit touch-slider adjustment must be possible: {unlocked}")
-    # A single completed touch edit is enough to re-arm scroll safety.
-    page.locator("#prevChsSize").dispatch_event("pointerup", {"pointerType": "touch"})
-    ensure(page.locator("#hsrTouchSliderToggle").get_attribute("aria-pressed")=="false",
-           "Touch slider was not automatically re-locked after pointerup")
-    value_before=page.locator("#prevChsSize").input_value()
+    page.locator("#studioStyleTab").click()
+    number=page.locator("#prevChsSizeTouchNumber")
+    ensure(number.is_visible(),"Coarse pointer has no direct numeric parameter input")
+    ensure(not page.locator("#prevChsSize").is_visible(),
+           "Touch range still captures vertical scrolling")
+    before=page.locator("#prevChsSize").input_value()
     page.evaluate("""() => {
-      const view=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
-      view.scrollTop+=140;
+      const inspector=document.querySelector('#subtitleLayoutPreviewCard .preview-inspector');
+      inspector.scrollTop+=140;
     }""")
-    ensure(page.locator("#prevChsSize").input_value()==value_before,
-           "Scrolling workbench unexpectedly changed slider value")
-    ensure(page.evaluate("""() => getComputedStyle(
-      document.getElementById('layoutTimelinePan')).pointerEvents""")=="none",
-           "Timeline navigation range remains touch-active while locked")
-    report["touch_sliders"]={"locked":locked,"unlocked":unlocked}
+    ensure(page.locator("#prevChsSize").input_value()==before,
+           "Scrolling Inspector unexpectedly changed parameter value")
+    number.fill("52")
+    number.dispatch_event("change")
+    ensure(page.locator("#prevChsSize").input_value()=="52",
+           "Direct touch numeric editor failed to update authoritative range value")
+    ensure(page.locator("#prevChsSizeVal").inner_text().strip().startswith("52"),
+           "Touch value did not update live preview parameter feedback")
+    ensure(page.locator("#hsrTouchSliderToggle").count()==0,
+           "Global slider locking control has returned")
+    report["touch_numeric"]={"before":before,"after":page.locator("#prevChsSize").input_value()}
     page.close()
 
 
