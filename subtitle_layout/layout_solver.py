@@ -43,6 +43,7 @@ def solve_subtitle_layout(
     base_primary_size: int = DEFAULT_BASE_FONT_SIZE_PRIMARY,
     safe_area: SafeArea = DEFAULT_SAFE_AREA,
     min_central_gap: float = 20.0,
+    primary_region_share: float = 0.60,
     chs_font_path: str | None = None,
     primary_font_path: str | None = None,
 ) -> SolvedLayout:
@@ -54,7 +55,7 @@ def solve_subtitle_layout(
     # 60% to the primary/source subtitle region above the gap and 40% to the
     # Chinese target subtitle region below it.
     available_height = max(0.0, safe_area.max_printable_height - min_central_gap)
-    primary_region_height = available_height * 0.60
+    primary_region_height = available_height * max(0.20, min(0.80, float(primary_region_share)))
     y_center_top = round(safe_area.y_min + primary_region_height)
     y_center_bottom = round(y_center_top + min_central_gap)
 
