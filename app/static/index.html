@@ -3016,6 +3016,25 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
         <p class="small muted">“复制项目”会复制设置和程序生成的索引，但不复制 output 成品、.state 恢复状态或原始语音包，适合从同一素材派生另一套语言/参数。“删除项目”会清理程序管理的数据。</p>
       </div>
+      <details id="translationCredentialsPanel" class="hsr-translation-credentials">
+        <summary>AI API 翻译 · 配置与真实可用性检测</summary>
+        <p class="small muted">当官方中文缺失并启用 AI 翻译时，使用你提供的 API。输入个人 API Key、服务地址和模型，保存后发送一次真实的小样本翻译测试（可能产生少量费用）。密钥只保存在处理设备，不会回显。</p>
+        <form id="translationCredentialsForm">
+          <div class="row">
+            <label>API 服务<select id="translationProvider"><option value="openai">OpenAI</option><option value="custom">兼容 OpenAI Responses 的服务</option></select></label>
+            <label>Base URL <input id="translationBaseUrl" type="url" required placeholder="https://api.openai.com/v1"></label>
+          </div>
+          <div class="row">
+            <label>模型 ID <input id="translationApiModel" required placeholder="服务商支持的模型 ID"></label>
+            <label>你的 API Key <input id="translationApiKey" type="password" autocomplete="new-password" required placeholder="仅保存在当前设备"></label>
+          </div>
+          <div class="actions">
+            <button type="submit" class="primary" id="translationSaveTestBtn">保存并检测 API</button>
+            <button type="button" id="translationRetestBtn">重新检测已保存配置</button>
+          </div>
+        </form>
+        <p id="translationApiStatus" class="small muted" role="status" aria-live="polite">正在读取 API 配置状态…</p>
+      </details>
       <div id="noProject">
         <h3>快速创建</h3>
         <p class="small muted">从本机 Download 目录选择语音包。扫描阶段只读取文件，不修改源包；索引、项目目录和 AI 翻译设置由程序自动准备。</p>
@@ -5698,6 +5717,57 @@ async function saveProject(){
   fillProject(j.project);
   return j.project;
 }
+let translationApiVerified=false;
+async function loadTranslationCredentialStatus(){
+  try{
+    const result=await api('/api/translation/credentials');
+    document.getElementById('translationProvider').value=result.provider==='openai'?'openai':'custom';
+    document.getElementById('translationBaseUrl').value=result.base_url||'https://api.openai.com/v1';
+    document.getElementById('translationApiModel').value=result.default_model||'';
+    const status=document.getElementById('translationApiStatus');
+    status.className='small muted';
+    status.textContent=result.configured
+      ? 'Key 已配置（'+(result.source||'本机')+'），尚未验证本次可用性；请点击「重新检测」。'
+      : '未配置 API Key。仅当官方中文缺失并启用 AI 翻译时才需要配置。';
+  }catch(error){document.getElementById('translationApiStatus').textContent='读取配置失败：'+shortError(error)}
+}
+document.getElementById('translationProvider')?.addEventListener('change',()=>{
+  if(document.getElementById('translationProvider').value==='openai')
+    document.getElementById('translationBaseUrl').value='https://api.openai.com/v1';
+});
+async function runTranslationApiTest(){
+  const status=document.getElementById('translationApiStatus'),button=document.getElementById('translationRetestBtn');
+  translationApiVerified=false;
+  try{
+    if(button)button.disabled=true;
+    status.className='small muted';status.textContent='正在发送真实基础翻译请求（超时 20 秒）…';
+    const result=await api('/api/translation/test',{method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({model:document.getElementById('translationApiModel').value.trim()})});
+    translationApiVerified=!!(result.ok&&result.schema_compatible);
+    status.className='small status-ok';
+    status.textContent='API 可用性检测通过：'+result.provider+' / '+result.model+'；结构化翻译响应有效（可能产生少量费用）。';
+  }catch(error){
+    status.className='small status-bad';
+    status.textContent='API 检测失败：'+shortError(error)+'。请检查 Key、Base URL、模型和 Responses 兼容性。';
+  }finally{if(button)button.disabled=false}
+}
+document.getElementById('translationCredentialsForm')?.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const button=document.getElementById('translationSaveTestBtn'),status=document.getElementById('translationApiStatus');
+  try{
+    button.disabled=true;
+    const d={provider:document.getElementById('translationProvider').value,
+      base_url:document.getElementById('translationBaseUrl').value.trim(),
+      model:document.getElementById('translationApiModel').value.trim(),
+      api_key:document.getElementById('translationApiKey').value.trim()};
+    await api('/api/translation/credentials',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(d)});
+    document.getElementById('translationApiKey').value='';
+    status.className='small muted';status.textContent='凭据已保存；正在检测实际可用性…';
+    await runTranslationApiTest();
+  }catch(error){status.className='small status-bad';status.textContent='保存 API 配置失败：'+shortError(error)}
+  finally{button.disabled=false}
+});
+document.getElementById('translationRetestBtn')?.addEventListener('click',runTranslationApiTest);
 document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
@@ -9102,6 +9172,6 @@ document.getElementById('layoutStyleRedoBtn')?.addEventListener('click',()=>trav
 resetLayoutStyleHistory();
 
 document.getElementById('refreshBtn').onclick=refresh;
-refresh();loadQuickCandidates();
+refresh();loadQuickCandidates();loadTranslationCredentialStatus();
 </script>
 </body></html>
