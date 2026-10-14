@@ -8577,6 +8577,10 @@ function setHsrStudioMode(mode){
       }else section.open=false;
     });
     root.dataset.lastInspectorMode=next;
+    // Each task owns its own parameters. Do not reopen Effects halfway down
+    // the long Layout Inspector or vice versa after task navigation.
+    const inspector=root.querySelector('.preview-inspector');
+    if(inspector)inspector.scrollTop=0;
   }
   syncHsrTouchNumericEditors();
   invalidateLibassPreview();
