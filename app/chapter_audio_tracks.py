@@ -12,7 +12,7 @@ from pathlib import Path
 MAX_CHAPTER_AUDIO_TRACKS = 128
 
 
-def chapter_audio_tracks(output: Path) -> list[tuple[Path, str]]:
+def chapter_audio_tracks(output: Path, *, verify_hashes: bool = True) -> list[tuple[Path, str]]:
     directory = output / "chapter_flac"
     manifest = directory / "chapter_flac_manifest.json"
     if directory.is_symlink() or manifest.is_symlink() or not manifest.is_file():
@@ -36,12 +36,13 @@ def chapter_audio_tracks(output: Path) -> list[tuple[Path, str]]:
         digest = str(row.get("file_sha256") or "")
         if len(digest) != 64 or any(ch not in "0123456789abcdef" for ch in digest):
             raise ValueError("章节 FLAC 清单缺少有效音频校验值")
-        hasher = hashlib.sha256()
-        with track.open("rb") as stream:
-            for chunk in iter(lambda: stream.read(1024 * 1024), b""):
-                hasher.update(chunk)
-        if hasher.hexdigest() != digest:
-            raise ValueError("章节音轨与清单校验不一致：" + name)
+        if verify_hashes:
+            hasher = hashlib.sha256()
+            with track.open("rb") as stream:
+                for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+                    hasher.update(chunk)
+            if hasher.hexdigest() != digest:
+                raise ValueError("章节音轨与清单校验不一致：" + name)
         names.add(name)
         tracks.append((track, str(row.get("group_id") or name)))
     return tracks
