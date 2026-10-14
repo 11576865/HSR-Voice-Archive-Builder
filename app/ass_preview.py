@@ -219,6 +219,9 @@ def render_ass_preview_png(
             overflow_report_path=root / "overflow.json",
         )
         escaped_ass = _escape_subtitles_filter_path(ass_path)
+        font_env = _project_font_environment(
+            config, font_dir, root, english=english_text, chinese=chinese_text,
+        )
         if use_studio_reference_background:
             image_path = root / "reference.webp"
             image_path.write_bytes(load_studio_reference_background())
@@ -250,12 +253,14 @@ def render_ass_preview_png(
             text=True,
             timeout=20,
             check=False,
+            env=font_env,
         )
         if completed.returncode != 0 or not png_path.is_file() or png_path.stat().st_size == 0:
             detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
             raise RuntimeError(f"FFmpeg/libass 预览失败: {detail[:1200]}")
         _assert_project_font_selected(completed.stderr, config, font_dir,
-                                      english=english_text, chinese=chinese_text)
+                                      english=english_text, chinese=chinese_text,
+                                      env=font_env)
         return png_path.read_bytes()
 
 
@@ -416,6 +421,9 @@ def render_ass_preview_video(
             overflow_report_path=root / "overflow.json",
         )
         escaped_ass = _escape_subtitles_filter_path(ass_path)
+        font_env = _project_font_environment(
+            config, font_dir, root, english=english_text, chinese=chinese_text,
+        )
         if source_video_bytes is not None:
             source_path = root / "selected-local-footage"
             source_path.write_bytes(source_video_bytes)
@@ -468,7 +476,8 @@ def render_ass_preview_video(
         command += ["-t", f"{duration:.3f}", str(result_path)]
         try:
             completed = subprocess.run(
-                command, capture_output=True, text=True, timeout=50, check=False
+                command, capture_output=True, text=True, timeout=50, check=False,
+                env=font_env
             )
         except subprocess.TimeoutExpired as exc:
             raise RuntimeError("FFmpeg/libass preview timed out") from exc
@@ -477,7 +486,8 @@ def render_ass_preview_video(
             detail = (completed.stderr or completed.stdout or "unknown FFmpeg error").strip()
             raise RuntimeError(f"FFmpeg/libass preview failed: {detail[:1200]}")
         _assert_project_font_selected(completed.stderr, config, font_dir,
-                                      english=english_text, chinese=chinese_text)
+                                      english=english_text, chinese=chinese_text,
+                                      env=font_env)
         if result_path.stat().st_size > 16 * 1024 * 1024:
             raise RuntimeError("Dynamic preview exceeds 16 MiB output limit")
         return result_path.read_bytes()
