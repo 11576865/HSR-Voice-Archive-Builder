@@ -97,8 +97,8 @@ def load_studio_under_production_csp(page) -> None:
           status: document.getElementById('layoutCorpusCheckStatus')?.textContent
         })""")
         raise AssertionError(f"Production corpus did not initialize: {state}") from exc
-    # A real user in focused mode changes tasks via the visible in-workbench navigation.
-    page.locator('[data-hsr-focus-task="effects"]').click()
+    # The primary workspace navigation is the only Layout/Effects switch.
+    page.locator("#studioEffectsTab").click()
     ensure(page.locator("#previewVideoBtn").is_visible(), "Effect preview hidden")
 
 
