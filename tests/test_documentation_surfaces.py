@@ -19,7 +19,7 @@ class DocumentationSurfaceTests(unittest.TestCase):
         self.assertIn("两条独立可选的 ASS/SRT 软字幕轨", readme)
         self.assertIn("output/exports/", readme)
         self.assertIn("仅连续 FLAC", readme)
-        self.assertIn("上传背景图上限为 16 MiB", readme)
+        self.assertIn("上传背景图上限为 64 MiB", readme)
         self.assertIn("confirmed incremental `Chinese(PRC)` text as official Chinese target text", readme)
         self.assertIn("docs/reliability.md", readme)
         self.assertLess(len(readme), 12000)
