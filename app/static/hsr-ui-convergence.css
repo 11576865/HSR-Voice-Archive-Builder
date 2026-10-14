@@ -271,16 +271,18 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench.audi
 
 
 /* WU-02: evidence-based stage/inspector composition on portrait and tablet.
-   Stage stays visible as its independently scrolling timeline is edited.
-   Reference scenery is deliberately NOT the project/MKV delivery background. */
+   Preview and Inspector are independently scrollable. Do not stick the scene
+   inside the timeline's own scroll pane: an overlapping sticky stage intercepts
+   touch/pointerdown on timeline drag handles after scroll-into-view.
+   Reference scenery is NOT the project/MKV delivery background. */
 body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench>.layout-preview-region{
   background:#0d111a!important;
   scroll-padding-top:1rem;
 }
 body[data-workspace="layout"] #subtitleLayoutPreviewCard .layout-preview-region>.preview-stage{
-  position:sticky!important;
-  top:0!important;
-  z-index:9;
+  position:relative!important;
+  top:auto!important;
+  z-index:1;
   width:min(100%, calc(50dvh * 16 / 9))!important;
   max-width:100%!important;
   margin-inline:auto!important;
