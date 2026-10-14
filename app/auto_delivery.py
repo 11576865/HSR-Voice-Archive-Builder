@@ -67,10 +67,14 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     if settings["background_spec"]["mode"] == "image" and not settings["image_saved"]:
         return None
     key = str(config.root)
-    snapshot = _input_identity(
-        output, include_fonts=settings["attach_project_fonts"], settings=settings,
-        include_chapter_flac=config.generate_chapter_flac,
-    )
+    try:
+        snapshot = _input_identity(
+            output, include_fonts=settings["attach_project_fonts"], settings=settings,
+            include_chapter_flac=config.generate_chapter_flac,
+        )
+    except (OSError, ValueError, TypeError):
+        # Invalid chapter sources must not erase the whole project dashboard.
+        return None
     with _LOCK:
         prior = _ATTEMPTS.get(key)
         failures = 0
