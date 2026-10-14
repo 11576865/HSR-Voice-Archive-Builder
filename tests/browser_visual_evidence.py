@@ -10,11 +10,13 @@ import argparse
 import base64
 import json
 import math
+import mimetypes
 import os
 import subprocess
 import tempfile
 from pathlib import Path
 import threading
+from urllib.parse import unquote, urlsplit
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 
 from playwright.sync_api import sync_playwright
@@ -58,13 +60,24 @@ class QuietHandler(SimpleHTTPRequestHandler):
         super().__init__(*args, directory=str(ROOT), **kwargs)
 
     def do_GET(self):
-        if self.path.startswith("/static/hsr-ui-convergence.css"):
-            css=(ROOT / "app/static/hsr-ui-convergence.css").read_bytes()
+        # Mirror both production servers' /static mount. The old fixture
+        # special-cased just the stylesheet, accidentally returning HTTP 404
+        # for the newly bundled diagnostic WebP image.
+        path = unquote(urlsplit(self.path).path)
+        if path.startswith("/static/"):
+            static_root = (ROOT / "app" / "static").resolve()
+            requested = (static_root / path[len("/static/"):]).resolve()
+            if not requested.is_relative_to(static_root) or not requested.is_file():
+                self.send_error(404, "Static resource does not exist")
+                return
+            media_type = mimetypes.guess_type(str(requested))[0] or "application/octet-stream"
+            payload = requested.read_bytes()
             self.send_response(200)
-            self.send_header("Content-Type", "text/css; charset=utf-8")
-            self.send_header("Content-Length", str(len(css)))
+            self.send_header("Content-Type", media_type)
+            self.send_header("X-Content-Type-Options", "nosniff")
+            self.send_header("Content-Length", str(len(payload)))
             self.end_headers()
-            self.wfile.write(css)
+            self.wfile.write(payload)
             return
         if self.path.startswith("/app/static/index.html"):
             # Match the production FastAPI template injection; serving raw
@@ -302,10 +315,25 @@ def desktop_check(browser, base_url, output, report):
            "Effects operation status is not visible beside the stage")
     ensure(page.locator("#previewBackgroundMode").input_value()=="reference",
            "Studio did not default to user red-clouds reference")
-    page.wait_for_function("""() => {
-      const i=document.getElementById('previewBackgroundImage');
-      return i && i.complete && i.naturalWidth===640 && i.naturalHeight===360;
-    }""",timeout=10000)
+    try:
+        page.wait_for_function("""() => {
+          const i=document.getElementById('previewBackgroundImage');
+          return i && i.complete && i.naturalWidth===640 && i.naturalHeight===360;
+        }""",timeout=10000)
+    except Exception as exc:
+        image_details = page.evaluate("""() => {
+          const img=document.getElementById('previewBackgroundImage');
+          return img && {
+            src: img.currentSrc, complete: img.complete,
+            naturalWidth: img.naturalWidth, naturalHeight: img.naturalHeight
+          };
+        }""")
+        response = page.request.get(page.url.split("/app/static/index.html")[0] +
+                                    "/static/assets/studio-red-clouds.webp")
+        raise AssertionError(
+            f"Reference WebP did not decode: {image_details}; HTTP {response.status}; "
+            f"type={response.headers.get('content-type')}; bytes={len(response.body())}"
+        ) from exc
     ensure(page.locator("#previewBackgroundImage").is_visible(),
            "Red-clouds image is missing from the actual stage")
     screenshot(page, output, "desktop_clean_effects_workspace")
