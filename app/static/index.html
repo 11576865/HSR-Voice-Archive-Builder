@@ -8613,8 +8613,11 @@ function renderPreviewCanvasSvg(data, options) {
 
   svg.innerHTML = elements.join('');
 
-  // Lightweight HTML5 Canvas Subtitle Rendering
-  renderCanvasSubtitleOverlay(data);
+  // Exactly one browser geometry text renderer: SVG. The legacy Canvas
+  // renderer painted the very same lines a second time (different metrics),
+  // producing visibly doubled/ghosted glyphs after a font change.
+  const overlay=document.getElementById('assCanvasPreview');
+  overlay?.getContext('2d')?.clearRect(0,0,overlay.width,overlay.height);
 }
 
 function renderCanvasSubtitleOverlay(data) {
