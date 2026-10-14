@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import base64
+import hashlib
+import json
 import shutil
 import subprocess
 import tempfile
@@ -17,6 +19,7 @@ from app.archive_bundle_exporter import (
 from app.subtitle_export_status import record_subtitle_export
 from app.archive_bundle_lifecycle import bundle_export_status, load_previous_bundle_image
 from app import jobs as job_registry
+from app.delivery_artifacts import seal_complete_delivery, extract_flac_from_mkv
 
 
 class BundleInputValidationTests(unittest.TestCase):
@@ -139,6 +142,48 @@ class BundleRealFFmpegTests(unittest.TestCase):
             "1\n00:00:00,000 --> 00:00:01,500\nTest\n", encoding="utf-8"
         )
         record_subtitle_export(root, state="current", ass_required=True)
+
+    def test_chapter_flacs_become_selectable_mkv_audio_and_main_stays_extractable(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            chapter_dir = root / "chapter_flac"
+            chapter_dir.mkdir()
+            rows = []
+            for index, frequency in enumerate((300, 650), start=1):
+                chapter = chapter_dir / f"{index:02d}_chapter.flac"
+                subprocess.run([
+                    "ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                    "-i", f"sine=frequency={frequency}:sample_rate=44100:duration=0.9",
+                    "-c:a", "flac", str(chapter),
+                ], check=True, capture_output=True)
+                rows.append({
+                    "ordinal": index, "group_id": f"chapter{index}",
+                    "path": str(chapter),
+                    "file_sha256": hashlib.sha256(chapter.read_bytes()).hexdigest(),
+                })
+            (chapter_dir / "chapter_flac_manifest.json").write_text(
+                json.dumps({"schema_version": 1, "chapter_count": 2,
+                            "outputs": rows}), encoding="utf-8",
+            )
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            mkv = root / "HSR_Voice_Archive_Bundle.mkv"
+            result = exporter.export(
+                audio, ass, mkv, require_current_ass=True, include_chapter_flac=True,
+            )
+            self.assertEqual(result["audio_track_count"], 3)
+            probe = exporter._probe(mkv)
+            tracks = [row for row in probe["streams"] if row.get("codec_type") == "audio"]
+            self.assertEqual([row["codec_name"] for row in tracks],
+                             ["flac", "flac", "flac"])
+            self.assertEqual(tracks[0].get("disposition", {}).get("default"), 1)
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            seal_complete_delivery(root)
+            self.assertFalse(audio.exists())
+            self.assertTrue(extract_flac_from_mkv(root).is_file())
+            (chapter_dir / "01_chapter.flac").write_bytes(b"damaged")
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
 
     def test_default_dual_soft_subtitle_tracks_and_srt_staleness(self):
         with tempfile.TemporaryDirectory() as td:
