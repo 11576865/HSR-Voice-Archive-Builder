@@ -19,7 +19,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('id="hsrInspectorTitle"', html)
         self.assertIn('id="studioStyleTab"', html)
         self.assertIn('id="studioEffectsTab"', html)
-        self.assertIn('href="/static/hsr-ui-convergence.css"', html)
+        self.assertIn('href="/static/studio-v3.css"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
             "grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);",
@@ -105,7 +105,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         html = self.html
         self.assertIn("Subtitle Style Workbench v15", html)
         self.assertIn('class="layout-workflow-strip"', html)
-        self.assertIn('class="layout-preview-region"', html)
+        self.assertIn('class="layout-preview-region studio-v3-main"', html)
         self.assertIn('class="layout-preview-evidence"', html)
         for element_id in (
             "previewModeLabel",

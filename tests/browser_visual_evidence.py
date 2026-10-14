@@ -295,13 +295,17 @@ def desktop_check(browser, base_url, output, report):
            f"Desktop workbench must be viewport-bounded, not an endless document: {shell}")
     scroll_regions=page.evaluate("""() => {
       const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
-      const preview=root.querySelector('.layout-preview-region');
+      const preview=root.querySelector('.studio-v3-editors');
       const inspector=root.querySelector('.preview-inspector');
       return [preview,inspector].map(x=>({scroll:getComputedStyle(x).overflowY,
         height:x.clientHeight,outer:root.clientHeight}));
     }""")
     ensure(all(x["scroll"] == "auto" and x["height"] <= x["outer"]+3 for x in scroll_regions),
-           f"Desktop canvas and Inspector must be independent scroll panes: {scroll_regions}")
+           f"V3 timeline/cue and Inspector must be independent scroll panes: {scroll_regions}")
+    ensure(page.locator(".studio-v3-command-bar #previewVideoBtn").count() == 1,
+           "V3 stage must own the live preview command")
+    ensure(page.locator(".studio-v3-inspector #previewVideoBtn").count() == 0,
+           "Render controls must not be buried inside the Inspector")
     ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
            "Karaoke generation/import remains hidden in an advanced disclosure")
     for action in ("#refreshWordAlignmentBtn","#importWordAlignmentBtn"):
@@ -589,27 +593,42 @@ def mobile_check(browser, base_url, output, report, width, height, label):
            f"{label}: hidden QA controls remain focusable")
     ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "false",
            f"{label}: QA opener did not return to closed state")
-    vp = rect(page, "#layoutTimelineViewport")
     canvas = rect(page, ".preview-workbench .preview-stage")
-    cue = rect(page, "#layoutCueEditorPanel")
-    inspector = rect(page, ".preview-inspector")
-    ensure(canvas["y"] < cue["y"],
-           f"{label}: preview must come before selected subtitle timing")
-    if width < 760:
-        preview_pane = rect(page, ".preview-workbench .layout-preview-region")
-        ensure(preview_pane["y"] + preview_pane["height"] <= inspector["y"] + 8,
-               f"{label}: bounded preview pane physically overlaps inspector")
-        ensure(page.evaluate("""() => getComputedStyle(
-          document.querySelector('.preview-workbench .layout-preview-region')).overflowY""") == "auto",
-               f"{label}: cue/timeline must scroll inside clipped preview pane")
+    if width < 680:
+        tabs = page.locator('.studio-v3-pane-nav [role="tab"]')
+        ensure(tabs.count()==3 and tabs.first.is_visible(),
+               f"{label}: mobile task selector missing")
+        ensure(page.locator("#studioV3TimelineTab").get_attribute("aria-selected")=="true",
+               f"{label}: Effects should open in its timeline")
+        vp=rect(page,"#layoutTimelineViewport")
+        page.locator("#studioV3CueTab").click()
+        ensure(page.locator("#layoutCueEditorPanel").is_visible(),
+               f"{label}: cue panel missing")
+        cue=rect(page,"#layoutCueEditorPanel")
+        ensure(canvas["y"] < cue["y"], f"{label}: cue obscures the stage")
+        page.locator("#studioV3InspectorTab").click()
+        inspector=rect(page,".studio-v3-inspector")
+        ensure(page.locator("#layoutTimelinePanel").is_hidden(),
+               f"{label}: inactive timeline still visible")
+        page.locator("#studioV3TimelineTab").click()
+        ensure(page.locator("#layoutTimelineViewport").is_visible(),
+               f"{label}: timeline not restored")
     else:
-        preview_pane = rect(page, ".preview-workbench .layout-preview-region")
-        ensure(preview_pane["y"] + preview_pane["height"] <= inspector["y"] + 8,
-               f"{label}: tablet preview scroll pane overlaps inspector")
-        ensure(inspector["width"] >= width * 0.72,
-               f"{label}: tablet inspector too narrow for controls")
-    ensure(vp["width"] > width*(0.6 if width < 760 else 0.38), f"{label}: timeline too narrow")
-    ensure(page.locator("#layoutCueTimingStart").is_enabled(), f"{label}: timing editor inaccessible")
+        ensure(page.locator(".studio-v3-pane-nav").is_hidden(),
+               f"{label}: tablet shouldn't have phone task tabs")
+        vp=rect(page,"#layoutTimelineViewport")
+        cue=rect(page,"#layoutCueEditorPanel")
+        inspector=rect(page,".studio-v3-inspector")
+        ensure(canvas["y"]<cue["y"],f"{label}: stage should precede cue")
+        preview_pane=rect(page,".studio-v3-main")
+        ensure(preview_pane["y"]+preview_pane["height"]<=inspector["y"]+8,
+               f"{label}: tablet panes overlap")
+        ensure(inspector["width"]>=width*0.72,
+               f"{label}: tablet Inspector too narrow")
+    ensure(vp["width"]>width*(0.6 if width<760 else 0.38),
+           f"{label}: timeline too narrow")
+    ensure(page.locator("#layoutCueTimingStart").is_enabled(),
+           f"{label}: timing controls disabled")
     # Control headings/content must stay within the horizontal viewport, not
     # merely hide body overflow in CSS.
     sizes = page.evaluate("""() => ({
@@ -706,7 +725,7 @@ def focused_studio_viewport_check(browser, base_url, output, report):
             view=page.evaluate("""() => {
               const root=document.getElementById('subtitleLayoutPreviewCard');
               const task=root.querySelector('.preview-workbench');
-              const stage=task.querySelector('.layout-preview-region');
+              const stage=task.querySelector('.studio-v3-editors');
               const tools=task.querySelector('.preview-inspector');
               return {
                 rootPosition:getComputedStyle(root).position,
@@ -724,7 +743,7 @@ def focused_studio_viewport_check(browser, base_url, output, report):
             ensure(260 <= view["taskHeight"] <= max(view["innerHeight"],340),
                    f"{width}: workbench is unbounded: {view}")
             ensure(view["stageOverflow"]=="auto" and view["toolsOverflow"]=="auto",
-                   f"{width}: content is not independently scrollable: {view}")
+                   f"{width}: editing deck and Inspector must scroll independently: {view}")
             ensure(view["stageHeight"]<=view["taskHeight"]+3 and
                    view["toolsHeight"]<=view["taskHeight"]+3,
                    f"{width}: canvas/inspector escaped bounded frame: {view}")

@@ -35,7 +35,7 @@ class ReferenceBackgroundTests(unittest.TestCase):
 
     def test_workbench_uses_reference_by_default_but_archive_export_does_not(self):
         html = (ROOT / "app/static/index.html").read_text("utf-8")
-        css = (ROOT / "app/static/hsr-ui-convergence.css").read_text("utf-8")
+        css = (ROOT / "app/static/studio-v3.css").read_text("utf-8")
         self.assertIn('id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp"', html)
         self.assertIn('<option value="reference" selected>', html)
         self.assertIn('use_studio_reference_background:', html)
@@ -45,7 +45,7 @@ class ReferenceBackgroundTests(unittest.TestCase):
         self.assertIn("invalidateLibassPreview();", html)
         self.assertIn("不改变项目图、ASS 或最终 MKV 背景", html)
         self.assertIn("position:relative!important", css)
-        self.assertIn("timeline drag handles after scroll-into-view", css)
+        self.assertNotIn("position:sticky!important;top:0!important;z-index:9", css)
         self.assertIn(".hsr-cue-timing-disclosure", css)
         self.assertIn('<summary>按需调整显示时间', html)
         self.assertNotIn("studio-red-clouds.webp", (ROOT / "app/archive_bundle_exporter.py").read_text("utf-8"))

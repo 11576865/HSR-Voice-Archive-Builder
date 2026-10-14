@@ -449,8 +449,8 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("平滑淡入淡出", html)
         self.assertNotIn("淡入淡出 / 动态进入", html)
         self.assertIn('class="preview-stage" id="previewCanvasContainer"', html)
-        self.assertIn('class="preview-workbench"', html)
-        self.assertIn('class="preview-inspector" aria-label="字幕样式参数与操作"', html)
+        self.assertIn('class="preview-workbench studio-v3-workbench"', html)
+        self.assertIn('class="preview-inspector studio-v3-inspector" id="studioV3Inspector" aria-label="字幕样式与特效参数"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
             'grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);',
