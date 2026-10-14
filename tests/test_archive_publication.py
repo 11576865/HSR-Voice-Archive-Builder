@@ -9,6 +9,7 @@ import tempfile
 import unittest
 import wave
 from pathlib import Path
+from types import SimpleNamespace
 from unittest.mock import patch
 
 from app.pipeline import build_project_v02
@@ -31,8 +32,7 @@ class ArchiveBackupPortabilityTests(unittest.TestCase):
             chapter.write_bytes(b"old chapter")
 
             # Reproduce Android/Termux Python builds without os.link.
-            with patch.object(os, "link", create=True):
-                del os.link
+            with patch("app.publishing.os", new=SimpleNamespace(replace=os.replace)):
                 with self.assertRaisesRegex(RuntimeError, "build failed"):
                     with preserve_published_archive(output, state):
                         audio.write_bytes(b"new audio")
