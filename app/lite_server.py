@@ -1535,7 +1535,8 @@ class Handler(BaseHTTPRequestHandler):
                 ).export(
                     source, subtitle, target, fonts_dir=font_asset_directory(output),
                     include_fonts=include_fonts, background_color=color, background_image=image, background_spec=spec,
-                require_current_ass=True,
+                    include_chapter_flac=config.generate_chapter_flac,
+                    require_current_ass=True,
                     progress=lambda current, total, msg: report_progress("encode", msg, current, total),
                 )
                 seal_complete_delivery(output)
