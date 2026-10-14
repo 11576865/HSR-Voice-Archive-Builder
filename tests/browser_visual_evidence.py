@@ -646,7 +646,7 @@ def shared_corpus_request_check(browser, base_url, report):
 def focused_studio_viewport_check(browser, base_url, output, report):
     """Both tasks are bounded in the ordinary page: no focus/fullscreen mode."""
     measured=[]
-    for width,height,mobile in [(1600,900,False),(768,1024,True),(390,844,True)]:
+    for width,height,mobile in [(1600,900,False),(768,1024,True),(390,844,True),(844,390,True)]:
         page=browser.new_page(viewport={"width":width,"height":height},
                               device_scale_factor=1,is_mobile=mobile,has_touch=mobile)
         page.route("**/api/**",make_router([dict(row) for row in SUBTITLES],[]))
