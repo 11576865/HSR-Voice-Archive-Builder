@@ -156,10 +156,10 @@ def publish_flac_only(output: Path) -> Path:
     if not audio.stat().st_size or len([s for s in streams if s.get("codec_type") == "audio"
                                            and s.get("codec_name") == "flac"]) != 1:
         raise ValueError("Single-FLAC output failed codec validation")
-    for name in (SRT, ASS):
+    for name in (SRT, ASS, LEGACY_BLACK):
         candidate = output / name
         if candidate.is_symlink():
-            raise ValueError("Unsafe subtitle path")
+            raise ValueError("Unsafe project-generated output path")
     # The former bundle and its publication receipt are now an obsolete
     # *project-owned* output. A failure before this line leaves them intact.
     receipt = _read_receipt(output)
@@ -174,7 +174,7 @@ def publish_flac_only(output: Path) -> Path:
         }, ensure_ascii=False, indent=2))
     (output / OUTPUT).unlink(missing_ok=True)
     (output / RECEIPT).unlink(missing_ok=True)
-    for name in (SRT, ASS):
+    for name in (SRT, ASS, LEGACY_BLACK):
         (output / name).unlink(missing_ok=True)
     return audio
 
@@ -258,6 +258,11 @@ def export_optional_track(output: Path, kind: Literal["flac", "srt", "ass"]) -> 
     index = 1 if kind == "srt" else 0
     if index >= len(streams) or streams[index].get("codec_name") != media_codec:
         raise ValueError("Requested track is not present in the verified MKV")
-    exported = output / "exports" / name
+    export_dir = output / "exports"
+    # Explicit exports must stay within their project. A symlinked exports/
+    # folder otherwise redirects writes outside the selected project root.
+    if export_dir.is_symlink():
+        raise ValueError("Unsafe symlinked track export directory")
+    exported = export_dir / name
     _copy_track(output / OUTPUT, exported, map_arg=stream_map, codec=codec, fmt=fmt)
     return exported
