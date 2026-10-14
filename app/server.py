@@ -819,7 +819,7 @@ async def api_subtitle_layout_render_preview(request: Request):
 @app.post("/api/subtitle-layout/render-preview-video")
 async def api_subtitle_layout_render_preview_video(request: Request):
     try:
-        max_body = 36 * 1024 * 1024
+        max_body = 96 * 1024 * 1024
         size = request.headers.get("content-length")
         if size is not None and int(size) > max_body:
             raise ValueError("Preview JSON body exceeds 36 MiB")
