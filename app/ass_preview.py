@@ -72,6 +72,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
             0.0, min(0.40, float(data.get("margin_vertical_percent", 0.05)))
         ),
         min_central_gap=max(0.0, min(200.0, float(data.get("min_central_gap", 20.0)))),
+        primary_region_share=max(0.20, min(0.80, float(data.get("primary_region_share", 0.60)))),
     )
 
 
