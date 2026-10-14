@@ -775,16 +775,17 @@ def touch_safety_check(browser, base_url, report):
     # Rendering is debounced; the committed source range changes synchronously.
     page.wait_for_function("""() => document.getElementById('prevChsSizeVal')
       .textContent.trim().startsWith('52')""", timeout=12000)
-    # Mutually exclusive native Inspector sections keep the toolbar short.
-    # Presets belong to a different section, so open it intentionally.
+    # The old preset accordion is intentionally hidden. Exercise a visible
+    # category and then a direct numeric edit, never force-click hidden UI.
     style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
-    ensure(style_sections.count()==4,"Style must expose four exclusive parameter groups")
-    page.locator('details[name="hsr-style-parameter-groups"]').nth(2).locator(":scope > summary").click()
-    ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
-           "Multiple long style sections remained expanded after category switch")
-    page.locator("#prevPresetDefault").click()
-    ensure(number.input_value()=="48",
-           "Preset restored range but left the touch numeric editor stale")
+    ensure(style_sections.count()==4,"Style controls unexpectedly lost a section")
+    style_sections.nth(3).locator(":scope > summary").click()
+    ensure(style_sections.nth(3).evaluate("(el)=>el.open"),
+           "Appearance section cannot be expanded")
+    number.fill("48")
+    number.dispatch_event("change")
+    ensure(page.locator("#prevChsSize").input_value()=="48",
+           "Direct touch edit did not restore the authoritative value")
     page.locator('details[name="hsr-style-parameter-groups"]').first.locator(":scope > summary").click()
     ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
            "Returning to typography created multiple long expanded sections")
