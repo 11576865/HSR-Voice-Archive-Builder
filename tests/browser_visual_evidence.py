@@ -320,8 +320,9 @@ def desktop_check(browser, base_url, output, report):
            "Karaoke readiness failed to explain missing project data")
     ensure(page.locator("#generateWordAlignmentBtn").is_disabled(),
            "WhisperX generation claimed availability in an unconfigured fixture")
-    ensure(page.locator("#hsrEffectOperationStatus").is_visible(),
-           "Effects operation status is not visible beside the stage")
+    ensure(page.locator("#hsrEffectOperationStatus").get_attribute("data-phase")=="idle" and
+           page.locator("#hsrEffectOperationStatus").is_hidden(),
+           "Idle operation status should not take space away from the image")
     ensure(page.locator("#previewBackgroundMode").input_value()=="reference",
            "Studio did not default to user red-clouds reference")
     try:
