@@ -38,12 +38,16 @@ class StudioFontAndRegionTests(unittest.TestCase):
                 resolved=_project_font_config(cfg,fonts)
                 self.assertEqual(resolved.chs_font_path,str(path))
                 self.assertEqual(resolved.primary_font_path,None)
-                selected_log="fontselect: (ProjectChinese, 400, 0) -> "+str(path)+", 0, ProjectChinese"
-                _assert_project_font_selected(selected_log,resolved,fonts,
-                                              english="",chinese="汉字")
-                with self.assertRaisesRegex(RuntimeError,"导入字体未用于真实 ASS 渲染"):
-                    _assert_project_font_selected("fontselect: (ProjectChinese, 400, 0) -> /host/fallback.ttf",
-                                                  resolved,fonts,english="",chinese="汉字")
+                selected_log="fontselect: (ProjectChinese, 400, 0) -> ProjectChinese, 0, ProjectChinese"
+                result=type("MatchResult",(),{"stdout":str(path)+"\\n","returncode":0})()
+                with patch("app.ass_preview.subprocess.run",return_value=result):
+                    _assert_project_font_selected(selected_log,resolved,fonts,
+                                                  english="",chinese="汉字")
+                bad=type("MatchResult",(),{"stdout":"/host/fallback.ttf\\n","returncode":0})()
+                with patch("app.ass_preview.subprocess.run",return_value=bad):
+                    with self.assertRaisesRegex(RuntimeError,"被回退"):
+                        _assert_project_font_selected(selected_log,resolved,fonts,
+                                                      english="",chinese="汉字")
 
     def test_html_has_single_geometry_glyph_layer_and_region_control(self):
         html=(ROOT/"app/static/index.html").read_text("utf-8")
