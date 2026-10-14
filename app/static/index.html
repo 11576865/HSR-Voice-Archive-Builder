@@ -3842,9 +3842,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
         </div>
-<section id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="卡拉 OK 逐词时间准备">
-  <strong>卡拉 OK · 词级时间准备</strong>
-  <p class="small muted">无需寻找通用文件：使用当前项目的原始音频与台词生成逐词时间，或导入与项目匹配的 JSON。没有有效时间时不会伪造高亮。</p>
+<details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
+  <summary>词级时间 <small>可选 · 生成或导入</small></summary>
   <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
@@ -3854,9 +3853,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
             <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-</section>
+</details>
 <details class="hsr-preview-media-disclosure" data-studio-scope="effects">
-  <summary>预览视频、图片与底色 <small>可选素材</small></summary>
+  <summary>自选预览素材 <small>高级选项</small></summary>
   <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
   <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
   <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
@@ -9137,6 +9136,8 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
     invalidateLibassPreview();
     updateLayoutPreview();
     if(id==='prevEnableKaraoke'){
+      const panel=document.getElementById('hsrKaraokeReadiness');
+      if(panel&&document.getElementById('prevEnableKaraoke')?.checked)panel.open=true;
       loadWordAlignmentDiagnostics();
       loadLayoutStressSample();
     }
