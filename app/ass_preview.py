@@ -4,12 +4,14 @@ import base64
 import binascii
 import json
 import math
+import os
 import re
 import shutil
 import subprocess
 import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
+from xml.sax.saxutils import escape as escape_xml
 
 from subtitle_layout.ass_writer import write_ass
 from subtitle_layout.config import SubtitleRenderConfig
@@ -100,31 +102,80 @@ def _project_font_config(config: SubtitleRenderConfig, font_dir: Path | None) ->
     return replace(
         config,
         chs_font_path=str(chs) if chs else config.chs_font_path,
-        primary_font_path=str(primary) if primary else config.primary_font_path,
+        primary_font_path=strdef _project_font_environment(config: SubtitleRenderConfig, font_dir: Path | None,
+                              temporary_dir: Path, *, english: str, chinese: str) -> dict[str, str] | None:
+    """Prefer project fonts in an isolated Fontconfig configuration.
+
+    fontsdir loads imported files, but alone doesn't guarantee a matching
+    family wins over an already-installed system family of the same name.
+    """
+    if font_dir is None or not font_dir.is_dir():
+        return None
+    imported = [
+        project_font_for_family(font_dir.parent, family)
+        for text, family in ((chinese, config.chs_font), (english, config.primary_font))
+        if str(text or "").strip()
+    ]
+    if not any(path is not None for path in imported):
+        return None
+    candidates = [
+        os.environ.get("FONTCONFIG_FILE", ""),
+        str(Path(os.environ.get("PREFIX", "/nonexistent")) / "etc/fonts/fonts.conf"),
+        "/etc/fonts/fonts.conf", "/usr/local/etc/fonts/fonts.conf",
+    ]
+    original = next((Path(name) for name in candidates if name and Path(name).is_file()), None)
+    includes = (f'<include ignore_missing="yes">{escape_xml(str(original))}</include>'
+                if original else "")
+    config_path = temporary_dir / "project-fontconfig.xml"
+    config_path.write_text(
+        '<?xml version="1.0"?>\n<!DOCTYPE fontconfig SYSTEM "fonts.dtd">\n'
+        '<fontconfig><dir>' + escape_xml(str(font_dir.resolve()))
+        + '</dir>' + includes + '</fontconfig>', encoding="utf-8",
     )
+    env = os.environ.copy()
+    env["FONTCONFIG_FILE"] = str(config_path)
+    return env
 
 
 def _assert_project_font_selected(
     log: str, config: SubtitleRenderConfig, font_dir: Path | None,
-    *, english: str, chinese: str,
+    *, english: str, chinese: str, env: dict[str, str] | None = None,
 ) -> None:
-    """Do not claim a true project font render if libass selected a fallback."""
+    """Verify fontconfig resolved to the uploaded file, not a system fallback.
+
+    libass fontselect logs face names, not necessarily filesystem paths.
+    """
     if font_dir is None or not font_dir.is_dir():
         return
-    selections = [line.casefold() for line in log.splitlines() if "fontselect:" in line]
+    selections = [line.casefold() for line in log.splitlines()
+                  if "fontselect:" in line.casefold()]
     for used, family in ((chinese, config.chs_font), (english, config.primary_font)):
         if not str(used or "").strip():
             continue
         expected = project_font_for_family(font_dir.parent, family)
         if expected is None:
             continue
-        # In fontselect traces libass reports the resolved font file. Verify the
-        # uploaded file, not only the requested ASS family string.
-        if not any(expected.name.casefold() in entry for entry in selections):
+        matcher = shutil.which("fc-match")
+        if not matcher:
+            raise RuntimeError("无法确认项目字体：处理主机缺少 fontconfig 的 fc-match，请安装后重试。")
+        completed = subprocess.run(
+            [matcher, "-f", "%{file}\\n", "--", family],
+            env=env, capture_output=True, text=True, timeout=8, check=False,
+        )
+        actual = completed.stdout.splitlines()[0].strip() if completed.stdout else ""
+        if (completed.returncode != 0 or not actual
+                or Path(actual).resolve() != expected.resolve()):
             raise RuntimeError(
-                "导入字体未用于真实 ASS 渲染：" + family
-                + "。libass 选择了其他字体（可能是缺字或字体族名回退）。"
-                + "请检查字体文件中的实际字族名和中文字形；不把回退结果标记为成功。"
+                f"导入字体 {family} 被回退为 {actual or '未知字体'}，"
+                f"而非导入文件 {expected.name}；请检查字体族名、字体文件和字形。"
+            )
+        if not any(f"fontselect: ({family.casefold()}," in line for line in selections):
+            raise RuntimeError(
+                f"无法从 libass 字体选择日志确认 {family}；不把未验证的回退字体视为成功。"
+            )
+
+
+       + "请检查字体文件中的实际字族名和中文字形；不把回退结果标记为成功。"
             )
 
 
