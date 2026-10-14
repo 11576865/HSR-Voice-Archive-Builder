@@ -23,7 +23,7 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertEqual(doc.count('id="studioStyleTab"'), 1)
         self.assertEqual(doc.count('id="studioEffectsTab"'), 1)
         self.assertLess(doc.index('id="studioStyleTab"'), doc.index('class="preview-workbench studio-v3-workbench studio-v4-workbench"'))
-        self.assertLess(doc.index('id="studioEffectsTab"'), doc.index('class="preview-workbench studio-v3-workbench"'))
+        self.assertLess(doc.index('id="studioEffectsTab"'), doc.index('class="preview-workbench studio-v3-workbench studio-v4-workbench"'))
         self.assertIn('id="hsrInspectorTitle"', doc)
         self.assertIn("?'特效参数':'排版参数'", doc)
 
@@ -51,7 +51,7 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn("workbench.classList.toggle('audit-open',!!open)", doc)
         self.assertIn("rail.toggleAttribute('inert',!open)", doc)
         self.assertIn("rail.contains(document.activeElement)", doc)
-        self.assertIn('.studio-v3-workbench:not(.audit-open)>.layout-corpus-rail', self.css)
+        self.assertIn('.studio-v4-workbench.audit-open>.layout-corpus-rail', self.css)
 
     def test_mobile_qa_has_one_open_state_and_no_orphan_toggle(self):
         doc = self.html
@@ -94,7 +94,7 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertNotIn("data-hsr-focus-task", doc)
         self.assertIn("setHsrAuditDrawer(false);", doc)
         self.assertIn("if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);", doc)
-        self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.css)
+        self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.shared)
         for task in ("review", "layout", "effects", "export", "update"):
             self.assertIn(f'.workspace-nav button[data-workspace-target="{task}"]', doc)
         self.assertNotIn(".workspace-nav button:nth-child", doc)
@@ -113,13 +113,13 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertNotIn('data-hsr-studio-focus=',css)
         self.assertIn('body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench{',css)
         self.assertIn('height:auto!important',css)
-        self.assertIn('@media(max-width:679px)',css)
-        self.assertIn('overflow-y:auto!important',css)
+        self.assertIn('@media(max-width:600px)',css)
+        self.assertIn('overflow:visible!important',css)
         self.assertIn('id="projectFontImporter"',doc)
         self.assertIn('function initHsrTouchNumericEditors()',doc)
         self.assertIn("editor.type='number'",doc)
         self.assertIn("range.dispatchEvent(new Event('input',{bubbles:true}))",doc)
-        self.assertIn('input[type="range"]{display:none!important}',css)
+        self.assertIn('input[type="range"]{display:none!important}',self.shared)
         self.assertIn("range.insertAdjacentElement('afterend',stepper)",doc)
         self.assertIn('name="hsr-effects-parameter-groups"',doc)
         self.assertIn('name="hsr-style-parameter-groups"',doc)
