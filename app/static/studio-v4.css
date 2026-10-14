@@ -1,0 +1,238 @@
+/* Studio V4: flat visual authoring surface.
+   The document is the only vertical scroller. No nested viewport, artificial
+   bounded grid or settings-inside-settings. Real canvas comes FIRST. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+  --v4-bg:#101827;--v4-panel:#162134;--v4-border:#334356;
+  --v4-ink:#e9f1fa;--v4-muted:#a9b8c8;
+  display:block!important;overflow:visible!important;
+  height:auto!important;max-height:none!important;
+  padding:0!important;margin:0!important;
+  border:0!important;border-radius:0!important;
+  background:var(--v4-bg)!important;
+  color:var(--v4-ink);
+}
+#subtitleLayoutPreviewCard .studio-v4-sr-label{
+  position:absolute!important;width:1px!important;height:1px!important;
+  padding:0!important;margin:-1px!important;overflow:hidden!important;
+  clip:rect(0,0,0,0)!important;white-space:nowrap!important;border:0!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{
+  min-height:35px!important;padding:5px 12px!important;margin:0!important;
+  background:var(--v4-panel)!important;border-bottom:1px solid var(--v4-border)!important;
+}
+#subtitleLayoutPreviewCard #previewSaveStatus{font-size:11px!important;line-height:1.35!important;min-height:0!important}
+#subtitleLayoutPreviewCard #previewHeaderBadges{gap:5px!important}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard>.hsr-studio-toolbar{
+  display:flex;justify-content:flex-end;align-items:center;
+  min-height:0!important;padding:4px 12px!important;
+  border:0!important;background:var(--v4-bg)!important;
+}
+#subtitleLayoutPreviewCard>.hsr-studio-toolbar>.small{display:none!important}
+#subtitleLayoutPreviewCard #layoutAuditDrawerToggle{
+  font-size:11px!important;min-height:31px!important;padding:5px 10px!important;
+}
+#subtitleLayoutPreviewCard>.layout-workflow-strip,
+#subtitleLayoutPreviewCard>p.small.muted{display:none!important}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench{
+  display:grid!important;
+  grid-template-columns:minmax(0,1fr) minmax(290px,clamp(320px,28vw,420px))!important;
+  grid-template-rows:auto!important;
+  height:auto!important;min-height:0!important;max-height:none!important;
+  overflow:visible!important;position:relative!important;
+  gap:0!important;align-items:start!important;background:var(--v4-bg)!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.studio-v3-main{
+  display:block!important;grid-area:auto!important;
+  width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;
+  overflow:visible!important;position:static!important;top:auto!important;
+  border:0!important;border-right:1px solid var(--v4-border)!important;
+  background:var(--v4-bg)!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.studio-v3-inspector{
+  display:block!important;grid-area:auto!important;
+  width:100%!important;height:auto!important;min-height:0!important;max-height:none!important;
+  position:static!important;top:auto!important;
+  overflow:visible!important;border:0!important;
+  padding-bottom:24px!important;background:var(--v4-panel)!important;
+}
+/* Stage as the actual primary editing object. */
+#subtitleLayoutPreviewCard .studio-v3-visual{
+  display:flex!important;flex-direction:column!important;
+  max-height:none!important;min-height:0!important;height:auto!important;
+  width:100%!important;overflow:visible!important;
+  background:var(--v4-bg)!important;border:0!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-visual>.preview-stage{
+  order:0!important;display:block!important;
+  width:100%!important;max-width:100%!important;
+  height:auto!important;max-height:none!important;
+  aspect-ratio:16/9!important;
+  position:relative!important;top:auto!important;z-index:0!important;
+  padding:0!important;margin:0!important;
+  border:0!important;border-radius:0!important;
+  overflow:hidden!important;box-shadow:none!important;
+  background:#151323!important;
+}
+#subtitleLayoutPreviewCard #previewBackgroundImage{display:block!important;object-fit:cover!important}
+#subtitleLayoutPreviewCard #previewModeOverlay{z-index:7;top:8px!important;left:10px!important}
+#subtitleLayoutPreviewCard .studio-v3-command-bar{
+  order:1!important;padding:6px 9px!important;margin:0!important;
+  background:var(--v4-panel)!important;
+  border-block:1px solid var(--v4-border)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions{
+  position:static!important;display:flex!important;flex-wrap:wrap!important;
+  align-items:center!important;justify-content:space-between!important;
+  gap:7px!important;margin:0!important;padding:0!important;border:0!important;
+  background:transparent!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions>.actions{
+  display:flex!important;gap:7px!important;flex:1 1 400px;
+  align-items:center!important;flex-wrap:wrap!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar button,
+#subtitleLayoutPreviewCard .studio-v3-command-bar .hsr-export-advanced>summary{
+  font-size:12px!important;min-height:35px!important;height:auto!important;
+  padding:6px 10px!important;border-radius:6px!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar #previewLibassBtn,
+#subtitleLayoutPreviewCard .studio-v3-command-bar #previewVideoBtn{
+  background:#82b9ef!important;color:#102034!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .layout-style-history-actions{
+  display:flex!important;flex:0 0 auto;gap:4px!important;margin:0!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .layout-action-note{display:none!important}
+#subtitleLayoutPreviewCard #previewBackgroundMode,
+#subtitleLayoutPreviewCard .hsr-stage-background-toolbar,
+#subtitleLayoutPreviewCard #previewBackgroundFileWrap,
+#subtitleLayoutPreviewCard #previewBackgroundGrid,
+#subtitleLayoutPreviewCard #layoutTrialTextDetails{display:none!important}
+#subtitleLayoutPreviewCard .studio-v3-visual #libassPreviewStatus{
+  order:2!important;margin:0!important;padding:5px 12px!important;
+  min-height:0!important;line-height:1.35!important;font-size:11px!important;
+  background:var(--v4-bg)!important;border:0!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-visual #videoPreviewStatus{
+  order:3!important;margin:0!important;padding:4px 12px!important;
+  border:0!important;background:var(--v4-bg)!important;font-size:11px!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-visual .hsr-effect-operation-status{
+  order:4!important;margin:0!important;padding:5px 12px!important;
+  border:0!important;border-top:1px solid var(--v4-border)!important;
+  border-radius:0!important;font-size:11px!important;min-height:0!important;
+}
+#subtitleLayoutPreviewCard .hsr-effect-operation-status[data-phase="idle"]{display:none!important}
+#subtitleLayoutPreviewCard .studio-v3-visual .layout-preview-evidence{
+  order:5!important;margin:0!important;padding:4px 12px!important;
+  min-height:0!important;gap:5px!important;
+  border:0!important;border-top:1px solid var(--v4-border)!important;
+  background:var(--v4-bg)!important;
+}
+#subtitleLayoutPreviewCard .layout-preview-evidence strong{font-size:11px!important}
+#subtitleLayoutPreviewCard .layout-preview-evidence p{display:none!important}
+#subtitleLayoutPreviewCard .layout-evidence-meta{font-size:10px!important;padding:3px 6px!important}
+#subtitleLayoutPreviewCard .studio-v3-visual .layout-export-health{
+  order:6!important;padding:5px 10px!important;margin:0!important;
+  min-height:0!important;display:flex;align-items:center;gap:10px;
+  background:#232c3c!important;border:0!important;
+}
+#subtitleLayoutPreviewCard .layout-export-health[hidden]{display:none!important}
+#subtitleLayoutPreviewCard .layout-export-health strong,
+#subtitleLayoutPreviewCard .layout-export-health p{font-size:11px!important;line-height:1.35!important;margin:0!important}
+#subtitleLayoutPreviewCard .layout-export-health button{min-height:28px!important;padding:3px 8px!important;font-size:10px!important}
+#subtitleLayoutPreviewCard .studio-v3-pane-nav{display:none!important}
+#subtitleLayoutPreviewCard .studio-v3-editors{
+  display:block!important;min-height:0!important;height:auto!important;
+  max-height:none!important;overflow:visible!important;
+  padding:0!important;margin:0!important;background:var(--v4-bg)!important;
+}
+#subtitleLayoutPreviewCard .studio-v4-timing{
+  display:block!important;margin:0!important;padding:0!important;
+  background:var(--v4-bg)!important;border:0!important;
+  border-top:1px solid var(--v4-border)!important;
+}
+#subtitleLayoutPreviewCard .studio-v4-timing>summary{
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  min-height:40px;padding:9px 12px;
+  color:var(--v4-ink);font-size:12px;font-weight:700;
+}
+#subtitleLayoutPreviewCard .studio-v4-timing>summary small{font-size:10px;font-weight:400;color:var(--v4-muted)}
+#subtitleLayoutPreviewCard .studio-v4-timing:not([open])>.layout-timeline,
+#subtitleLayoutPreviewCard .studio-v4-timing:not([open])>.layout-cue-editor{display:none!important}
+#subtitleLayoutPreviewCard .studio-v4-timing>.layout-timeline,
+#subtitleLayoutPreviewCard .studio-v4-timing>.layout-cue-editor{
+  display:block!important;border:0!important;border-top:1px solid var(--v4-border)!important;
+  padding:12px!important;margin:0!important;border-radius:0!important;
+  background:var(--v4-bg)!important;
+}
+#subtitleLayoutPreviewCard .layout-timeline-viewport{overflow-x:hidden;touch-action:pan-y}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-head{
+  position:static!important;top:auto!important;z-index:auto!important;
+  display:flex;align-items:center;min-height:41px!important;
+  padding:8px 12px!important;margin:0!important;
+  border-bottom:1px solid var(--v4-border)!important;
+  background:var(--v4-panel)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-head strong{font-size:13px!important}
+#subtitleLayoutPreviewCard .studio-v3-inspector .preview-controls{
+  display:block!important;width:100%!important;
+  grid-template-columns:none!important;gap:0!important;
+  padding:0!important;margin:0!important;border:0!important;
+  background:var(--v4-panel)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section{border:0!important;border-bottom:1px solid var(--v4-border)!important;border-radius:0!important;margin:0!important}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section>summary{
+  min-height:43px!important;padding:9px 12px!important;
+  font-size:12px!important;border:0!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section-body{
+  padding:8px 12px 16px!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector label{font-size:12px!important}
+#subtitleLayoutPreviewCard .studio-v3-inspector input,
+#subtitleLayoutPreviewCard .studio-v3-inspector select{max-width:100%!important}
+#subtitleLayoutPreviewCard .studio-v3-inspector .hsr-project-font-importer{margin:7px 0!important}
+#subtitleLayoutPreviewCard .font-browser-item[data-project-font="true"]{border-left:3px solid #82b9ef!important}
+#subtitleLayoutPreviewCard .studio-v4-workbench.audit-open>.layout-corpus-rail{
+  display:flex!important;position:absolute!important;top:0!important;left:0!important;
+  width:min(345px,100%)!important;height:min(90dvh,760px)!important;z-index:15!important;
+  background:var(--v4-panel)!important;box-shadow:5px 12px 24px #0008;
+}
+/* NO second vertical scrollbar. On small screens the document scrolls as a
+   conventional page; the user sees the entire image before the controls. */
+@media(max-width:1020px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench{
+    display:flex!important;flex-direction:column!important;
+    height:auto!important;max-height:none!important;overflow:visible!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.studio-v3-main,
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.studio-v3-inspector{
+    flex:0 0 auto!important;display:block!important;
+    width:100%!important;height:auto!important;max-height:none!important;
+    overflow:visible!important;position:static!important;
+    border:0!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-visual{max-height:none!important;overflow:visible!important}
+  #subtitleLayoutPreviewCard .studio-v3-visual>.preview-stage{width:100%!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions{display:flex!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions>.actions{display:flex!important;flex-wrap:wrap!important}
+}
+@media(max-width:600px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{min-height:30px!important;padding:4px 9px!important}
+  #subtitleLayoutPreviewCard #previewSaveStatus{font-size:10px!important}
+  #subtitleLayoutPreviewCard #previewHeaderBadges{display:none!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar{padding:6px!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions>.actions{gap:5px!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar button{font-size:11px!important;min-height:35px!important;padding:6px 8px!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .layout-style-history-actions{display:none!important}
+  #subtitleLayoutPreviewCard .studio-v3-visual #libassPreviewStatus,
+  #subtitleLayoutPreviewCard .studio-v3-visual .layout-preview-evidence,
+  #subtitleLayoutPreviewCard .studio-v3-visual .layout-export-health{padding:5px 8px!important}
+  #subtitleLayoutPreviewCard .layout-evidence-meta{display:none!important}
+  #subtitleLayoutPreviewCard .layout-export-health p{max-height:32px;overflow:hidden}
+}
+/* The diagnostic stage must remain navigable, not an inaccessible fixed overlay. */
+@media(prefers-reduced-motion:reduce){
+  #subtitleLayoutPreviewCard *{scroll-behavior:auto!important}
+}
