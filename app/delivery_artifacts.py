@@ -65,7 +65,7 @@ def _copy_track(source: Path, target: Path, *, map_arg: str, codec: str,
 
 
 def extract_flac_from_mkv(output: Path, *, target: Path | None = None) -> Path:
-    """Stream-copy the existing lossless audio; never rerun WAV -> FLAC."""
+    """Stream-copy default primary FLAC; chapter tracks remain independently selectable."""
     mkv = output / OUTPUT
     receipt = _read_receipt(output)
     if (not receipt or _signature(mkv) != receipt.get("artifact")
@@ -73,8 +73,8 @@ def extract_flac_from_mkv(output: Path, *, target: Path | None = None) -> Path:
         raise ValueError("No verified sealed MKV is available for FLAC extraction")
     tracks = _probe(mkv)
     audio = [x for x in tracks if x.get("codec_type") == "audio"]
-    if len(audio) != 1 or audio[0].get("codec_name") != "flac":
-        raise ValueError("MKV must contain exactly one lossless FLAC track")
+    if not audio or audio[0].get("codec_name") != "flac":
+        raise ValueError("MKV must contain a default primary lossless FLAC track")
     destination = target or output / FLAC
     _copy_track(mkv, destination, map_arg="0:a:0", codec="flac", fmt="flac")
     return destination
