@@ -549,8 +549,12 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     ensure(canvas["y"] < cue["y"],
            f"{label}: preview must come before selected subtitle timing")
     if width < 760:
-        ensure(cue["y"] + cue["height"] <= inspector["y"] + 8,
-               f"{label}: effect controls overlay selected subtitle on mobile")
+        preview_pane = rect(page, ".preview-workbench .layout-preview-region")
+        ensure(preview_pane["y"] + preview_pane["height"] <= inspector["y"] + 8,
+               f"{label}: bounded preview pane physically overlaps inspector")
+        ensure(page.evaluate("""() => getComputedStyle(
+          document.querySelector('.preview-workbench .layout-preview-region')).overflowY""") == "auto",
+               f"{label}: cue/timeline must scroll inside clipped preview pane")
     else:
         ensure(cue["y"] + cue["height"] <= inspector["y"] + 8,
                f"{label}: tablet Effects inspector overlaps cue editor")
