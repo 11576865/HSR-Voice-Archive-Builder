@@ -37,13 +37,13 @@ def decode_bundle_background(encoded: object) -> bytes | None:
     if not encoded:
         return None
     if not isinstance(encoded, str) or len(encoded) > ((MAX_BACKGROUND_BYTES + 2) // 3) * 4 + 16:
-        raise ValueError("Background image exceeds the 16 MiB maximum")
+        raise ValueError("Background image exceeds the 64 MiB maximum")
     try:
         raw = base64.b64decode(encoded, validate=True)
     except (ValueError, binascii.Error) as exc:
         raise ValueError("Background image must be valid base64") from exc
     if not 0 < len(raw) <= MAX_BACKGROUND_BYTES:
-        raise ValueError("Background image must be 1 byte to 16 MiB")
+        raise ValueError("Background image must be 1 byte to 64 MiB")
     image_extension(raw)  # Reject misleading/unknown input before job creation.
     return raw
 
@@ -121,7 +121,7 @@ class ArchiveBundleExporter:
         })
         if background_image is not None:
             if not isinstance(background_image, bytes) or not 0 < len(background_image) <= MAX_BACKGROUND_BYTES:
-                raise ValueError("Background image exceeds the 16 MiB maximum")
+                raise ValueError("Background image exceeds the 64 MiB maximum")
             suffix = image_extension(background_image)
         else:
             suffix = None
