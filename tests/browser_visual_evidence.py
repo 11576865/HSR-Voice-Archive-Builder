@@ -463,6 +463,9 @@ def desktop_check(browser, base_url, output, report):
     ensure(not writes, "Pointer drag persisted timing without explicit save")
     ensure(page.locator("#layoutCueTimingSaveBtn").is_enabled(), "Save not offered for changed draft")
     screenshot(page, output, "desktop_studio_unsaved_drag")
+    # The time controls are deliberately disclosed, not permanently stacked
+    # ahead of the Effects preview; expand before a real user click.
+    page.locator(".hsr-cue-timing-disclosure > summary").click()
     page.locator("#layoutCueTimingSaveBtn").click()
     page.wait_for_function("document.getElementById('layoutCueTimingSaveBtn').disabled === true")
     ensure(len(writes) == 1 and abs(writes[0]["end"] - 7.4) < 0.05, "Saved timing mismatch")
