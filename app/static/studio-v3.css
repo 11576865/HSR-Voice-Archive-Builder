@@ -1,0 +1,287 @@
+/* Studio V3 — one task surface, three responsibilities:
+   preview/commit, cue timing, style/effects Inspector. No duplicated editors.
+   This file owns Studio V3 geometry. Other workspace CSS does not. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard {
+  --s3-bg:#0b1018; --s3-panel:#111a25; --s3-raised:#192332;
+  --s3-border:#2b3a4b; --s3-ink:#ecf2f9; --s3-soft:#a9b9cc;
+  --s3-accent:#84bfff; --s3-good:#91d3b1;
+  max-width:none!important;
+  padding:0!important;
+  margin:0!important;
+  background:var(--s3-bg)!important;
+  border:1px solid var(--s3-border)!important;
+  border-radius:12px!important;
+  overflow:hidden!important;
+}
+body[data-workspace="layout"] main,
+body[data-workspace="layout"] .grid {max-width:1920px!important}
+#subtitleLayoutPreviewCard>.topline {
+  display:flex!important;justify-content:space-between;align-items:center;
+  gap:12px;padding:11px 18px!important;margin:0!important;
+  background:var(--s3-panel)!important;border-bottom:1px solid var(--s3-border)!important;
+}
+#subtitleLayoutPreviewCard>.topline h2 {font-size:19px!important;margin:2px 0!important;letter-spacing:-.03em}
+#subtitleLayoutPreviewCard>.topline .layout-workbench-kicker {font-size:10px;letter-spacing:.08em}
+#subtitleLayoutPreviewCard>.topline #previewSaveStatus {font-size:11px;line-height:1.4}
+#subtitleLayoutPreviewCard>.hsr-studio-toolbar {
+  display:flex;align-items:center;justify-content:space-between;
+  gap:12px;padding:7px 18px;min-height:42px;
+  border-bottom:1px solid var(--s3-border);background:var(--s3-bg);
+  color:var(--s3-soft);
+}
+#subtitleLayoutPreviewCard>.hsr-studio-toolbar>span {font-size:11px}
+#subtitleLayoutPreviewCard>.layout-workflow-strip,
+#subtitleLayoutPreviewCard>p.small.muted {display:none!important}
+/* Main stage | compact Inspector. QA appears as an overlay, not a third column. */
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench {
+  display:grid!important;grid-template-columns:minmax(0,1fr) minmax(320px,clamp(335px,29vw,450px))!important;
+  grid-template-rows:minmax(0,1fr)!important;align-items:stretch!important;
+  height:clamp(470px,calc(100dvh - 184px),1020px)!important;
+  max-height:calc(100dvh - 110px)!important;min-height:0!important;
+  overflow:hidden!important;background:var(--s3-bg)!important;position:relative!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.studio-v3-main {
+  display:flex!important;flex-direction:column;gap:0;grid-area:1/1/2/2!important;
+  position:relative!important;top:auto!important;
+  width:100%!important;height:100%!important;min-width:0;min-height:0;max-height:100%!important;
+  overflow:hidden!important; border:0!important;border-right:1px solid var(--s3-border)!important;
+  background:var(--s3-bg)!important;
+}
+body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.studio-v3-inspector {
+  grid-area:1/2/2/3!important;width:100%!important;min-width:0;min-height:0;
+  height:100%!important;max-height:100%!important;
+  position:relative!important;top:auto!important;
+  overflow-y:auto!important;overflow-x:hidden!important;
+  border:0!important;background:var(--s3-panel)!important;overscroll-behavior:contain;
+}
+#subtitleLayoutPreviewCard .studio-v3-visual {
+  display:flex;flex-direction:column;flex:0 0 auto;
+  min-height:0;max-height:63%;overflow-y:auto;overscroll-behavior:contain;
+  background:var(--s3-bg);
+  border-bottom:1px solid var(--s3-border);
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar {
+  display:block;flex:0 0 auto;padding:0;background:var(--s3-panel);
+  border-bottom:1px solid var(--s3-border);
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions {
+  position:relative!important;top:auto!important;display:grid;
+  grid-template-columns:minmax(0,1fr) auto;align-items:center;
+  gap:7px!important;padding:8px 12px!important;
+  margin:0!important;border:0!important;background:transparent!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions>.actions {
+  display:flex!important;align-items:center;gap:7px!important;flex-wrap:wrap!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar button {
+  min-height:36px!important;padding:6px 10px!important;
+  border-radius:7px!important;font-size:11px!important;
+  font-weight:680!important;white-space:normal;line-height:1.2;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar #previewLibassBtn,
+#subtitleLayoutPreviewCard .studio-v3-command-bar #previewVideoBtn {
+  background:var(--s3-accent)!important;color:#0b1723!important;border-color:transparent!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar #saveSubtitleLayoutBtn {
+  border-color:var(--s3-good)!important;color:var(--s3-good)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .layout-style-history-actions {
+  display:flex!important;gap:4px!important;margin:0!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .layout-style-history-actions button{
+  padding:5px 7px!important;min-width:0!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-command-bar .layout-action-note{display:none!important}
+#subtitleLayoutPreviewCard .studio-v3-visual .preview-stage {
+  flex:0 0 auto;position:relative!important;top:auto!important;z-index:1!important;
+  display:block;width:min(100%,calc(49dvh * 16 / 9))!important;
+  aspect-ratio:16/9!important;height:auto!important;
+  max-height:none!important;margin:12px auto!important;
+  border-radius:5px!important;overflow:hidden!important;
+  background:#090c14;box-shadow:0 12px 34px #0006!important;
+}
+#subtitleLayoutPreviewCard .hsr-stage-background-toolbar {
+  display:flex;align-items:center;gap:7px 14px;flex-wrap:wrap;
+  padding:7px 12px;margin:0!important;
+  border-block:1px solid var(--s3-border);background:var(--s3-panel);
+}
+#subtitleLayoutPreviewCard .hsr-stage-background-toolbar label{
+  display:flex;align-items:center;gap:8px;font-size:11px;min-width:0;margin:0;
+}
+#subtitleLayoutPreviewCard .hsr-stage-background-toolbar select{min-height:34px;max-width:min(55vw,220px);font-size:11px}
+#subtitleLayoutPreviewCard .hsr-stage-background-explainer{font-size:10px;line-height:1.35;color:var(--s3-soft)}
+#subtitleLayoutPreviewCard .studio-v3-visual .layout-preview-evidence {
+  min-height:0;gap:8px;padding:9px 13px!important;background:#132032!important;
+}
+#subtitleLayoutPreviewCard .layout-preview-evidence strong {font-size:12px}
+#subtitleLayoutPreviewCard .layout-preview-evidence p {font-size:10px;margin:2px 0 0}
+#subtitleLayoutPreviewCard .layout-evidence-meta {font-size:10px}
+#subtitleLayoutPreviewCard .studio-v3-visual #libassPreviewStatus,
+#subtitleLayoutPreviewCard .studio-v3-visual #videoPreviewStatus{
+  margin:0!important;padding:7px 13px!important;font-size:11px!important;line-height:1.45;
+}
+#subtitleLayoutPreviewCard .studio-v3-visual .hsr-effect-operation-status{
+  padding:8px 12px;margin:5px 12px!important;font-size:11px;
+}
+#subtitleLayoutPreviewCard .studio-v3-pane-nav{display:none}
+#subtitleLayoutPreviewCard .studio-v3-editors {
+  display:block;flex:1 1 auto;min-height:0;overflow:auto;
+  overscroll-behavior:contain;scrollbar-gutter:stable;
+  background:var(--s3-bg);
+}
+#subtitleLayoutPreviewCard .studio-v3-editors>.layout-timeline,
+#subtitleLayoutPreviewCard .studio-v3-editors>.layout-cue-editor{
+  border-radius:0!important;padding:12px 14px!important;margin:0!important;
+  background:var(--s3-bg)!important;border:0!important;
+  border-bottom:1px solid var(--s3-border)!important;
+}
+#subtitleLayoutPreviewCard .layout-timeline-top h3,
+#subtitleLayoutPreviewCard .layout-cue-heading h3 {font-size:14px!important;margin-top:2px!important}
+#subtitleLayoutPreviewCard .layout-timeline-viewport {touch-action:pan-y}
+#subtitleLayoutPreviewCard .layout-cue-clock {display:flex;gap:8px;flex-wrap:wrap;margin:7px 0}
+#subtitleLayoutPreviewCard .layout-cue-grid {display:grid;grid-template-columns:1fr 1fr;gap:8px}
+#subtitleLayoutPreviewCard .layout-cue-source,
+#subtitleLayoutPreviewCard .layout-cue-translation{
+  min-width:0;max-height:126px;overflow-y:auto;overscroll-behavior:contain;
+}
+#subtitleLayoutPreviewCard .layout-cue-source p,
+#subtitleLayoutPreviewCard .hsr-cue-readonly {max-height:75px!important;overflow:auto!important}
+#subtitleLayoutPreviewCard .hsr-cue-timing-disclosure {margin:9px 0!important}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-head {
+  position:sticky!important;top:0!important;z-index:3;
+  padding:11px 14px!important;min-height:55px!important;
+  background:var(--s3-panel)!important;border-bottom:1px solid var(--s3-border)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-head strong {font-size:15px}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section>summary{
+  min-height:46px!important;padding:11px 14px!important;font-size:13px!important;
+  border-bottom:1px solid var(--s3-border)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section-body{
+  padding:10px 14px 16px!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector input,
+#subtitleLayoutPreviewCard .studio-v3-inspector select {
+  max-width:100%;min-width:0;
+}
+#subtitleLayoutPreviewCard .studio-v3-inspector .hsr-preview-trial,
+#subtitleLayoutPreviewCard .studio-v3-inspector .hsr-karaoke-readiness,
+#subtitleLayoutPreviewCard .studio-v3-inspector .hsr-preview-media-disclosure{
+  margin:9px 12px!important;background:var(--s3-raised)!important;border-color:var(--s3-border)!important;
+}
+#subtitleLayoutPreviewCard .studio-v3-workbench.audit-open>.layout-corpus-rail{
+  display:flex!important;position:absolute!important;left:0!important;top:0!important;
+  width:min(345px,100%)!important;height:100%!important;max-height:100%!important;
+  overflow:hidden!important;z-index:12;box-shadow:12px 0 28px #0008;
+}
+#subtitleLayoutPreviewCard .studio-v3-workbench:not(.audit-open)>.layout-corpus-rail,
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail{display:none!important}
+#subtitleLayoutPreviewCard .hsr-touch-stepper{display:none}
+@media(pointer:coarse){
+  #subtitleLayoutPreviewCard .studio-v3-inspector input[type="range"]{display:none!important}
+  #subtitleLayoutPreviewCard .studio-v3-inspector .hsr-touch-stepper{
+    display:grid!important;grid-template-columns:46px minmax(0,1fr) 46px;
+    gap:6px;align-items:center;margin:5px 0 11px;
+  }
+  #subtitleLayoutPreviewCard .hsr-touch-number{min-height:44px;width:100%;font-size:16px;text-align:center}
+  #subtitleLayoutPreviewCard .hsr-touch-stepper button{min-height:44px;min-width:44px;touch-action:manipulation}
+  #subtitleLayoutPreviewCard .layout-timeline-navigation input[type="range"]{display:none!important}
+}
+/* Tablets: single column but use an explicit, bounded preview/editor deck. */
+@media(max-width:1100px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench{
+    grid-template-columns:minmax(0,1fr)!important;
+    grid-template-rows:minmax(0,51%) minmax(0,49%)!important;
+    height:max(470px,calc(100dvh - 170px))!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.studio-v3-main {
+    grid-area:1/1/2/2!important;border-right:0!important;border-bottom:1px solid var(--s3-border)!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.studio-v3-inspector {
+    grid-area:2/1/3/2!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-visual{max-height:69%}
+  #subtitleLayoutPreviewCard .studio-v3-visual .preview-stage{
+    width:min(100%,calc(37dvh * 16 / 9))!important;
+  }
+}
+/* Phone: stage always occupies the upper editing surface. One lower task at a
+   time, chosen intentionally; no giant document scroll or hidden hit targets. */
+@media(max-width:679px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard{
+    border-radius:0!important;border-inline:0!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard>.topline{
+    padding:8px 10px!important;gap:5px;
+  }
+  #subtitleLayoutPreviewCard>.topline h2{font-size:16px!important}
+  #subtitleLayoutPreviewCard>.topline #previewSaveStatus{font-size:10px;max-width:42ch}
+  #subtitleLayoutPreviewCard #previewHeaderBadges .badge{font-size:9px}
+  #subtitleLayoutPreviewCard>.hsr-studio-toolbar{padding:5px 10px;min-height:0}
+  #subtitleLayoutPreviewCard>.hsr-studio-toolbar>span{font-size:10px}
+  #layoutAuditDrawerToggle{min-height:36px!important;font-size:10px!important}
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench {
+    display:flex!important;flex-direction:column!important;
+    height:max(420px,calc(100dvh - 168px))!important;max-height:calc(100dvh - 92px)!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.studio-v3-main{
+    flex:1 1 auto;display:flex!important;min-height:0!important;height:auto!important;
+    max-height:100%!important;
+  }
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.studio-v3-inspector{
+    flex:1 1 auto;min-height:0!important;height:auto!important;max-height:none!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions {
+    padding:6px!important;gap:6px!important;
+    grid-template-columns:minmax(0,1fr)!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions>.actions{
+    display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr))!important;
+    gap:5px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar button {min-height:38px!important;font-size:10px!important;padding:4px 5px!important}
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .layout-style-history-actions{display:none!important}
+  #subtitleLayoutPreviewCard .studio-v3-visual{
+    flex:0 0 auto;max-height:48dvh;min-height:0;overflow-y:auto;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-visual .preview-stage{
+    width:100%!important;margin:0 auto!important;border-radius:0!important;
+  }
+  #subtitleLayoutPreviewCard .hsr-stage-background-toolbar{padding:6px 9px;gap:5px}
+  #subtitleLayoutPreviewCard .hsr-stage-background-toolbar label{font-size:10px}
+  #subtitleLayoutPreviewCard .hsr-stage-background-explainer{display:none}
+  #subtitleLayoutPreviewCard .studio-v3-visual .layout-preview-evidence{padding:6px 9px!important}
+  #subtitleLayoutPreviewCard .layout-preview-evidence p{display:none}
+  #subtitleLayoutPreviewCard .studio-v3-pane-nav{
+    flex:0 0 auto;display:grid!important;grid-template-columns:repeat(3,minmax(0,1fr));
+    gap:4px;padding:5px 7px;min-height:46px;
+    background:var(--s3-panel);border-block:1px solid var(--s3-border);
+  }
+  #subtitleLayoutPreviewCard .studio-v3-pane-nav button{
+    min-width:0;min-height:38px;border-radius:7px!important;font-size:12px!important;
+    color:var(--s3-soft)!important;background:transparent!important;border:1px solid transparent!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-pane-nav button[aria-selected="true"]{
+    color:var(--s3-ink)!important;border-color:#527ba0!important;
+    background:var(--s3-raised)!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-editors{flex:1 1 auto;min-height:0!important;overflow-y:auto}
+  #subtitleLayoutPreviewCard .studio-v3-workbench[data-studio-pane="timeline"] .studio-v3-editors>.layout-cue-editor,
+  #subtitleLayoutPreviewCard .studio-v3-workbench[data-studio-pane="cue"] .studio-v3-editors>.layout-timeline{display:none!important}
+  #subtitleLayoutPreviewCard .studio-v3-workbench[data-studio-pane="inspector"] .studio-v3-editors{
+    display:none!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-workbench:not([data-studio-pane="inspector"])>.studio-v3-inspector{
+    display:none!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-workbench[data-studio-pane="inspector"]>.studio-v3-main{
+    flex:0 0 auto;height:auto!important;max-height:50dvh!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-workbench[data-studio-pane="inspector"]>.studio-v3-inspector{
+    flex:1 1 auto;height:auto!important;
+  }
+  #subtitleLayoutPreviewCard .layout-cue-grid{grid-template-columns:minmax(0,1fr)!important}
+  #subtitleLayoutPreviewCard .studio-v3-workbench.audit-open>.layout-corpus-rail{
+    width:min(345px,96%)!important;
+  }
+}
