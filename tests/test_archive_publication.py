@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import csv
+import os
 import hashlib
 import json
 import shutil
@@ -12,8 +13,35 @@ from unittest.mock import patch
 
 from app.pipeline import build_project_v02
 from app.project import ProjectConfig, project_summary
-from app.publishing import BUILD_MARKER
+from app.publishing import BUILD_MARKER, preserve_published_archive
 from app.subtitles import update_project_subtitles
+
+
+class ArchiveBackupPortabilityTests(unittest.TestCase):
+    def test_missing_os_link_restores_audio_and_chapters(self) -> None:
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td) / "output"
+            output.mkdir()
+            state = Path(td) / ".state"
+            audio = output / "continuous.flac"
+            audio.write_bytes(b"old audio")
+            chapters = output / "chapter_flac"
+            chapters.mkdir()
+            chapter = chapters / "chapter.flac"
+            chapter.write_bytes(b"old chapter")
+
+            # Reproduce Android/Termux Python builds without os.link.
+            with patch.object(os, "link", create=True):
+                del os.link
+                with self.assertRaisesRegex(RuntimeError, "build failed"):
+                    with preserve_published_archive(output, state):
+                        audio.write_bytes(b"new audio")
+                        chapter.write_bytes(b"new chapter")
+                        raise RuntimeError("build failed")
+
+            self.assertEqual(audio.read_bytes(), b"old audio")
+            self.assertEqual(chapter.read_bytes(), b"old chapter")
+            self.assertFalse((output / BUILD_MARKER).exists())
 
 
 @unittest.skipUnless(shutil.which("ffmpeg"), "ffmpeg is required")
@@ -102,7 +130,7 @@ class ArchivePublicationTests(unittest.TestCase):
     def test_failed_rebuild_restores_audio_when_hard_links_are_unavailable(self) -> None:
         self.build()
         old_audio = (self.output / "continuous.flac").read_bytes()
-        with patch("app.publishing.os.link", side_effect=OSError("unsupported")), patch(
+        with patch("app.publishing.os.link", side_effect=OSError("unsupported"), create=True), patch(
             "app.pipeline.build_continuous_flac", side_effect=RuntimeError("encoder failed")
         ):
             with self.assertRaisesRegex(RuntimeError, "encoder failed"):
