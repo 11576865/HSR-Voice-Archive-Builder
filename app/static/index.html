@@ -4509,6 +4509,8 @@ if(location.search){history.replaceState(null,'',location.pathname)}
 const headers=()=>token?{'X-HSR-Token':token}:{};
 const log=document.getElementById('log');
 let currentProject=null,pollTimer=null;
+// A page reload must reattach to the server-owned job, not just draw one snapshot.
+let watchedJobId=null,jobPollGeneration=0;
 function syncProgressPlacement(){
   const card=document.getElementById('progressCard');
   const sideStack=document.getElementById('sideStack');
@@ -5525,12 +5527,23 @@ async function refresh(){
     document.getElementById('mode').textContent=base+(rt.ffmpeg?' · FFmpeg ✓':' · FFmpeg 缺失')+(rt.translation_api_key_configured?' · '+(rt.translation_provider||'AI')+' API ✓':'');
     if(rt.warnings?.length && !currentProject){setLog(rt.warnings.join('\n'))}
     fillProject(s.project);renderProjectSwitcher(s.recent_projects||[]);renderJobs(s.jobs);
+    const ongoing=(s.jobs||[]).find(job=>['queued','running'].includes(job.state));
+    if(ongoing&&ongoing.id!==watchedJobId){
+      // Browser refresh destroys timers, NOT the backend's active FFmpeg job.
+      // Reconnect to its actual ID without accidentally launching another mux.
+      void watchJob(ongoing.id);
+    }
   }catch(e){setLog(String(e));document.getElementById('mode').textContent='后端连接失败';showDiagnosticLog();}
 }
 async function watchJob(id){
+  if(!id||watchedJobId===id)return;
+  const generation=++jobPollGeneration;
+  watchedJobId=id;
   clearTimeout(pollTimer);
   let failures=0;
+  let lastCurrent=-1,lastAdvance=Date.now();
   const poll=async()=>{
+    if(generation!==jobPollGeneration)return;
     let terminal=false;
     let x=null;
     let lastError=null;
@@ -5551,9 +5564,25 @@ async function watchJob(id){
       if(textBox)textBox.textContent='进度连接暂时中断，正在自动重试…';
       if(failures>=3)setLog('进度轮询暂时失败：'+shortError(lastError)+'\n程序仍会自动重试。');
     }else{
+      if(generation!==jobPollGeneration)return;
       failures=0;
       try{
         renderJobs([x.job]);
+        if(x.job.state==='running'&&x.job.kind==='archive-bundle-export'){
+          const current=Number(x.job.progress_current||0);
+          if(current!==lastCurrent){lastCurrent=current;lastAdvance=Date.now()}
+          const elapsed=Date.now()-lastAdvance;
+          const status=document.getElementById('bundleOutputStatus');
+          if(status){
+            if(elapsed>90000){
+              status.textContent='MKV 编码进度超过 90 秒没有变化。后台任务仍显示运行中，请检查 FFmpeg 状态；刷新页面不会重新启动任务。';
+              status.className='small status-warn';
+            }else{
+              status.textContent='正在封装 MKV：'+jobProgressPercent(x.job)+'% · 后台任务已连接；页面刷新不会中断编码。';
+              status.className='small muted';
+            }
+          }
+        }
         if(x.job.state==='succeeded'){
           terminal=true;
           if(x.job.kind==='remote-update-check'){
@@ -5627,9 +5656,14 @@ async function watchJob(id){
         if(failures>=3)setLog('进度轮询暂时失败：'+shortError(e)+'\n程序仍会自动重试。');
       }
     }
+    if(generation!==jobPollGeneration)return;
     if(!terminal){
       const delay=failures?Math.min(4000,700*Math.pow(2,Math.min(failures,3))):700;
       pollTimer=setTimeout(poll,delay);
+    }else{
+      watchedJobId=null;
+      clearTimeout(pollTimer);
+      pollTimer=null;
     }
   };
   await poll();
