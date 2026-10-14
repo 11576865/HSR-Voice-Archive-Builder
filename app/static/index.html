@@ -3665,7 +3665,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <input id="projectFontFile" type="file" accept=".ttf,.otf,.ttc,font/ttf,font/otf" />
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
-              <button id="projectFontImportBtn" class="secondary" type="button">导入并保存字体</button>
+              <button id="projectFontImportBtn" class="secondary" type="button" disabled>导入并保存字体</button>
               <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
               <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
@@ -3752,7 +3752,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevCardOpacityVal" class="small muted">62%</span>
             </div>
             <input type="range" id="prevCardOpacity" min="0" max="100" value="62" step="1">
-            <div class="small muted inspector-help"><code>\blur</code> 只柔化 ASS 字形、描边和轮廓，不会模糊底层视频画面。</div>
+            <div class="small muted inspector-help">描边、阴影、柔化、底板和动态效果以「实际 ASS 渲染」为准；快速几何画布只用于核对字幕位置和换行，不模拟这些字形特效。</div>
           </section>
             </div>
           </details>
@@ -6811,11 +6811,23 @@ async function refreshProjectFontList(){
       const button=document.createElement('button');
       button.type='button';button.className='secondary';
       button.textContent=item.family+' · '+Math.round(Number(item.bytes||0)/1024)+' KiB';
-      button.onclick=()=>{
+      button.onclick=async()=>{
         const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
         const input=document.getElementById(target);
-        if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
-        ensureHostFontLoaded(item.family).catch(()=>{});
+        const status=document.getElementById('projectFontImportStatus');
+        const projectAtStart=currentProject?.root;
+        try{
+          button.disabled=true;
+          const name=await ensureHostFontLoaded(item.family);
+          if(!hostFontFaces.has(item.family)||name===item.family)
+            throw new Error('浏览器未能加载此字体，尚未应用');
+          if(!currentProject||currentProject.root!==projectAtStart)return;
+          if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
+          if(!(await saveSubtitleLayoutSettings()))throw new Error('字体选择未成功保存，请检查上方状态');
+          if(status){status.textContent='已应用并保存 '+item.family+'；建议点击实际 ASS 渲染确认字形。';status.className='small status-ok';}
+        }catch(error){
+          if(status){status.textContent='应用项目字体失败：'+shortError(error);status.className='small status-bad';}
+        }finally{button.disabled=false;}
       };
       list.appendChild(button);
     }
@@ -6877,6 +6889,11 @@ async function importCurrentProjectFont(){
   }
 }
 document.getElementById('projectFontImportBtn')?.addEventListener('click',importCurrentProjectFont);
+document.getElementById('projectFontFile')?.addEventListener('change',event=>{
+  const file=event.target.files?.[0];
+  const button=document.getElementById('projectFontImportBtn');
+  if(button)button.disabled=!file;
+});
 document.getElementById('projectFontRefreshBtn')?.addEventListener('click',refreshProjectFontList);
 document.getElementById('projectFontImporter')?.addEventListener('toggle',event=>{
   if(event.target.open)refreshProjectFontList();
