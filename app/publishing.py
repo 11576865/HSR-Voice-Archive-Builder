@@ -60,7 +60,7 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
                 if path.name in {"continuous.flac", "HSR_Voice_Archive_Black.mkv", "HSR_Voice_Archive_Bundle.mkv"}:
                     try:
                         os.link(path, saved)
-                    except OSError:
+                    except (OSError, AttributeError):
                         shutil.copy2(path, saved)
                 else:
                     shutil.copy2(path, saved)
@@ -75,7 +75,7 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
                 def _link_or_copy(src: str, dst: str) -> str:
                     try:
                         os.link(src, dst)
-                    except OSError:
+                    except (OSError, AttributeError):
                         shutil.copy2(src, dst)
                     return dst
                 shutil.copytree(path, saved, copy_function=_link_or_copy)
