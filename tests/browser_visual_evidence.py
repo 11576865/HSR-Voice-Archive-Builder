@@ -388,7 +388,7 @@ def desktop_check(browser, base_url, output, report):
            "Two top-level workspace tabs selected")
     ensure(page.evaluate("document.body.dataset.workspace") == "layout",
            "Effects forked the canvas layout surface")
-    ensure(page.evaluate("document.body.dataset.workspaceTask") == "studioEffectsTab",
+    ensure(page.evaluate("document.body.dataset.workspaceTask") == "effects",
            "Effects task identity lost")
     ensure(page.locator("#layoutTimelineViewport").is_visible(),
            "Top-level Effects lost the timeline")
