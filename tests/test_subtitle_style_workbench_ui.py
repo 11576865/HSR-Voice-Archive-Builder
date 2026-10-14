@@ -13,13 +13,13 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
     def test_style_workbench_uses_adaptive_split_pane_shell(self) -> None:
         html = self.html
         self.assertIn('id="hsrStudioTitle"', html)
-        self.assertIn(">字幕排版工作台</h2>", html)
-        self.assertIn('id="hsrStudioEyebrow">SUBTITLE LAYOUT', html)
-        self.assertIn("next==='effects'?'SUBTITLE EFFECTS':'SUBTITLE LAYOUT'", html)
+        self.assertIn(">排版</h2>", html)
+        self.assertIn('id="hsrStudioEyebrow" class="studio-v4-sr-label">SUBTITLE LAYOUT', html)
+        self.assertIn("next==='effects'?'EFFECTS':'LAYOUT'", html)
         self.assertIn('id="hsrInspectorTitle"', html)
         self.assertIn('id="studioStyleTab"', html)
         self.assertIn('id="studioEffectsTab"', html)
-        self.assertIn('href="/static/studio-v3.css"', html)
+        self.assertIn('href="/static/studio-v4.css"', html)
         self.assertIn("Subtitle Style Workbench redesign v14", html)
         self.assertIn(
             "grid-template-columns:minmax(0,1fr) clamp(390px,26vw,460px);",

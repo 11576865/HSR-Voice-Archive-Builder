@@ -255,7 +255,9 @@ def load_studio(page):
            "Effects is not a primary destination")
     ensure(page.locator("#studioStyleTab").get_attribute("aria-current") is None,
            "Layout and Effects both selected")
-    ensure(page.locator("#layoutTimelineViewport").is_visible(), "Effects timeline hidden")
+    ensure(not page.locator("#layoutTimelineViewport").is_visible() and
+           not page.locator("#studioV4Timing").evaluate("(node)=>node.open"),
+           "Effects should start with the full image, not an expanded timeline")
     ensure(page.locator("#previewVideoBtn").is_visible(), "Playable effect preview action hidden")
     ensure(page.locator("#layoutCueFinalText").count() == 0,
            "Duplicate final text editor still exists in DOM")
@@ -290,22 +292,27 @@ def desktop_check(browser, base_url, output, report):
            "Layout and Effects must have one primary navigation entry each")
     ensure(page.locator("#layoutCueFinalText").count() == 0,
            "Duplicated final text textarea is still mounted")
-    shell = page.locator("#subtitleLayoutPreviewCard .preview-workbench").bounding_box()
-    ensure(shell is not None and shell["height"] < 850,
-           f"Desktop workbench must be viewport-bounded, not an endless document: {shell}")
-    scroll_regions=page.evaluate("""() => {
-      const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
-      const preview=root.querySelector('.studio-v3-editors');
-      const inspector=root.querySelector('.preview-inspector');
-      return [preview,inspector].map(x=>({scroll:getComputedStyle(x).overflowY,
-        height:x.clientHeight,outer:root.clientHeight}));
+    visual=page.evaluate("""() => {
+      const root=document.getElementById('subtitleLayoutPreviewCard');
+      const stage=root.querySelector('.preview-stage');
+      const cmd=root.querySelector('.studio-v3-command-bar');
+      const nodes=['.studio-v4-workbench','.studio-v3-main',
+                   '.studio-v3-visual','.studio-v3-editors',
+                   '.studio-v3-inspector'].map(k=>root.querySelector(k));
+      const box=x=>x.getBoundingClientRect();
+      return {width:box(stage).width,height:box(stage).height,
+        imageFirst:box(stage).bottom<=box(cmd).top+2,
+        overflow:nodes.map(x=>getComputedStyle(x).overflowY)};
     }""")
-    ensure(all(x["scroll"] == "auto" and x["height"] <= x["outer"]+3 for x in scroll_regions),
-           f"V3 timeline/cue and Inspector must be independent scroll panes: {scroll_regions}")
-    ensure(page.locator(".studio-v3-command-bar #previewVideoBtn").count() == 1,
-           "V3 stage must own the live preview command")
-    ensure(page.locator(".studio-v3-inspector #previewVideoBtn").count() == 0,
-           "Render controls must not be buried inside the Inspector")
+    ensure(visual["height"]>260 and
+           abs(visual["width"]/visual["height"]-16/9)<.045 and visual["imageFirst"],
+           f"V4 screenshot must show complete 16:9 preview first: {visual}")
+    ensure(all(v=="visible" for v in visual["overflow"]),
+           f"Nested scrolling containers still present: {visual}")
+    ensure(page.locator("#layoutTrialTextDetails").is_hidden(),
+           "Second subtitle editor should not exist in visible workspace")
+    ensure(page.locator("#previewBackgroundMode").is_hidden(),
+           "Preview has only one fixed red-clouds background")
     ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
            "Karaoke generation/import remains hidden in an advanced disclosure")
     for action in ("#refreshWordAlignmentBtn","#importWordAlignmentBtn"):
@@ -315,8 +322,9 @@ def desktop_check(browser, base_url, output, report):
            "Karaoke readiness failed to explain missing project data")
     ensure(page.locator("#generateWordAlignmentBtn").is_disabled(),
            "WhisperX generation claimed availability in an unconfigured fixture")
-    ensure(page.locator("#hsrEffectOperationStatus").is_visible(),
-           "Effects operation status is not visible beside the stage")
+    ensure(page.locator("#hsrEffectOperationStatus").get_attribute("data-phase")=="idle" and
+           page.locator("#hsrEffectOperationStatus").is_hidden(),
+           "Idle operation status should not take space away from the image")
     ensure(page.locator("#previewBackgroundMode").input_value()=="reference",
            "Studio did not default to user red-clouds reference")
     try:
@@ -438,8 +446,9 @@ def desktop_check(browser, base_url, output, report):
            "Effects forked the canvas layout surface")
     ensure(page.evaluate("document.body.dataset.workspaceTask") == "effects",
            "Effects task identity lost")
+    page.locator("#studioV4Timing > summary").click()
     ensure(page.locator("#layoutTimelineViewport").is_visible(),
-           "Top-level Effects lost the timeline")
+           "Opt-in timeline cannot be opened")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Layout QA rail leaks into the Effects task")
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
@@ -593,40 +602,27 @@ def mobile_check(browser, base_url, output, report, width, height, label):
            f"{label}: hidden QA controls remain focusable")
     ensure(page.locator("#layoutAuditDrawerToggle").get_attribute("aria-expanded") == "false",
            f"{label}: QA opener did not return to closed state")
-    canvas = rect(page, ".preview-workbench .preview-stage")
-    if width < 680:
-        tabs = page.locator('.studio-v3-pane-nav [role="tab"]')
-        ensure(tabs.count()==3 and tabs.first.is_visible(),
-               f"{label}: mobile task selector missing")
-        ensure(page.locator("#studioV3TimelineTab").get_attribute("aria-selected")=="true",
-               f"{label}: Effects should open in its timeline")
-        vp=rect(page,"#layoutTimelineViewport")
-        page.locator("#studioV3CueTab").click()
-        ensure(page.locator("#layoutCueEditorPanel").is_visible(),
-               f"{label}: cue panel missing")
-        cue=rect(page,"#layoutCueEditorPanel")
-        ensure(canvas["y"] < cue["y"], f"{label}: cue obscures the stage")
-        page.locator("#studioV3InspectorTab").click()
-        inspector=rect(page,".studio-v3-inspector")
-        ensure(page.locator("#layoutTimelinePanel").is_hidden(),
-               f"{label}: inactive timeline still visible")
-        page.locator("#studioV3TimelineTab").click()
-        ensure(page.locator("#layoutTimelineViewport").is_visible(),
-               f"{label}: timeline not restored")
-    else:
-        ensure(page.locator(".studio-v3-pane-nav").is_hidden(),
-               f"{label}: tablet shouldn't have phone task tabs")
-        vp=rect(page,"#layoutTimelineViewport")
-        cue=rect(page,"#layoutCueEditorPanel")
-        inspector=rect(page,".studio-v3-inspector")
-        ensure(canvas["y"]<cue["y"],f"{label}: stage should precede cue")
-        preview_pane=rect(page,".studio-v3-main")
-        ensure(preview_pane["y"]+preview_pane["height"]<=inspector["y"]+8,
-               f"{label}: tablet panes overlap")
-        ensure(inspector["width"]>=width*0.72,
-               f"{label}: tablet Inspector too narrow")
-    ensure(vp["width"]>width*(0.6 if width<760 else 0.38),
-           f"{label}: timeline too narrow")
+    canvas=rect(page,".preview-stage")
+    ensure(abs(canvas["width"]/canvas["height"]-16/9)<.045,
+           f"{label}: preview squashed: {canvas}")
+    ensure(page.locator("#layoutTrialTextDetails").is_hidden(),
+           f"{label}: second editable subtitle field visible")
+    ensure(page.locator("#previewBackgroundMode").is_hidden(),
+           f"{label}: multiple preview backgrounds exposed")
+    flat=page.evaluate("""() => {
+      const root=document.getElementById('subtitleLayoutPreviewCard');
+      return ['.studio-v4-workbench','.studio-v3-main','.studio-v3-visual',
+              '.studio-v3-editors','.studio-v3-inspector'].map(
+                 k=>getComputedStyle(root.querySelector(k)).overflowY);
+    }""")
+    ensure(all(v=="visible" for v in flat),
+           f"{label}: nested scrollbox detected: {flat}")
+    ensure(not page.locator("#studioV4Timing").evaluate("(n)=>n.open"),
+           f"{label}: time editing should be collapsed by default")
+    page.locator("#studioV4Timing > summary").click()
+    vp=rect(page,"#layoutTimelineViewport")
+    cue=rect(page,"#layoutCueEditorPanel")
+    inspector=rect(page,".studio-v3-inspector")
     ensure(page.locator("#layoutCueTimingStart").is_enabled(),
            f"{label}: timing controls disabled")
     # Control headings/content must stay within the horizontal viewport, not
@@ -710,9 +706,10 @@ def shared_corpus_request_check(browser, base_url, report):
 
 
 def focused_studio_viewport_check(browser, base_url, output, report):
-    """Both tasks are bounded in the ordinary page: no focus/fullscreen mode."""
+    """Verify V4's full-size stage and a single document scrollbar."""
     measured=[]
-    for width,height,mobile in [(1600,900,False),(768,1024,True),(390,844,True),(844,390,True)]:
+    for width,height,mobile in [(1600,900,False),(768,1024,True),
+                                (390,844,True),(844,390,True)]:
         page=browser.new_page(viewport={"width":width,"height":height},
                               device_scale_factor=1,is_mobile=mobile,has_touch=mobile)
         page.route("**/api/**",make_router([dict(row) for row in SUBTITLES],[]))
@@ -724,34 +721,33 @@ def focused_studio_viewport_check(browser, base_url, output, report):
             page.locator("#studioEffectsTab" if destination=="effects" else "#studioStyleTab").click()
             view=page.evaluate("""() => {
               const root=document.getElementById('subtitleLayoutPreviewCard');
-              const task=root.querySelector('.preview-workbench');
-              const stage=task.querySelector('.studio-v3-editors');
-              const tools=task.querySelector('.preview-inspector');
+              const stage=root.querySelector('.preview-stage');
+              const actions=root.querySelector('.studio-v3-command-bar');
+              const els=['.studio-v4-workbench','.studio-v3-main',
+                '.studio-v3-visual','.studio-v3-editors','.studio-v3-inspector']
+                  .map(x=>root.querySelector(x));
+              const box=x=>x.getBoundingClientRect();
               return {
-                rootPosition:getComputedStyle(root).position,
-                taskHeight:task.clientHeight,taskScroll:task.scrollHeight,
-                stageHeight:stage.clientHeight,toolsHeight:tools.clientHeight,
-                stageOverflow:getComputedStyle(stage).overflowY,
-                toolsOverflow:getComputedStyle(tools).overflowY,
-                innerHeight:window.innerHeight,
-                focusControls:!!document.getElementById('hsrStudioFocusToggle'),
-                lockControls:!!document.getElementById('hsrTouchSliderToggle'),
+                width:box(stage).width,height:box(stage).height,
+                beforeActions:box(stage).bottom<=box(actions).top+2,
+                overflow:els.map(x=>getComputedStyle(x).overflowY),
+                secondText:!!document.getElementById('layoutTrialTextDetails').offsetParent,
+                backdropPicker:!!document.getElementById('previewBackgroundFile')
               };
             }""")
-            ensure(view["rootPosition"]!="fixed" and not view["focusControls"] and
-                   not view["lockControls"],f"{width}: hidden modal/focus lock remains: {view}")
-            ensure(260 <= view["taskHeight"] <= max(view["innerHeight"],340),
-                   f"{width}: workbench is unbounded: {view}")
-            ensure(view["stageOverflow"]=="auto" and view["toolsOverflow"]=="auto",
-                   f"{width}: editing deck and Inspector must scroll independently: {view}")
-            ensure(view["stageHeight"]<=view["taskHeight"]+3 and
-                   view["toolsHeight"]<=view["taskHeight"]+3,
-                   f"{width}: canvas/inspector escaped bounded frame: {view}")
+            ensure(view["beforeActions"] and
+                   view["width"]>width*.55 and
+                   abs(view["width"]/view["height"]-16/9)<.05,
+                   f"{width}: canvas too small or occluded: {view}")
+            ensure(all(v=="visible" for v in view["overflow"]),
+                   f"{width}: nested scroll region: {view}")
+            ensure(not view["secondText"] and not view["backdropPicker"],
+                   f"{width}: duplicate inputs returned: {view}")
             measured.append({"width":width,"height":height,"task":destination,"view":view})
-        ensure(not errors,f"{width}: JS errors in bounded workbench: {errors}")
-        page.screenshot(path=str(output/f"bounded_studio_{width}.png"),full_page=False)
+        ensure(not errors,f"{width}: JS errors: {errors}")
+        page.screenshot(path=str(output/f"flat_studio_{width}.png"),full_page=True)
         page.close()
-    report["bounded_studio"]=measured
+    report["flat_studio"]=measured
 
 
 def touch_safety_check(browser, base_url, report):

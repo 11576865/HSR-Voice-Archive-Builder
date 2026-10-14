@@ -8,7 +8,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 HTML = (ROOT / "app/static/index.html").read_text(encoding="utf-8")
-CSS = (ROOT / "app/static/studio-v3.css").read_text(encoding="utf-8")
+CSS = (ROOT / "app/static/studio-v4.css").read_text(encoding="utf-8")
 SHARED = (ROOT / "app/static/hsr-ui-convergence.css").read_text(encoding="utf-8")
 
 
@@ -22,7 +22,7 @@ class StudioV3ArchitectureTests(unittest.TestCase):
             "layoutAuditDrawerToggle", "layoutCorpusRail",
         ):
             self.assertEqual(HTML.count(f'id="{ident}"'), 1, ident)
-        self.assertIn('class="preview-workbench studio-v3-workbench"', HTML)
+        self.assertIn('class="preview-workbench studio-v3-workbench studio-v4-workbench"', HTML)
         self.assertIn('class="studio-v3-command-bar"', HTML)
         self.assertLess(HTML.index('id="studioV3Visual"'), HTML.index('id="studioV3Editors"'))
         self.assertLess(HTML.index('id="studioV3Editors"'), HTML.index('id="studioV3Inspector"'))
@@ -44,20 +44,20 @@ class StudioV3ArchitectureTests(unittest.TestCase):
         self.assertIn("button.tabIndex=active?0:-1", HTML)
         self.assertIn("['ArrowLeft','ArrowRight']", HTML)
         self.assertIn("setStudioV3Pane(next==='effects'?'timeline':'inspector')", HTML)
-        self.assertIn('.studio-v3-pane-nav', CSS)
-        self.assertIn('data-studio-pane="cue"', CSS)
-        self.assertIn('data-studio-pane="inspector"', CSS)
-        self.assertIn('@media(max-width:679px)', CSS)
+        self.assertIn('.studio-v3-pane-nav{display:none!important}', CSS)
+        self.assertIn('studio-v4-timing', CSS)
+        self.assertIn('overflow:visible!important', CSS)
+        self.assertIn('@media(max-width:600px)', CSS)
         self.assertEqual(HTML.count('id="studioStyleTab"'), 1)
         self.assertEqual(HTML.count('id="studioEffectsTab"'), 1)
 
     def test_new_layout_isolated_and_no_old_breakpoint_ownership(self):
-        self.assertEqual(HTML.count('href="/static/studio-v3.css"'), 1)
-        self.assertIn("Studio V3", CSS)
+        self.assertEqual(HTML.count('href="/static/studio-v4.css"'), 1)
+        self.assertIn("Studio V4", CSS)
         self.assertIn("grid-template-columns:minmax(0,1fr)", CSS)
         self.assertIn(".studio-v3-editors", CSS)
-        self.assertIn(".studio-v3-visual .preview-stage", CSS)
-        self.assertIn("overscroll-behavior:contain", CSS)
+        self.assertIn(".studio-v3-visual>.preview-stage", CSS)
+        self.assertIn("overflow:visible!important", CSS)
         self.assertNotIn("height:clamp(340px,calc(100dvh - 210px),880px)", SHARED)
         self.assertNotIn("grid-template-rows:minmax(0,44%)", SHARED)
         self.assertNotIn("position:sticky!important;top:0!important;z-index:9", CSS)

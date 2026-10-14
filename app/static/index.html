@@ -2947,7 +2947,7 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 #archiveBundlePanel .hsr-bundle-options select{max-width:100%}
 </style>
 <link rel="stylesheet" href="/static/hsr-ui-convergence.css">
-<link rel="stylesheet" href="/static/studio-v3.css">
+<link rel="stylesheet" href="/static/studio-v4.css">
 <style>
 /* Archive owns build status; Export owns the single full artifact inventory. */
 body[data-workspace="project"] #archiveCard{display:none!important}
@@ -3416,7 +3416,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
     <section class="card" id="subtitleLayoutPreviewCard" data-studio-mode="style">
       <div class="topline">
         <div>
-          <div class="layout-workbench-kicker" id="hsrStudioEyebrow">SUBTITLE LAYOUT</div><h2 id="hsrStudioTitle" style="margin-bottom:4px">字幕排版工作台</h2>
+          <span id="hsrStudioEyebrow" class="studio-v4-sr-label">SUBTITLE LAYOUT</span><h2 id="hsrStudioTitle" class="studio-v4-sr-label">排版</h2>
           <div id="previewSaveStatus" class="small muted" role="status" aria-live="polite">快速预览即时响应；需要定稿时用 FFmpeg/libass 实际渲染确认。</div>
         </div>
         <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end" id="previewHeaderBadges">
@@ -3432,7 +3432,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       <div class="layout-workflow-strip" aria-label="字幕制作工作流">
         <span><b>01</b> 调整样式与几何</span><span><b>02</b> 实际渲染检视</span><span><b>03</b> 保存与生成</span>
       </div>
-      <div class="preview-workbench studio-v3-workbench" data-studio-pane="inspector">
+      <div class="preview-workbench studio-v3-workbench studio-v4-workbench" data-studio-pane="inspector">
 
         <aside class="layout-corpus-rail" id="layoutCorpusRail" aria-label="批量排版检查与问题字幕定位" aria-hidden="true" inert>
           <div class="layout-rail-title">
@@ -3471,6 +3471,21 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </aside>
         <div class="layout-preview-region studio-v3-main" aria-label="字幕画布、时间轴与条目编辑">
           <div class="studio-v3-visual" id="studioV3Visual" aria-label="字幕预览舞台">
+          <div class="preview-stage" id="previewCanvasContainer">
+          <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
+          <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
+          <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
+          <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="FFmpeg/libass 动态字幕预览（黑底或用户本地视频片段）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
+<img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
+          <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
+            <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
+            <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
+          </div>
+          <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
+            <span>布局失败：</span>
+            <span id="previewCollisionReason">CENTRAL_COLLISION</span>
+          </div>
+          </div>
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
                   <div class="actions" style="margin:0">
@@ -3487,38 +3502,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
                 </div>
           </div>
-          <div class="preview-stage" id="previewCanvasContainer">
-          <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
-          <div id="previewBackgroundGrid" class="preview-background-grid hidden" aria-hidden="true"></div>
-          <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
-          <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
-          <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="FFmpeg/libass 动态字幕预览（黑底或用户本地视频片段）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
-<img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
-          <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
-            <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
-            <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
-          </div>
-          <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
-            <span>布局失败：</span>
-            <span id="previewCollisionReason">CENTRAL_COLLISION</span>
-          </div>
-          </div>
-          <div class="hsr-stage-background-toolbar" role="group" aria-label="工作台视觉参考背景">
-            <label for="previewBackgroundMode">预览参考背景
-              <select id="previewBackgroundMode">
-                <option value="reference" selected>红云参考图（默认）</option>
-                <option value="gradient">中性渐变</option>
-                <option value="black">纯黑</option>
-                <option value="grid">明暗网格</option>
-                <option value="image">本地图片</option>
-              </select>
-            </label>
-            <div id="previewBackgroundFileWrap" class="hidden">
-              <label for="previewBackgroundFile">本地参考图片</label>
-              <input id="previewBackgroundFile" type="file" accept="image/png,image/jpeg,image/webp">
-            </div>
-            <span class="hsr-stage-background-explainer">便于辨认描边、阴影和运动；不改变项目图、ASS 或最终 MKV 背景。</span>
-          </div>
+          <!-- One immutable reference image. Final delivery settings remain independent. -->
+          <input id="previewBackgroundMode" type="hidden" value="reference">
           <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">实际 ASS 预览尚未生成。</div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
@@ -3527,7 +3512,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="layout-preview-evidence" role="status" aria-live="polite" aria-atomic="true" data-preview-evidence="geometry">
             <div class="layout-preview-evidence-main">
               <span class="layout-evidence-dot" aria-hidden="true"></span>
-              <div><strong id="previewEvidenceTitle">浏览器几何预览</strong><p id="previewEvidenceDetail">版面与安全区由求解器计算；请用实际 ASS 渲染确认字形和最终画面。</p></div>
+              <div><strong id="previewEvidenceTitle">几何预览</strong><p id="previewEvidenceDetail">非真实渲染</p></div>
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
           </div>
@@ -3545,6 +3530,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <button type="button" role="tab" id="studioV3InspectorTab" data-studio-pane-target="inspector" aria-controls="studioV3Inspector" aria-selected="true">参数</button>
           </nav>
           <div class="studio-v3-editors" id="studioV3Editors" aria-label="连续字幕与显示时间编辑">
+          <details id="studioV4Timing" class="studio-v4-timing">
+            <summary>字幕时间轴 <small>需要调整时展开</small></summary>
           <section class="layout-timeline" aria-label="连续字幕显示时间轴" id="layoutTimelinePanel">
             <div class="layout-timeline-top">
               <div><span class="layout-eyebrow">SUBTITLE TIMELINE</span><h3>字幕显示时间轴</h3></div>
@@ -3626,13 +3613,14 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <button type="button" id="layoutOpenProofreadingBtn" class="secondary">在校对中编辑当前字幕与试听原始语音</button>
 <p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只显示当前正文；字幕正文与原始 WAV 的唯一操作入口位于「校对」。字幕显示时间仍可在上方单独调整。</p>
           </section>
+          </details>
           </div>
         </div>
 
         <aside class="preview-inspector studio-v3-inspector" id="studioV3Inspector" aria-label="字幕样式与特效参数">
           <div class="layout-inspector-head"><div><span id="hsrInspectorEyebrow">LAYOUT</span><strong id="hsrInspectorTitle">排版参数</strong></div><span class="layout-inspector-resolution">1920×1080 · ASS</span>
           </div>
-  <details id="layoutTrialTextDetails" class="hsr-preview-trial">
+  <details id="layoutTrialTextDetails" class="hsr-preview-trial" hidden inert aria-hidden="true">
     <summary>手动试调字幕文本（不会修改项目字幕）</summary>
     <div class="row preview-copy-fields">
           <div>
@@ -3670,17 +3658,17 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <input id="prevPriFont" value="Noto Sans" autocomplete="off">
               <button type="button" class="secondary font-browse-btn" data-font-target="prevPriFont">浏览</button>
             </div>
-            <div id="fontResolveStatus" class="small muted inspector-help">“浏览”仅列出主机已经安装的字体。若实际 ASS 渲染发生字体回退，请在下面将自己的 TTF/OTF/TTC 导入当前项目，而不是只填写字体名。</div>
+            <div id="fontResolveStatus" class="small muted inspector-help">字体浏览包含项目字体和系统字体。导入后自动选用；以实际 FFmpeg/libass 字形为准。</div>
             <details id="projectFontImporter" class="hsr-project-font-importer">
-              <summary>导入字体到当前项目（真实 ASS 预览可用）</summary>
+              <summary>导入字体</summary>
               <label for="projectFontFile">本地字体文件 · TTF / OTF / TTC，最多 12 MiB</label>
               <input id="projectFontFile" type="file" accept=".ttf,.otf,.ttc,font/ttf,font/otf" />
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
-              <button id="projectFontImportBtn" class="secondary" type="button">导入并应用到当前试调</button>
+              <button id="projectFontImportBtn" class="secondary" type="button">导入并保存字体</button>
               <button id="projectFontRefreshBtn" class="secondary" type="button">查看已导入字体</button>
               <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
-              <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">仅使用你有权使用和再分发的字体。上传不会安装到系统字体目录；当前阶段用于项目真实预览，完整 MKV 附件封装将单独验收。</p>
+              <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevChsSize" style="margin:0">中文基础字号</label>
@@ -6767,12 +6755,16 @@ async function loadFontBrowser(query=''){
   try{
     const data=await api('/api/subtitle-layout/fonts?q='+encodeURIComponent(query)+'&limit=500');
     const families=data.families||[];
-    meta.textContent='找到 '+families.length+' 个字体 family。悬停或选择字体时会从处理主机按需加载真实字形。';
-    if(!families.length){list.innerHTML='<div class="update-empty">没有匹配字体。</div>';return}
+    const imported=await api('/api/subtitle-layout/project-fonts').then(x=>x.fonts||[]).catch(()=>[]);
+    const choices=[...new Set([...imported.map(x=>String(x.family||'')).filter(Boolean),...families])];
+    meta.textContent='项目字体 '+imported.length+' 个 · 系统字体 '+families.length+' 个。点击选择并加载真实字形。';
+    const filtered=choices.filter(name=>name.toLowerCase().includes(String(query||'').toLowerCase()));
+    if(!filtered.length){list.innerHTML='<div class="update-empty">没有匹配字体。</div>';return}
     list.innerHTML='';
-    for(const family of families){
+    for(const family of filtered){
       const button=document.createElement('button');
       button.type='button';button.className='font-browser-item';
+      if(imported.some(x=>x.family===family))button.dataset.projectFont='true';
       const name=document.createElement('span');name.textContent=family;
       const sample=document.createElement('span');sample.className='font-browser-sample';sample.textContent='Aa 中 123';
       sample.style.fontFamily='"'+family.replace(/"/g,'')+'", sans-serif';
@@ -6857,9 +6849,21 @@ async function importCurrentProjectFont(){
     hostFontFaces.delete(family); // A prior browser fallback is no longer authoritative.
     const field=document.getElementById(target);
     if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
-    await ensureHostFontLoaded(family,{quiet:true});
-    if(status){status.textContent='已导入并选择「'+family+'」。点击「实际 ASS 渲染」验证，不要只相信几何预览。';status.className='small status-ok';}
+    const resolved=await ensureHostFontLoaded(family,{quiet:true});
+    const loaded=hostFontFaces.get(family)?.state==='loaded'&&resolved!==family;
+    if(!loaded)throw new Error('字体已保存，但浏览器加载失败；字体不能被标记为可用，请检查格式');
+    if(status){status.textContent='已导入、加载并应用「'+family+'」作为'+(target==='prevChsFont'?'中文':'原文')+'字体。请使用实际 ASS 渲染核对字形。';status.className='small status-ok';}
+    const resolveStatus=document.getElementById('fontResolveStatus');
+    if(resolveStatus)resolveStatus.textContent='项目字体已加载：'+family+'。实际 ASS 字形仍需验证。';
     await refreshProjectFontList();
+    invalidateLibassPreview();
+    scheduleLayoutPreviewUpdate();
+    // "Import and apply" must survive reloading the project: the previous
+    // implementation only changed an unsaved input. Make the persistence
+    // contract explicit, and never report success when the save failed.
+    const persisted=await saveSubtitleLayoutSettings();
+    if(!persisted)throw new Error('字体已保存到项目，但当前字体选择尚未保存。请检查上方保存状态并重试');
+    if(status){status.textContent='字体「'+family+'」已导入、加载并保存为'+(target==='prevChsFont'?'中文':'原文')+'字体。可进一步用实际 ASS 渲染检查。';status.className='small status-ok';}
   }catch(error){
     if(status){status.textContent='字体导入失败：'+shortError(error);status.className='small status-bad';}
   }finally{
@@ -6884,34 +6888,12 @@ function openFontBrowser(targetId){
 
 function applyPreviewBackground(){
   const stage=document.getElementById('previewCanvasContainer');
-  const mode=document.getElementById('previewBackgroundMode')?.value||'reference';
   const image=document.getElementById('previewBackgroundImage');
-  const grid=document.getElementById('previewBackgroundGrid');
-  const wrap=document.getElementById('previewBackgroundFileWrap');
-  if(!stage||!image||!grid)return;
-  stage.classList.remove('preview-bg-gradient','preview-bg-black','preview-bg-image');
-  grid.classList.toggle('hidden',mode!=='grid');
-  if(mode==='reference'&&image.getAttribute('src')!=='/static/assets/studio-red-clouds.webp')
-    image.src='/static/assets/studio-red-clouds.webp';
-  else if(mode==='image'&&previewBackgroundObjectUrl&&image.src!==previewBackgroundObjectUrl)
-    image.src=previewBackgroundObjectUrl;
-  image.classList.toggle('hidden',!(mode==='reference'||(mode==='image'&&!!previewBackgroundObjectUrl)));
-  if(wrap)wrap.classList.toggle('hidden',mode!=='image');
-  if(mode==='black')stage.classList.add('preview-bg-black');
-  else if(mode==='image'||mode==='reference')stage.classList.add('preview-bg-image');
-  else stage.classList.add('preview-bg-gradient');
-}
-
-function loadPreviewBackgroundFile(file){
-  if(previewBackgroundObjectUrl){URL.revokeObjectURL(previewBackgroundObjectUrl);previewBackgroundObjectUrl=null}
-  if(!file){applyPreviewBackground();return}
-  if(!/^image\/(png|jpeg|webp)$/i.test(file.type||''))throw new Error('背景只支持 PNG、JPEG 或 WebP');
-  previewBackgroundObjectUrl=URL.createObjectURL(file);
-  const image=document.getElementById('previewBackgroundImage');
-  image.src=previewBackgroundObjectUrl;
+  if(!stage||!image)return;
+  image.src='/static/assets/studio-red-clouds.webp';
   image.classList.remove('hidden');
-  applyPreviewBackground();
-  invalidateLibassPreview();
+  stage.classList.remove('preview-bg-gradient','preview-bg-black');
+  stage.classList.add('preview-bg-image');
 }
 
 let previewDebounceTimer = null;
@@ -7051,7 +7033,7 @@ function libassPreviewPayload(){
     word_alignments:Array.isArray(layoutStressSample?.word_alignments)?layoutStressSample.word_alignments:null,
     preview_duration_seconds:previewDuration,
     preview_timestamp:Math.max(0.01,previewDuration*previewPercent),
-    use_studio_reference_background:document.getElementById('previewBackgroundMode')?.value==='reference'
+    use_studio_reference_background:true
   };
 }
 
@@ -8731,9 +8713,9 @@ function setHsrStudioMode(mode){
   }
   root.dataset.studioMode=next;
   const heading=document.getElementById('hsrStudioTitle');
-  if(heading)heading.textContent=next==='effects'?'字幕特效工作台':'字幕排版工作台';
+  if(heading)heading.textContent=next==='effects'?'特效':'排版';
   const eyebrow=document.getElementById('hsrStudioEyebrow');
-  if(eyebrow)eyebrow.textContent=next==='effects'?'SUBTITLE EFFECTS':'SUBTITLE LAYOUT';
+  if(eyebrow)eyebrow.textContent=next==='effects'?'EFFECTS':'LAYOUT';
   const inspectorTitle=document.getElementById('hsrInspectorTitle');
   if(inspectorTitle)inspectorTitle.textContent=next==='effects'?'特效参数':'排版参数';
   const inspectorEyebrow=document.getElementById('hsrInspectorEyebrow');
@@ -8869,7 +8851,7 @@ async function renderHsrEffectVideo(){
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
   const backgroundImage=effectBackgroundImageFile;
-  const usesReference=!footage&&!backgroundImage&&document.getElementById('previewBackgroundMode')?.value==='reference';
+  const usesReference=!footage&&!backgroundImage;
   const footageStart=document.getElementById('effectFootageStart')?.value||'0';
   const footageAudio=!!document.getElementById('effectFootageAudio')?.checked;
   const backgroundColor=document.getElementById('effectPreviewBackgroundColor')?.value||'#000000';
@@ -8972,11 +8954,8 @@ document.getElementById('fontBrowserSearch')?.addEventListener('input',(event)=>
   clearTimeout(fontBrowserTimer);
   fontBrowserTimer=setTimeout(()=>loadFontBrowser(event.target.value||''),180);
 });
-document.getElementById('previewBackgroundMode')?.addEventListener('change',()=>{applyPreviewBackground();invalidateLibassPreview();});
-document.getElementById('previewBackgroundFile')?.addEventListener('change',(event)=>{
-  try{loadPreviewBackgroundFile(event.target.files?.[0]||null)}
-  catch(error){setLog(String(error))}
-});
+// Studio V4: fixed reference; no background picker.
+
 window.addEventListener('beforeunload',()=>{if(previewBackgroundObjectUrl)URL.revokeObjectURL(previewBackgroundObjectUrl)});
 applyPreviewBackground();
 
