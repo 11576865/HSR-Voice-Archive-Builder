@@ -131,17 +131,30 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .preview-workbench.audi
 /* Touch: numeric fields are explicit intentional edits; upward/downward
    scrolling cannot hit an invisible/unlocked range control. Mouse/keyboard
    users retain the existing sliders and undo behavior. */
-#subtitleLayoutPreviewCard .hsr-touch-number{display:none}
+#subtitleLayoutPreviewCard .hsr-touch-stepper{display:none}
 @media(pointer:coarse){
   #subtitleLayoutPreviewCard .preview-inspector input[type="range"]{display:none!important}
-  #subtitleLayoutPreviewCard .preview-inspector .hsr-touch-number{
-    display:block!important;min-height:44px;width:100%;max-width:100%;
-    margin:4px 0 10px;padding:8px 12px;font-size:16px;
+  #subtitleLayoutPreviewCard .preview-inspector .hsr-touch-stepper{
+    display:grid!important;grid-template-columns:46px minmax(0,1fr) 46px;
+    align-items:center;gap:6px;margin:5px 0 11px;
+  }
+  #subtitleLayoutPreviewCard .hsr-touch-number{
+    display:block!important;min-height:44px;width:100%;min-width:0;
+    padding:8px 10px;font-size:16px;text-align:center;
     border:1px solid var(--layout-border);border-radius:6px;
     background:var(--layout-section);color:var(--layout-text);
   }
+  #subtitleLayoutPreviewCard .hsr-touch-stepper button{
+    min-height:44px;min-width:44px;padding:5px;
+    border:1px solid var(--layout-border);border-radius:6px;
+    background:var(--layout-section);color:var(--layout-text);
+    touch-action:manipulation;
+  }
+  #subtitleLayoutPreviewCard .hsr-touch-stepper button:disabled{opacity:.35}
+  /* Timeline can already be moved by explicit previous/next buttons and
+     the viewport selector. A range slider adds no necessary touch task. */
   #subtitleLayoutPreviewCard .layout-timeline-navigation input[type="range"]{
-    pointer-events:auto!important;touch-action:pan-y;
+    display:none!important;
   }
 }
 #subtitleLayoutPreviewCard .hsr-alignment-help{
