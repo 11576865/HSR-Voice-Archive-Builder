@@ -58,10 +58,11 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
         return None
     status = bundle_export_status(output)
     receipt = _read_receipt(output)
-    chapter_mode_changed = bool(receipt and receipt.get("include_chapter_flac")) != bool(config.generate_chapter_flac)
+    chapter_enabled = bool(getattr(config, "generate_chapter_flac", False))
+    chapter_mode_changed = bool(receipt and receipt.get("include_chapter_flac")) != chapter_enabled
     if (not status["needs_rebuild"] and not chapter_mode_changed) or not status["can_generate"]:
         return None
-    if config.generate_chapter_flac and not (output / "chapter_flac" / "chapter_flac_manifest.json").is_file():
+    if chapter_enabled and not (output / "chapter_flac" / "chapter_flac_manifest.json").is_file():
         return None
     settings = previous_bundle_settings(output)
     if settings["background_spec"]["mode"] == "image" and not settings["image_saved"]:
@@ -70,7 +71,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     try:
         snapshot = _input_identity(
             output, include_fonts=settings["attach_project_fonts"], settings=settings,
-            include_chapter_flac=config.generate_chapter_flac,
+            include_chapter_flac=chapter_enabled,
         )
     except (OSError, ValueError, TypeError):
         # Invalid chapter sources must not erase the whole project dashboard.
@@ -99,7 +100,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
             now = previous_bundle_settings(output)
             if _input_identity(
                 output, include_fonts=now["attach_project_fonts"], settings=now,
-                include_chapter_flac=config.generate_chapter_flac,
+                include_chapter_flac=chapter_enabled,
             ) != snapshot:
                 raise RuntimeError("自动 MKV 更新的输入已变化，等待下一轮任务检查")
             from .subtitles import subtitle_render_config
@@ -121,7 +122,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
                 include_fonts=now["attach_project_fonts"],
                 background_color=now["background_color"],
                 background_image=background, background_spec=spec,
-                include_chapter_flac=config.generate_chapter_flac,
+                include_chapter_flac=chapter_enabled,
                 require_current_ass=True,
                 progress=lambda done, total, message: report_progress(
                     "encode", message, done, total,
