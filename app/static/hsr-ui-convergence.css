@@ -355,6 +355,8 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .layout-preview-region>
   }
   body[data-workspace="layout"] #subtitleLayoutPreviewCard .layout-preview-region>.preview-stage{
     width:min(100%, calc(42dvh * 16 / 9))!important;
+    /* The compact pane must be able to scroll to timeline handles. */
+    position:relative!important;top:auto!important;
   }
   #subtitleLayoutPreviewCard .hsr-stage-background-explainer{flex-basis:100%}
 }
