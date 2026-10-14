@@ -708,9 +708,30 @@ def touch_safety_check(browser, base_url, report):
     # Rendering is debounced; the committed source range changes synchronously.
     page.wait_for_function("""() => document.getElementById('prevChsSizeVal')
       .textContent.trim().startsWith('52')""", timeout=12000)
+    # Mutually exclusive native Inspector sections keep the toolbar short.
+    # Presets belong to a different section, so open it intentionally.
+    style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
+    ensure(style_sections.count()==4,"Style must expose four exclusive parameter groups")
+    page.locator('details[name="hsr-style-parameter-groups"]').nth(2).locator("summary").click()
+    ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
+           "Multiple long style sections remained expanded after category switch")
     page.locator("#prevPresetDefault").click()
     ensure(number.input_value()=="48",
            "Preset restored range but left the touch numeric editor stale")
+    page.locator('details[name="hsr-style-parameter-groups"]').first.locator("summary").click()
+    ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
+           "Returning to typography created multiple long expanded sections")
+    ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),
+           "Numeric editor disappeared after accordion navigation")
+    stepper=page.locator("#prevChsSizeTouchNumber").locator("xpath=..")
+    stepper.get_by_role("button",name="中文基础字号（数值调整） 增加").click()
+    ensure(page.locator("#prevChsSize").input_value()=="49",
+           "Intentional +1 button failed to update the authoritative range")
+    ensure(not page.locator("#layoutTimelinePan").is_visible(),
+           "Timeline range still captures touch scrolling in Effects")
+    ensure(page.locator("#layoutTimelineEarlierBtn").count()==1 and
+           page.locator("#layoutTimelineLaterBtn").count()==1,
+           "Timeline navigation lost its intentional arrow controls")
     ensure(page.locator("#hsrTouchSliderToggle").count()==0,
            "Global slider locking control has returned")
     report["touch_numeric"]={"before":before,"after":page.locator("#prevChsSize").input_value()}
