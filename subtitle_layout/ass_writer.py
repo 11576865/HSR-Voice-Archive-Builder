@@ -332,8 +332,8 @@ def render_ass(
     cfg = config or SubtitleRenderConfig()
     chs_font = validate_ass_font_name(cfg.chs_font)
     primary_font = validate_ass_font_name(cfg.primary_font)
-    chs_font_path = resolve_font_path(chs_font)
-    primary_font_path = resolve_font_path(primary_font)
+    chs_font_path = cfg.chs_font_path or resolve_font_path(chs_font)
+    primary_font_path = cfg.primary_font_path or resolve_font_path(primary_font)
     margin_h = round(1920 * max(0.0, min(0.40, float(cfg.margin_horizontal_percent))))
     margin_v = round(1080 * max(0.0, min(0.40, float(cfg.margin_vertical_percent))))
     header = f"""[Script Info]
