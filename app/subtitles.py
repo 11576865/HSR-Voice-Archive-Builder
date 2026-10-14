@@ -302,6 +302,7 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
             0.0, min(0.40, float(config.subtitle_margin_vertical_percent))
         ),
         min_central_gap=max(0.0, min(200.0, float(config.subtitle_min_central_gap))),
+        primary_region_share=max(0.20, min(0.80, float(config.subtitle_primary_region_share))),
     )
 
 
