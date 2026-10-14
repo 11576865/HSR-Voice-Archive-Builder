@@ -17,7 +17,7 @@ from .archive_bundle_backgrounds import RESOLUTIONS
 from .archive_bundle_exporter import ArchiveBundleExporter
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery
 from .archive_bundle_lifecycle import (
-    _sources, bundle_export_status, load_previous_bundle_image,
+    _read_receipt, _sources, bundle_export_status, load_previous_bundle_image,
     previous_bundle_settings,
 )
 from .jobs import create_job, get_job
@@ -33,9 +33,11 @@ RETRY_BASE_SECONDS = 60.0
 RETRY_MAX_SECONDS = 3600.0
 
 
-def _input_identity(output: Path, *, include_fonts: bool, settings: dict) -> str:
+def _input_identity(output: Path, *, include_fonts: bool, settings: dict,
+                    include_chapter_flac: bool = False) -> str:
     evidence = {
-        "inputs": _sources(output, include_fonts),
+        "inputs": _sources(output, include_fonts, include_chapter_flac),
+        "chapters": include_chapter_flac,
         "background": settings["background_spec"],
         "background_color": settings["background_color"],
         "attach_fonts": include_fonts,
@@ -55,12 +57,19 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     if output is None:
         return None
     status = bundle_export_status(output)
-    if not status["needs_rebuild"] or not status["can_generate"]:
+    receipt = _read_receipt(output)
+    chapter_mode_changed = bool(receipt and receipt.get("include_chapter_flac")) != bool(config.generate_chapter_flac)
+    if (not status["needs_rebuild"] and not chapter_mode_changed) or not status["can_generate"]:
+        return None
+    if config.generate_chapter_flac and not (output / "chapter_flac" / "chapter_flac_manifest.json").is_file():
         return None
     settings = previous_bundle_settings(output)
+    if settings["background_spec"]["mode"] == "image" and not settings["image_saved"]:
+        return None
     key = str(config.root)
     snapshot = _input_identity(
         output, include_fonts=settings["attach_project_fonts"], settings=settings,
+        include_chapter_flac=config.generate_chapter_flac,
     )
     with _LOCK:
         prior = _ATTEMPTS.get(key)
@@ -86,6 +95,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
             now = previous_bundle_settings(output)
             if _input_identity(
                 output, include_fonts=now["attach_project_fonts"], settings=now,
+                include_chapter_flac=config.generate_chapter_flac,
             ) != snapshot:
                 raise RuntimeError("自动 MKV 更新的输入已变化，等待下一轮任务检查")
             from .subtitles import subtitle_render_config
@@ -107,6 +117,7 @@ def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
                 include_fonts=now["attach_project_fonts"],
                 background_color=now["background_color"],
                 background_image=background, background_spec=spec,
+                include_chapter_flac=config.generate_chapter_flac,
                 require_current_ass=True,
                 progress=lambda done, total, message: report_progress(
                     "encode", message, done, total,
