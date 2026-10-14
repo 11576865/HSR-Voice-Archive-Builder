@@ -123,7 +123,7 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn("range.insertAdjacentElement('afterend',stepper)",doc)
         self.assertIn('name="hsr-effects-parameter-groups"',doc)
         self.assertIn('name="hsr-style-parameter-groups"',doc)
-        self.assertIn('input[type="range"]{',css)
+        self.assertIn('input[type="range"]{',self.shared)
 
     def test_production_script_parse(self):
         if not __import__("shutil").which("node"):
