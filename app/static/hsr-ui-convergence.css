@@ -374,3 +374,29 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .layout-preview-region>
   #subtitleLayoutPreviewCard .layout-cue-grid{grid-template-columns:minmax(0,1fr)}
   #subtitleLayoutPreviewCard .layout-cue-clock strong{font-size:12px}
 }
+
+
+/* Effects: keep effect parameters immediately under the render/save actions.
+   Optional media uploads no longer occupy a full Inspector viewport by default. */
+#subtitleLayoutPreviewCard .hsr-preview-media-disclosure{
+  margin:10px 12px 14px;
+  border:1px solid var(--layout-border);
+  border-radius:8px;
+  background:var(--layout-section);
+  color:var(--layout-text);
+}
+#subtitleLayoutPreviewCard .hsr-preview-media-disclosure>summary{
+  cursor:pointer;display:flex;align-items:center;justify-content:space-between;
+  gap:10px;padding:12px 13px;min-height:43px;font-weight:720;font-size:12px;
+}
+#subtitleLayoutPreviewCard .hsr-preview-media-disclosure>summary small{
+  font-size:10px;color:var(--layout-muted);font-weight:500;
+}
+#subtitleLayoutPreviewCard .hsr-preview-media-disclosure .hsr-footage-picker{
+  border:0;border-top:1px solid var(--layout-border);border-radius:0;
+  margin:0;padding:12px;
+}
+#subtitleLayoutPreviewCard #videoPreviewStatus{
+  padding:9px 12px;line-height:1.5;
+  border-bottom:1px solid var(--layout-border);
+}
