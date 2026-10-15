@@ -292,6 +292,31 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("karaoke_timing: document.getElementById('prevKaraokeTiming')",html)
         self.assertIn("karaoke_speed_ms:parseInt(document.getElementById('prevKaraokeSpeed')",html)
 
+    def test_effects_advanced_ranges_and_manual_fade_override_are_explicit(self) -> None:
+        import re
+        html=self.html
+        for name,low,high in (
+            ("prevChsSize",12,240),("prevPriSize",12,240),
+            ("prevFadeIn",0,5000),("prevFadeOut",0,5000),
+            ("prevOutlineWidth",0,24),("prevShadowDepth",0,24),
+            ("prevBlurRadius",0,12),("prevSoftEntryScale",25,300),
+            ("prevSoftEntryBlur",0,12),("prevSoftEntryMs",0,5000),
+            ("prevArchiveHudSize",12,120),
+        ):
+            with self.subTest(name=name):
+                self.assertRegex(html,re.compile(
+                    rf'id="{name}" min="{low}" max="{high}"'
+                ))
+        self.assertIn("按相邻语音间隔自动调整 Fade（启用后覆盖手动时长）",html)
+        self.assertIn("el.disabled=!kinetic||autoFade",html)
+        self.assertIn("自动 Fade 正在按语音间隔决定时长",html)
+        self.assertIn("const timing=document.getElementById('prevKaraokeTiming')?.value||'fixed';",html)
+        self.assertIn("set('prevKaraokeTiming',config.subtitle_enable_karaoke",html)
+        self.assertIn("unit === \"pixel\"", (Path(__file__).resolve().parents[1] /
+            "subtitle_layout/ass_writer.py").read_text("utf-8"))
+
+
+
 
 if __name__ == "__main__":
     unittest.main()
