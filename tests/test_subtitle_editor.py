@@ -336,7 +336,14 @@ class TestSubtitleEditor(unittest.TestCase):
                 json.dumps(rebuilt, ensure_ascii=False),
                 encoding="utf-8",
             )
-            refresh_subtitle_artifacts(cfg, out)
+            # Revalidate edit persistence with a mocked raster decision; an
+            # independent CI job tests true FFmpeg/libass pixels.
+            with patch("subtitle_layout.ass_writer.validate_real_ink") as ink:
+                ink.return_value = SimpleNamespace(
+                    ok=True, reason=None,
+                    primary_width_ratio=1.0, chinese_width_ratio=1.0,
+                )
+                refresh_subtitle_artifacts(cfg, out)
             rebuilt_saved = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(rebuilt_saved["entries"][0]["target_text"], "规矩就是用来打破的！")
             self.assertEqual(rebuilt_saved["entries"][0]["final_chs"], "规则，就是用来打破的！")
