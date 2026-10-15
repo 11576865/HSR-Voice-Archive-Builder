@@ -87,6 +87,18 @@ class TestAdvancedTypography(unittest.TestCase):
                 timing="cue",unit="pixel",speed_ms=500,mode="kf",
             )
         self.assertEqual(normalized,r"{\kf171}W{\kf29}i")
+        # When a very short audio cue has more graphemes than centiseconds,
+        # the animation must not invent time outside the subtitle event.
+        crowded = format_generated_karaoke(
+            [SimpleNamespace(text="星穹铁道")],0.02,timing="cue",
+            unit="character",speed_ms=300,mode="kf"
+        )
+        import re
+        durations=[int(n) for n in re.findall(r"\\kf(\d+)",crowded)]
+        self.assertEqual(len(durations),4)
+        self.assertEqual(sum(durations),2)
+        self.assertEqual(crowded.replace(r"{\kf1}","").replace(r"{\kf0}",""),"星穹铁道")
+
 
         cfg=SubtitleRenderConfig(
             enable_karaoke=True,karaoke_timing="fixed",karaoke_unit="character",
