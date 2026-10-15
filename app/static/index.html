@@ -3763,7 +3763,21 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
-            <label class="check"><input type="checkbox" id="prevEnableKaraoke" disabled aria-describedby="wordAlignmentProviderStatus"> 逐词高亮（需有效词级时间）</label>
+            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 启用卡拉 OK 字幕推进</label>
+            <label for="prevKaraokeTiming">推进时间来源</label>
+            <select id="prevKaraokeTiming">
+              <option value="fixed">固定速度（无需音频词级对齐）</option>
+              <option value="cue">整个字幕时长均匀推进</option>
+              <option value="aligned">按真实词级时间同步</option>
+            </select>
+            <label for="prevKaraokeUnit">推进单位</label>
+            <select id="prevKaraokeUnit">
+              <option value="character">逐字符</option>
+              <option value="word">逐词（按空格分组）</option>
+            </select>
+            <label for="prevKaraokeSpeed">固定速度：每单位毫秒</label>
+            <input type="range" id="prevKaraokeSpeed" min="10" max="2000" value="300" step="10">
+            <div class="small muted">固定速度和整句时长模式不需要词级对齐，不会改动字幕起止时间；超出字幕显示时长的动画会被字幕事件截断。</div>
             <label for="prevKaraokeMode">高亮模式</label>
             <select id="prevKaraokeMode">
               <option value="k">逐词切换（\k）</option>
@@ -3775,7 +3789,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevKaraokePreviewTimeVal" class="small muted">50%</span>
             </div>
             <input type="range" id="prevKaraokePreviewTime" min="5" max="95" value="50" step="5">
-            <div class="small muted inspector-help">Karaoke 并不需要你从网上寻找某个固定文件：它需要当前项目每条字幕中每个词的开始／结束时间。优先点击「刷新状态」，再使用「本地生成缺失时间」（处理主机需安装 WhisperX）；也可以从其他对齐工具导入 JSON。完成后选择有词级时间的真实字幕，再点击「播放动态特效」。没有时间数据时不会伪造逐词高亮。</div>
+            <div class="small muted inspector-help">只有「真实词级同步」模式需要有效词级时间。固定速度与整句均分模式生成明确标注为非同步的 ASS 效果，不调用 WhisperX，也不伪造对齐记录。</div>
             <details id="hsrAlignmentHelp" class="hsr-alignment-help">
               <summary>词级时间 JSON 从哪里来？查看格式与示例</summary>
               <p>可以使用 WhisperX 为本项目的原音频和已知台词做强制对齐；或自己通过其他工具得到时间戳。导入的是数据，不是字幕字体，也不是视频文件。</p>
@@ -7258,12 +7272,16 @@ async function loadWordAlignmentDiagnostics(){
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     // An enabled-looking Karaoke checkbox with zero timestamped words is a
     // fake affordance. Preserve saved intent, but forbid ineffective edits.
+    // Only genuine audio-synced highlighting needs recorded word time.
+    // Unsynced fixed-speed and whole-cue modes are always available.
     const karaokeToggle=document.getElementById('prevEnableKaraoke');
     const karaokeMode=document.getElementById('prevKaraokeMode');
     const previewTime=document.getElementById('prevKaraokePreviewTime');
-    for(const control of [karaokeToggle,karaokeMode,previewTime]){
-      if(control){control.disabled=usable<=0;control.title=usable<=0?'项目没有有效词级时间；请先导入匹配 JSON，或在支持 WhisperX 的主机生成。':'';}
-    }
+    const timing=document.getElementById('prevKaraokeTiming')?.value||'fixed';
+    if(karaokeToggle)karaokeToggle.disabled=timing==='aligned'&&usable<=0;
+    if(karaokeMode)karaokeMode.disabled=timing==='aligned'&&usable<=0;
+    if(previewTime)previewTime.disabled=timing==='aligned'&&usable<=0;
+    syncHsrKaraokeControls();
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
     if(total<=0){
       setHsrKaraokeReadiness('尚无可诊断的项目字幕。先构建项目并选择真实语音。','warning');
@@ -7389,7 +7407,7 @@ async function importWordAlignmentFile(file){
 
 const layoutStyleControlIds=[
   'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV',
-  'prevEnableKaraoke','prevKaraokeMode','prevEnableCard','prevEnableOutline',
+  'prevEnableKaraoke','prevKaraokeMode','prevKaraokeTiming','prevKaraokeUnit','prevKaraokeSpeed','prevEnableCard','prevEnableOutline',
   'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
   'prevEnableSoftEntry','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs',
@@ -7451,6 +7469,22 @@ function travelLayoutStyleHistory(delta){
   scheduleLayoutPreviewUpdate();
 }
 
+function syncHsrKaraokeControls(){
+  const timing=document.getElementById('prevKaraokeTiming')?.value||'fixed';
+  const mode=document.getElementById('prevKaraokeMode');
+  const unit=document.getElementById('prevKaraokeUnit');
+  const speed=document.getElementById('prevKaraokeSpeed');
+  const active=!!document.getElementById('prevEnableKaraoke')?.checked;
+  if(mode){
+    const clip=mode.querySelector('option[value="clip"]');
+    if(clip)clip.disabled=timing!=='aligned';
+    if(timing!=='aligned'&&mode.value==='clip')mode.value='kf';
+  }
+  if(unit)unit.disabled=!active||timing==='aligned';
+  if(speed)speed.disabled=!active||timing!=='fixed';
+  syncHsrTouchNumericEditors();
+}
+
 function syncDependentStyleControls(){
   // Active-looking controls that have no effect on either ASS or FFmpeg are
   // misleading. Explain the dependency and keep both slider and touch editor
@@ -7469,7 +7503,7 @@ function syncDependentStyleControls(){
       el.title=active?'':hint;
     }
   }
-  syncHsrTouchNumericEditors();
+  syncHsrKaraokeControls();
 }
 
 function subtitleSettingsPayload(){
@@ -7485,6 +7519,9 @@ function subtitleSettingsPayload(){
     primary_region_share: Number(document.getElementById('prevPrimaryShare')?.value||60)/100,
     enable_karaoke: !!document.getElementById('prevEnableKaraoke')?.checked,
     karaoke_mode: document.getElementById('prevKaraokeMode')?.value || 'k',
+    karaoke_timing: document.getElementById('prevKaraokeTiming')?.value || 'fixed',
+    karaoke_unit: document.getElementById('prevKaraokeUnit')?.value || 'character',
+    karaoke_speed_ms:parseInt(document.getElementById('prevKaraokeSpeed')?.value||'300',10),
     enable_translucent_card: !!document.getElementById('prevEnableCard')?.checked,
     enable_multi_layer_outline: !!document.getElementById('prevEnableOutline')?.checked,
     enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked,
@@ -7530,6 +7567,9 @@ function loadSubtitleLayoutSettings(config){
   set('prevPrimaryShare',Math.round(Number(config.subtitle_primary_region_share??0.60)*100));
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
   set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
+  set('prevKaraokeTiming',config.subtitle_karaoke_timing||'fixed');
+  set('prevKaraokeUnit',config.subtitle_karaoke_unit||'character');
+  set('prevKaraokeSpeed',config.subtitle_karaoke_speed_ms??300);
   check('prevEnableCard',config.subtitle_enable_translucent_card);
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
@@ -7548,6 +7588,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevArchiveHudSize',config.subtitle_archive_hud_font_size??22);
   set('prevArchiveHudOpacity',Number(config.subtitle_archive_hud_opacity??0.72)*100);
   syncDependentStyleControls();
+  syncHsrKaraokeControls();
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
   resetLayoutStyleHistory();
   invalidateLayoutBatchAudit();
@@ -8563,7 +8604,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
       return updateLayoutPreview();
     }
     const karaokeEnabled=!!document.getElementById('prevEnableKaraoke')?.checked;
-    const alignedCandidates=karaokeEnabled
+    const alignedCandidates=karaokeEnabled&&document.getElementById('prevKaraokeTiming')?.value==='aligned'
       ? subtitles.filter(sub=>sub.word_alignment_ready)
       : [];
     const samplePool=alignedCandidates.length?alignedCandidates:subtitles;
@@ -8606,14 +8647,16 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
     if(priInput)priInput.value=primary;
     updateLayoutSampleOrigin();
     if(status){
-      if(karaokeEnabled&&alignment?.valid){
+      if(karaokeEnabled&&document.getElementById('prevKaraokeTiming')?.value!=='aligned'){
+        status.textContent='已载入字幕 #'+selected.id+'；固定速度/整句均分卡拉 OK 不需要词级同步。';
+      }else if(karaokeEnabled&&alignment?.valid){
         status.textContent='已载入带词级时间的项目字幕 #'+selected.id+'；实际 ASS 预览可检查 Karaoke 时间效果。';
       }else if(karaokeEnabled&&!alignedCandidates.length){
         status.textContent='项目没有可用词级时间；当前载入版面压力样本 #'+selected.id+'，Karaoke 将降级为普通整句。';
       }else{
         status.textContent='已载入项目版面压力较高的字幕 #'+selected.id+'，调整字号或安全边距时会自动复检。';
       }
-      status.className='small '+(karaokeEnabled&&!alignment?.valid?'status-warn':'muted')+' layout-corpus-status';
+      status.className='small '+(karaokeEnabled&&document.getElementById('prevKaraokeTiming')?.value==='aligned'&&!alignment?.valid?'status-warn':'muted')+' layout-corpus-status';
     }
     invalidateLibassPreview();
     return updateLayoutPreview();
@@ -9471,7 +9514,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 });
 
 
-['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
+['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity','prevKaraokeSpeed'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',queueLiveRealPreview);
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
@@ -9526,6 +9569,10 @@ function scheduleCommittedAppearancePreview(){
   });
 });
 
+['prevKaraokeTiming','prevKaraokeUnit'].forEach(id=>document.getElementById(id)?.addEventListener('change',()=>{
+  syncHsrKaraokeControls();
+  previewPreset='custom';markSubtitleSettingsDirty();invalidateLayoutBatchAudit();invalidateLibassPreview();updateLayoutPreview();
+}));
 document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
   previewPreset='custom';
   markSubtitleSettingsDirty();
@@ -9533,6 +9580,7 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
   invalidateLibassPreview();
   updateLayoutPreview();
   queueLiveRealPreview();
+  syncHsrKaraokeControls();
   loadWordAlignmentDiagnostics();
 });
 
