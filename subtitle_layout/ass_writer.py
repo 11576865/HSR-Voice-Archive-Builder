@@ -709,9 +709,13 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 hud_text = " · ".join(hud_parts)
                 hud_x = round(safe_area.x_min + 10)
                 hud_y = round(safe_area.y_min + 8)
+                hud_fade = (
+                    f"\\fad({fade_in_ms},{fade_out_ms})"
+                    if use_kinetic and (fade_in_ms or fade_out_ms) else ""
+                )
                 dialogues.append(
                     f"Dialogue: 5,{start_time},{end_time},Archive,,0,0,0,,"
-                    f"{{\\an7\\pos({hud_x},{hud_y})}}{hud_text}"
+                    f"{{\\an7\\pos({hud_x},{hud_y}){hud_fade}}}{hud_text}"
                 )
 
         if use_frosted_glass:
