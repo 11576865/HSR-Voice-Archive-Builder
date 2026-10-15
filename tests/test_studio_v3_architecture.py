@@ -44,7 +44,7 @@ class StudioV3ArchitectureTests(unittest.TestCase):
         self.assertIn("button.setAttribute('aria-selected',active?'true':'false')", HTML)
         self.assertIn("button.tabIndex=active?0:-1", HTML)
         self.assertIn("['ArrowLeft','ArrowRight']", HTML)
-        self.assertIn("setStudioV3Pane(next==='effects'?'cue':'inspector')", HTML)
+        self.assertIn("setStudioV3Pane('inspector')", HTML)
         self.assertIn('.studio-v3-pane-nav{display:none!important}', CSS)
         self.assertIn('studio-v4-timing', CSS)
         self.assertIn('overflow:visible!important', CSS)
