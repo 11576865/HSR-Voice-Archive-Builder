@@ -2,8 +2,8 @@
   "schema_version": 1,
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
-  "status": "code_changes_submitted_pending_seven_contract_ci",
-  "current_bounded_work_unit": "PR #186: explicit over-budget Fade failure rather than hidden truncation, terminal fade via MKV video tail, symmetric-budget provenance parity, truthful geometric proof labels, and updated authoritative subtitle freshness tests.",
+  "status": "code_changes_submitted_pending_external_ci",
+  "current_bounded_work_unit": "Decouple layout/effects parameter autosave from expensive ASS/MKV regeneration; invalidate stale ASS/MKV certification without touching outputs.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -44,16 +44,21 @@
       "summary": "Added explicit no-hidden Fade clip policy and last-event tail preservation, verified via a new real FFmpeg mux assertion; corrected stale legacy timing test fixtures, symmetric budgets, per-cue progress test ownership and geometry-only evidence marker.",
       "commit": "f9378470f0124d65c73ec3bc1c12a67d51d163ee",
       "validation": "New dedicated seven-ASS GitHub Actions run 38790099410 in_progress; original tests and browser CI also queued/running."
+    },
+    {
+      "summary": "Eliminated queueAutoAssRefresh/runAutoAssRefresh after config autosaves, preserving explicit Generate and user-triggered real libass preview. Invalidated only ASS style receipt on effective subtitle_* changes (SRT remains independently valid; existing media bytes unchanged). Added focused regression tests; updated previous auto-rebuild expectation.",
+      "commit": "d2cd4dd6229d21670a607bfdf0f5717941e456aa",
+      "validation": "New head CI pending. No claim of physical device/playback acceptance."
     }
   ],
   "next_units": [
-    "On next explicit continuation, read exact-head PR #186 CI result once. Repair directly attributable red tests, and avoid silently modifying unrelated UI contracts.",
-    "Merge PR #186 to main after code-level acceptance; user then validates complete actual HSR MKV with real player and cadence.",
-    "Verify exact rendered Fade-in and Fade-out including final tail, and visually inspect real libass ink proof separately from fast serialization."
+    "Validate PR #186 exact-head CI once; repair newly introduced failures, while distinguishing legacy baseline tests.",
+    "User acceptance: autosave inspector controls never enqueues ASS/MKV; explicit Generate builds and re-muxes a current MKV; old output is flagged stale after settings changes.",
+    "Continue separate seven-contract code-level QA for Fade/Karaoke, archive expiry and actual rendered libass, preserving user-invoked job boundary."
   ],
   "branch": "fix/hsr-seven-ass-contracts-20261016",
-  "pr": 185,
-  "latest_durable_commit": "f9378470f0124d65c73ec3bc1c12a67d51d163ee",
+  "pr": 186,
+  "latest_durable_commit": "d2cd4dd6229d21670a607bfdf0f5717941e456aa",
   "external_validation": {
     "previous_head": "b32b27e6563aca4000bb3e592e3dd1a03eca4d22",
     "previous_ci": "completed_failure",
@@ -68,9 +73,9 @@
     "user_real_project": "pending_user"
   },
   "blockers": [
-    "First PR #186 CI status: dedicated seven-contract suite in_progress; existing tests in_progress; browser evidence queued. No green verdict.",
-    "No true user HSR archive/device/player acceptance; user plans to verify independently.",
-    "First voice Fade cannot extend before absolute timeline zero if project configured intro gap is shorter than selected Fade; this physical boundary remains and should be surfaced in acceptance."
+    "PR #186 CI pending on the latest autosave separation commit.",
+    "No physical user-device or real-project validation yet.",
+    "Existing broad CI may contain unrelated legacy interface assertions."
   ],
   "updated_at": "2026-10-16",
   "pr_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/186"
