@@ -32,9 +32,13 @@ class SubtitleExportReceiptTests(unittest.TestCase):
             '{"schema_version":1,"entries":{}}', encoding="utf-8"
         )
         status = read_subtitle_export_health(self.output)
-        self.assertEqual(status["state"], "stale")
+        self.assertEqual(status["state"], "current",
+                         "Legacy display-only overrides are no longer export inputs")
+        self.assertTrue(status["artifacts_current"])
+        (self.output / "manifest.json").write_text('{"entries":[{"index":1}]}',encoding="utf-8")
+        status=read_subtitle_export_health(self.output)
+        self.assertEqual(status["state"],"stale")
         self.assertFalse(status["artifacts_current"])
-        self.assertIn("source or human", status["artifact_error"])
         record_subtitle_export(self.output, state="current", ass_required=True)
         self.assertEqual(read_subtitle_export_health(self.output)["state"], "current")
         (self.output / SRT_NAME).write_text("altered outside app\n", encoding="utf-8")
