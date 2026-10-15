@@ -10,6 +10,9 @@ class SubtitleRenderConfig:
 
     enable_karaoke: bool = False
     karaoke_mode: str = "k"
+    karaoke_timing: str = "aligned"
+    karaoke_unit: str = "character"
+    karaoke_speed_ms: int = 300
     enable_frosted_glass: bool = False
     enable_multi_layer_outline: bool = False
     enable_kinetic: bool = True
