@@ -470,8 +470,10 @@ def desktop_check(browser, base_url, output, report):
     # Programmatic task switches must not strand keyboard focus in a newly
     # inert subtree or on the layout-only (now hidden) drawer opener.
     page.locator('#studioStyleTab').click()
-    ensure(page.locator("#layoutTimelinePanel").is_visible(),
-           "Layout timeline remains inaccessible despite expanded timing disclosure")
+    ensure(page.locator("#layoutTimelinePanel").is_hidden(),
+           "Layout must not expose the timeline UI")
+    ensure(page.locator("#layoutCueEditorPanel").is_visible(),
+           "Layout must retain the current subtitle editor")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
@@ -798,7 +800,7 @@ def touch_safety_check(browser, base_url, report):
            "Typography number input not visible")
     ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
            "60/40 bilingual region number input not visible")
-    ensure(page.locator("#studioRegionPercent").is_visible() and
+    ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible() and
            page.locator('[data-share-percent="60"]').is_visible(),
            "60/40 position controls must be conspicuous on a touch device")
     page.locator('[data-share-percent="40"]').click()
@@ -806,8 +808,8 @@ def touch_safety_check(browser, base_url, report):
            "40/60 quick choice did not reach authoritative region field")
     page.wait_for_function("""() => document.getElementById('prevPrimaryShareVal')
        .textContent.trim()==='40% / 60%'""", timeout=10000)
-    page.locator("#studioRegionPercent").fill("50")
-    page.locator("#studioRegionPercent").dispatch_event("change")
+    page.locator("#prevPrimaryShareTouchNumber").fill("50")
+    page.locator("#prevPrimaryShareTouchNumber").dispatch_event("change")
     ensure(page.locator("#prevPrimaryShare").input_value()=="50",
            "Explicit numeric region edit is not connected")
     style_sections.nth(2).locator(":scope > summary").click()
