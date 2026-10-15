@@ -51,7 +51,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         enable_multi_layer_outline=as_bool("enable_multi_layer_outline", False),
         enable_kinetic=as_bool("enable_kinetic", True),
         fade_in_ms=max(0, int(data.get("fade_in_ms", 200))),
-        fade_out_ms=max(0, int(data.get("fade_out_ms", 200))),
+        fade_out_ms=max(0, int(data.get("fade_in_ms", data.get("fade_out_ms", 200)))),
         use_audio_aware_fade=as_bool("use_audio_aware_fade", True),
         outline_width=max(0.0, min(24.0, float(data.get("outline_width", 3.0)))),
         shadow_depth=max(0.0, min(24.0, float(data.get("shadow_depth", 2.0)))),
