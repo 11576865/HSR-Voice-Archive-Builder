@@ -299,6 +299,7 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         primary_font=validate_ass_font_name(config.subtitle_primary_font or "Noto Sans"),
         chs_font_path=str(chs_path) if chs_path else None,
         primary_font_path=str(primary_path) if primary_path else None,
+        verify_libass_layout=True,
         base_chs_size=max(12, min(120, int(config.subtitle_chs_size))),
         base_primary_size=max(12, min(120, int(config.subtitle_primary_size))),
         margin_horizontal_percent=max(

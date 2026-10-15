@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence
+from typing import Callable, Sequence
 
 from .breaker import break_line
 from .collision import LayoutBlock, check_bilingual_collision_with_reason
@@ -46,6 +46,9 @@ def solve_subtitle_layout(
     primary_region_share: float = 0.60,
     chs_font_path: str | None = None,
     primary_font_path: str | None = None,
+    primary_width_factor: float = 1.0,
+    chs_width_factor: float = 1.0,
+    ink_validator: Callable[[SolvedLayout], tuple[bool, str | None]] | None = None,
 ) -> SolvedLayout:
     same_chinese = source_language == target_language == "zh-CN"
     center_x = safe_area.canvas_width // 2
@@ -80,6 +83,11 @@ def solve_subtitle_layout(
     effective_base_chs = base_chs_size
     effective_base_pri = base_primary_size
 
+    # Width correction is supplied by actual libass pixel evidence, never a
+    # hard-coded font-specific UI multiplier. Keep a bounded search budget.
+    primary_width_limit = safe_area.max_printable_width / max(0.65, min(1.55, primary_width_factor))
+    chs_width_limit = safe_area.max_printable_width / max(0.65, min(1.55, chs_width_factor))
+
     for scale in SCALE_FACTORS:
         scale_percent = round(scale * 100)
         scale_attempts.append(scale_percent)
@@ -90,13 +98,13 @@ def solve_subtitle_layout(
         if same_chinese or not english_text.strip():
             pri_broken = []
             chs_input = chinese_text or english_text
-            chs_broken = break_line(chs_input, safe_area.max_printable_width, chs_size, chs_font_path)
+            chs_broken = break_line(chs_input, chs_width_limit, chs_size, chs_font_path)
         elif not chinese_text.strip():
-            pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size, primary_font_path)
+            pri_broken = break_line(english_text, primary_width_limit, primary_size, primary_font_path)
             chs_broken = []
         else:
-            pri_broken = break_line(english_text, safe_area.max_printable_width, primary_size, primary_font_path)
-            chs_broken = break_line(chinese_text, safe_area.max_printable_width, chs_size, chs_font_path)
+            pri_broken = break_line(english_text, primary_width_limit, primary_size, primary_font_path)
+            chs_broken = break_line(chinese_text, chs_width_limit, chs_size, chs_font_path)
 
         chs_lh = measure_line_height(chs_size)
         pri_lh = measure_line_height(primary_size)
@@ -117,6 +125,7 @@ def solve_subtitle_layout(
             y_start=chs_start,
             y_end=chs_end,
             max_width=safe_area.max_printable_width,
+            font_path=chs_font_path,
         )
         pri_block = LayoutBlock(
             lines=pri_broken,
@@ -124,6 +133,7 @@ def solve_subtitle_layout(
             y_start=pri_start,
             y_end=pri_end,
             max_width=safe_area.max_printable_width,
+            font_path=primary_font_path,
         )
 
         has_collision, failure_condition = check_bilingual_collision_with_reason(
@@ -153,15 +163,21 @@ def solve_subtitle_layout(
         last_pri_positions = pri_positions
         last_chs_positions = chs_positions
 
+        candidate = SolvedLayout(
+            scale_factor=scale, chs_lines=chs_positions,
+            primary_lines=pri_positions, scale_attempts=list(scale_attempts),
+        )
+        if ink_validator is not None:
+            # The actual rasterization is authoritative. This correctly
+            # accepts a candidate when PIL overestimates width, and rejects
+            # one when true outlines extend beyond its synthetic rectangles.
+            valid, real_reason = ink_validator(candidate)
+            if valid:
+                return candidate
+            last_failure_condition = real_reason or "LIBASS_INK_REJECTED"
+            continue
         if not has_collision:
-            return SolvedLayout(
-                scale_factor=scale,
-                chs_lines=chs_positions,
-                primary_lines=pri_positions,
-                failed=False,
-                failed_condition=None,
-                scale_attempts=scale_attempts,
-            )
+            return candidate
 
         last_failure_condition = failure_condition
 

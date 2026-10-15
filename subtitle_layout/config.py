@@ -48,6 +48,10 @@ class SubtitleRenderConfig:
     margin_vertical_percent: float = 0.05
     min_central_gap: float = 20.0
     primary_region_share: float = 0.60
+    # When enabled, FFmpeg/libass actual ink determines candidate acceptance.
+    # Disabled for standalone pure-Python consumers and legacy unit fixtures;
+    # project preview and finished ASS export explicitly enable it.
+    verify_libass_layout: bool = False
 
     @classmethod
     def plain_text_preset(cls) -> SubtitleRenderConfig:
