@@ -58,9 +58,11 @@ class FadeBudgetTests(unittest.TestCase):
         self.config.subtitle_fade_in_ms = 300
         self.config.subtitle_fade_out_ms = 300
         self.assertFalse(fade_budget(self.config)["warning"])
+        self.config.subtitle_fade_in_ms = 301
         self.config.subtitle_fade_out_ms = 301
         self.assertTrue(fade_budget(self.config)["warning"])
-        self.config.subtitle_fade_out_ms = 700
+        self.config.subtitle_fade_in_ms = 500
+        self.config.subtitle_fade_out_ms = 500
         result = fade_budget(self.config)
         self.assertTrue(result["warning"])
         self.assertFalse(result["exceeds"])
@@ -75,7 +77,7 @@ class FadeBudgetTests(unittest.TestCase):
         self.assertTrue(fade_budget(self.config)["exceeds"])
         validate_fade_update(self.config, 1600, 1600)
         with self.assertRaises(ValueError):
-            validate_fade_update(self.config, 2100, 1600)
+            validate_fade_update(self.config, 2200, 2200)
 
     def test_project_update_blocks_increased_fade_before_mutation(self):
         from unittest.mock import patch
@@ -108,7 +110,16 @@ class FadeBudgetTests(unittest.TestCase):
         self.assertNotIn('id="prevFadeIn" min="0" max="5000"', html)
         self.assertNotIn('id="prevFadeOut" min="0" max="5000"', html)
         self.assertIn("ratio>0.6", html)
-        self.assertIn("proposed+otherValue>gap", html)
+        self.assertIn("proposed*2>gap", html)
+        self.assertIn("fade*2", html)
+
+    def test_old_unequal_config_budget_matches_real_symmetric_renderer(self):
+        self.config.subtitle_fade_in_ms = 420
+        self.config.subtitle_fade_out_ms = 3000
+        budget = fade_budget(self.config)
+        self.assertEqual(budget["fade_total_ms"], 840)
+        self.assertEqual(budget["remaining_clear_ms"], 660)
+        self.assertFalse(budget["warning"])
 
     def test_zero_silence_blocks_positive_fade_increase(self):
         self.set_entries([
