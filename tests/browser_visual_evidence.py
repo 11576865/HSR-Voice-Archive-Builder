@@ -238,7 +238,7 @@ def load_studio(page):
         }};
         showWorkspace('layout',{scroll:false});
     }""")
-    page.wait_for_function("document.querySelectorAll('[data-timeline-cue]').length >= 3", timeout=12000)
+    page.wait_for_function("layoutCorpusItems.length >= 3", timeout=12000)
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
     # A separate effects workbench owns timing, Karaoke and playable preview.
     # The style view intentionally hides those controls.
@@ -456,9 +456,14 @@ def desktop_check(browser, base_url, output, report):
            "Effects forked the canvas layout surface")
     ensure(page.evaluate("document.body.dataset.workspaceTask") == "effects",
            "Effects task identity lost")
-    page.locator("#studioV4Timing > summary").click()
-    ensure(page.locator("#layoutTimelineViewport").is_visible(),
-           "Opt-in timeline cannot be opened")
+    page.locator("#layoutAuditDrawerToggle").click()
+    ensure(page.locator("#layoutCorpusRail").is_visible(),
+           "Effects must expose the shared cue browser")
+    ensure(page.locator("#layoutCorpusSearch").is_visible(),
+           "Effects cue selector has no searchable list")
+    ensure(page.locator("#layoutAuditBtn").is_hidden(),
+           "Layout-only bulk check leaked into Effects")
+    page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Layout QA rail leaks into the Effects task")
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
@@ -479,13 +484,13 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#layoutAuditDrawerToggle").click()
     page.locator("#layoutCorpusSearch").focus()
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
-    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
-           "Moving from focused QA rail to Effects lost visible keyboard focus")
+    ensure(page.evaluate("document.activeElement?.id") in ("studioEffectsTab","layoutAuditDrawerToggle"),
+           "Moving from focused shared cue browser left keyboard focus hidden")
     page.locator('#studioStyleTab').click()
     page.locator("#layoutAuditDrawerToggle").focus()
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
-    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
-           "Layout QA opener retained hidden focus after switching to Effects")
+    ensure(page.evaluate("document.activeElement?.id") in ("studioEffectsTab","layoutAuditDrawerToggle"),
+           "Shared cue browser focus was lost after switching task")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Focused QA rail did not close when entering Effects")
     stage = rect(page, ".preview-workbench .layout-preview-region")
@@ -496,17 +501,20 @@ def desktop_check(browser, base_url, output, report):
     ensure(inspector["width"] >= 320, "Effects inspector too narrow")
     ensure(abs(canvas["width"] / canvas["height"] - 16/9) < 0.1,
            "Stage aspect ratio incorrect")
-    ensure(page.locator("#layoutTimelineViewport").is_visible(),
-           "Effects timeline should remain available for read-only navigation")
-    ensure(page.locator('[data-timeline-edge]').count()==0,
-           "Audio-derived subtitle boundaries must not be draggable")
-    page.evaluate("() => layoutTimelineSelect(11)")
-    page.wait_for_function("String(layoutCueActiveId)==='11'")
+    ensure(page.locator("#layoutTimelineViewport").count()==0,
+           "Selection-only timeline should have been removed")
+    page.locator("#layoutAuditDrawerToggle").click()
+    ensure(page.locator("#layoutCorpusList").is_visible(),
+           "Effects should reuse Layout's project subtitle browser")
+    page.evaluate("() => selectLayoutCorpusByIndex(0)")
+    page.wait_for_function("layoutCueActiveId!==null")
+    page.locator("#layoutAuditDrawerToggle").click()
+    page.locator("#studioV4Timing > summary").click()
     ensure(page.locator("#layoutCueClockOrigin").is_visible(),
            "Read-only audio-clock source label is missing")
     ensure(page.locator("#layoutCueTimingSaveBtn").count()==0,
            "Unauthorized subtitle time editor remains in the workbench")
-    ensure(not writes,"Browsing subtitle timeline must not modify audio or SRT")
+    ensure(not writes,"Selecting subtitle in shared browser must not modify audio or SRT")
     screenshot(page, output, "desktop_studio_audio_clock_readonly")
     # Fixture-injected failed receipt in the *real* Chromium-rendered app.
     # Exercise the existing independent retry control without resubmitting
