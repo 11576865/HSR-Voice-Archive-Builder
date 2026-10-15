@@ -16,7 +16,7 @@ class StudioV3ArchitectureTests(unittest.TestCase):
     def test_studio_has_single_stage_cue_timeline_inspector_and_render_owner(self):
         for ident in (
             "studioV3Visual", "studioV3Editors", "studioV3Inspector",
-            "previewCanvasContainer", "previewLibassBtn", "previewVideoBtn",
+            "previewCanvasContainer", "previewQuickBtn", "previewLibassBtn", "previewVideoBtn",
             "layoutTimelinePanel", "layoutCueEditorPanel", "layoutCueTimingSaveBtn",
             "previewBackgroundMode", "hsrKaraokeReadiness", "previewSaveStatus",
             "layoutAuditDrawerToggle", "layoutCorpusRail",
