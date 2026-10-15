@@ -91,6 +91,43 @@ class LibassInkSolverTests(unittest.TestCase):
         cached = validate_real_ink(candidate, cfg, SafeArea())
         self.assertEqual(cached, result)
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "system FFmpeg not installed")
+    def test_real_ass_writer_is_accepted_by_real_ink_measurement(self):
+        # No mocked libass: verifies the authored ASS can be emitted from
+        # actual pixel-measured glyphs, not only from a synthetic rectangle.
+        cfg = SubtitleRenderConfig(
+            primary_font="DejaVu Sans", chs_font="DejaVu Sans",
+            enable_kinetic=False, verify_libass_layout=True,
+            enable_multi_layer_outline=True,
+        )
+        entry = SimpleNamespace(
+            english="The actual font, actual raster, and line-break oracle agree.",
+            chinese="", start_seconds=0.0, display_end_seconds=3.0,
+        )
+        ass = render_ass([entry], config=cfg)
+        self.assertIn("Dialogue:", ass)
+        self.assertIn("Style: Primary,DejaVu Sans", ass)
+
+    def test_real_evidence_width_feedback_is_candidate_specific(self):
+        from subtitle_layout.libass_ink import InkVerdict
+        text = " ".join(["Glorious memories cannot be forgotten"] * 6)
+        entry = SimpleNamespace(english=text, chinese="",
+                                start_seconds=0.0, display_end_seconds=4.0)
+        original = render_ass([entry], config=SubtitleRenderConfig(
+            enable_kinetic=False, base_primary_size=42,
+        ))
+        real_cfg = SubtitleRenderConfig(
+            enable_kinetic=False, base_primary_size=42,
+            verify_libass_layout=True,
+        )
+        with patch("subtitle_layout.ass_writer.validate_real_ink") as oracle:
+            oracle.return_value = InkVerdict(
+                True, None, InkBounds(100, 300, 1150, 575), None, 0.60, 1.0
+            )
+            revised = render_ass([entry], config=real_cfg)
+        self.assertLessEqual(revised.count(r"\N"), original.count(r"\N"))
+        self.assertTrue(oracle.called)
+
     def test_project_flows_explicitly_enable_real_oracle(self):
         root = Path(__file__).resolve().parents[1]
         preview = (root/"app/ass_preview.py").read_text("utf-8")
