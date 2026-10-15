@@ -1,8 +1,5 @@
 from __future__ import annotations
 
-import math
-
-
 def generate_kinetic_tags(
     duration_seconds: float,
     *,
@@ -25,32 +22,12 @@ def generate_kinetic_tags(
     Physical overshoot and scale bounce transforms (\\fscx/\\fscy scale jumps) have been
     deprecated and removed in favor of clean audio-aware fade-in/fade-out transitions.
     """
-    duration_ms = max(100, int(round(duration_seconds * 1000)))
-
-    # Voice Gap aware dynamic fade duration adjustments
-    if voice_gap_seconds is not None:
-        if voice_gap_seconds < 0.3:
-            default_fade = 80
-        elif voice_gap_seconds <= 1.0:
-            default_fade = 150
-        else:
-            default_fade = 300
-        in_ms = default_fade if base_entry_ms is None else base_entry_ms
-        out_ms = default_fade if base_exit_ms is None else base_exit_ms
-    else:
-        in_ms = fade_in_ms if base_entry_ms is None else base_entry_ms
-        out_ms = fade_out_ms if base_exit_ms is None else base_exit_ms
-
-    max_anim_ms = max(30, int(math.floor(duration_ms * max_portion)))
-    t_in = min(max(0, in_ms), max_anim_ms)
-    t_out = min(max(0, out_ms), max_anim_ms)
-
-    if t_in + t_out > duration_ms:
-        # Preserve the author's chosen in/out ratio, instead of secretly
-        # discarding both durations and forcing a symmetric half-cue fade.
-        total = t_in + t_out
-        t_in = round(duration_ms * t_in / total)
-        t_out = duration_ms - t_in
+    # The source-aligned event already includes fade margins. Do not silently
+    # replace manual durations with 80/150/300ms gap presets or compress them
+    # to fit inside spoken time. Project validation guards real gap budgets.
+    # The obsolete voice_gap_seconds/max_portion args remain for API compat.
+    t_in = max(0, int(base_entry_ms if base_entry_ms is not None else fade_in_ms))
+    t_out = max(0, int(base_exit_ms if base_exit_ms is not None else fade_out_ms))
 
     tags: list[str] = []
 
