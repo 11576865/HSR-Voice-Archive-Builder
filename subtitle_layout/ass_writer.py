@@ -631,6 +631,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 
         start_time = _ass_time(actual_start_sec)
         duration_sec = max(0.01, end_sec - actual_start_sec)
+        # Subtitle presentation can cover the silent gap until the next cue.
+        # Generated cue-timed karaoke must instead finish at the PCM voice end.
+        raw_audio_end = getattr(entry, "audio_end_seconds", None)
+        karaoke_end = min(end_sec, float(raw_audio_end)) if raw_audio_end is not None else end_sec
+        karaoke_duration_sec = max(0.01, karaoke_end - start_sec)
+        # Kinetic pre-roll moves the ASS Dialogue start before voice onset.
+        # An empty timed prefix keeps the generated sweep aligned to speech.
+        karaoke_preroll_cs = max(0, round((start_sec - actual_start_sec) * 100))
         prev_end_sec = end_sec
 
         if cfg.enable_archive_hud:
@@ -719,7 +727,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if use_karaoke and karaoke_mode in {"k", "kf"}:
                 pri_text = format_multiline_karaoke(
                     layout.primary_lines,
-                    duration_sec,
+                    karaoke_duration_sec if karaoke_timing == "cue" else duration_sec,
                     word_alignments=pri_alignments,
                     is_cjk=source_language.startswith("zh"),
                     mode=karaoke_mode,
@@ -728,6 +736,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     speed_ms=karaoke_speed_ms,
                     font_path=primary_font_path,
                 )
+                if karaoke_timing == "cue" and karaoke_preroll_cs:
+                    pri_text = f"{{\\k{karaoke_preroll_cs}}}" + pri_text
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{pri_text}"
@@ -793,7 +803,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             if use_karaoke and karaoke_mode in {"k", "kf"}:
                 chs_text = format_multiline_karaoke(
                     layout.chs_lines,
-                    duration_sec,
+                    karaoke_duration_sec if karaoke_timing == "cue" else duration_sec,
                     word_alignments=chs_alignments,
                     is_cjk=True,
                     mode=karaoke_mode,
@@ -802,6 +812,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     speed_ms=karaoke_speed_ms,
                     font_path=chs_font_path,
                 )
+                if karaoke_timing == "cue" and karaoke_preroll_cs:
+                    chs_text = f"{{\\k{karaoke_preroll_cs}}}" + chs_text
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
