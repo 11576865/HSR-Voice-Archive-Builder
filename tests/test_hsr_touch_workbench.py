@@ -40,7 +40,7 @@ class TouchWorkbenchTests(unittest.TestCase):
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
-        self.assertIn("section.open=first;", self.html)
+        self.assertIn("section.open=next==='style'?visibleIndex<2:visibleIndex===0", self.html)
         self.assertIn("root.dataset.lastInspectorMode=next;", self.html)
 
     def test_inspector_sections_are_exclusive_without_long_persistent_scroll(self):
