@@ -5382,7 +5382,15 @@ function jobProgressPercent(job){
     if(job.phase==='audio')return 88;
     if(job.phase==='final'||job.phase==='done')return 100;
   }
-  if(['black-video-export','ass-export','archive-bundle-export'].includes(job.kind))return tot>0?Math.round(ratio*100):5;
+  if(job.kind==='ass-export'){
+    if(job.state==='succeeded')return 100;
+    if(job.phase==='render')return Math.min(20,Math.round(ratio*20));
+    if(job.phase==='prepare-bundle')return 23;
+    if(job.phase==='encode-bundle')return 25+Math.round(ratio*70);
+    if(job.phase==='verify-bundle')return 97;
+    return 3;
+  }
+  if(['black-video-export','archive-bundle-export'].includes(job.kind))return tot>0?Math.round(ratio*100):5;
   return tot>0?Math.round(ratio*100):5;
 }
 function setRunReport(title,body,open=true){
@@ -5395,7 +5403,9 @@ function setRunReport(title,body,open=true){
 function completedReport(job){
   const r=job?.result||{};
   if(job?.kind==='remote-update-apply')return '已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。\n项目来源已更新，请重新构建成品。';
-  if(job?.kind==='ass-export')return 'ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
+  if(job?.kind==='ass-export')return r.delivery==='complete-mkv'
+    ? '新 ASS 已替换完整 MKV 内的旧字幕轨道，逐轨校验与封存已通过：'+(r.output||'HSR_Voice_Archive_Bundle.mkv')
+    : '独立 ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
   if(job?.kind==='black-video-export')return '黑屏 MKV 已生成：'+(r.output||'');
   if(job?.kind==='archive-bundle-export')return '完整 MKV 已生成：'+(r.output||'')+' · 字体附件 '+Number(r.font_attachments||0)+' 个';
   if(['build','quick-build'].includes(job?.kind))return '构建完成。\n成品文件已放至：'+(currentProject?.output_path||'项目 output 目录');
@@ -5557,8 +5567,11 @@ async function watchJob(id){
             setLog(r);
           }else if(x.job.kind==='ass-export'){
             const status=document.getElementById('optionalOutputStatus');
-            if(status)status.textContent='ASS 字幕已生成。';
-            setRunReport('ASS 字幕已生成',completedReport(x.job),false);
+            const isBundle=x.job.result?.delivery==='complete-mkv';
+            if(status)status.textContent=isBundle
+              ? 'MKV 内 ASS 已替换并通过校验；独立 ASS 仅作为中间文件使用。'
+              : '独立 ASS 字幕已生成。';
+            setRunReport(isBundle?'完整 MKV 字幕已更新':'独立 ASS 字幕已生成',completedReport(x.job),false);
           }else if(x.job.kind==='archive-bundle-export'){
             const status=document.getElementById('bundleOutputStatus');
             const result=x.job.result||{};
