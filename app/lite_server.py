@@ -23,7 +23,7 @@ from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
 from .effect_voice_preview import resolve_effect_voice
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
+from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration, queue_external_ass_export
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -1568,6 +1568,15 @@ class Handler(BaseHTTPRequestHandler):
 
             job = queue_ass_regeneration(config, output)
             self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/output/ass/external":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None or not (output / "manifest.json").is_file():
+                raise ValueError("请先完成项目构建")
+            job = queue_external_ass_export(config, output)
+            self._json({"ok": True, "job": job.id, "delivery": "external-ass"})
             return
 
         if path == "/api/output/archive-bundle/background-preview":
