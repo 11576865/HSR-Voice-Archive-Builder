@@ -58,7 +58,7 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertNotIn("const appearanceGeometryPreviewSpec=()=>",html)
         self.assertNotIn("elements.push(geometryStyledText(",html)
         self.assertIn("辅助边界图（无文字渲染）",html)
-        self.assertIn("Always show estimated line rectangles",html)
+        self.assertIn("if(options.showBBox){ // Solver estimate",html)
         # Assert the non-authoritative visual contract, not a legacy
         # literal sentence that was intentionally rewritten in PR #179.
         self.assertIn("geometry:['辅助边界图（无文字渲染）'",html)
