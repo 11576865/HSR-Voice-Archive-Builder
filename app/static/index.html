@@ -7576,6 +7576,54 @@ function markSubtitleSettingsDirty(){
 
 let subtitleSettingsAutosaveTimer=null;
 let subtitleSettingsSaveWaiters=[];
+let assAutoRefreshTimer=null;
+let assAutoRefreshInFlight=false;
+let assAutoRefreshGeneration=0;
+function queueAutoAssRefresh(){
+  if(!currentProject?.root||!layoutCorpusPersistable)return;
+  const generation=++assAutoRefreshGeneration;
+  clearTimeout(assAutoRefreshTimer);
+  assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(generation),1800);
+}
+async function runAutoAssRefresh(generation){
+  if(generation!==assAutoRefreshGeneration)return;
+  if(assAutoRefreshInFlight||subtitleSettingsSavePending){
+    clearTimeout(assAutoRefreshTimer);
+    assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(generation),600);
+    return;
+  }
+  const project=currentProject?.root;
+  if(!project||!layoutCorpusPersistable)return;
+  assAutoRefreshInFlight=true;
+  const status=document.getElementById('previewSaveStatus');
+  if(status){status.textContent='参数已保存；正在后台仅生成 ASS（不会更新 SRT 或自动渲染视频帧）…';status.className='small muted';}
+  try{
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/artifacts/refresh',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({expected_project_root:project,ass_only:true})
+    });
+    if(currentProject?.root!==project||generation!==assAutoRefreshGeneration)return;
+    if(result.export_status)layoutCueApplyExportHealth(result.export_status);
+    const problem=String(result.artifact_error||result.refreshed?.ass_error||'');
+    if(status){
+      status.textContent=problem
+        ?'样式已保存，但 ASS 自动生成失败：'+problem+'。SRT 未改写。'
+        :'样式已自动保存，ASS 已按最新设置重新生成；SRT 未改写。';
+      status.className='small '+(problem?'status-bad':'status-ok');
+    }
+  }catch(err){
+    if(currentProject?.root===project&&generation===assAutoRefreshGeneration&&status){
+      status.textContent='样式设置已保存，但 ASS 自动生成尚未完成：'+shortError(err)+'；SRT 未改写。';
+      status.className='small status-warn';
+    }
+  }finally{
+    assAutoRefreshInFlight=false;
+    if(currentProject?.root===project&&generation!==assAutoRefreshGeneration){
+      clearTimeout(assAutoRefreshTimer);
+      assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(assAutoRefreshGeneration),1800);
+    }
+  }
+}
 function queueSubtitleSettingsAutosave(delay=650){
   if(!currentProject||fontImportTransactionActive)return;
   clearTimeout(subtitleSettingsAutosaveTimer);
@@ -7632,6 +7680,7 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
       queueSubtitleSettingsAutosave(150);
       return false; // Do not export an older settings snapshot.
     }
+    if(autosave)queueAutoAssRefresh();
     return true;
   }catch(err){
     if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
