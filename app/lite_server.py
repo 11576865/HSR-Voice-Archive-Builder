@@ -711,7 +711,7 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline", str(config.subtitle_enable_multi_layer_outline))),
                 subtitle_enable_kinetic=_bool(data.get("enable_kinetic", str(config.subtitle_enable_kinetic))),
                 subtitle_fade_in_ms=max(0, _int(data.get("fade_in_ms"), config.subtitle_fade_in_ms)),
-                subtitle_fade_out_ms=max(0, _int(data.get("fade_out_ms"), config.subtitle_fade_out_ms)),
+                subtitle_fade_out_ms=max(0, _int(data.get("fade_in_ms", data.get("fade_out_ms")), config.subtitle_fade_in_ms)),
                 subtitle_use_audio_aware_fade=_bool(data.get("use_audio_aware_fade", str(config.subtitle_use_audio_aware_fade))),
                 subtitle_outline_width=max(0.0, min(24.0, _float(data.get("outline_width"), config.subtitle_outline_width))),
                 subtitle_shadow_depth=max(0.0, min(24.0, _float(data.get("shadow_depth"), config.subtitle_shadow_depth))),
