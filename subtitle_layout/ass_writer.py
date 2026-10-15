@@ -3,10 +3,11 @@ from __future__ import annotations
 import json
 import os
 import re
+import time
 import unicodedata
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 from .config import SubtitleRenderConfig
 from .fonts import resolve_font_path, validate_ass_font_name
@@ -412,6 +413,7 @@ def render_ass(
     overflow_report_path: Path | None = None,
     config: SubtitleRenderConfig | None = None,
     layout_capture: dict[str, object] | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
     enable_karaoke: bool | None = None,
     enable_frosted_glass: bool | None = None,
     enable_multi_layer_outline: bool | None = None,
@@ -478,8 +480,20 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     overflow_records: list[dict[str, object]] = []
 
     prev_end_sec: float | None = None
+    # Only count the input when a caller requests progress; this preserves
+    # streaming behavior for other renderers and legacy unit tests.
+    if progress_callback is not None:
+        entries = list(entries)
+        progress_total = len(entries)
+        progress_last = 0.0
 
-    for entry in entries:
+    for entry_number, entry in enumerate(entries, 1):
+        if progress_callback is not None:
+            current_time = time.monotonic()
+            if entry_number == 1 or current_time - progress_last >= 1.0:
+                # Count completed entries, not the item still awaiting libass.
+                progress_callback(entry_number - 1, progress_total)
+                progress_last = current_time
         raw_source = getattr(entry, "english", getattr(entry, "source_text", ""))
         raw_target = getattr(entry, "chinese", getattr(entry, "target_text", ""))
         clean_source = _clean_ass_text(raw_source)
@@ -827,6 +841,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     if not dialogues:
         raise ValueError("ASS rendering produced no dialogue lines")
 
+    if progress_callback is not None:
+        progress_callback(progress_total, progress_total)
     return header + "\n".join(dialogues) + "\n"
 
 
@@ -839,6 +855,7 @@ def write_ass(
     overflow_report_path: Path | None = None,
     config: SubtitleRenderConfig | None = None,
     layout_capture: dict[str, object] | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
     enable_karaoke: bool | None = None,
     enable_frosted_glass: bool | None = None,
     enable_multi_layer_outline: bool | None = None,
@@ -854,6 +871,7 @@ def write_ass(
             overflow_report_path=report_path,
             config=config,
             layout_capture=layout_capture,
+            progress_callback=progress_callback,
             enable_karaoke=enable_karaoke,
             enable_frosted_glass=enable_frosted_glass,
             enable_multi_layer_outline=enable_multi_layer_outline,
