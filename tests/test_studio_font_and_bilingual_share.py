@@ -125,7 +125,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("lastRenderedAssIdentity!==currentLibassPreviewIdentity()",html)
         self.assertIn("queueLiveRealPreview();",html)
         self.assertIn("liveRealPreviewArmed=true;",html)
-        self.assertIn("几何估算通过 · 非真实验收",html)
+        self.assertIn("仅预估边界 · 非真实验收",html)
         self.assertIn("不代表全项目通过",html)
         self.assertIn("渲染前预估（仅边界）",html)
         self.assertNotIn("geometryStyledText(",html)
