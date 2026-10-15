@@ -7021,7 +7021,7 @@ function invalidateLibassPreview(){
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
   const img=document.getElementById('libassPreviewImage');
-  if(img){img.classList.add('hidden');img.removeAttribute('src');}
+  if(img){img.classList.add('hidden');img.removeAttribute?.('src');}
   const hadResult=!!libassPreviewObjectUrl;
   if(libassPreviewObjectUrl){
     URL.revokeObjectURL(libassPreviewObjectUrl);
@@ -7039,7 +7039,7 @@ function showGeometryPreview(){
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
   const still=document.getElementById('libassPreviewImage');
-  if(still){still.classList.add('hidden');still.removeAttribute('src');}
+  if(still){still.classList.add('hidden');still.removeAttribute?.('src');}
   liveRealPreviewArmed=false;
   clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
@@ -7133,7 +7133,7 @@ async function renderLibassPreview(){
     const canvas=document.getElementById('assCanvasPreview');
     if(canvas){
       canvas.classList.add('hidden');canvas.style.display='none';
-      canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
+      canvas.getContext?.('2d')?.clearRect(0,0,canvas.width,canvas.height);
     }
     img.classList.remove('hidden');
     setPreviewEvidence('libass');
