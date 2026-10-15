@@ -7477,6 +7477,16 @@ function syncDependentStyleControls(){
       el.title=active?'':hint;
     }
   }
+  // Automatic voice-gap Fade overrides the numerical in/out values.
+  // Disable inactive numbers rather than letting them look effective.
+  const autoFade=!!document.getElementById('prevAudioAwareFade')?.checked;
+  const kinetic=!!document.getElementById('prevEnableKinetic')?.checked;
+  for(const id of ['prevFadeIn','prevFadeOut']){
+    const el=document.getElementById(id);
+    if(!el)continue;
+    el.disabled=!kinetic||autoFade;
+    el.title=!kinetic?'先启用平滑淡入淡出':autoFade?'自动 Fade 正在按语音间隔决定时长；关闭自动后可使用手动数值':'';
+  }
   syncHsrKaraokeControls();
 }
 
