@@ -9263,8 +9263,7 @@ async function renderHsrEffectVideo(){
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
   const payload=libassPreviewPayload();
-  if(layoutSampleSource!=='sample'||layoutStressSample?.id===undefined||layoutStressSample?.id===null)
-    throw new Error('请先选择一条有真实语音的项目字幕；自定义测试文本没有可同步的项目音频。');
+  const noProjectVoice=layoutSampleSource!=='sample'||layoutStressSample?.id===undefined||layoutStressSample?.id===null;
   payload.project_voice_entry_id=layoutStressSample.id;
   payload.expected_project_root=currentProject?.root||null;
   // The server resolves the exact PCM clock and fade margins; no fixed 8s.
@@ -9285,6 +9284,7 @@ async function renderHsrEffectVideo(){
     backgroundColor===(document.getElementById('effectPreviewBackgroundColor')?.value||'#000000')&&
     document.getElementById('subtitleLayoutPreviewCard')?.dataset.studioMode==='effects';
   try{
+    if(noProjectVoice)throw new Error('请先选择一条有真实语音的项目字幕；自定义测试文本没有可同步的项目音频。');
     if(button)button.disabled=true;
     setPreviewEvidence('rendering',footage?'正在把当前 ASS 效果叠加到选定的真实本地视频…':'正在渲染真实连续视频；单帧图片不作为本操作的成功结果。');
     if(status)status.textContent=footage?'正在读取本地视频并使用 FFmpeg/libass 合成…':
