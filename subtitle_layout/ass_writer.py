@@ -479,7 +479,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     dialogues: list[str] = []
     overflow_records: list[dict[str, object]] = []
 
-    prev_end_sec: float | None = None
     # Only count the input when a caller requests progress; this preserves
     # streaming behavior for other renderers and legacy unit tests.
     if progress_callback is not None:
@@ -618,28 +617,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "evidence": "libass-validated-ass-plan",
             })
 
-        # Project 2 Pre-roll audio-aware fade calculation
-        actual_start_sec = start_sec
+        # Strict silence contract: no kinetic pre-roll may paint a future cue
+        # before its PCM voice begins. Effects stay inside the voice event.
         fade_in_ms = cfg.fade_in_ms
         fade_out_ms = cfg.fade_out_ms
-
-        if use_kinetic and cfg.use_audio_aware_fade and prev_end_sec is not None:
-            delta_t_sec = start_sec - prev_end_sec
-            if delta_t_sec > 0:
-                pre_roll_sec = min(delta_t_sec / 2.0, fade_in_ms / 1000.0)
-                actual_start_sec = max(prev_end_sec, start_sec - pre_roll_sec)
-
-        start_time = _ass_time(actual_start_sec)
-        duration_sec = max(0.01, end_sec - actual_start_sec)
-        # Subtitle presentation can cover the silent gap until the next cue.
-        # Generated cue-timed karaoke must instead finish at the PCM voice end.
+        start_time = _ass_time(start_sec)
         raw_audio_end = getattr(entry, "audio_end_seconds", None)
-        karaoke_end = min(end_sec, float(raw_audio_end)) if raw_audio_end is not None else end_sec
-        karaoke_duration_sec = max(0.01, karaoke_end - start_sec)
-        # Kinetic pre-roll moves the ASS Dialogue start before voice onset.
-        # An empty timed prefix keeps the generated sweep aligned to speech.
-        karaoke_preroll_cs = max(0, round((start_sec - actual_start_sec) * 100))
-        prev_end_sec = end_sec
+        if raw_audio_end is not None:
+            end_sec = min(end_sec, float(raw_audio_end))
+            end_time = _ass_time(end_sec)
+        duration_sec = max(0.01, end_sec - start_sec)
+        karaoke_duration_sec = duration_sec
 
         if cfg.enable_archive_hud:
             character = _clean_ass_text(
@@ -736,8 +724,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     speed_ms=karaoke_speed_ms,
                     font_path=primary_font_path,
                 )
-                if karaoke_timing == "cue" and karaoke_preroll_cs:
-                    pri_text = f"{{\\k{karaoke_preroll_cs}}}" + pri_text
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{pri_text}"
@@ -812,8 +798,6 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     speed_ms=karaoke_speed_ms,
                     font_path=chs_font_path,
                 )
-                if karaoke_timing == "cue" and karaoke_preroll_cs:
-                    chs_text = f"{{\\k{karaoke_preroll_cs}}}" + chs_text
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
