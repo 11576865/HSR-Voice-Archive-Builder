@@ -121,8 +121,8 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn("range.dispatchEvent(new Event('input',{bubbles:true}))",doc)
         self.assertIn('input[type="range"]{display:none!important}',self.shared)
         self.assertIn("range.insertAdjacentElement('afterend',stepper)",doc)
-        self.assertIn('name="hsr-effects-parameter-groups"',doc)
-        self.assertIn('name="hsr-style-parameter-groups"',doc)
+        self.assertNotIn('name="hsr-effects-parameter-groups"',doc)
+        self.assertNotIn('name="hsr-style-parameter-groups"',doc)
         self.assertIn('input[type="range"]{',self.shared)
 
     def test_production_script_parse(self):

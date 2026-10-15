@@ -780,37 +780,33 @@ def touch_safety_check(browser, base_url, report):
     # Rendering is debounced; the committed source range changes synchronously.
     page.wait_for_function("""() => document.getElementById('prevChsSizeVal')
       .textContent.trim().startsWith('52')""", timeout=12000)
-    # The old preset accordion is intentionally hidden. Exercise a visible
-    # category and then a direct numeric edit, never force-click hidden UI.
-    style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
-    ensure(style_sections.count()==3,"Layout must expose only font, position and readability sections")
+    # Layout typography AND bilingual region must be visible together.
+    # The previous name= accordion was mutually exclusive, concealing 60/40.
+    style_sections=page.locator('details.layout-inspector-section[data-studio-scope="style"]')
+    ensure(style_sections.count()==3,"Expected typography, bilingual position and readability")
+    ensure(style_sections.nth(0).evaluate("(el)=>el.open") and
+           style_sections.nth(1).evaluate("(el)=>el.open"),
+           "Typography and 60/40 position must both be expanded on Layout entry")
+    ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),
+           "Typography number input not visible")
+    ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
+           "60/40 bilingual region number input not visible")
     style_sections.nth(2).locator(":scope > summary").click()
-    ensure(style_sections.nth(2).evaluate("(el)=>el.open"),
-           "Appearance section cannot be expanded")
-    # Font size lives under Typography: return to that visible accordion
-    # before exercising its numeric input.
-    style_sections.first.locator(":scope > summary").click()
+    ensure(style_sections.nth(2).evaluate("(el)=>el.open") and
+           style_sections.nth(0).evaluate("(el)=>el.open") and
+           style_sections.nth(1).evaluate("(el)=>el.open"),
+           "Opening readability must not close typography/position")
     number.fill("48")
     number.dispatch_event("change")
     ensure(page.locator("#prevChsSize").input_value()=="48",
-           "Direct touch edit did not restore the authoritative value")
-    ensure(page.locator('details[name="hsr-style-parameter-groups"][open]').count()==1,
-           "Returning to typography created multiple long expanded sections")
-    ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),
-           "Numeric editor disappeared after accordion navigation")
-    style_sections.nth(1).locator(":scope > summary").click()
-    ensure(page.locator("#prevPrimaryShare").is_visible(),
-           "60/40 primary/Chinese share is still hidden on touch")
-    ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
-           "60/40 split cannot be entered numerically")
+           "Direct touch typography edit failed")
     share=page.locator("#prevPrimaryShareTouchNumber")
     share.fill("65")
     share.dispatch_event("change")
     ensure(page.locator("#prevPrimaryShare").input_value()=="65",
-           "Touch split input not wired to layout state")
+           "Touch region share is not wired to layout state")
     page.wait_for_function("""() => document.getElementById('prevPrimaryShareVal')
       .textContent.trim()==='65% / 35%'""",timeout=12000)
-    style_sections.first.locator(":scope > summary").click()
     stepper=page.locator("#prevChsSizeTouchNumber").locator("xpath=..")
     stepper.get_by_role("button",name="中文基础字号（数值调整） 增加").click()
     ensure(page.locator("#prevChsSize").input_value()=="49",

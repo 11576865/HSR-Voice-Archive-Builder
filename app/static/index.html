@@ -3471,7 +3471,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="studio-v3-visual" id="studioV3Visual" aria-label="字幕预览舞台">
           <div class="preview-stage" id="previewCanvasContainer">
           <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
-          <canvas id="assCanvasPreview" width="1920" height="1080" style="position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;z-index:2"></canvas>
+          <canvas id="assCanvasPreview" width="1920" height="1080" class="hidden" aria-hidden="true" style="display:none;pointer-events:none"></canvas>
           <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
           <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="FFmpeg/libass 动态字幕预览（黑底或用户本地视频片段）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
 <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
@@ -3642,7 +3642,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
 
 
         <div class="preview-controls" id="previewControls">
-          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>文字与字体</span><small>Font & type</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3665,7 +3665,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
               <button id="projectFontImportBtn" class="secondary" type="button" disabled>导入并保存字体</button>
               <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
-              <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
+              <div id="projectFontList" class="hsr-project-font-list" hidden inert aria-hidden="true"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
@@ -3682,7 +3682,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>位置与安全区</span><small>Position</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3712,7 +3712,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style" name="hsr-style-parameter-groups">
+          <details class="layout-inspector-section layout-section-primary" open data-studio-scope="style">
             <summary><span>外观与可读性</span><small>Readability</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3743,7 +3743,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects" name="hsr-effects-parameter-groups">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
             <summary><span>动效</span><small>Motion</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3780,7 +3780,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects" name="hsr-effects-parameter-groups">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
             <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3808,7 +3808,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
 
-          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects" name="hsr-effects-parameter-groups">
+          <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
             <summary><span>档案增强</span><small>Archive HUD</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
@@ -3834,7 +3834,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本机生成（需 WhisperX）</button>
               <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
@@ -6768,7 +6768,12 @@ async function loadFontBrowser(query=''){
       button.append(name,sample);
       button.onclick=async()=>{
         const alias=await ensureHostFontLoaded(family);
-        if(alias!==family)sample.style.fontFamily='"'+alias+'", sans-serif';
+        if(alias===family||hostFontFaces.get(family)?.state!=='loaded'){
+          const info=document.getElementById('fontBrowserMeta');
+          if(info){info.textContent='字体「'+family+'」无法从处理主机加载。未应用后备字体，请改用其他字体或重新导入。';info.className='small status-bad';}
+          return;
+        }
+        sample.style.fontFamily='"'+alias+'", sans-serif';
         const input=document.getElementById(fontBrowserTargetId||'');
         if(input){input.value=family;input.dispatchEvent(new Event('input',{bubbles:true}))}
         document.getElementById('fontBrowserDialog')?.close();
@@ -7178,18 +7183,18 @@ async function loadWordAlignmentDiagnostics(){
     const generateButton=document.getElementById('generateWordAlignmentBtn');
     if(providerStatus){
       if(provider.available){
-        providerStatus.textContent='本地对齐器：WhisperX 可用'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；推理在处理主机执行。';
+        providerStatus.textContent='已安装 WhisperX / PyTorch'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；模型加载和对齐仍须实际验证。';
         providerStatus.className='small status-ok';
       }else{
         const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
-        providerStatus.textContent='此设备当前不能本地生成词级时间：缺少 '+missingPackages+'。可以在支持 WhisperX/PyTorch 的处理主机生成后，导入与本项目匹配的 JSON。';
+        providerStatus.textContent='本机不能生成词级时间：缺少 '+missingPackages+'。请在支持 WhisperX/PyTorch 的电脑上生成本项目匹配的 JSON，再在此导入；不会伪造时间。';
         providerStatus.className='small muted';
       }
     }
     if(generateButton){
       generateButton.disabled=!provider.available;
-      generateButton.hidden=!provider.available;
-      generateButton.title=provider.available?'为当前缺失或无效的条目生成逐词时间':'此设备无法运行 WhisperX/PyTorch，请导入匹配的词级时间 JSON';
+      generateButton.hidden=false;
+      generateButton.title=provider.available?'尝试真实本地 WhisperX 对齐，仍需模型和音频可用':'本机缺少 WhisperX/PyTorch，禁用生成；可导入对齐 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
@@ -7199,7 +7204,7 @@ async function loadWordAlignmentDiagnostics(){
       status.className='small muted layout-corpus-status';
     }else if(usable<=0){
       setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
-        ?'可以直接点击「本地生成缺失时间」。'
+        ?'可尝试本机 WhisperX 对齐，模型和音频仍需验证。'
         :'当前处理环境没有可运行的本地词级对齐器；请从其他支持的环境生成匹配 JSON 后导入。'),'warning');
       status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
@@ -8677,7 +8682,7 @@ function renderPreviewCanvasSvg(data, options) {
   // renderer painted the very same lines a second time (different metrics),
   // producing visibly doubled/ghosted glyphs after a font change.
   const overlay=document.getElementById('assCanvasPreview');
-  overlay?.getContext('2d')?.clearRect(0,0,overlay.width,overlay.height);
+  if(overlay){overlay.getContext('2d')?.clearRect(0,0,overlay.width,overlay.height);overlay.style.display='none';}
 }
 
 function renderCanvasSubtitleOverlay(data) {
@@ -8789,11 +8794,14 @@ function setHsrStudioMode(mode){
   // Keep explicit user choices while changing subtask; first entry stays discoverable.
   const previous=root.dataset.lastInspectorMode;
   if(previous!==next){
-    let first=true;
+    // Typography and bilingual positioning are both primary Layout tasks.
+    // Show both immediately; a single-open accordion made 60/40 effectively
+    // undiscoverable even though it was implemented and persisted.
+    let visibleIndex=0;
     root.querySelectorAll('.layout-inspector-section[data-studio-scope]').forEach(section=>{
       if(section.dataset.studioScope===next){
-        section.open=first;
-        first=false;
+        section.open=next==='style'?visibleIndex<2:visibleIndex===0;
+        visibleIndex++;
       }else section.open=false;
     });
     root.dataset.lastInspectorMode=next;
@@ -9252,9 +9260,7 @@ document.getElementById('generateWordAlignmentBtn')?.addEventListener('click',ge
 document.getElementById('importWordAlignmentBtn')?.addEventListener('click',()=>document.getElementById('wordAlignmentFile')?.click());
 document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>importWordAlignmentFile(e.target.files?.[0]));
 
-document.getElementById('prevPresetDefault')?.addEventListener('click',()=>applySubtitlePreset('standard'));
-document.getElementById('prevPresetPlain')?.addEventListener('click',()=>applySubtitlePreset('plain'));
-document.getElementById('prevPresetKaraoke')?.addEventListener('click',()=>applySubtitlePreset('karaoke'));
+// Studio settings are explicit; removed orphaned "standard/plain/karaoke" preset buttons.
 
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);

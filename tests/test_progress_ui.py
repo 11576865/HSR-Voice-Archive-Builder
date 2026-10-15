@@ -426,7 +426,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="wordAlignmentProviderStatus"', html)
         self.assertIn("async function generateLocalWordAlignments()", html)
         self.assertIn("'/word-alignments/generate'", html)
-        self.assertIn("generateButton.hidden=!provider.available", html)
+        self.assertIn("generateButton.hidden=false", html)
         self.assertIn('id="prevKaraokePreviewTime"', html)
         self.assertIn('id="prevKaraokePreviewTimeVal"', html)
         self.assertIn("async function loadWordAlignmentDiagnostics()", html)

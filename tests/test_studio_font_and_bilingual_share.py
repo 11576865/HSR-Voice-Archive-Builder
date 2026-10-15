@@ -60,6 +60,13 @@ class StudioFontAndRegionTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError,"不匹配的字体面"):
                         _assert_project_font_selected(wrong_face,resolved,fonts,
                                                       english="",chinese="汉字")
+                # A valid fc-match is insufficient if libass reports missing
+                # glyphs and silently chooses a different fallback face.
+                missing_glyph=f"{selected_log}\\n[Parsed_subtitles_0] Glyph 0x6C49 not found, selecting one more font"
+                with patch("app.ass_preview.subprocess.run",return_value=result):
+                    with self.assertRaisesRegex(RuntimeError,"缺少当前字幕中的字形 U\\+6C49"):
+                        _assert_project_font_selected(missing_glyph,resolved,fonts,
+                                                      english="",chinese="汉字")
                 bad=type("MatchResult",(),{"stdout":"/host/fallback.ttf","returncode":0})()
                 with patch("app.ass_preview.subprocess.run",return_value=bad):
                     with self.assertRaisesRegex(RuntimeError,"被回退"):
@@ -72,7 +79,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertEqual(html.count('id="prevPrimaryShare"'),1)
         self.assertIn("primary_region_share:primaryShare/100",html)
         self.assertIn("primary_region_share: Number(document.getElementById('prevPrimaryShare')",html)
-        self.assertIn("overlay?.getContext('2d')?.clearRect",html)
+        self.assertIn("overlay.style.display='none'",html)
         self.assertIn("const realFrame=mode==='libass'",html)
         self.assertIn("document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame)",html)
         self.assertIn("queueLiveRealPreview()",html)
@@ -84,7 +91,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("#assCanvasPreview{display:none!important}",css)
         self.assertIn("studioV4Timing[open] #layoutTimelinePanel",css)
         self.assertIn('id="projectFontRefreshBtn" class="secondary" type="button" hidden',html)
-        self.assertIn("generateButton.hidden=!provider.available",html)
+        self.assertIn("generateButton.hidden=false",html)
 
     def test_persistent_share_wired_both_server_flavors_and_final_export(self):
         project=(ROOT/"app/project.py").read_text("utf-8")
