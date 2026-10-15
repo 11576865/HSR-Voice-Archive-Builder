@@ -7238,6 +7238,7 @@ async function loadWordAlignmentDiagnostics(){
       generateButton.title=provider.available?'使用本地 WhisperX 生成真实词级时间；可能还需模型下载及音频依赖':'当前设备不支持本地生成，请导入有效的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
+    hsrAlignedUsableCount=usable;
     // An enabled-looking Karaoke checkbox with zero timestamped words is a
     // fake affordance. Preserve saved intent, but forbid ineffective edits.
     // Only genuine audio-synced highlighting needs recorded word time.
@@ -7259,7 +7260,7 @@ async function loadWordAlignmentDiagnostics(){
       setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
         ?'可尝试本机 WhisperX 对齐，模型和音频仍需验证。'
         :'当前处理环境没有可运行的本地词级对齐器；请从其他支持的环境生成匹配 JSON 后导入。'),'warning');
-      status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
+      status.textContent='真实词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。固定速度和整句均分卡拉 OK 仍可使用。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
     }else{
       setHsrKaraokeReadiness('有效逐词时间 '+usable+' / '+total+' 条。'+(usable<total
@@ -7437,12 +7438,16 @@ function travelLayoutStyleHistory(delta){
   scheduleLayoutPreviewUpdate();
 }
 
+let hsrAlignedUsableCount=0;
 function syncHsrKaraokeControls(){
   const timing=document.getElementById('prevKaraokeTiming')?.value||'fixed';
   const mode=document.getElementById('prevKaraokeMode');
   const unit=document.getElementById('prevKaraokeUnit');
   const speed=document.getElementById('prevKaraokeSpeed');
-  const active=!!document.getElementById('prevEnableKaraoke')?.checked;
+  const karaokeToggle=document.getElementById('prevEnableKaraoke');
+  const active=!!karaokeToggle?.checked;
+  if(karaokeToggle)karaokeToggle.disabled=timing==='aligned'&&hsrAlignedUsableCount===0;
+  if(mode)mode.disabled=timing==='aligned'&&hsrAlignedUsableCount===0;
   if(mode){
     const clip=mode.querySelector('option[value="clip"]');
     if(clip)clip.disabled=timing!=='aligned';
@@ -9053,6 +9058,11 @@ function setHsrStudioMode(mode){
     document.getElementById('layoutAuditDrawerToggle')?.focus();
   setHsrAuditDrawer(false);
   root.dataset.studioMode=next;
+  if(next==='effects'&&layoutCorpusFilter!=='all'){
+    layoutCorpusFilter='all';
+    layoutCorpusPage=0;
+    renderLayoutCorpusRail();
+  }
   const cueRailTitle=document.getElementById('layoutCorpusRailTitle');
   const cueRailEyebrow=document.getElementById('layoutCorpusRailEyebrow');
   if(cueRailTitle)cueRailTitle.textContent=next==='effects'?'字幕条目':'排版问题检查';
