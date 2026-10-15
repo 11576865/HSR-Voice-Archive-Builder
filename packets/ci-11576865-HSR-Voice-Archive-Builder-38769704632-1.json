@@ -1,0 +1,67 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-HSR-Voice-Archive-Builder-38769704632-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "tests: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/HSR-Voice-Archive-Builder",
+  "source_event": "workflow_run",
+  "source_ref": "main",
+  "source_sha": "0b360b2ce3898965c45d89d8ebb62684a453e09e",
+  "source_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/actions/runs/38769704632",
+  "created_at": "2026-10-15T16:32:25+00:00",
+  "dedupe_key": "workflow_run:11576865/HSR-Voice-Archive-Builder:38769704632:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "tests",
+    "run_id": "38769704632",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "push",
+    "failed_jobs": [
+      {
+        "id": 116541987583,
+        "name": "unit (3.11)",
+        "conclusion": "failure"
+      },
+      {
+        "id": 116541987744,
+        "name": "real-libass-ink-evidence",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "unit (3.11)",
+        "number": 7,
+        "name": "Run unit tests",
+        "conclusion": "failure"
+      },
+      {
+        "job": "real-libass-ink-evidence",
+        "number": 6,
+        "name": "Validate real rendered ink evidence",
+        "conclusion": "failure"
+      },
+      {
+        "job": "unit (3.12)",
+        "number": 7,
+        "name": "Run unit tests",
+        "conclusion": "failure"
+      },
+      {
+        "job": "unit (3.13)",
+        "number": 7,
+        "name": "Run unit tests",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
