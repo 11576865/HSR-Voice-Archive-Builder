@@ -14,7 +14,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape as escape_xml
 
 from subtitle_layout.ass_writer import write_ass
-from subtitle_layout.config import SubtitleRenderConfig
+from subtitle_layout.config import SubtitleRenderConfig, normalize_subtitle_color
 from subtitle_layout.fonts import validate_ass_font_name
 from .archive_bundle_exporter import image_extension, MAX_BACKGROUND_BYTES
 from .project_fonts import project_font_for_family, project_font_face_names
@@ -44,6 +44,8 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     return SubtitleRenderConfig(
+        primary_color=normalize_subtitle_color(data.get("primary_color", "#DCEBFF")),
+        chs_color=normalize_subtitle_color(data.get("chs_color", "#FFFFFF")),
         enable_karaoke=as_bool("enable_karaoke", False),
         karaoke_mode=(str(data.get("karaoke_mode", "k") or "k").lower() if str(data.get("karaoke_mode", "k") or "k").lower() in {"k", "kf", "clip"} else "k"),
         karaoke_timing=(str(data.get("karaoke_timing", "aligned") or "aligned").lower() if str(data.get("karaoke_timing","aligned") or "aligned").lower() in {"aligned","fixed","cue"} else "aligned"),
@@ -59,7 +61,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         shadow_depth=max(0.0, min(24.0, float(data.get("shadow_depth", 2.0)))),
         blur_radius=max(0.0, min(12.0, float(data.get("blur_radius", 0.0)))),
         card_opacity=max(0.0, min(1.0, float(data.get("card_opacity", 0.62)))),
-        enable_soft_entry=as_bool("enable_soft_entry", False),
+        enable_soft_entry=False,  # hidden non-Fade motion disabled
         soft_entry_scale_percent=max(
             25.0, min(300.0, float(data.get("soft_entry_scale_percent", 98.0)))
         ),
