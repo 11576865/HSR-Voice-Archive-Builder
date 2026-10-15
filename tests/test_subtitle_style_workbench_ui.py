@@ -269,7 +269,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertEqual(html.count('id="layoutCorpusRail"'),1)
         self.assertEqual(html.count('id="layoutCorpusSearch"'),1)
         self.assertEqual(html.count('id="layoutCorpusList"'),1)
-        self.assertIn("setStudioV3Pane(next==='effects'?'cue':'inspector')",html)
+        self.assertIn("setStudioV3Pane('inspector')",html)
         self.assertIn("next==='effects'?'选择字幕条目':'批量排版检查'",html)
         self.assertIn("function selectLayoutCorpusByIndex(index)",html)
         self.assertIn("loadLayoutStressSample({force:true,selectId:sub.id})",html)
