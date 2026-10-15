@@ -3558,7 +3558,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div class="layout-timeline-bottom">
               <span id="layoutTimelineScope">尚无项目字幕</span>
               <label><input id="layoutTimelineSnap" type="checkbox" checked/> 吸附相邻字幕边界</label>
-              <span id="layoutTimelineEditHint">单击条目选择 · 拖动选中字幕两端手柄 · 键盘左右键微调 0.1s · 保存时间另行执行</span>
+              <span id="layoutTimelineEditHint">单击条目查看字幕；所有起止时间由音频片段与间隔确定，不允许拖动修改</span>
             </div>
           </section>
           <section id="layoutCueEditorPanel" class="layout-cue-editor" aria-label="当前字幕条目编辑">
@@ -8676,8 +8676,27 @@ async function updateLayoutPreview() {
 
     if(generation!==geometryPreviewGeneration)return;
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
-    if(document.body.dataset.workspaceTask==='layout'&&geometryExplicitlyRequested)
-      setPreviewEvidence('geometry');
+    if(document.body.dataset.workspaceTask==='layout'&&geometryExplicitlyRequested){
+      const resultLayout=res?.layout||{};
+      const pct=Number(resultLayout.scale_percent||100);
+      const status=document.getElementById('libassPreviewStatus');
+      if(status){
+        if(resultLayout.failed){
+          status.textContent='自动缩放至最低档仍无法容纳字幕：'+(resultLayout.failed_condition||'OVERFLOW')+'。请缩短文本、调整双语比例、安全边距或字号。';
+          status.className='small status-bad';
+        }else if(pct<100){
+          status.textContent='排版已自动缩小至 '+pct+'%（快速预览估算）；点击「实际 ASS 渲染」验证 libass 真实效果。';
+          status.className='small status-warn';
+        }else{
+          status.textContent='浏览器字幕快速预览：当前估算不需缩放；如需真实字体与描边，请主动点击「实际 ASS 渲染」。';
+          status.className='small muted';
+        }
+      }
+      setPreviewEvidence('geometry',
+        resultLayout.failed
+          ?'自动缩放仍失败：'+(resultLayout.failed_condition||'OVERFLOW')
+          :pct<100?'已自动缩放至 '+pct+'%（浏览器估算，非真实 ASS）':undefined);
+    }
     // Browser geometry remains approximate; real ASS is invoked only by its button.
     const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
     if(corpusStatus&&layoutStressSample){
@@ -8748,8 +8767,11 @@ function renderPreviewCanvasSvg(data, options) {
     if (reasonEl) reasonEl.textContent = layout.failed_condition || 'OVERFLOW';
   } else {
     if (statusBadge) {
-      statusBadge.textContent = '几何估算通过 · 非真实验收';
-      statusBadge.style.color = 'var(--ok)';
+      const scaled=Number(layout.scale_percent||100);
+      statusBadge.textContent = scaled<100
+        ? '自动缩放至 '+scaled+'% · 近似预览'
+        : '几何估算通过 · 非真实验收';
+      statusBadge.style.color = scaled<100?'var(--warn)':'var(--ok)';
     }
     if (banner) banner.classList.add('hidden');
   }
