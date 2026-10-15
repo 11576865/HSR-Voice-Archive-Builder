@@ -126,8 +126,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("setPreviewEvidence('libass')", html)
         self.assertIn("setPreviewEvidence('rendering')", html)
         self.assertIn("setPreviewEvidence('failed'", html)
-        self.assertIn("setPreviewEvidence(hadResult?'stale':'rendering')", html)
-        self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
+        self.assertIn("setPreviewEvidence(sameCue?'stale':'rendering')", html)
+        self.assertIn("const overlayVisible=geometryExplicitlyRequested",html)
         self.assertIn("真实渲染不会保存设置", html)
 
     def test_out_of_order_preview_results_cannot_replace_current_state(self) -> None:
@@ -144,7 +144,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertGreaterEqual(
             html.count("if(generation!==geometryPreviewGeneration)return;"), 3
         )
-        self.assertIn("libassPreviewGeneration++; // Explicit user choice", html)
+        self.assertIn("libassPreviewGeneration++;", html)
+        self.assertIn("if(!stillCurrent()){URL.revokeObjectURL(pendingUrl);return false;}",html)
 
     def test_persisted_snapshot_is_the_submitted_snapshot(self) -> None:
         html = self.html
@@ -174,8 +175,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("layoutStressSample=null; // Never reuse a sample's word timings", html)
         self.assertIn("request===layoutSampleRequestGeneration", html)
         self.assertIn("loadLayoutStressSample({force:true})", html)
-        self.assertIn("if(typeof img.decode==='function')", html)
-        self.assertIn("img.addEventListener('error',onError,{once:true})", html)
+        self.assertIn("if(typeof pendingImage.decode==='function')", html)
+        self.assertIn("pendingImage.onerror=()=>reject(new Error('真实 PNG 解码失败'))", html)
         self.assertIn("signal:controller?.signal", html)
         self.assertIn("subtitleSettingsSavePending=true;", html)
         self.assertIn("if(subtitleSettingsSavePending)", html)
