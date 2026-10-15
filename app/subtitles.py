@@ -349,9 +349,9 @@ def refresh_subtitle_artifacts_from_settings(
     _apply_derived_subtitle_fields(entries, overrides)
     # Validate the entire derived time layer before mutating manifest/CSV or
     # writing new exports. A stale source clock is a hard failure, not a partial refresh.
-    timing_overrides = read_timing_overrides(output_dir)
-    for entry in entries:
-        effective_subtitle_window(entry, timing_overrides)
+    # ASS and SRT share only the audio-derived clock. Legacy timing
+    # overrides are preserved on disk but never applied to either output.
+    timing_overrides: dict[str, dict[str, float]] = {}
 
     # Mark the preceding export as non-current before mutating manifest/CSV or
     # touching output files. A process crash leaves a visible pending/stale
@@ -634,7 +634,7 @@ def get_project_subtitles(
             [entry for entry in entries if isinstance(entry, dict)],
             output_dir,
         )
-    timing_overrides = read_timing_overrides(output_dir)
+    timing_overrides: dict[str, dict[str, float]] = {}  # audio clock is authoritative
     overrides = load_subtitle_overrides(output_dir)
     if isinstance(entries, list):
         # Keep displayed baseline identical to ASS/SRT export resolution.
