@@ -8986,7 +8986,7 @@ function renderPreviewCanvasSvg(data, options) {
   // measurements. Without an explicit textLength the SVG remeasures each
   // wrapped line independently and renders a different visual width.
   // Shared, testable mapping: no second wrapping, scaling or baseline solver.
-  const drawQuickSubtitleLine=(line,family)=>{
+  const drawQuickSubtitleLine=(line,family,color)=>{
     const size=Number(line.font_size);
     const box=line.bbox||{};
     const height=Number(line.line_height)||size*1.25;
@@ -9010,12 +9010,12 @@ function renderPreviewCanvasSvg(data, options) {
     el.setAttribute('stroke','#101010');
     el.setAttribute('stroke-width',String(Math.max(0,Number(document.getElementById('prevOutlineWidth')?.value||0)*2)));
     el.setAttribute('stroke-linejoin','round');
-    el.setAttribute('fill','#fff');
+    el.setAttribute('fill',color);
     el.textContent=String(line.text||'');
     svg.appendChild(el);
   };
-  (layout.primary_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevPriFont')?.value||'Noto Sans'));
-  (layout.chs_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevChsFont')?.value||'汉仪旗黑'));
+  (layout.primary_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevPriFont')?.value||'Noto Sans',document.getElementById('prevPrimaryColor')?.value||'#dcebff'));
+  (layout.chs_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevChsFont')?.value||'汉仪旗黑',document.getElementById('prevChsColor')?.value||'#ffffff'));
 
   // Exactly one browser geometry text renderer: SVG. The legacy Canvas
   // renderer painted the very same lines a second time (different metrics),
