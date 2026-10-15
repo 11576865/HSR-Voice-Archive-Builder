@@ -324,6 +324,7 @@ def render_ass(
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
     config: SubtitleRenderConfig | None = None,
+    layout_capture: dict[str, object] | None = None,
     enable_karaoke: bool | None = None,
     enable_frosted_glass: bool | None = None,
     enable_multi_layer_outline: bool | None = None,
@@ -471,6 +472,39 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "failed_condition": layout.failed_condition,
             })
             continue
+
+        # Optional in-memory proof for the explicit single-frame preview.
+        # This records the actual libass-validated layout chosen by render_ass
+        # (including any fallback scale or ink-guided reflow), without a new
+        # FFmpeg call and without changing ordinary ASS export.
+        if layout_capture is not None:
+            def capture_lines(lines: list, font_path: str | None, is_primary: bool) -> list[dict[str, object]]:
+                if not lines:
+                    return []
+                line_height = measure_line_height(lines[0].font_size)
+                top = float(lines[0].y) - len(lines) * line_height if is_primary else float(lines[0].y)
+                result: list[dict[str, object]] = []
+                for n, position in enumerate(lines):
+                    width = measure_text_width(position.text, position.font_size, font_path)
+                    y = top + n * line_height
+                    result.append({
+                        "text": position.text, "font_size": position.font_size,
+                        "x": position.x, "y": position.y, "alignment": position.alignment,
+                        "line_height": line_height, "measured_width": width,
+                        "bbox": {
+                            "x_min": position.x - width / 2, "x_max": position.x + width / 2,
+                            "y_min": y, "y_max": y + line_height,
+                        },
+                    })
+                return result
+            layout_capture.clear()
+            layout_capture.update({
+                "scale_percent": round(layout.scale_factor * 100),
+                "failed": False,
+                "primary_lines": capture_lines(layout.primary_lines, primary_font_path, True),
+                "chs_lines": capture_lines(layout.chs_lines, chs_font_path, False),
+                "evidence": "libass-validated-ass-plan",
+            })
 
         # Project 2 Pre-roll audio-aware fade calculation
         actual_start_sec = start_sec
@@ -698,6 +732,7 @@ def write_ass(
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
     config: SubtitleRenderConfig | None = None,
+    layout_capture: dict[str, object] | None = None,
     enable_karaoke: bool | None = None,
     enable_frosted_glass: bool | None = None,
     enable_multi_layer_outline: bool | None = None,
@@ -712,6 +747,7 @@ def write_ass(
             target_language=target_language,
             overflow_report_path=report_path,
             config=config,
+            layout_capture=layout_capture,
             enable_karaoke=enable_karaoke,
             enable_frosted_glass=enable_frosted_glass,
             enable_multi_layer_outline=enable_multi_layer_outline,
