@@ -172,7 +172,7 @@ def _assert_project_font_selected(
         matched = [line for line in selections
                    if f"fontselect: ({family.casefold()}," in line]
         expected_path = str(expected.resolve()).casefold()
-        if not matched or not any(
+        if not matched or not all(
             "->" in line and expected_path in line.split("->", 1)[1]
             for line in matched
         ):
