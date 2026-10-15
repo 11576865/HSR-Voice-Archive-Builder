@@ -166,9 +166,20 @@ def _assert_project_font_selected(
                 f"导入字体 {family} 被回退为 {actual or '未知字体'}，"
                 f"而非导入文件 {expected.name}；请检查字体族名、字体文件和字形。"
             )
-        if not any(f"fontselect: ({family.casefold()}," in line for line in selections):
+        # Checking ONLY the requested family before the arrow is insufficient:
+        # libass can log "fontselect: (Family, 400, 0) -> /system/fallback.ttf".
+        # Verify the *actual selected file* for the requested font name.
+        matched = [line for line in selections
+                   if f"fontselect: ({family.casefold()}," in line]
+        expected_path = str(expected.resolve()).casefold()
+        if not matched or not any(
+            "->" in line and expected_path in line.split("->", 1)[1]
+            for line in matched
+        ):
+            selections_info = " / ".join(line[:260] for line in matched[:2]) or "无对应字体日志"
             raise RuntimeError(
-                f"无法从 libass 字体选择日志确认 {family}；不把未验证的回退字体视为成功。"
+                f"libass 对 {family} 使用了回退字形，而非已导入的 {expected.name}："
+                f"{selections_info}。请检查字体族名、字形覆盖和 Fontconfig 配置。"
             )
 
 
