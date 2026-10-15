@@ -4,7 +4,7 @@ import csv
 import json
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
@@ -335,6 +335,7 @@ def refresh_subtitle_artifacts_from_settings(
     render_config: SubtitleRenderConfig | None = None,
     manifest_data: dict[str, Any] | None = None,
     strict_ass: bool = True,
+    ass_progress: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Apply human overrides as a derived layer without mutating source provenance."""
 
@@ -405,6 +406,7 @@ def refresh_subtitle_artifacts_from_settings(
                 source_language=source_language,
                 target_language=target_language,
                 config=render_config,
+                **({"progress_callback": ass_progress} if ass_progress is not None else {}),
             )
         except Exception as exc:
             ass_file.unlink(missing_ok=True)
@@ -494,7 +496,10 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
 
 
 
-def refresh_ass_only(config: ProjectConfig, output_dir: Path) -> dict[str, Any]:
+def refresh_ass_only(
+    config: ProjectConfig, output_dir: Path,
+    *, ass_progress: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
     """Rebuild only the styled ASS artifact from audio-derived timing.
 
     Neither SRT bytes nor manifest/CSV/human text are written in this path.
@@ -523,6 +528,7 @@ def refresh_ass_only(config: ProjectConfig, output_dir: Path) -> dict[str, Any]:
                 target_language=config.target_language or "zh-CN",
                 config=subtitle_render_config(config),
                 overflow_report_path=output_dir / "ass_layout_overflow_report.json",
+                **({"progress_callback": ass_progress} if ass_progress is not None else {}),
             )
         except Exception as exc:
             ass_path.unlink(missing_ok=True)
