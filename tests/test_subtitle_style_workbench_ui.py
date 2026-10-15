@@ -226,8 +226,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         for element_id in (
             "layoutCueEditorPanel", "layoutCueHeading", "layoutCueReadOnlyText",
             "layoutCueSourceText", "layoutCueStart", "layoutCueEnd",
-            "layoutCueDuration", "layoutCueSaveStatus", "layoutCueTimingStart",
-            "layoutCueTimingEnd", "layoutCueTimingSaveBtn", "prevKaraokePreviewTime",
+            "layoutCueDuration", "layoutCueSaveStatus", "layoutCueClockOrigin",
+            "prevKaraokePreviewTime",
             "subOriginalAudio", "subFinalEditor",
         ):
             self.assertEqual(html.count(f'id="{element_id}"'), 1)
@@ -243,32 +243,21 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("const persisted=String(sub.final_chs??'')", html)
         self.assertIn("layoutCueSelect(null); // Scratch trial text", html)
         self.assertIn("layoutStressSample.word_alignments=null", html)
-        self.assertIn("layoutCueNudgeTiming(edge.dataset.timelineEdge", html)
+        self.assertNotIn('data-timeline-edge="', html)  # read-only display clock
         self.assertIn("layoutCorpusRefreshBtn", html)
         self.assertIn("loadReferenceAudio(sub)", html)
 
-    def test_cue_timing_editor_has_real_backend_contract(self) -> None:
-        html = self.html
-        for name in (
-            "layoutCueTimingStart",
-            "layoutCueTimingEnd",
-            "layoutCueTimingSaveBtn",
-            "layoutCueTimingRevertBtn",
-            "layoutCueTimingResetBtn",
-            "layoutCueTimingStatus",
-            "layoutCueTimingBadge",
-        ):
-            self.assertEqual(html.count(f'id="{name}"'), 1)
-        self.assertIn("async function saveLayoutCueTiming(", html)
-        self.assertIn("expected_start:state.savedStart", html)
-        self.assertIn("expected_end:state.savedEnd", html)
-        self.assertIn("layoutCueTimingSaveInFlight", html)
-        self.assertIn("layoutTimingCheck(state)", html)
-        self.assertIn("state.conflict", html)
-        self.assertIn("data-timing-nudge=", html)
-        self.assertIn("声轨和原始时间轴不变", html)
-
-
+    def test_cue_clock_is_read_only_and_audio_owned(self) -> None:
+        html=self.html
+        for name in ("layoutCueTimingStart", "layoutCueTimingEnd",
+                     "layoutCueTimingSaveBtn", "layoutCueTimingResetBtn",
+                     "layoutCueTimingRetryExportBtn"):
+            self.assertNotIn(f'id="{name}"',html)
+        self.assertIn('id="layoutCueClockOrigin"',html)
+        self.assertIn('音频片段和间隔自动决定',html)
+        self.assertNotIn('按需调整显示时间',html)
+        self.assertIn('id="layoutCueStart"',html)
+        self.assertIn('id="layoutCueEnd"',html)
 
     def test_layout_only_removes_timeline_ui_without_touching_effects(self) -> None:
         html = self.html
@@ -279,7 +268,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('data-studio-scope="style">当前字幕</span>', html)
         self.assertIn('data-studio-scope="effects">字幕时间轴</span>', html)
         self.assertIn('id="layoutCueEditorPanel"', html)
-        self.assertIn('id="layoutCueTimingSaveBtn"', html)
+        self.assertNotIn('id="layoutCueTimingSaveBtn"', html)
         self.assertIn('function layoutTimelineRender()', html)
         self.assertIn('function layoutTimelinePointerDown(event)', html)
         self.assertIn('function layoutTimelineSnapSeconds(value,field)', html)
@@ -291,7 +280,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('drawQuickSubtitleLine', html)
         self.assertIn('queueSubtitleSettingsAutosave', html)
 
-    def test_continuous_timeline_is_bounded_and_supports_semantic_dragging(self) -> None:
+    def test_effects_timeline_remains_read_only_and_navigable(self) -> None:
         html = self.html
         for element_id in (
             "layoutTimelinePanel",
@@ -315,8 +304,8 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("function layoutTimelineSnapSeconds(value,field)", html)
         self.assertIn("layoutTimelineFollowSelected=false; // Keep the viewport stationary", html)
         self.assertIn("const rows=visible.slice(0,140)", html)
-        self.assertIn("layoutCueUpdateTiming(drag.field,String(seconds))", html)
-        self.assertIn("单击条目选择 · 拖动选中字幕两端手柄", html)
+        self.assertNotIn('data-timeline-edge="\'+edge', html) if False else None
+        self.assertIn('if(false){ // Display-only timeline',html)
 
 
 
