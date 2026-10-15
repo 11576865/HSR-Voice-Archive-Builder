@@ -235,8 +235,8 @@ def validate_real_ink(layout: SolvedLayout, cfg: SubtitleRenderConfig,
             blur=cfg.blur_radius, multi_outline=cfg.enable_multi_layer_outline,
         )
         # Cache on actual emitted probe bytes, font content/mtime and chosen
-        # runtime. The bounded 256-entry pool prevents repeated subprocesses
-        # during identical preview/export calls without assuming a fixed scale.
+        # runtime. A complete archive may need thousands of unique bilingual
+        # layouts; retain enough signatures to accelerate re-export after edits.
         fingerprint = []
         for value in (cfg.primary_font_path, cfg.chs_font_path):
             if value and Path(value).is_file():
@@ -246,7 +246,7 @@ def validate_real_ink(layout: SolvedLayout, cfg: SubtitleRenderConfig,
         cached = _INK_CACHE.get(signature)
         if cached is None:
             box = _raster_bounds(ass, cfg, ffmpeg)
-            if len(_INK_CACHE) >= 256:
+            if len(_INK_CACHE) >= MAX_INK_CACHE_ENTRIES:
                 _INK_CACHE.pop(next(iter(_INK_CACHE)))
             _INK_CACHE[signature] = (box,)
         else:
@@ -284,4 +284,5 @@ def validate_real_ink(layout: SolvedLayout, cfg: SubtitleRenderConfig,
     )
 
 
+MAX_INK_CACHE_ENTRIES = 16384
 _INK_CACHE: dict[str, tuple[InkBounds | None]] = {}
