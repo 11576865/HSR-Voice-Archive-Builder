@@ -146,7 +146,7 @@ def preview_subtitle_layout(
     parallax_info = {
         "primary_offset": primary_height,
         "chs_offset": chs_height,
-        "total_span": primary_height + min_central_gap + chs_height,
+        "total_span": primary_height + anchor_gap + chs_height,
         "parallax_ratio": (
             round(primary_height / chs_height, 3)
             if chs_height > 0
