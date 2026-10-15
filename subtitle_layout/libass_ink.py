@@ -140,9 +140,34 @@ def _layer_ass(lines: list[str], *, family: str, size: int, x: int, y: int,
     return styles + events
 
 
+def _raw_rgb24_bbox(raw: bytes, width: int, height: int,
+                    background: bytes) -> tuple[int, int, int, int] | None:
+    if len(raw) != width * height * 3 or len(background) != 3:
+        raise InkProbeUnavailable("Invalid raw RGB frame for libass ink measurement")
+    bg_row = background * width
+    stride = width * 3
+    x0, y0, x1, y1 = width, height, 0, 0
+    view = memoryview(raw)
+    for y in range(height):
+        row = view[y * stride:(y + 1) * stride]
+        if row == bg_row:
+            continue
+        for x in range(width):
+            at = 3 * x
+            delta = (abs(row[at] - background[0]) +
+                     abs(row[at + 1] - background[1]) +
+                     abs(row[at + 2] - background[2]))
+            if delta > 36:
+                x0 = min(x0, x)
+                x1 = max(x1, x + 1)
+                y0 = min(y0, y)
+                y1 = max(y1, y + 1)
+    if x1 <= x0 or y1 <= y0:
+        return None
+    return x0, y0, x1, y1
+
+
 def _raster_bounds(ass_text: str, cfg: SubtitleRenderConfig, ffmpeg: str) -> InkBounds | None:
-    if Image is None or ImageChops is None:
-        raise InkProbeUnavailable("Actual ink measurement requires python-pillow")
     with tempfile.TemporaryDirectory(prefix="hsr-libass-ink-") as td:
         root = Path(td)
         ass = root / "probe.ass"
@@ -169,11 +194,18 @@ def _raster_bounds(ass_text: str, cfg: SubtitleRenderConfig, ffmpeg: str) -> Ink
         if proc.returncode or len(proc.stdout) != 1920 * 1080 * 3:
             message = proc.stderr.decode("utf-8", errors="replace")[:600]
             raise InkProbeUnavailable(f"libass ink probe failed: {message}")
-        img = Image.frombytes("RGB", (1920, 1080), proc.stdout)
-        bg = img.getpixel((0, 0))
-        delta = ImageChops.difference(img, Image.new("RGB", img.size, bg))
-        mask = delta.convert("L").point(lambda v: 255 if v > 12 else 0)
-        box = mask.getbbox()
+        bg = proc.stdout[:3]
+        if Image is not None and ImageChops is not None:
+            img = Image.frombytes("RGB", (1920, 1080), proc.stdout)
+            delta = ImageChops.difference(img, Image.new("RGB", img.size, tuple(bg)))
+            mask = delta.convert("L").point(lambda v: 255 if v > 12 else 0)
+            box = mask.getbbox()
+        else:
+            # Pillow is an optional accelerator, not a reason to reject a
+            # functioning FFmpeg/libass installation (notably minimal CI).
+            # Inspect only non-background rows; a uniform FFmpeg color frame
+            # skips ~90% of pixels without costly per-pixel Python iteration.
+            box = _raw_rgb24_bbox(proc.stdout, 1920, 1080, bg)
         return InkBounds(*box) if box else None
 
 
