@@ -204,13 +204,13 @@ def _soft_entry_tags(cfg: SubtitleRenderConfig, duration_sec: float) -> str:
     if not cfg.enable_soft_entry:
         return ""
     duration_ms = max(100, int(round(duration_sec * 1000)))
-    entry_ms = min(max(0, int(cfg.soft_entry_ms)), max(0, duration_ms // 2))
+    entry_ms = min(max(0, int(cfg.soft_entry_ms)), duration_ms)
     if entry_ms <= 0:
         return ""
 
-    start_scale = max(90.0, min(100.0, float(cfg.soft_entry_scale_percent)))
-    base_blur = max(0.0, min(5.0, float(cfg.blur_radius)))
-    start_blur = max(base_blur, max(0.0, min(5.0, float(cfg.soft_entry_blur))))
+    start_scale = max(25.0, min(300.0, float(cfg.soft_entry_scale_percent)))
+    base_blur = max(0.0, min(12.0, float(cfg.blur_radius)))
+    start_blur = max(base_blur, max(0.0, min(12.0, float(cfg.soft_entry_blur))))
 
     tags = (
         f"\\fscx{_fmt_num(start_scale)}"
