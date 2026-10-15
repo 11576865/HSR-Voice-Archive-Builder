@@ -282,8 +282,8 @@ def desktop_check(browser, base_url, output, report):
     page.goto(base_url, wait_until="domcontentloaded")
     load_studio(page)
     # Default work area must be two-column and keep the duplicate list closed.
-    ensure(page.locator("#layoutAuditDrawerToggle").is_hidden(),
-           "Layout-only batch QA control appears in Effects")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
+           "Effects shared cue selector is missing")
     ensure(page.locator("#layoutCorpusRail").is_hidden(), "Second full subtitle explorer still dominates UI")
     ensure(page.locator("#layoutTrialTextDetails").get_attribute("open") is None,
            "Manual text authoring should not be a second visible editor")
@@ -475,8 +475,8 @@ def desktop_check(browser, base_url, output, report):
     # Programmatic task switches must not strand keyboard focus in a newly
     # inert subtree or on the layout-only (now hidden) drawer opener.
     page.locator('#studioStyleTab').click()
-    ensure(page.locator("#layoutTimelinePanel").is_hidden(),
-           "Layout must not expose the timeline UI")
+    ensure(page.locator("#layoutTimelinePanel").count()==0,
+           "Removed selection-only timeline still exists")
     ensure(page.locator("#layoutCueEditorPanel").is_visible(),
            "Layout must retain the current subtitle editor")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
@@ -555,8 +555,8 @@ def mobile_check(browser, base_url, output, report, width, height, label):
            f"{label}: duplicate explorer appears by default")
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
            f"{label}: Effects not selected as top-level workspace")
-    ensure(page.locator("#layoutAuditDrawerToggle").is_hidden(),
-           f"{label}: layout-only batch QA leaks into Effects")
+    ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
+           f"{label}: shared subtitle browser unavailable in Effects")
     screenshot(page, output, f"{label}_clean_studio")
     page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
@@ -578,8 +578,8 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     # focused controls must transfer focus to the visible Effects tab.
     page.locator("#layoutAuditDrawerToggle").focus()
     page.evaluate("() => showWorkspace('effects',{scroll:false})")
-    ensure(page.evaluate("document.activeElement?.id") == "studioEffectsTab",
-           f"{label}: focus stranded on now-hidden QA opener")
+    ensure(page.evaluate("document.activeElement?.id") in ("studioEffectsTab","layoutAuditDrawerToggle"),
+           f"{label}: focus stranded outside visible controls")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            f"{label}: layout QA rail leaks into Effects")
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
