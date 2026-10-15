@@ -22,7 +22,7 @@ class SubtitleDisplayTimingEditorTests(unittest.TestCase):
         self.assertNotIn('id="layoutCueTimingStart"',html)
         self.assertNotIn('id="layoutCueTimingEnd"',html)
         self.assertNotIn('data-timeline-edge="start"',html)
-        self.assertIn('if(false){ // Display-only timeline',html)
+        self.assertIn('Audio-derived cue boundaries are navigable but never draggable.',html)
 
     def test_legacy_saved_override_never_retimes_source(self):
         entry={"index":11,"start_seconds":2,"display_end_seconds":4,
