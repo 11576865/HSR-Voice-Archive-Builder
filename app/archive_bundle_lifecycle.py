@@ -14,7 +14,7 @@ from typing import Any
 from .builder import atomic_write_text
 from .project_fonts import font_asset_directory
 from .subtitle_export_status import read_subtitle_export_health, _inputs as _subtitle_inputs
-from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, MODES, normalize_bundle_background
+from .archive_bundle_backgrounds import MAX_IMAGE_BYTES, MODES, normalize_bundle_background, load_default_red_cloud_background
 from .chapter_audio_tracks import chapter_audio_tracks
 
 RECEIPT = "archive_bundle_receipt.json"
@@ -140,10 +140,12 @@ def _background_preferences(output: Path) -> dict[str, Any] | None:
 def previous_bundle_settings(output: Path) -> dict[str, Any]:
     receipt = _read_receipt(output) or _background_preferences(output)
     if receipt is None:
+        # The packaged asset is an actual available image, not a remembered
+        # project upload. It is snapshotted into the first verified MKV receipt.
         return {"known": False, "background_color": "#000000",
-                "background_kind": "color", "image_saved": False,
-                "attach_project_fonts": True,
-                "background_spec": normalize_bundle_background(None)}
+                "background_kind": "image", "image_saved": True,
+                "bundled_default": True, "attach_project_fonts": True,
+                "background_spec": normalize_bundle_background({"mode": "image"})}
     bg = receipt["background"]
     image_saved = False
     if bg.get("kind") == "image":
@@ -165,7 +167,9 @@ def previous_bundle_settings(output: Path) -> dict[str, Any]:
 
 def load_previous_bundle_image(output: Path) -> bytes:
     receipt = _read_receipt(output) or _background_preferences(output)
-    if receipt is None or receipt["background"].get("kind") != "image":
+    if receipt is None:
+        return load_default_red_cloud_background()
+    if receipt["background"].get("kind") != "image":
         raise ValueError("该项目没有可复用的 MKV 背景图，请上传图片或改用纯色")
     image = _image_asset(output, receipt)
     assert image is not None
