@@ -1,0 +1,74 @@
+{
+  "schema_version": 1,
+  "task_id": "hsr-pr159-controlled-integration-20261015",
+  "source": {
+    "pr": 159,
+    "head": "20c8216beef50403c57f0e480b5e0dc89a18778f",
+    "branch": "feat/hsr-archive-audit-karaoke-v1",
+    "relation_to_main_at_audit": {
+      "ahead": 181,
+      "behind": 280
+    }
+  },
+  "goal": "Retire the unsafe historical mega-PR without losing unique feature work; re-land independently testable capabilities onto current main with explicit provenance.",
+  "status": "in_progress",
+  "current_bounded_work_unit": "Port read-only archive structural audit and original-WAV hash verification to current FastAPI and Termux-lite APIs, together with original tests.",
+  "completed_units": [],
+  "next_units": [
+    "Validate PR #159 archive-audit successor on exact-head Python/Termux CI; physical Termux remains separate.",
+    "Re-land true exported ASS raster evidence and bounded batch coverage with export-policy/source-receipt identity; current main lacks these modules.",
+    "Review standalone remote-update guard/publication/publish and human subtitle recovery against current remote_index, recovery and MKV lifecycle; implement only missing semantics.",
+    "Reconcile stale ASS writer/geometry/Karaoke changes against current Studio Layout/Effects/word-alignment implementation; retain failing regressions only when consistent with current product contract.",
+    "After evidence-backed integration or explicit disposition for every independent PR #159 cluster, close PR #159 as superseded, never merge historical 181-commit stack."
+  ],
+  "feature_disposition": {
+    "archive_audit": {
+      "status": "successor_pr_prepared",
+      "paths": [
+        "app/archive_audit.py",
+        "tests/test_archive_audit.py",
+        "app/server.py",
+        "app/lite_server.py"
+      ]
+    },
+    "ass_evidence": {
+      "status": "pending_integration",
+      "paths": [
+        "app/ass_artifact_evidence.py",
+        "app/ass_export_sampling.py",
+        "app/ass_coverage_batches.py",
+        "app/ass_coverage_lock.py",
+        "subtitle_layout/rendered_ink.py",
+        "subtitle_layout/temporal_samples.py"
+      ]
+    },
+    "remote_update": {
+      "status": "pending_semantic_review",
+      "paths": [
+        "app/remote_update_guard.py",
+        "app/remote_update_publication.py",
+        "app/remote_update_publish.py"
+      ]
+    },
+    "subtitle_recovery": {
+      "status": "pending_semantic_review",
+      "paths": [
+        "app/subtitle_recovery.py"
+      ]
+    },
+    "legacy_studio_and_karaoke": {
+      "status": "pending_overlap_review",
+      "notes": "Do not overwrite current main font rendering, last published MKV receipt, project font, geometry UI, or user-authorized word timing."
+    }
+  },
+  "safety": "No bulk merge, forced rebase or delete; original source branch retained until disposition and audit evidence close.",
+  "branch": "integration/pr159-archive-audit-20261015",
+  "pr": null,
+  "latest_durable_commit": null,
+  "external_validation": {
+    "ci": "pending",
+    "android_termux": "pending",
+    "real_archive": "pending"
+  },
+  "updated_at": "2026-10-15"
+}

@@ -20,6 +20,7 @@ from .credentials import (
     save_translation_credentials, test_saved_translation_credentials,
 )
 from .black_video_exporter import BlackVideoExporter
+from .archive_audit import audit_archive, verify_archive_source_audio
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
@@ -342,6 +343,46 @@ def _project_paths(config: ProjectConfig) -> dict[str, Path | None]:
         "state": resolve_project_path(config, config.state_dir),
         "candidates": resolve_project_path(config, config.update_candidates),
     }
+
+
+@app.get("/api/project/{project_id}/archive/audit")
+def api_get_archive_audit(project_id: str):
+    """Read-only archive provenance diagnostics; not a byte audit."""
+    try:
+        config = _resolve_project(project_id)
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("Project output directory is not configured")
+        return {"ok": True, "audit": audit_archive(output)}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400,
+        )
+
+
+@app.post("/api/project/{project_id}/archive/verify-sources")
+def api_start_archive_source_audit(project_id: str):
+    """Verify original WAV bytes in a background job, never mutate the archive."""
+    try:
+        config = _resolve_project(project_id)
+        assert_project_idle(config.root)
+        output = resolve_project_path(config, config.output_dir)
+        if output is None or not (output / "manifest.json").is_file():
+            raise FileNotFoundError("请先构建档案；尚不存在 manifest.json")
+        job = create_job(
+            "archive-verify",
+            lambda report_progress: verify_archive_source_audio(
+                config, output, report_progress=report_progress,
+            ),
+            with_progress=True,
+            project_root=str(config.root),
+            project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400,
+        )
 
 
 @app.get("/api/project/{project_id}/subtitles")
