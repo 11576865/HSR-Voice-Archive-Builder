@@ -98,7 +98,7 @@ class ProjectFontTests(unittest.TestCase):
                 output, "first.ttf", base64.b64encode(original).decode("ascii"))
             # Appending a byte leaves the SFNT table offsets, checksums and glyphs
             # unchanged but changes the content-addressed project asset identity.
-            replacement = original + b"\\0"
+            replacement = original + bytes([0])
             second = import_project_font(
                 output, "replacement.ttf",
                 base64.b64encode(replacement).decode("ascii"))
@@ -114,7 +114,7 @@ class ProjectFontTests(unittest.TestCase):
                 source_language="en", target_language="en",
                 config=cfg, duration_seconds=1.5, timestamp=0.5,
                 font_dir=font_asset_directory(output))
-            self.assertTrue(frame.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+            self.assertTrue(frame.startswith(bytes([137, 80, 78, 71, 13, 10, 26, 10])))
             self.assertGreater(len(frame), 1500)
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "Real FFmpeg unavailable")
