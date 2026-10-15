@@ -109,7 +109,7 @@ class LayoutAutosaveDoesNotExportTests(unittest.TestCase):
         self.assertNotIn("startAssExport()", body)
         self.assertIn("queueSubtitleSettingsAutosave", html)
         self.assertIn(
-            "if(await saveSubtitleLayoutSettings())await startAssExport();",
+            "if(await saveSubtitleLayoutSettings())await startAssExport('internal');",
             html, "Explicit Generate must continue to save latest parameters first",
         )
         self.assertIn("function queueLiveRealPreview()", html)
