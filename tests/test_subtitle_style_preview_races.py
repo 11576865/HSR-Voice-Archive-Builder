@@ -14,7 +14,7 @@ from pathlib import Path
 
 @unittest.skipUnless(shutil.which("node"), "Node is needed for the JS state-machine regression")
 class SubtitlePreviewIdentityTests(unittest.TestCase):
-    def test_real_scheduler_skips_layout_and_keeps_effects(self) -> None:
+    def test_real_still_preview_is_click_only_across_both_tasks(self) -> None:
         html = (Path(__file__).resolve().parents[1] / "app/static" / "index.html").read_text(
             encoding="utf-8"
         )
@@ -27,8 +27,7 @@ class SubtitlePreviewIdentityTests(unittest.TestCase):
         update_start = html.index("async function updateLayoutPreview()")
         update_end = html.index("function scheduleLayoutPreviewUpdate()", update_start)
         update_source = html[update_start:update_end]
-        # Geometry updates must not trigger real ASS in Layout; the previous
-        # independent Effects scheduler remains unchanged.
+        # No parameter change may schedule a still-image FFmpeg subprocess in either task.
         self.assertLess(
             update_source.index("queueLiveRealPreview();"),
             update_source.index("await Promise.allSettled(["),
@@ -37,9 +36,9 @@ class SubtitlePreviewIdentityTests(unittest.TestCase):
             invalidation_source.index("queueLiveRealPreview();"),
             invalidation_source.index("\n}"),
         )
-        self.assertIn("if(document.body.dataset.workspaceTask==='layout')return;", scheduling_source)
-        self.assertIn("['layout','effects'].includes(document.body.dataset.workspaceTask)",
-                      scheduling_source)
+        self.assertIn("clearTimeout(liveRealPreviewTimer);", scheduling_source)
+        self.assertIn("  return;", scheduling_source)
+        self.assertNotIn("renderLibassPreview()", scheduling_source)
         self.assertIn("document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview)",html)
         self.assertIn("geometryExplicitlyRequested=true;",invalidation_source)
         self.assertIn("liveRealPreviewArmed=false;",invalidation_source)
@@ -63,29 +62,16 @@ const state = {
 };
 vm.createContext(state);
 vm.runInContext(source, state);
-state.document.body.dataset.workspaceTask='layout';
-vm.runInContext('queueLiveRealPreview()',state);
-assert.equal(active,null,'Layout must never automatically invoke FFmpeg/libass');
-assert.equal(invocationCount,0);
-state.document.body.dataset.workspaceTask='effects';
-vm.runInContext('queueLiveRealPreview()',state);
-assert.equal(typeof active,'function','Effects scheduler should remain functional');
-active();
-assert.equal(invocationCount,1);
-state.lastRenderedAssIdentity='cue-1';
-vm.runInContext('queueLiveRealPreview()',state);
-assert.equal(typeof active,'function');
-active();
-assert.equal(invocationCount,1,'decoded matching frame must suppress duplicate work');
+for(const task of ['layout','effects']){
+ state.document.body.dataset.workspaceTask=task;
+ vm.runInContext('queueLiveRealPreview()',state);
+ assert.equal(active,null,task+' must not auto-render ASS');
+ assert.equal(invocationCount,0);
+}
 state.document.body.dataset.workspace='project';
 vm.runInContext('queueLiveRealPreview()',state);
-assert.equal(active,null,'leaving workbench must stop true preview scheduling');
-state.document.body.dataset.workspace='layout';
-state.document.body.dataset.workspaceTask='layout';
-state.lastRenderedAssIdentity=null;
-vm.runInContext('queueLiveRealPreview()',state);
-assert.equal(active,null,'Even an invalidated Layout frame must not auto-render');
-process.stdout.write('Layout manual-only preview and Effects scheduler: OK\n');
+assert.equal(active,null);
+process.stdout.write('FFmpeg still preview is manual in every task: OK\n');
 """
         script = "const source = " + json.dumps(scheduling_source, ensure_ascii=False) + ";\n" + harness
         completed = subprocess.run(
