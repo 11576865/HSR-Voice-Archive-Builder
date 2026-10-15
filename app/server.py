@@ -21,6 +21,7 @@ from .credentials import (
 )
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
+from .effect_voice_preview import resolve_effect_voice
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
@@ -938,6 +939,16 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         if data.get("use_studio_reference_background") is True and not source_bytes and background_image is None:
             background_image = load_studio_reference_background()
         background_color = normalize_preview_background_color(data.get("preview_background_color"))
+        voice = {}
+        if data.get("project_voice_entry_id") is not None:
+            config = _active_config()
+            expected = str(data.get("expected_project_root") or "").strip()
+            if expected and expected != str(config.root):
+                raise ValueError("The preview belongs to a different project; reload the selected cue")
+            voice = resolve_effect_voice(
+                config, data["project_voice_entry_id"],
+                fade_ms=int(data.get("fade_in_ms", config.subtitle_fade_in_ms)),
+            )
         video = await run_in_threadpool(
             render_ass_preview_video,
             english_text=str(data.get("english_text") or ""),
@@ -946,11 +957,16 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             target_language=str(data.get("target_language") or "zh-CN"),
             config=config,
             word_alignments=words,
-            duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
+            duration_seconds=float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)),
             container_format=fmt,
             source_video_bytes=source_bytes,
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
             include_source_audio=data.get("include_source_audio", True) is True,
+            audio_source_path=voice.get("audio_source_path"),
+            audio_source_start_seconds=float(voice.get("audio_source_start_seconds", 0)),
+            voice_start_offset_seconds=float(voice.get("voice_start_offset_seconds", 0)),
+            voice_duration_seconds=voice.get("voice_duration_seconds"),
+            preview_after_fade_ms=int(voice.get("preview_after_fade_ms", 0)),
             background_color=background_color,
             background_image_bytes=background_image,
             font_dir=_active_preview_font_dir(),
