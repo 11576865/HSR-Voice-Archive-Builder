@@ -109,18 +109,15 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertNotIn(r"\fad", ass_output)
         self.assertNotIn(r"\fscx88", ass_output)
 
-    def test_tiered_voice_gap_classification(self) -> None:
-        # Compact Mode (T_gap < 0.3s): compressed fade (80ms)
-        tags_compact = generate_kinetic_tags(2.0, voice_gap_seconds=0.1)
-        self.assertIn(r"\fad(80,80)", tags_compact)
-
-        # Normal Mode (0.3s <= T_gap <= 1.0s): baseline fade (150ms)
-        tags_normal = generate_kinetic_tags(2.0, voice_gap_seconds=0.5)
-        self.assertIn(r"\fad(150,150)", tags_normal)
-
-        # Spacious/Cinematic Mode (T_gap > 1.0s): extended fade (300ms)
-        tags_spacious = generate_kinetic_tags(2.0, voice_gap_seconds=1.5)
-        self.assertIn(r"\fad(300,300)", tags_spacious)
+    def test_manual_fade_is_not_overridden_by_gap_classification(self) -> None:
+        # The voice-gap threshold is a validation budget, not a hidden
+        # switch to three fixed fade-duration presets.
+        for gap in (0.1, 0.5, 1.5):
+            tags = generate_kinetic_tags(
+                2.0, fade_in_ms=640, fade_out_ms=430,
+                voice_gap_seconds=gap,
+            )
+            self.assertIn(r"\\fad(640,430)", tags)
 
     def test_audio_aware_fade_uses_silence_outside_pcm_voice(self) -> None:
         entry1 = SimpleNamespace(
