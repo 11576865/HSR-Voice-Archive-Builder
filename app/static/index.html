@@ -9193,6 +9193,21 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
   });
 });
 
+// Real ASS appearance values must have visible feedback even before the
+// user manually enables live FFmpeg preview. Debounce until a committed
+// change to avoid a subprocess for each slider pointer movement.
+function scheduleCommittedAppearancePreview(){
+  if(!currentProject?.root||document.body.dataset.workspace!=='layout')return;
+  liveRealPreviewArmed=true;
+  const status=document.getElementById('libassPreviewStatus');
+  if(status){status.textContent='正在按已提交的外观参数生成真实 FFmpeg/libass 预览…';status.className='small muted';}
+  queueLiveRealPreview();
+}
+['prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevEnableCard',
+ 'prevCardOpacity','prevEnableOutline'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',scheduleCommittedAppearancePreview);
+});
+
 ['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevAudioAwareFade','prevEnableSoftEntry','prevEnableArchiveHud'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',()=>{
     previewPreset='custom';
