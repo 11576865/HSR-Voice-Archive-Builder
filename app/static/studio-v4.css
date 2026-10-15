@@ -241,3 +241,37 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.s
 @media(prefers-reduced-motion:reduce){
   #subtitleLayoutPreviewCard *{scroll-behavior:auto!important}
 }
+
+
+/* Studio V4 follow-up: the bilingual region share is a primary layout
+   parameter, NOT an obscure advanced or hidden touchscreen slider. */
+#subtitleLayoutPreviewCard .studio-region-share{
+  display:flex!important;justify-content:space-between;align-items:center;
+  flex-wrap:wrap;gap:8px;padding:12px;margin:0 0 5px!important;
+  background:#1b344b!important;border:1px solid #5685aa!important;
+  border-radius:8px!important;
+}
+#subtitleLayoutPreviewCard .studio-region-share label{
+  font-weight:730!important;font-size:13px!important;margin:0!important;
+}
+#subtitleLayoutPreviewCard #prevPrimaryShareVal{
+  font-weight:750!important;font-size:18px!important;color:#c1e7ff!important;
+  font-variant-numeric:tabular-nums;
+}
+#subtitleLayoutPreviewCard #prevPrimaryShare{
+  display:block!important;width:100%!important;min-height:30px!important;
+  touch-action:pan-y;
+  accent-color:#82b9ef;
+}
+@media(pointer:coarse){
+  #subtitleLayoutPreviewCard .studio-region-share + #prevPrimaryShare{
+    display:block!important;min-height:44px!important;
+  }
+  #subtitleLayoutPreviewCard #prevPrimaryShare + .hsr-touch-stepper{
+    display:grid!important;
+  }
+}
+/* Purely technical legend; imported family names are already in font browser. */
+#subtitleLayoutPreviewCard #projectFontList{display:none!important}
+#subtitleLayoutPreviewCard #previewSvg.hidden,
+#subtitleLayoutPreviewCard #assCanvasPreview.hidden{display:none!important}
