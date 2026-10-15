@@ -49,6 +49,42 @@ class LibassInkSolverTests(unittest.TestCase):
             with self.assertRaisesRegex(InkProbeUnavailable, "FFmpeg"):
                 validate_real_ink(candidate, cfg, SafeArea())
 
+    def test_explicit_ass_preview_captures_verified_reflow_and_shrink(self):
+        from subtitle_layout.libass_ink import InkVerdict
+        entry = SimpleNamespace(
+            english="Real libass decides the subtitle line size",
+            chinese="真实渲染决定断行",
+            start_seconds=0.0, display_end_seconds=3.0,
+        )
+        cfg = SubtitleRenderConfig(
+            primary_font="DejaVu Sans", chs_font="DejaVu Sans",
+            enable_kinetic=False, verify_libass_layout=True,
+        )
+        evidence = {}
+        def validate(candidate, *_):
+            accept = candidate.scale_factor <= 0.95
+            return InkVerdict(
+                accept, None if accept else "LIBASS_HORIZONTAL_OVERFLOW",
+                InkBounds(120, 200, 1800, 620) if accept else None,
+                InkBounds(200, 680, 1700, 840) if accept else None,
+                1.0, 1.0,
+            )
+        with patch("subtitle_layout.ass_writer.validate_real_ink",
+                   side_effect=validate):
+            output = render_ass([entry], config=cfg, layout_capture=evidence)
+        self.assertIn("Dialogue:", output)
+        self.assertEqual(evidence["evidence"], "libass-validated-ass-plan")
+        self.assertEqual(evidence["scale_percent"], 95)
+        for lines in (evidence["primary_lines"], evidence["chs_lines"]):
+            self.assertTrue(lines)
+            for line in lines:
+                self.assertGreater(line["measured_width"], 0)
+                self.assertGreater(line["line_height"], 0)
+                self.assertEqual(line["bbox"]["x_max"] - line["bbox"]["x_min"],
+                                 line["measured_width"])
+                self.assertEqual(line["bbox"]["y_max"] - line["bbox"]["y_min"],
+                                 line["line_height"])
+
     def test_real_project_export_uses_verified_ink_not_svg(self):
         cfg = SubtitleRenderConfig(
             primary_font="DejaVu Sans",
