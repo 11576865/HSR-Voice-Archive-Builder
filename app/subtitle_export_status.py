@@ -18,7 +18,7 @@ EXPORT_RECEIPT_NAME = "subtitle_export_receipt.json"
 INPUT_NAMES = (
     "manifest.json",
     "subtitles_overrides.json",
-    "subtitle_timing_overrides.json",
+    # Legacy display-time overrides no longer affect either artifact.
 )
 SRT_NAME = "HSR_Voice_Archive.srt"
 ASS_NAME = "HSR_Voice_Archive.ass"
