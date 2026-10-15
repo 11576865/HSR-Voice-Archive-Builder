@@ -92,7 +92,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn('function commitStudioShare(value)',html)
         self.assertIn("const svg=document.getElementById('previewSvg')",html)
         self.assertIn("canvas.getContext?.('2d')?.clearRect",html)
-        self.assertIn("img.removeAttribute('src')",html)
+        self.assertIn("img.removeAttribute?.('src')",html)
         self.assertIn("fontChoiceSaved=false",html)
         self.assertIn("if(!fontChoiceSaved&&field",html)
         self.assertNotIn('id="projectFontRefreshBtn"',html)
