@@ -292,7 +292,7 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         enable_multi_layer_outline=bool(config.subtitle_enable_multi_layer_outline),
         enable_kinetic=bool(config.subtitle_enable_kinetic),
         fade_in_ms=max(0, int(config.subtitle_fade_in_ms)),
-        fade_out_ms=max(0, int(config.subtitle_fade_out_ms)),
+        fade_out_ms=max(0, int(config.subtitle_fade_in_ms)),
         use_audio_aware_fade=bool(config.subtitle_use_audio_aware_fade),
         outline_width=max(0.0, min(24.0, float(config.subtitle_outline_width))),
         shadow_depth=max(0.0, min(24.0, float(config.subtitle_shadow_depth))),
