@@ -8,6 +8,7 @@ from .font_scale import (
 )
 from .fonts import resolve_font_path, validate_ass_font_name
 from .layout_solver import SolvedLayout, SubtitleLinePos, solve_subtitle_layout
+from .collision import central_ink_reserve
 from .measure import measure_line_height, measure_text_width
 from .safe_area import SafeArea
 
@@ -75,6 +76,10 @@ def preview_subtitle_layout(
     margin_left_percent: float = 0.03,
     margin_top_percent: float = 0.05,
     min_central_gap: float = 20.0,
+    outline_width: float = 3.0,
+    shadow_depth: float = 2.0,
+    blur_radius: float = 0.0,
+    enable_multi_layer_outline: bool = False,
     primary_region_share: float = 0.60,
     chs_font: str = "汉仪旗黑",
     primary_font: str = "Noto Sans",
@@ -100,6 +105,9 @@ def preview_subtitle_layout(
         margin_bottom_percent=margin_top_percent,
     )
 
+    ink_padding = central_ink_reserve(
+        outline_width, shadow_depth, blur_radius, enable_multi_layer_outline,
+    )
     solved: SolvedLayout = solve_subtitle_layout(
         english_text=english_text,
         chinese_text=chinese_text,
@@ -109,6 +117,7 @@ def preview_subtitle_layout(
         base_primary_size=int(base_primary_size),
         safe_area=safe_area,
         min_central_gap=min_central_gap,
+        central_ink_padding=ink_padding,
         primary_region_share=primary_region_share,
         chs_font_path=chs_font_path,
         primary_font_path=primary_font_path,
@@ -125,10 +134,11 @@ def preview_subtitle_layout(
         font_path=chs_font_path,
     )
 
-    available_height = max(0.0, safe_area.max_printable_height - min_central_gap)
+    anchor_gap = min_central_gap + ink_padding
+    available_height = max(0.0, safe_area.max_printable_height - anchor_gap)
     primary_region_height = available_height * max(0.20, min(0.80, float(primary_region_share)))
     y_center_top = round(safe_area.y_min + primary_region_height)
-    y_center_bottom = round(y_center_top + min_central_gap)
+    y_center_bottom = round(y_center_top + anchor_gap)
     y_center = (y_center_top + y_center_bottom) / 2.0
 
     primary_height = float(primary_block["height"])
@@ -171,6 +181,9 @@ def preview_subtitle_layout(
             "margin_top_percent": safe_area.margin_top_percent,
         },
         "central_gap": {
+            "visible_min_gap": min_central_gap,
+            "ink_padding": ink_padding,
+            "anchor_gap": anchor_gap,
             "y_center": y_center,
             "y_top": y_center_top,
             "y_bottom": y_center_bottom,
