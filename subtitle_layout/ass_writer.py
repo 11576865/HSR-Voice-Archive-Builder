@@ -870,44 +870,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
 
-            chs_alignments = word_alignments if source_language.startswith("zh") else None
-            if use_karaoke and karaoke_mode in {"k", "kf"}:
-                chs_text = format_multiline_karaoke(
-                    layout.chs_lines,
-                    karaoke_duration_sec if karaoke_timing == "cue" else duration_sec,
-                    word_alignments=chs_alignments,
-                    is_cjk=True,
-                    mode=karaoke_mode,
-                    timing=karaoke_timing,
-                    unit=karaoke_unit,
-                    speed_ms=karaoke_speed_ms,
-                    font_path=chs_font_path,
-                )
-                if karaoke_offset_cs and re.search(r"\{\\k(?:f)?\d+", chs_text):
-                    chs_text = f"{{\\kt{karaoke_offset_cs}}}" + chs_text
-            else:
-                chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
+            # Karaoke progression belongs exclusively to the spoken source
+            # (Primary) line. Translated Chinese must stay legible and static,
+            # independent of k/kf/clip/aligned/fixed/cue modes. Motion and
+            # fade envelopes still apply to the complete bilingual composition.
+            chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
-            if use_karaoke and karaoke_mode == "clip" and len(layout.chs_lines) == 1:
-                clip_tags = generate_clip_karaoke_overlay(
-                    layout.chs_lines[0],
-                    duration_sec,
-                    chs_alignments,
-                    font_path=chs_font_path,
-                    time_offset_ms=karaoke_offset_cs * 10,
-                )
-                if clip_tags:
-                    clip_text = getattr(layout.chs_lines[0], "text", str(layout.chs_lines[0]))
-                    overlay = (
-                        f"{pos_prefix}\\fs{pos0.font_size}\\1c&H00E8FF&"
-                        f"\\bord0\\shad0{clip_tags}}}{clip_text}"
-                    )
-                    dialogues.append(
-                        f"Dialogue: 4,{start_time},{end_time},CHS,,0,0,0,,{overlay}"
-                    )
 
     if overflow_report_path is not None:
         _atomic_write(
