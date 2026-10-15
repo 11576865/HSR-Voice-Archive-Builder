@@ -60,6 +60,8 @@ class ProjectConfig:
     subtitle_margin_vertical_percent: float = 0.05
     subtitle_min_central_gap: float = 20.0
     subtitle_primary_region_share: float = 0.60
+    subtitle_primary_color: str = "#DCEBFF"
+    subtitle_chs_color: str = "#FFFFFF"
     subtitle_enable_karaoke: bool = False
     subtitle_karaoke_mode: str = "k"
     subtitle_karaoke_timing: str = "aligned"  # aligned | fixed | cue
