@@ -17,6 +17,7 @@ from subtitle_layout import (
     split_chinese_semantic,
 )
 from subtitle_layout.measure import clear_measure_cache
+from subtitle_layout.breaker import _get_candidate_split_points
 
 
 class SubtitleLayoutTests(unittest.TestCase):
@@ -256,6 +257,31 @@ class SubtitleLayoutTests(unittest.TestCase):
         lines = split_res.split(r"\N")
         self.assertFalse(lines[1].startswith("！"))
         self.assertGreaterEqual(len(lines[1]), 4)
+
+    def test_contraction_apostrophe_is_not_line_break_candidate(self) -> None:
+        # A real Termux FFmpeg example showed That's as That' / s.
+        for text in ("That's how it works", "It's time to wait",
+                     "John's record", "That’s how it works"):
+            apostrophe = text.index("'") if "'" in text else text.index("’")
+            self.assertNotIn(apostrophe + 1, _get_candidate_split_points(text))
+
+    def test_ass_writer_and_solver_share_explicit_line_plan(self) -> None:
+        # The geometry solver and export writer must at least agree on
+        # explicit line text; raster metrics are proved only by libass.
+        text = ("Wantonly editing memories or burning them all up without a second "
+                "thought... That's how unbelievably banal my colleagues often are. "
+                "But I like to wait.")
+        translation = "将记忆随意剪辑，抑或不由分说地将它们烧尽。我的同僚们往往就是这般俗不可耐。"
+        layout = solve_subtitle_layout(text, translation)
+        self.assertFalse(layout.failed)
+        lines = [line.text for line in layout.primary_lines]
+        self.assertTrue(lines)
+        self.assertFalse(any(line.endswith(("'", "’")) for line in lines[:-1]))
+        ass = render_ass([SimpleNamespace(
+            english=text, chinese=translation, start_seconds=0.0,
+            display_end_seconds=3.0,
+        )], source_language="en", target_language="zh-CN")
+        self.assertIn(r"\N".join(lines), ass)
 
     def test_font_size_stability_across_sentences(self) -> None:
         # Verify base font sizes remain strictly consistent (52 for CHS, 42 for Primary)

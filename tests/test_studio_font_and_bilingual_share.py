@@ -118,6 +118,18 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn('id="projectFontImporter"',html)
         self.assertIn("generateButton.hidden=!provider.available",html)
 
+    def test_actual_ass_is_the_authoritative_layout_editing_surface(self):
+        html=(ROOT/"app/static/index.html").read_text("utf-8")
+        self.assertIn("let lastRenderedAssIdentity = null;",html)
+        self.assertIn("lastRenderedAssIdentity=identity;",html)
+        self.assertIn("lastRenderedAssIdentity!==currentLibassPreviewIdentity()",html)
+        self.assertIn("queueLiveRealPreview();",html)
+        self.assertIn("liveRealPreviewArmed=true;",html)
+        self.assertIn("几何估算通过 · 非真实验收",html)
+        self.assertIn("不代表全项目通过",html)
+        self.assertIn("辅助几何（非成品）",html)
+        self.assertIn("font-weight=\"400\"",html)
+
     def test_persistent_share_wired_both_server_flavors_and_final_export(self):
         project=(ROOT/"app/project.py").read_text("utf-8")
         backend=(ROOT/"app/server.py").read_text("utf-8")
