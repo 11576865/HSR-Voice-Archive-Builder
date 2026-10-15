@@ -45,6 +45,66 @@ def _input_identity(output: Path, *, include_fonts: bool, settings: dict,
     return hashlib.sha256(json.dumps(evidence, sort_keys=True).encode()).hexdigest()
 
 
+
+def publish_generated_ass_complete_mkv(
+    config: ProjectConfig, output: Path, report_progress,
+) -> dict[str, object]:
+    """Finish an explicit ASS regeneration by publishing its final MKV.
+
+    Called within the already-serialized ass-export job. Never report success
+    for a loose source .ass while the previous MKV still carries old subtitles.
+    ArchiveBundleExporter verifies staged streams and atomically replaces MKV;
+    seal_complete_delivery removes the temporary working ASS/SRT/FLAC only
+    AFTER the replacement passes its source-receipt checks.
+    """
+    if config.delivery_mode != "complete":
+        raise ValueError("Complete MKV publication requires complete delivery mode")
+    status = bundle_export_status(output)
+    if not status["can_generate"]:
+        raise ValueError(
+            "新字幕尚不能安全封装进 MKV：" + "；".join(status["blockers"])
+        )
+    settings = previous_bundle_settings(output)
+    spec = settings["background_spec"]
+    if spec["mode"] == "image" and not settings["image_saved"]:
+        raise ValueError("已保存的 MKV 图片背景不可用，旧 MKV 保持不变")
+    chapter_enabled = bool(getattr(config, "generate_chapter_flac", False))
+    if chapter_enabled and not (
+        output / "chapter_flac" / "chapter_flac_manifest.json"
+    ).is_file():
+        raise ValueError("章节 FLAC 缺失，拒绝替换现有 MKV")
+    from .subtitles import subtitle_render_config
+    report_progress("prepare-bundle", "正在准备 MKV 的已有音视频来源", 0, 0)
+    prepare_complete_sources(
+        output,
+        source_language=config.source_text_language or "en",
+        target_language=config.target_language or "zh-CN",
+        render_config=subtitle_render_config(config),
+    )
+    background = load_previous_bundle_image(output) if spec["mode"] == "image" else None
+    width, height = RESOLUTIONS[spec["resolution"]]
+    result = ArchiveBundleExporter(width=width, height=height).export(
+        output / "continuous.flac",
+        output / "HSR_Voice_Archive.ass",
+        output / "HSR_Voice_Archive_Bundle.mkv",
+        fonts_dir=font_asset_directory(output),
+        include_fonts=settings["attach_project_fonts"],
+        background_color=settings["background_color"],
+        background_image=background, background_spec=spec,
+        include_chapter_flac=chapter_enabled,
+        require_current_ass=True,
+        progress=lambda current, total, message: report_progress(
+            "encode-bundle", message, current, total,
+        ),
+    )
+    report_progress("verify-bundle", "正在封存已校验的 MKV 新字幕轨", 0, 0)
+    seal_complete_delivery(output)
+    final = bundle_export_status(output)
+    if final["state"] != "current":
+        raise RuntimeError("MKV 更新后未达到已验证状态：" + final["message"])
+    return result
+
+
 def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     """Enqueue at most once for each changed certified source generation.
 
