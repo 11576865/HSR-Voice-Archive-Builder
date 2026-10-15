@@ -127,6 +127,12 @@ class WordApiGenerationTests(unittest.TestCase):
                 self.assertIn('"whisper-api-words"', code)
                 self.assertIn("confirm_audio_upload", code)
                 self.assertIn("generate_api_word_alignments", code)
+        lite=(root / "app/lite_server.py").read_text("utf-8")
+        get_handler=lite.split("def _handle_api_get(self, path: str) -> None:",1)[1].split("def _handle_api_post(self, path: str, data: dict[str, str]) -> None:",1)[0]
+        post_handler=lite.split("def _handle_api_post(self, path: str, data: dict[str, str]) -> None:",1)[1]
+        self.assertNotIn('path.endswith("/word-alignments/generate")',get_handler)
+        self.assertIn('path.endswith("/word-alignments/generate")',post_handler)
+        self.assertIn('"api_provider": api_word_alignment_status()',get_handler)
         html = (root / "app/static/index.html").read_text("utf-8")
         self.assertIn('id="generateApiWordAlignmentBtn"', html)
         self.assertIn("window.confirm(", html)
