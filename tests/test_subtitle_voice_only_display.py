@@ -1,0 +1,99 @@
+"""Silence between recorded voice clips must contain no subtitle events."""
+from __future__ import annotations
+
+import re
+import tempfile
+import unittest
+from pathlib import Path
+from types import SimpleNamespace
+
+from app.subtitle_timing import source_subtitle_window
+from app.subtitles import _subtitle_adapters
+from app.timeline import resolve_timeline, write_srt
+from subtitle_layout.ass_writer import render_ass
+from subtitle_layout.config import SubtitleRenderConfig
+
+
+class VoiceOnlySubtitleWindowTests(unittest.TestCase):
+    def test_timeline_retains_actual_silence_but_does_not_hold_subtitles(self):
+        report = resolve_timeline(
+            [
+                {"index": 1, "filename": "first.wav", "group": "a", "source_frames": 1000},
+                {"index": 2, "filename": "second.wav", "group": "b", "source_frames": 2000},
+            ],
+            sample_rate=1000, intro_gap=1.0,
+            same_group_gap=1.5, group_gap=3.0,
+        )
+        a, b = report["entry_timings"]
+        self.assertEqual(a["start_sample"], 1000)
+        self.assertEqual(a["audio_end_sample"], 2000)
+        self.assertEqual(a["display_end_sample"], 2000)
+        self.assertEqual(a["next_start_sample"], 5000)
+        self.assertEqual(b["display_end_sample"], b["audio_end_sample"])
+        self.assertTrue(any(
+            gap["type"] == "gap" and gap["start_sample"] == 2000
+            and gap["end_sample"] == 5000
+            for gap in report["segments"]
+        ))
+
+    def test_previous_project_legacy_display_hold_is_ignored_by_ui_srt_and_ass(self):
+        source = [
+            {"index": 1, "start_seconds": 1.0,
+             "audio_end_seconds": 2.0, "display_end_seconds": 4.0,
+             "source_text": "Hello", "target_text": "你好"},
+            {"index": 2, "start_seconds": 5.0,
+             "audio_end_seconds": 6.0, "display_end_seconds": 7.0,
+             "source_text": "Next", "target_text": "下一条"},
+        ]
+        self.assertEqual(source_subtitle_window(source[0]), (1.0, 2.0))
+        self.assertEqual(source[0]["display_end_seconds"], 4.0)  # no source mutation
+        adapters = _subtitle_adapters(source)
+        self.assertEqual(
+            [(x.start_seconds, x.display_end_seconds) for x in adapters],
+            [(1.0, 2.0), (5.0, 6.0)],
+        )
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "voice-only.srt"
+            write_srt(adapters, path)
+            srt = path.read_text(encoding="utf-8-sig")
+        self.assertIn("00:00:01,000 --> 00:00:02,000", srt)
+        self.assertIn("00:00:05,000 --> 00:00:06,000", srt)
+        self.assertNotIn("00:00:04,000", srt)
+
+    def test_ass_kinetic_and_generated_karaoke_never_enter_silent_gap(self):
+        cfg = SubtitleRenderConfig(
+            enable_karaoke=True,
+            karaoke_mode="k",
+            karaoke_timing="cue",
+            karaoke_unit="character",
+            enable_kinetic=True,
+            use_audio_aware_fade=True,
+            fade_in_ms=200, fade_out_ms=200,
+            verify_libass_layout=False,
+        )
+        entries = [
+            SimpleNamespace(english="Hello", chinese="你好",
+                            start_seconds=1.0, audio_end_seconds=2.0,
+                            display_end_seconds=4.0),
+            SimpleNamespace(english="Next", chinese="下一条",
+                            start_seconds=5.0, audio_end_seconds=6.0,
+                            display_end_seconds=7.0),
+        ]
+        ass = render_ass(entries, config=cfg)
+        dialogues = [x for x in ass.splitlines() if x.startswith("Dialogue:")]
+        self.assertTrue(dialogues)
+        for line in dialogues:
+            parts = line.split(",", 3)
+            self.assertIn(
+                (parts[1], parts[2]),
+                {("0:00:01.00", "0:00:02.00"),
+                 ("0:00:05.00", "0:00:06.00")},
+            )
+        self.assertFalse(any("0:00:04." in line for line in dialogues))
+        self.assertFalse(any("0:00:07." in line for line in dialogues))
+        english = next(line for line in dialogues if "Hello" in line)
+        self.assertEqual(sum(int(t) for t in re.findall(r"\{\\k(\d+)\}", english)), 100)
+
+
+if __name__ == "__main__":
+    unittest.main()
