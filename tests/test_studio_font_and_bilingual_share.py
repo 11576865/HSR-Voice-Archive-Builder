@@ -114,7 +114,8 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertNotIn('#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel,',html)
         self.assertNotIn("renderCanvasSubtitleOverlay(data);",html)
         self.assertIn("#assCanvasPreview{display:none!important}",css)
-        self.assertIn("studioV4Timing[open] #layoutTimelinePanel",css)
+        self.assertNotIn("studioV4Timing[open] #layoutTimelinePanel",css)
+        self.assertIn('[data-studio-mode="style"] #layoutTimelinePanel{display:none!important}',css)
         self.assertIn('id="projectFontImporter"',html)
         self.assertIn("generateButton.hidden=!provider.available",html)
 
