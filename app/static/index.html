@@ -9051,7 +9051,7 @@ async function renderHsrEffectVideo(){
     });
     if(!stillCurrent())return;
     video.classList.remove('hidden');
-    setPreviewEvidence(footage?'video-footage':backgroundImage?'video-image':'video');
+    setPreviewEvidence(footage?'video-footage':(backgroundImage||usesReference)?'video-image':'video');
     setHsrEffectOperation('ready','视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
     // The render trigger lives in the Inspector, but playback lives on stage.
     // Reveal the successful result so the action is not perceived as inert.
