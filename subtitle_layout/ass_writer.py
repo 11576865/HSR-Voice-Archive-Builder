@@ -333,8 +333,25 @@ def format_generated_karaoke(
         return r"\N".join(line_texts)
     if timing == "cue":
         total_cs = max(unit_count, int(round(max(0.0, duration_sec) * 100)))
-        base, remainder = divmod(total_cs, unit_count)
-        ticks = [base + (1 if n < remainder else 0) for n in range(unit_count)]
+        if unit == "pixel":
+            widths = [
+                max(0.01, float(measure_text_width(
+                    part, int(getattr(line, "font_size", 42)), font_path
+                )))
+                for line, items in zip(lines, groups) for part in items
+            ]
+            remaining = total_cs - unit_count
+            quotas = [remaining * width / sum(widths) for width in widths]
+            extra = [int(q) for q in quotas]
+            leftover = remaining - sum(extra)
+            for index in sorted(range(unit_count),
+                                key=lambda i: (quotas[i] - extra[i], -i),
+                                reverse=True)[:leftover]:
+                extra[index] += 1
+            ticks = [1 + value for value in extra]
+        else:
+            base, remainder = divmod(total_cs, unit_count)
+            ticks = [base + (1 if n < remainder else 0) for n in range(unit_count)]
     elif unit == "pixel":
         # ms per 100px of actual measured text width: constant sweep speed.
         ticks = [
