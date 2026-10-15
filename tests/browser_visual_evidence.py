@@ -387,21 +387,21 @@ def desktop_check(browser, base_url, output, report):
     ensure(not page.locator(".hsr-preview-media-disclosure").evaluate("(el) => el.open"),
            "Optional video upload settings should start collapsed")
     page.locator(".hsr-preview-media-disclosure > summary").click()
-    # An image must reach the actual video endpoint, rather than being used
-    # merely as decorative background in the browser's geometry preview.
-    png=b"\x89PNG\r\n\x1a\n"+b"browser-fixture"
-    page.locator("#effectBackgroundImageFile").set_input_files({
-        "name": "custom-image.png", "mimeType": "image/png", "buffer": png
-    })
+    ensure(page.locator("#effectBackgroundImageFile").count()==0,
+           "Alternate studio image picker returned")
+    ensure(page.locator("#effectPreviewBackgroundColor").count()==0,
+           "Alternate studio color picker returned")
+    page.locator("#prevEnableKinetic").uncheck()
     ensure(page.locator("#hsrEffectOperationStatus").get_attribute("data-phase")=="stale",
-           "Changing media retained false success state")
+           "Effect changes retained false successful playback")
     page.locator("#previewVideoBtn").click()
     page.wait_for_function("""() => {
       const video=document.getElementById('libassVideoPreview');
-      return video.readyState>=2 && document.getElementById('videoPreviewStatus')
-        .textContent.includes('本地背景图片');
+      return video.readyState>=2 &&
+        document.querySelector('.layout-preview-evidence')
+          .dataset.previewEvidence==='video-image';
     }""",timeout=20000)
-    screenshot(page, output, "desktop_image_background_effect_preview")
+    screenshot(page, output, "desktop_red_cloud_effect_preview")
     # File picker must forward actual source bytes and update evidence identity.
     page.locator("#effectFootageFile").set_input_files({
         "name": "user-footage.webm", "mimeType": "video/webm", "buffer": fixture_video
