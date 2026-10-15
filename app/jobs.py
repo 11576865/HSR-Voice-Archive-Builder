@@ -1,12 +1,13 @@
 from __future__ import annotations
 
 import json
+from contextlib import contextmanager
 import threading
 import traceback
 import uuid
 from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 from .project import STATE_DIR, atomic_write_json
 
@@ -45,6 +46,8 @@ class Job:
 
 _LOCK = threading.Lock()
 _JOBS: dict[str, Job] = {}
+# Synchronous HTTP exports must reserve the same writer slot as async jobs.
+_RESERVED_PROJECT_WRITERS: dict[str, str] = {}
 
 
 def _persist_locked() -> None:
@@ -101,11 +104,49 @@ def assert_no_active_build() -> None:
             )
 
 
+@contextmanager
+def reserve_project_output_writer(project_root: str, *, kind: str = "ass-refresh") -> Iterator[None]:
+    """Atomically exclude asynchronous jobs and other synchronous export requests.
+
+    Acquiring this reservation happens BEFORE dispatching expensive work to a
+    threadpool. It is released even when rendering fails or the request exits.
+    The reservation is process-local, matching the scope of the jobs journal.
+    """
+    target = str(project_root or "").strip()
+    if not target:
+        raise ValueError("Project root is required for an output writer")
+    with _LOCK:
+        incumbent = _RESERVED_PROJECT_WRITERS.get(target)
+        if not incumbent:
+            incumbent = next(
+                (existing.kind for existing in _JOBS.values()
+                 if existing.project_root == target
+                 and existing.kind in PROJECT_OUTPUT_WRITERS
+                 and existing.state in {"queued", "running"}),
+                None,
+            )
+        if incumbent:
+            raise RuntimeError(
+                f"同一项目已有输出任务正在运行（{incumbent}），请等待完成，"
+                "避免 FLAC/ASS/MKV 成品被并发覆盖"
+            )
+        _RESERVED_PROJECT_WRITERS[target] = kind
+    try:
+        yield
+    finally:
+        with _LOCK:
+            _RESERVED_PROJECT_WRITERS.pop(target, None)
+
+
 def assert_project_idle(project_root: str) -> None:
     target = str(project_root or "").strip()
     if not target:
         return
     with _LOCK:
+        if target in _RESERVED_PROJECT_WRITERS:
+            raise RuntimeError(
+                f"项目「{target}」的字幕输出仍在运行，不能同时修改或删除该项目"
+            )
         for job in _JOBS.values():
             if job.project_root == target and job.state in {"queued", "running"}:
                 raise RuntimeError(
@@ -138,6 +179,12 @@ def create_job(
                     "已有构建任务正在运行，请等待它完成后再开始新的构建"
                 )
         if kind in PROJECT_OUTPUT_WRITERS and job.project_root:
+            reserved = _RESERVED_PROJECT_WRITERS.get(job.project_root)
+            if reserved:
+                raise RuntimeError(
+                    "同一项目已有输出任务正在运行（" + reserved +
+                    "），请等待完成，避免 FLAC/ASS/MKV 成品被并发覆盖"
+                )
             for existing in _JOBS.values():
                 if (existing.project_root == job.project_root
                         and existing.kind in PROJECT_OUTPUT_WRITERS
