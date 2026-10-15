@@ -332,7 +332,11 @@ def format_generated_karaoke(
     if unit_count == 0:
         return r"\N".join(line_texts)
     if timing == "cue":
-        total_cs = max(unit_count, int(round(max(0.0, duration_sec) * 100)))
+        # A sub-second cue can contain more graphemes than centiseconds.
+        # Never extend generated tags beyond the actual audio-derived event.
+        # Zero-length \k durations are legal in ASS and cause an immediate
+        # step, instead of silently fabricating additional display time.
+        total_cs = max(0, int(round(max(0.0, duration_sec) * 100)))
         if unit == "pixel":
             widths = [
                 max(0.01, float(measure_text_width(
@@ -340,15 +344,13 @@ def format_generated_karaoke(
                 )))
                 for line, items in zip(lines, groups) for part in items
             ]
-            remaining = total_cs - unit_count
-            quotas = [remaining * width / sum(widths) for width in widths]
-            extra = [int(q) for q in quotas]
-            leftover = remaining - sum(extra)
+            quotas = [total_cs * width / sum(widths) for width in widths]
+            ticks = [int(q) for q in quotas]
+            leftover = total_cs - sum(ticks)
             for index in sorted(range(unit_count),
-                                key=lambda i: (quotas[i] - extra[i], -i),
+                                key=lambda i: (quotas[i] - ticks[i], -i),
                                 reverse=True)[:leftover]:
-                extra[index] += 1
-            ticks = [1 + value for value in extra]
+                ticks[index] += 1
         else:
             base, remainder = divmod(total_cs, unit_count)
             ticks = [base + (1 if n < remainder else 0) for n in range(unit_count)]
