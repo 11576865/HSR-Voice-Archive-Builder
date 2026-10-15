@@ -315,8 +315,8 @@ def desktop_check(browser, base_url, output, report):
            "Preview has only one fixed red-clouds background")
     # Word timestamp diagnostics live inside the one Effects Karaoke section.
     # Expand the user-visible owner before checking its nested controls.
-    parent=page.locator('details.layout-inspector-section[data-studio-scope="effects"]')
-      .filter(has=page.locator('#hsrKaraokeReadiness'))
+    parent=page.locator('details.layout-inspector-section[data-studio-scope="effects"]').filter(
+        has=page.locator('#hsrKaraokeReadiness'))
     ensure(parent.count()==1,"Word timing has lost its single Effects owner")
     parent.locator(":scope > summary").click()
     ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
