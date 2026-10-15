@@ -974,6 +974,8 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
+                     "X-HSR-Preview-Audio": "project" if voice else ("footage" if source_bytes is not None else "none"),
+                     "X-HSR-Preview-Duration": f'{float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)):.3f}',
                      "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
         )
     except Exception as exc:
