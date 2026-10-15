@@ -3696,15 +3696,11 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 平滑淡入淡出</label>
             <div style="display:flex;justify-content:space-between">
-              <label for="prevFadeIn" style="margin:0">淡入时长</label>
+              <label for="prevFadeIn" style="margin:0">淡入／淡出共同时间</label>
               <span id="prevFadeInVal" class="small muted">200 ms</span>
             </div>
             <input type="number" id="prevFadeIn" min="0" value="200" step="10" inputmode="numeric">
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevFadeOut" style="margin:0">淡出时长</label>
-              <span id="prevFadeOutVal" class="small muted">200 ms</span>
-            </div>
-            <input type="number" id="prevFadeOut" min="0" value="200" step="10" inputmode="numeric">
+            <input type="hidden" id="prevFadeOut" value="200">
             <div id="hsrFadeBudgetStatus" class="small muted" role="status" aria-live="polite">淡出 + 后淡入不得超过最短相邻语音间隔；超过 60% 将提示警告。</div>
             <label class="check"><input type="checkbox" id="prevEnableSoftEntry"> 柔和进入动画</label>
             <div style="display:flex;justify-content:space-between">
@@ -7391,7 +7387,7 @@ async function importWordAlignmentFile(file){
 const layoutStyleControlIds=[
   'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV',
   'prevEnableKaraoke','prevKaraokeMode','prevKaraokeTiming','prevKaraokeUnit','prevKaraokeSpeed','prevEnableCard','prevEnableOutline',
-  'prevEnableKinetic','prevFadeIn','prevFadeOut',
+  'prevEnableKinetic','prevFadeIn',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
   'prevEnableSoftEntry','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs',
   'prevEnableArchiveHud','prevArchiveHudSize','prevArchiveHudOpacity'
@@ -7479,7 +7475,7 @@ function syncDependentStyleControls(){
   const dependencies=[
     ['prevEnableCard',['prevCardOpacity'],'请先启用半透明底板'],
     ['prevEnableSoftEntry',['prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs'],'请先启用柔和进入动画'],
-    ['prevEnableKinetic',['prevFadeIn','prevFadeOut'],'请先启用平滑淡入淡出'],
+    ['prevEnableKinetic',['prevFadeIn'],'请先启用平滑淡入淡出'],
   ];
   for(const [toggleId,ids,hint] of dependencies){
     const active=!!document.getElementById(toggleId)?.checked;
@@ -7503,9 +7499,8 @@ function hsrFadeGapMs(){
 function syncHsrFadeBudget(message=''){
   const status=document.getElementById('hsrFadeBudgetStatus');
   const kinetic=!!document.getElementById('prevEnableKinetic')?.checked;
-  const fadeIn=Number(document.getElementById('prevFadeIn')?.value??0);
-  const fadeOut=Number(document.getElementById('prevFadeOut')?.value??0);
-  const gap=hsrFadeGapMs(),total=fadeIn+fadeOut;
+  const fade=Number(document.getElementById('prevFadeIn')?.value??0);
+  const gap=hsrFadeGapMs(),total=fade*2;
   const ratio=gap?total/gap:(total>0?Infinity:0);
   if(status){
     status.className='small '+(message?'status-bad':!kinetic?'muted':ratio>1?'status-bad':ratio>0.6?'status-warn':'status-ok');
@@ -7518,9 +7513,7 @@ function syncHsrFadeBudget(message=''){
 }
 function enforceHsrFadeBudget(input){
   if(!input)return true;
-  const other=document.getElementById(input.id==='prevFadeIn'?'prevFadeOut':'prevFadeIn');
   const proposed=Number(input.value),previous=Number(input.dataset.lastValid??'0');
-  const otherValue=Number(other?.value??0);
   if(input.value===''||!Number.isFinite(proposed)||!Number.isInteger(proposed)||proposed<0){
     input.value=String(previous);
     syncHsrFadeBudget('淡入淡出时长必须是非负整数毫秒。');
@@ -7528,12 +7521,14 @@ function enforceHsrFadeBudget(input){
   }
   const gap=hsrFadeGapMs();
   if(document.getElementById('prevEnableKinetic')?.checked &&
-     proposed+otherValue>gap && proposed>previous){
+     proposed*2>gap && proposed>previous){
     input.value=String(previous);
     syncHsrFadeBudget('已阻止增加：淡出 + 后淡入不能超过最短相邻语音静音 '+gap+' ms。');
     return false;
   }
   input.dataset.lastValid=String(proposed);
+  const mirror=document.getElementById('prevFadeOut');
+  if(mirror)mirror.value=String(proposed);
   syncHsrFadeBudget();
   return true;
 }
@@ -7558,7 +7553,7 @@ function subtitleSettingsPayload(){
     enable_multi_layer_outline: !!document.getElementById('prevEnableOutline')?.checked,
     enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked,
     fade_in_ms: parseInt(document.getElementById('prevFadeIn')?.value || '200',10),
-    fade_out_ms: parseInt(document.getElementById('prevFadeOut')?.value || '200',10),
+    fade_out_ms: parseInt(document.getElementById('prevFadeIn')?.value || '200',10),
     use_audio_aware_fade: true,
     outline_width: parseFloat(document.getElementById('prevOutlineWidth')?.value || '3'),
     shadow_depth: parseFloat(document.getElementById('prevShadowDepth')?.value || '2'),
@@ -7609,11 +7604,9 @@ function loadSubtitleLayoutSettings(config){
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
   set('prevFadeIn',config.subtitle_fade_in_ms??200);
-  set('prevFadeOut',config.subtitle_fade_out_ms??200);
-  for(const id of ['prevFadeIn','prevFadeOut']){
-    const input=document.getElementById(id);
-    if(input)input.dataset.lastValid=input.value;
-  }
+  set('prevFadeOut',config.subtitle_fade_in_ms??200);
+  const fadeInput=document.getElementById('prevFadeIn');
+  if(fadeInput)fadeInput.dataset.lastValid=fadeInput.value;
   set('prevOutlineWidth',config.subtitle_outline_width??3);
   set('prevShadowDepth',config.subtitle_shadow_depth??2);
   set('prevBlurRadius',config.subtitle_blur_radius??0);
@@ -8761,7 +8754,6 @@ async function updateLayoutPreview() {
   syncRangeLabel('prevBlurRadius','prevBlurRadiusVal',v=>v.toFixed(1));
   syncRangeLabel('prevCardOpacity','prevCardOpacityVal',v=>Math.round(v)+'%');
   syncRangeLabel('prevFadeIn','prevFadeInVal',v=>Math.round(v)+' ms');
-  syncRangeLabel('prevFadeOut','prevFadeOutVal',v=>Math.round(v)+' ms');
   syncHsrFadeBudget();
   syncRangeLabel('prevSoftEntryScale','prevSoftEntryScaleVal',v=>v.toFixed(1).replace(/\.0$/,'')+'%');
   syncRangeLabel('prevSoftEntryBlur','prevSoftEntryBlurVal',v=>v.toFixed(1));
@@ -9559,7 +9551,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 ['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity','prevKaraokeSpeed'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',queueLiveRealPreview);
   document.getElementById(id)?.addEventListener('input',()=>{
-    if((id==='prevFadeIn'||id==='prevFadeOut')&&!enforceHsrFadeBudget(document.getElementById(id)))return;
+    if(id==='prevFadeIn'&&!enforceHsrFadeBudget(document.getElementById(id)))return;
     previewPreset='custom';
     markSubtitleSettingsDirty();
     invalidateLayoutBatchAudit();
