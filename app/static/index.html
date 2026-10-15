@@ -3692,7 +3692,15 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
             <input type="range" id="prevPrimaryShare" min="20" max="80" value="60" step="1"
                    aria-label="原文区域百分比，剩余百分比分配给中文字幕">
-            <div class="small muted">可直接拖动，或使用下方数字及 ± 按钮。默认原文 60%／中文字幕 40%。</div>
+            <div class="studio-region-actions" role="group" aria-label="双语区域快捷比例">
+              <button type="button" data-share-percent="60" aria-pressed="true">60 / 40</button>
+              <button type="button" data-share-percent="50" aria-pressed="false">50 / 50</button>
+              <button type="button" data-share-percent="40" aria-pressed="false">40 / 60</button>
+              <label for="studioRegionPercent">原文比例
+                <input type="number" id="studioRegionPercent" min="20" max="80" value="60" step="1" inputmode="numeric"> %
+              </label>
+            </div>
+            <div class="small muted">输入原文百分比，剩余分配给中文；真实 ASS 使用相同设置。</div>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevCentralGap" style="margin:0">中央间隔</label>
               <span id="prevCentralGapVal" class="small muted">20 px</span>
@@ -7047,7 +7055,7 @@ function invalidateLibassPreview(){
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
   const img=document.getElementById('libassPreviewImage');
-  if(img)img.classList.add('hidden');
+  if(img){img.classList.add('hidden');img.removeAttribute('src');}
   const hadResult=!!libassPreviewObjectUrl;
   if(libassPreviewObjectUrl){
     URL.revokeObjectURL(libassPreviewObjectUrl);
@@ -7064,7 +7072,8 @@ function showGeometryPreview(){
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
-  document.getElementById('libassPreviewImage')?.classList.add('hidden');
+  const still=document.getElementById('libassPreviewImage');
+  if(still){still.classList.add('hidden');still.removeAttribute('src');}
   liveRealPreviewArmed=false;
   clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
@@ -7151,6 +7160,15 @@ async function renderLibassPreview(){
       });
     }
     if(!stillCurrent())return;
+    // Switch to exactly one visual owner. Old SVG/Canvas glyphs never blend
+    // beneath decoded FFmpeg pixels following a font change.
+    const svg=document.getElementById('previewSvg');
+    if(svg)svg.classList.add('hidden');
+    const canvas=document.getElementById('assCanvasPreview');
+    if(canvas){
+      canvas.classList.add('hidden');canvas.style.display='none';
+      canvas.getContext('2d')?.clearRect(0,0,canvas.width,canvas.height);
+    }
     img.classList.remove('hidden');
     setPreviewEvidence('libass');
     liveRealPreviewArmed=true;
@@ -8506,6 +8524,10 @@ async function updateLayoutPreview() {
   const primaryShare = Number(document.getElementById('prevPrimaryShare')?.value||60);
   const shareLabel=document.getElementById('prevPrimaryShareVal');
   if(shareLabel)shareLabel.textContent=primaryShare+'% / '+(100-primaryShare)+'%';
+  const shareNumber=document.getElementById('studioRegionPercent');
+  if(shareNumber&&document.activeElement!==shareNumber)shareNumber.value=String(primaryShare);
+  for(const button of document.querySelectorAll('[data-share-percent]'))
+    button.setAttribute('aria-pressed',String(primaryShare)===button.dataset.sharePercent?'true':'false');
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
@@ -9194,6 +9216,20 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
     scheduleLayoutPreviewUpdate();
   });
 });
+
+function commitStudioShare(value){
+  const range=document.getElementById('prevPrimaryShare');
+  if(!range)return;
+  const n=Number(value);
+  if(!Number.isFinite(n))return;
+  range.value=String(Math.round(Math.min(80,Math.max(20,n))));
+  range.dispatchEvent(new Event('input',{bubbles:true}));
+  range.dispatchEvent(new Event('change',{bubbles:true}));
+}
+document.querySelectorAll('[data-share-percent]').forEach(button=>
+  button.addEventListener('click',()=>commitStudioShare(button.dataset.sharePercent)));
+document.getElementById('studioRegionPercent')?.addEventListener('change',e=>
+  commitStudioShare(e.target.value));
 
 // Real ASS appearance values must have visible feedback even before the
 // user manually enables live FFmpeg preview. Debounce until a committed
