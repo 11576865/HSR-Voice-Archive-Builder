@@ -491,6 +491,48 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
 
 
 
+def refresh_ass_only(config: ProjectConfig, output_dir: Path) -> dict[str, Any]:
+    """Rebuild only the styled ASS artifact from audio-derived timing.
+
+    Neither SRT bytes nor manifest/CSV/human text are written in this path.
+    This is different from a proofreading or audio-build refresh.
+    """
+    with subtitle_edit_lock(output_dir):
+        manifest_path = output_dir / "manifest.json"
+        if not manifest_path.is_file():
+            raise FileNotFoundError("Build the archive before generating styled ASS")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entries = manifest.get("entries")
+        if not isinstance(entries, list):
+            raise ValueError("Manifest entries must be a list")
+        _apply_derived_subtitle_fields(entries, load_subtitle_overrides(output_dir))
+        apply_cached_word_alignments(entries, output_dir)
+        adapters = _subtitle_adapters(entries, {})
+        ass_path = output_dir / "HSR_Voice_Archive.ass"
+        srt_path = output_dir / "HSR_Voice_Archive.srt"
+        if not srt_path.is_file():
+            raise ValueError("SRT is not present; create it in the subtitle export workflow first")
+        record_subtitle_export(output_dir, state="pending", ass_required=True)
+        try:
+            write_ass(
+                adapters, ass_path,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                config=subtitle_render_config(config),
+                overflow_report_path=output_dir / "ass_layout_overflow_report.json",
+            )
+        except Exception as exc:
+            ass_path.unlink(missing_ok=True)
+            error = f"{type(exc).__name__}: {exc}"
+            record_subtitle_export(output_dir, state="failed", ass_required=True,
+                                   artifact_error=error)
+            return {"ass_file": "", "ass_error": error,
+                    "srt_file": str(srt_path), "srt_untouched": True}
+        record_subtitle_export(output_dir, state="current", ass_required=True)
+        return {"ass_file": str(ass_path), "ass_error": "",
+                "srt_file": str(srt_path), "srt_untouched": True}
+
+
 def _refresh_derived_subtitle_exports(
     config: ProjectConfig, output_dir: Path, *, force_ass: bool = False
 ) -> dict[str, Any]:
