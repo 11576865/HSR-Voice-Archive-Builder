@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -256,7 +258,14 @@ class TestSubtitleEditor(unittest.TestCase):
                     }
                 ]
             }
-            resp = self.client.post("/api/project/active/subtitles", json=update_payload, headers=self.headers)
+            # This tests human text-edit persistence, not libass raster ink.
+            # The dedicated real-libass CI job exercises the actual oracle.
+            with patch("subtitle_layout.ass_writer.validate_real_ink") as ink:
+                ink.return_value = SimpleNamespace(
+                    ok=True, reason=None,
+                    primary_width_ratio=1.0, chinese_width_ratio=1.0,
+                )
+                resp = self.client.post("/api/project/active/subtitles", json=update_payload, headers=self.headers)
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
             self.assertTrue(data["ok"])
