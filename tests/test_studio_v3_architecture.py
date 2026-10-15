@@ -17,7 +17,7 @@ class StudioV3ArchitectureTests(unittest.TestCase):
         for ident in (
             "studioV3Visual", "studioV3Editors", "studioV3Inspector",
             "previewCanvasContainer", "previewQuickBtn", "previewLibassBtn", "previewVideoBtn",
-            "layoutTimelinePanel", "layoutCueEditorPanel", "layoutCueTimingSaveBtn",
+            "layoutTimelinePanel", "layoutCueEditorPanel", "layoutCueClockOrigin",
             "previewBackgroundMode", "hsrKaraokeReadiness", "previewSaveStatus",
             "layoutAuditDrawerToggle", "layoutCorpusRail",
         ):
