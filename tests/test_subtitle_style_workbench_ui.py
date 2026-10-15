@@ -51,9 +51,9 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         action_pos = html.index('class="preview-actions"')
         controls_pos = html.index('class="preview-controls"')
         self.assertLess(action_pos, controls_pos)
-        self.assertIn('id="previewGeometryBtn"', html)
+        self.assertIn('id="previewQuickBtn"', html)
         self.assertIn('id="previewLibassBtn"', html)
-        self.assertIn('id="saveSubtitleLayoutBtn"', html)
+        self.assertNotIn('id="saveSubtitleLayoutBtn"', html)
         self.assertIn('id="generateSubtitleAssBtn"', html)
         self.assertIn("#generateSubtitleAssBtn{", html)
         self.assertIn("grid-column:1 / -1", html)
@@ -67,7 +67,6 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
             "动效",
             "逐词同步",
             "档案增强",
-            "画布与诊断",
         ):
             self.assertIn(title, html)
 
@@ -119,7 +118,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
 
     def test_real_render_and_geometry_actions_report_distinct_evidence(self) -> None:
         html = self.html
-        self.assertIn('id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false"', html)
+        self.assertIn('id="previewQuickBtn" data-studio-scope="style" aria-pressed="false"', html)
         self.assertIn('id="previewLibassBtn" aria-pressed="false"', html)
         for state in ("geometry", "rendering", "libass", "stale", "failed"):
             self.assertIn(f"{state}:[", html)
@@ -128,7 +127,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("setPreviewEvidence('failed'", html)
         self.assertIn("setPreviewEvidence(hadResult?'stale':'rendering')", html)
         self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
-        self.assertIn("真实渲染不会保存设置", html)
+        self.assertIn("参数修改后自动保存", html)
 
     def test_out_of_order_preview_results_cannot_replace_current_state(self) -> None:
         html = self.html
@@ -153,7 +152,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("savedSubtitleSettings=submittedIdentity", html)
         self.assertIn("const newerDraft=JSON.stringify(subtitleSettingsPayload())!==submittedIdentity;", html)
         self.assertIn("if(newerDraft){", html)
-        self.assertIn("return false; // Do not export the older settings", html)
+        self.assertIn("return false; // Do not export an older settings snapshot.", html)
         self.assertIn("markSubtitleSettingsDirty();", html)
 
     def test_v15_mobile_surface_is_in_flow(self) -> None:
@@ -271,33 +270,26 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
 
 
 
-    def test_continuous_timeline_is_bounded_and_supports_semantic_dragging(self) -> None:
+    def test_timeline_ui_removed_without_deleting_underlying_timing_logic(self) -> None:
         html = self.html
         for element_id in (
-            "layoutTimelinePanel",
-            "layoutTimelineViewport",
-            "layoutTimelineRuler",
-            "layoutTimelineTracks",
-            "layoutTimelineZoom",
-            "layoutTimelinePan",
-            "layoutTimelineFollowBtn",
-            "layoutTimelineEarlierBtn",
-            "layoutTimelineLaterBtn",
-            "layoutTimelineSnap",
-            "layoutTimelinePlayhead",
-            "layoutTimelineScope",
+            "layoutTimelinePanel", "layoutTimelineViewport",
+            "layoutTimelineRuler", "layoutTimelineTracks",
+            "studioV3TimelineTab", "layoutTimelineZoom", "layoutTimelinePan",
         ):
-            self.assertEqual(html.count(f'id="{element_id}"'), 1)
-        self.assertIn("layoutTimelineWindowSeconds=30;", html)
+            self.assertNotIn(f'id="{element_id}"', html)
+        self.assertNotIn("字幕时间轴 <small>", html)
+        self.assertIn('id="layoutCueEditorPanel"', html)
+        self.assertIn('id="layoutCueTimingSaveBtn"', html)
         self.assertIn("function layoutTimelineRender()", html)
         self.assertIn("function layoutTimelinePointerDown(event)", html)
-        self.assertIn("function layoutTimelinePointerMove(event)", html)
         self.assertIn("function layoutTimelineSnapSeconds(value,field)", html)
-        self.assertIn("layoutTimelineFollowSelected=false; // Keep the viewport stationary", html)
-        self.assertIn("const rows=visible.slice(0,140)", html)
-        self.assertIn("layoutCueUpdateTiming(drag.field,String(seconds))", html)
-        self.assertIn("单击条目选择 · 拖动选中字幕两端手柄", html)
-
+        self.assertIn("async function saveLayoutCueTiming(", html)
+        for guide in ("prevShowSafeArea", "prevShowCentralGap", "prevShowBBox"):
+            self.assertEqual(html.count(f'id="{guide}"'), 1)
+        self.assertNotIn("画布与诊断</summary>", html)
+        self.assertIn("drawQuickSubtitleLine", html)
+        self.assertIn("queueSubtitleSettingsAutosave", html)
 
 
 if __name__ == "__main__":
