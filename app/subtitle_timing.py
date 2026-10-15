@@ -128,7 +128,12 @@ def _effective_window(entry: dict[str, Any], overrides: dict[str, dict[str, floa
 def effective_subtitle_window(
     entry: dict[str, Any], overrides: dict[str, dict[str, float]]
 ) -> tuple[float, float]:
-    return _effective_window(entry, overrides)
+    """Use only the archive audio-derived display window.
+
+    Historical subtitle_timing_overrides.json remains untouched on disk for
+    audit/rollback, but never changes export or displayed time again.
+    """
+    return source_subtitle_window(entry)
 
 
 @serialized_subtitle_edit
@@ -147,6 +152,7 @@ def update_subtitle_display_timing(
     Optimistic-concurrency expected_start/end refers to the *currently
     effective* subtitle display window, not raw audio positions.
     """
+    raise ValueError("字幕显示时间由音频时序与间隔派生，不能在排版或特效工作台单独修改。")
     manifest_path = output_dir / "manifest.json"
     if not manifest_path.is_file():
         raise FileNotFoundError("Build the archive before adjusting subtitle display timing")
