@@ -26,6 +26,8 @@ class PreviewEntry:
     chinese: str
     start_seconds: float = 0.0
     display_end_seconds: float = 3.0
+    audio_end_seconds: float | None = None
+    preview_end_margin_ms: int = 0
     word_alignments: list[object] | None = None
 
 
@@ -449,6 +451,11 @@ def render_ass_preview_video(
     source_video_bytes: bytes | None = None,
     source_start_seconds: float = 0.0,
     include_source_audio: bool = True,
+    audio_source_path: Path | None = None,
+    audio_source_start_seconds: float = 0.0,
+    voice_start_offset_seconds: float = 0.0,
+    voice_duration_seconds: float | None = None,
+    preview_after_fade_ms: int = 0,
     background_color: str = "#000000",
     background_image_bytes: bytes | None = None,
     font_dir: Path | None = None,
@@ -462,8 +469,8 @@ def render_ass_preview_video(
     background_color = normalize_preview_background_color(background_color)
     ffmpeg_color = "0x" + background_color[1:]
     duration = float(duration_seconds)
-    if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
-        raise ValueError("Dynamic preview duration must be between 0.5 and 8 seconds")
+    if not math.isfinite(duration) or not 0.01 < duration <= 120.0:
+        raise ValueError("Dynamic preview duration must be between 0.01 and 120 seconds")
     start = float(source_start_seconds)
     if not math.isfinite(start) or not 0 <= start <= 600:
         raise ValueError("Preview source offset must be between 0 and 600 seconds")
@@ -485,10 +492,24 @@ def render_ass_preview_video(
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("Dynamic ASS preview requires FFmpeg")
+    if audio_source_path is not None:
+        if (not audio_source_path.is_file() or audio_source_path.is_symlink()
+                or voice_duration_seconds is None):
+            raise ValueError("The selected project voice source is unavailable")
+        if (not all(math.isfinite(float(x)) for x in (
+                audio_source_start_seconds, voice_start_offset_seconds, voice_duration_seconds))
+                or audio_source_start_seconds < 0 or voice_start_offset_seconds < 0
+                or voice_duration_seconds <= 0 or
+                voice_start_offset_seconds + voice_duration_seconds > duration + 0.02):
+            raise ValueError("Project PCM voice clip has invalid timing")
     entry = PreviewEntry(
         english=str(english_text or ""),
         chinese=str(chinese_text or ""),
+        start_seconds=voice_start_offset_seconds if audio_source_path is not None else 0.0,
         display_end_seconds=duration,
+        audio_end_seconds=(voice_start_offset_seconds + voice_duration_seconds)
+        if audio_source_path is not None else None,
+        preview_end_margin_ms=preview_after_fade_ms if audio_source_path is not None else 0,
         word_alignments=word_alignments,
     )
     config = _project_font_config(config, font_dir)
@@ -529,37 +550,41 @@ def render_ass_preview_video(
                 f"color=c={ffmpeg_color}:s=960x540:r=24:d={duration:.3f}",
             ]
             video_filters = ""
+        audio_args = (
+            ["-ss", f"{audio_source_start_seconds:.3f}", "-i", str(audio_source_path)]
+            if audio_source_path is not None else []
+        )
         command = [
             ffmpeg, "-y", "-hide_banner", "-loglevel", "info",
-            *source_args, "-vf",
+            *source_args, *audio_args, "-vf",
             video_filters + f"subtitles='{escaped_ass}':original_size=1920x1080" +
             (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else "") +
             ",format=yuv420p",
         ]
-        if source_video_bytes is not None:
-            # Explicit stream map prevents attached pictures/subtitles or a
-            # second source audio from leaking into the preview.
-            command += ["-map", "0:v:0"]
-            if include_source_audio:
-                command += ["-map", "0:a:0?"]
-            else:
-                command += ["-an"]
+        # Input 0 supplies visual background; input 1, when present, is
+        # the actual project voice (continuous FLAC or verified bundle).
+        command += ["-map", "0:v:0"]
+        if audio_source_path is not None:
+            command += ["-map", "1:a:0"]
+        elif source_video_bytes is not None and include_source_audio:
+            command += ["-map", "0:a:0?"]
         else:
             command += ["-an"]
         if fmt == "webm":
             command += ["-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
                         "-b:v", "1200k"]
-            if source_video_bytes is not None and include_source_audio:
+            if audio_source_path is not None or (source_video_bytes is not None and include_source_audio):
                 command += ["-c:a", "libopus", "-b:a", "96k"]
         else:
             command += ["-c:v", "libx264", "-preset", "ultrafast",
                         "-crf", "22", "-movflags", "+faststart"]
-            if source_video_bytes is not None and include_source_audio:
+            if audio_source_path is not None or (source_video_bytes is not None and include_source_audio):
                 command += ["-c:a", "aac", "-b:a", "128k"]
         command += ["-t", f"{duration:.3f}", str(result_path)]
         try:
             completed = subprocess.run(
-                command, capture_output=True, text=True, timeout=50, check=False,
+                command, capture_output=True, text=True,
+                timeout=max(50, duration * 4 + 15), check=False,
                 env=font_env
             )
         except subprocess.TimeoutExpired as exc:
