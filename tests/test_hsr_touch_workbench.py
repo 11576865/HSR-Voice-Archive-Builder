@@ -57,13 +57,13 @@ class TouchWorkbenchTests(unittest.TestCase):
         html=self.html
         self.assertNotIn("const appearanceGeometryPreviewSpec=()=>",html)
         self.assertNotIn("elements.push(geometryStyledText(",html)
-        self.assertIn("辅助边界图（无文字渲染）",html)
-        self.assertIn("Always show estimated line rectangles",html)
+        self.assertIn("字幕渲染前快速预览",html)
+        self.assertIn("Optional estimated line rectangles",html)
         # Assert the non-authoritative visual contract, not a legacy
         # literal sentence that was intentionally rewritten in PR #179.
-        self.assertIn("geometry:['辅助边界图（无文字渲染）'",html)
+        self.assertIn("geometry:['字幕渲染前快速预览'",html)
         self.assertIn("未经真实验证",html)
-        self.assertIn("字号、断行和占位以实际 ASS 为准",html)
+        self.assertIn("真实字体、断行、描边及最终排版以 FFmpeg/libass 为准",html)
         # Real frame failures must not suggest a geometrically fake glyph
         # substitute. Assert the fail-closed evidence state rather than old copy.
         self.assertIn("真实渲染失败 · 不可定稿",html)
