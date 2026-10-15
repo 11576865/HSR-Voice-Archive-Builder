@@ -255,7 +255,7 @@ def _subtitle_adapters(
                     max(start, min(end, float(entry["audio_end_seconds"])))
                     if entry.get("audio_end_seconds") is not None else None
                 ),
-                word_alignments=
+                word_alignments=(
                     None if entry_id in timing_overrides
                     else (entry.get("word_alignments") or entry.get("words") or None)
                 ),
