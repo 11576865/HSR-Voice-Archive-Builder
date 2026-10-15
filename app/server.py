@@ -1859,15 +1859,15 @@ def api_output_ass():
             raise FileNotFoundError("请先完成档案构建")
 
         def run(report_progress):
-            # FFmpeg/libass checks each bilingual cue. Expose actual progress
-            # instead of showing 0/1 until the entire archive finishes.
+            # Report completed dialogue entries during lightweight ASS writing;
+            # real libass ink probes belong to explicit preview, not export.
             totals = {"count": 0}
 
             def report_ass_progress(current: int, total: int) -> None:
                 totals["count"] = total
                 report_progress(
                     "render",
-                    f"正在校验真实字幕字形：{current}/{total} 条",
+                    f"正在生成 ASS 字幕：{current}/{total} 条",
                     current, total,
                 )
 
