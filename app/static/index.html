@@ -3487,22 +3487,21 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="仅显示估算边界和安全线，不会渲染另一套字幕文字">辅助边界（非字幕）</button>
+                    <button type="button" class="secondary" id="previewQuickBtn" data-studio-scope="style" aria-pressed="false" title="浏览器近似预览当前字幕文字；字体和断行以 FFmpeg/libass 为准">字幕渲染前预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
-<button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
                     <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
                   </div>
                   <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
                     <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
                     <button type="button" id="layoutStyleRedoBtn" disabled title="恢复撤销的样式参数修改；仅当前工作台会话">↷ 重做样式</button>
                   </div>
-                  <p class="layout-action-note">撤销/重做只影响本次试调。真实渲染不会保存设置，导出只读取明确保存的参数。</p>
+                  <p class="layout-action-note">参数修改后自动保存；真实渲染不生成字幕文件。</p>
                 </div>
           </div>
           <!-- One immutable reference image. Final delivery settings remain independent. -->
           <input id="previewBackgroundMode" type="hidden" value="reference">
-          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">默认只展示 FFmpeg/libass 真实字形；等待/失败时不展示 SVG 替代字形。辅助几何仅供诊断，不能用于分句或排版定稿。</div>
+          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">默认展示 FFmpeg/libass 真实字形；字幕渲染前预览仅为浏览器近似效果，不代表真实 ASS。</div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
             <span id="hsrEffectOperationDetail">点击「播放动态特效」生成可播放视频；完成后结果出现在上方画布。</span>
@@ -3523,44 +3522,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           </div>
           <nav class="studio-v3-pane-nav" aria-label="移动端工作台编辑区域" role="tablist">
-            <button type="button" role="tab" id="studioV3TimelineTab" data-studio-pane-target="timeline" aria-controls="layoutTimelinePanel" aria-selected="false">时间轴</button>
-            <button type="button" role="tab" id="studioV3CueTab" data-studio-pane-target="cue" aria-controls="layoutCueEditorPanel" aria-selected="false">当前字幕</button>
+                        <button type="button" role="tab" id="studioV3CueTab" data-studio-pane-target="cue" aria-controls="layoutCueEditorPanel" aria-selected="false">当前字幕</button>
             <button type="button" role="tab" id="studioV3InspectorTab" data-studio-pane-target="inspector" aria-controls="studioV3Inspector" aria-selected="true">参数</button>
           </nav>
           <div class="studio-v3-editors" id="studioV3Editors" aria-label="连续字幕与显示时间编辑">
           <details id="studioV4Timing" class="studio-v4-timing">
-            <summary>字幕时间轴 <small>需要调整时展开</small></summary>
-          <section class="layout-timeline" aria-label="连续字幕显示时间轴" id="layoutTimelinePanel">
-            <div class="layout-timeline-top">
-              <div><span class="layout-eyebrow">SUBTITLE TIMELINE</span><h3>字幕显示时间轴</h3></div>
-              <div class="layout-timeline-tools">
-                <button type="button" id="layoutTimelineFollowBtn" title="居中查看当前字幕">定位当前</button>
-                <label for="layoutTimelineZoom">视窗
-                  <select id="layoutTimelineZoom" aria-label="时间轴视窗跨度">
-                    <option value="12">12s</option><option value="30" selected>30s</option>
-                    <option value="60">60s</option><option value="120">120s</option><option value="300">300s</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div id="layoutTimelineViewport" class="layout-timeline-viewport" aria-label="字幕时间轴：选择字幕；拖动已选字幕的边界以修改显示时间">
-              <div id="layoutTimelineRuler" class="layout-timeline-ruler" aria-hidden="true"></div>
-              <div id="layoutTimelineTracks" class="layout-timeline-tracks" role="group" aria-label="当前视窗中的字幕条目">
-                <p class="layout-timeline-empty">打开项目后显示按实际时间排列的字幕片段。</p>
-              </div>
-              <div id="layoutTimelinePlayhead" class="layout-timeline-playhead hidden" aria-hidden="true"></div>
-            </div>
-            <div class="layout-timeline-navigation">
-              <button type="button" id="layoutTimelineEarlierBtn" aria-label="向前平移时间轴">←</button>
-              <input type="range" id="layoutTimelinePan" min="0" max="1000" value="0" step="1" aria-label="平移整个字幕显示时间轴" disabled/>
-              <button type="button" id="layoutTimelineLaterBtn" aria-label="向后平移时间轴">→</button>
-            </div>
-            <div class="layout-timeline-bottom">
-              <span id="layoutTimelineScope">尚无项目字幕</span>
-              <label><input id="layoutTimelineSnap" type="checkbox" checked/> 吸附相邻字幕边界</label>
-              <span id="layoutTimelineEditHint">单击条目选择 · 拖动选中字幕两端手柄 · 键盘左右键微调 0.1s · 保存时间另行执行</span>
-            </div>
-          </section>
+            <summary>当前字幕 <small>按需展开</small></summary>
           <section id="layoutCueEditorPanel" class="layout-cue-editor" aria-label="当前字幕条目编辑">
             <div class="layout-cue-heading">
               <div><span class="layout-eyebrow">CUE EDITOR</span><h3 id="layoutCueHeading">请选择字幕条目</h3></div>
@@ -3609,7 +3576,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               </div>
             </div>
             <button type="button" id="layoutOpenProofreadingBtn" class="secondary">在校对中编辑当前字幕与试听原始语音</button>
-<p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只显示当前正文；字幕正文与原始 WAV 的唯一操作入口位于「校对」。字幕显示时间仍可在上方单独调整。</p>
+<p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只显示当前正文；字幕正文与原始 WAV 的唯一操作入口位于「校对」。字幕显示时间可在「当前字幕」中按需调整。</p>
           </section>
           </details>
           </div>
@@ -3694,9 +3661,6 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <button type="button" data-share-percent="60" aria-pressed="true">60 / 40</button>
               <button type="button" data-share-percent="50" aria-pressed="false">50 / 50</button>
               <button type="button" data-share-percent="40" aria-pressed="false">40 / 60</button>
-              <label for="studioRegionPercent">原文比例
-                <input type="number" id="studioRegionPercent" min="20" max="80" value="60" step="1" inputmode="numeric"> %
-              </label>
             </div>
             <div class="small muted">输入原文百分比，剩余分配给中文；真实 ASS 使用相同设置。</div>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
@@ -3714,6 +3678,11 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
             </div>
             <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
+            <div class="studio-position-guides" role="group" aria-label="安全区、中央间隔及包围盒显示" style="display:flex;flex-wrap:wrap;gap:14px;margin-top:16px">
+              <label class="check"><input type="checkbox" id="prevShowSafeArea"> 安全区域</label>
+              <label class="check"><input type="checkbox" id="prevShowCentralGap"> 中央间隔</label>
+              <label class="check"><input type="checkbox" id="prevShowBBox"> 文本包围盒</label>
+            </div>
           </section>
             </div>
           </details>
@@ -3865,15 +3834,6 @@ body[data-workspace="project"] #archiveCard{display:none!important}
 
 
 
-        <details class="preview-advanced" data-studio-scope="style">
-          <summary>画布与诊断</summary>
-          <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea"> 安全区域</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文本包围盒</label>
-          </div>
-
-        </details>
         </aside>
       </div>
 
@@ -7019,7 +6979,7 @@ function setPreviewEvidence(mode, detail = '') {
   const meta=document.getElementById('previewEvidenceMeta');
   const modeLabel=document.getElementById('previewModeLabel');
   const states={
-    geometry:['辅助边界图（无文字渲染）','仅显示安全线和估算框，不另行绘制字幕文字；字号、断行和占位以实际 ASS 为准。','未经真实验证','辅助边界 · 不可据此定稿'],
+    geometry:['字幕渲染前快速预览','浏览器近似显示字幕文字与位置；真实字体、断行、描边及最终排版以 FFmpeg/libass 为准。','近似字幕 · 未经真实验证','字幕快速预览 · 非真实 ASS'],
     rendering:['实际 ASS 渲染中','正在生成当前字幕的 FFmpeg/libass 字形；不使用 SVG 字形冒充成品。','尚未验证','真实画面生成中 · 尚未定稿'],
     libass:['FFmpeg/libass 实际渲染','本条字幕的真实字形、断行与样式；并非整部档案逐条验收，且不代表已保存/导出。','当前字幕真实帧','实际 ASS · 当前字幕'],
     video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时纯色视频。','可播放视频 · 非正式导出','真实动态特效 · 纯色背景'],
@@ -7040,7 +7000,7 @@ function setPreviewEvidence(mode, detail = '') {
   if(description)description.textContent=detail||current[1];
   if(meta)meta.textContent=current[2];
   if(modeLabel)modeLabel.textContent=current[3];
-  document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',String(mode==='geometry'&&geometryExplicitlyRequested));
+  document.getElementById('previewQuickBtn')?.setAttribute('aria-pressed',String(mode==='geometry'&&geometryExplicitlyRequested));
   document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
   document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'||mode==='video-image'||mode==='video-footage'?'true':'false');
 }
@@ -7064,7 +7024,7 @@ function invalidateLibassPreview(){
   if(status){status.textContent='参数或测试文本已变化；实际 ASS 预览需要重新生成。';status.className='small muted';}
 }
 
-function showGeometryPreview(){
+function showQuickSubtitlePreview(){
   geometryExplicitlyRequested=true;
   clearVideoPreview();
   libassPreviewGeneration++; // Explicit user choice wins over any in-flight render.
@@ -7078,7 +7038,7 @@ function showGeometryPreview(){
   clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
   const status=document.getElementById('libassPreviewStatus');
-  if(status){status.textContent='已手动切换辅助边界视图：这里没有字幕字形，不能用于分句定稿。下一次编辑将重新生成真实 ASS。';status.className='small status-warn';}
+  if(status){status.textContent='已切换浏览器字幕快速预览；此图是近似排版，下一次编辑会重新触发真实 ASS 渲染。';status.className='small status-warn';}
 }
 
 function libassPreviewPayload(){
@@ -7565,27 +7525,41 @@ function markSubtitleSettingsDirty(){
     return;
   }
   const dirty=JSON.stringify(subtitleSettingsPayload())!==savedSubtitleSettings;
-  status.textContent=(dirty?'有未保存的试调值；ASS 导出仍使用上次保存的设置。':'当前设置已保存，将用于 ASS 导出。')
+  status.textContent=(dirty?'参数变更正在自动保存；ASS 导出会等待保存完成。':'当前设置已自动保存，将用于 ASS 导出。')
     +(lastRenderedAssIdentity===currentLibassPreviewIdentity()
       ?' 当前样本已有真实 ASS 帧（不代表全项目通过）。'
       :' 当前样本尚无匹配的真实 ASS 帧；不可依据几何图定稿。');
   status.className='small '+(dirty?'status-warn':'status-ok');
+  if(dirty)queueSubtitleSettingsAutosave();
 }
 
-async function saveSubtitleLayoutSettings(){
+let subtitleSettingsAutosaveTimer=null;
+let subtitleSettingsSaveWaiters=[];
+function queueSubtitleSettingsAutosave(delay=650){
+  if(!currentProject||fontImportTransactionActive)return;
+  clearTimeout(subtitleSettingsAutosaveTimer);
+  subtitleSettingsAutosaveTimer=setTimeout(()=>{
+    subtitleSettingsAutosaveTimer=null;
+    if(!currentProject||fontImportTransactionActive)return;
+    if(JSON.stringify(subtitleSettingsPayload())===savedSubtitleSettings)return;
+    if(subtitleSettingsSavePending){queueSubtitleSettingsAutosave(300);return;}
+    void saveSubtitleLayoutSettings({autosave:true});
+  },delay);
+}
+
+async function saveSubtitleLayoutSettings({autosave=false}={}){
   const status=document.getElementById('previewSaveStatus');
   if(subtitleSettingsSavePending){
-    if(status){status.textContent='字幕设置正在保存，请等待当前提交完成。';status.className='small muted';}
-    return false;
+    await new Promise(resolve=>subtitleSettingsSaveWaiters.push(resolve));
+    if(JSON.stringify(subtitleSettingsPayload())===savedSubtitleSettings)return true;
+    return saveSubtitleLayoutSettings({autosave});
   }
   if(!currentProject){
     if(status){status.textContent='请先打开项目。';status.className='small status-bad';}
     return false;
   }
   subtitleSettingsSavePending=true;
-  const saveButton=document.getElementById('saveSubtitleLayoutBtn');
   const exportButton=document.getElementById('generateSubtitleAssBtn');
-  if(saveButton)saveButton.disabled=true;
   if(exportButton)exportButton.disabled=true;
   try{
     if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
@@ -7602,8 +7576,8 @@ async function saveSubtitleLayoutSettings(){
       return false;
     }
     const newerDraft=JSON.stringify(subtitleSettingsPayload())!==submittedIdentity;
-    if(newerDraft){
-      // fillProject() reloads saved controls. Preserve the live draft instead.
+    if(newerDraft||autosave){
+      // Autosave must not reset the focused slider, workbench scroll or undo history.
       currentProject=j.project;
     }else{
       fillProject(j.project);
@@ -7611,8 +7585,9 @@ async function saveSubtitleLayoutSettings(){
     savedSubtitleSettings=submittedIdentity;
     markSubtitleSettingsDirty();
     if(newerDraft){
-      if(status){status.textContent='保存期间又调整了样式：之前提交的设置已保存，新试调值仍未保存。请再次保存后再生成 ASS。';status.className='small status-warn';}
-      return false; // Do not export the older settings as though they were this draft.
+      if(status){status.textContent='保存期间又修改了参数，正在自动保存最新设置。';status.className='small status-warn';}
+      queueSubtitleSettingsAutosave(150);
+      return false; // Do not export an older settings snapshot.
     }
     return true;
   }catch(err){
@@ -7621,8 +7596,8 @@ async function saveSubtitleLayoutSettings(){
     return false;
   }finally{
     subtitleSettingsSavePending=false;
-    if(saveButton)saveButton.disabled=false;
     if(exportButton)exportButton.disabled=false;
+    for(const resolve of subtitleSettingsSaveWaiters.splice(0))resolve();
   }
 }
 
@@ -8580,7 +8555,6 @@ async function updateLayoutPreview() {
   // Independent request pipelines: a slow, rejected or cancelled SVG geometry
   // API must never prevent this cue's real FFmpeg/libass frame being scheduled.
   queueLiveRealPreview();
-  if(currentProject&&document.body.dataset.workspace==='layout')geometryExplicitlyRequested=false;
   const generation=++geometryPreviewGeneration;
   if(geometryPreviewController)geometryPreviewController.abort();
   const controller=typeof AbortController==='function'?new AbortController():null;
@@ -8595,8 +8569,6 @@ async function updateLayoutPreview() {
   const primaryShare = Number(document.getElementById('prevPrimaryShare')?.value||60);
   const shareLabel=document.getElementById('prevPrimaryShareVal');
   if(shareLabel)shareLabel.textContent=primaryShare+'% / '+(100-primaryShare)+'%';
-  const shareNumber=document.getElementById('studioRegionPercent');
-  if(shareNumber&&document.activeElement!==shareNumber)shareNumber.value=String(primaryShare);
   for(const button of document.querySelectorAll('[data-share-percent]'))
     button.setAttribute('aria-pressed',String(primaryShare)===button.dataset.sharePercent?'true':'false');
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
@@ -8736,7 +8708,7 @@ function renderPreviewCanvasSvg(data, options) {
   }
 
   let elements = [];
-  // Diagnostic rectangles only: avoid a second, incompatible font rasterizer.
+  // Single SVG fast-preview text owner; libass remains the final visual authority.
 
   // Center Y reference line
   elements.push('<line x1="0" y1="540" x2="1920" y2="540" stroke="#303846" stroke-width="1" stroke-dasharray="4 4" />');
@@ -8778,7 +8750,7 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#5d9cec';
 
-    { // Always show estimated line rectangles
+    if(options.showBBox){ // Optional estimated line rectangles
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(93,156,236,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
@@ -8791,7 +8763,7 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#b78cff';
 
-    { // Always show estimated line rectangles
+    if(options.showBBox){ // Optional estimated line rectangles
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(183,140,255,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
@@ -8800,6 +8772,26 @@ function renderPreviewCanvasSvg(data, options) {
   });
 
   svg.innerHTML = elements.join('');
+  // Browser approximation: one SVG glyph layer. Never stack a second Canvas layer.
+  const drawQuickSubtitleLine=(line,family)=>{
+    const el=document.createElementNS('http://www.w3.org/2000/svg','text');
+    el.setAttribute('x',String(line.x));
+    el.setAttribute('y',String(line.bbox.y_min));
+    el.setAttribute('text-anchor','middle');
+    el.setAttribute('dominant-baseline','hanging');
+    el.setAttribute('font-family',browserPreviewFontName(family));
+    el.setAttribute('font-size',String(line.font_size));
+    el.setAttribute('font-weight','400');
+    el.setAttribute('paint-order','stroke');
+    el.setAttribute('stroke','#101010');
+    el.setAttribute('stroke-width',String(Math.max(0,Number(document.getElementById('prevOutlineWidth')?.value||0)*2)));
+    el.setAttribute('stroke-linejoin','round');
+    el.setAttribute('fill','#fff');
+    el.textContent=String(line.text||'');
+    svg.appendChild(el);
+  };
+  (layout.primary_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevPriFont')?.value||'Noto Sans'));
+  (layout.chs_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevChsFont')?.value||'汉仪旗黑'));
 
   // Exactly one browser geometry text renderer: SVG. The legacy Canvas
   // renderer painted the very same lines a second time (different metrics),
@@ -9343,8 +9335,6 @@ function commitStudioShare(value){
 }
 document.querySelectorAll('[data-share-percent]').forEach(button=>
   button.addEventListener('click',()=>commitStudioShare(button.dataset.sharePercent)));
-document.getElementById('studioRegionPercent')?.addEventListener('change',e=>
-  commitStudioShare(e.target.value));
 
 // Real ASS appearance values must have visible feedback even before the
 // user manually enables live FFmpeg preview. Debounce until a committed
@@ -9409,7 +9399,7 @@ document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>impor
 
 // Studio settings are explicit; removed orphaned "standard/plain/karaoke" preset buttons.
 
-document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
+document.getElementById('previewQuickBtn')?.addEventListener('click',showQuickSubtitlePreview);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
 document.getElementById('previewVideoBtn')?.addEventListener('click',renderHsrEffectVideo);
 document.getElementById('effectBackgroundImageFile')?.addEventListener('change',event=>{
@@ -9462,7 +9452,6 @@ document.getElementById('effectFootageClearBtn')?.addEventListener('click',()=>{
   const status=document.getElementById('videoPreviewStatus');
   if(status)status.textContent='本地视频已清除；下一次动态预览使用已选背景图片或当前纯色。';
 });
-document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
   if(await saveSubtitleLayoutSettings())await startAssExport();
 });
