@@ -7639,71 +7639,21 @@ function markSubtitleSettingsDirty(){
     return;
   }
   const dirty=JSON.stringify(subtitleSettingsPayload())!==savedSubtitleSettings;
-  status.textContent=(dirty?'参数变更正在自动保存；ASS 导出会等待保存完成。':'当前设置已自动保存，将用于 ASS 导出。')
+  status.textContent=(dirty
+      ?'参数变更正在自动保存；不会自动生成 ASS 或重新封装 MKV。'
+      :'字幕设置已保存；正式 ASS／MKV 需点击「生成 ASS 字幕」才会更新。')
     +(lastRenderedAssIdentity===currentLibassPreviewIdentity()
-      ?' 当前样本已有真实 ASS 帧（不代表全项目通过）。'
-      :' 当前样本尚无匹配的真实 ASS 帧；不可依据几何图定稿。');
+      ?' 当前样本已有手动生成的真实 ASS 帧（不代表全项目通过）。'
+      :' 当前样本未生成匹配的真实 ASS 帧；可手动预览。');
   status.className='small '+(dirty?'status-warn':'status-ok');
   if(dirty)queueSubtitleSettingsAutosave();
 }
 
 let subtitleSettingsAutosaveTimer=null;
 let subtitleSettingsSaveWaiters=[];
-let assAutoRefreshTimer=null;
-let assAutoRefreshInFlight=false;
-let assAutoRefreshGeneration=0;
-function queueAutoAssRefresh(){
-  if(!currentProject?.root||!layoutCorpusPersistable)return;
-  const generation=++assAutoRefreshGeneration;
-  clearTimeout(assAutoRefreshTimer);
-  assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(generation),1800);
-}
-async function runAutoAssRefresh(generation){
-  if(generation!==assAutoRefreshGeneration)return;
-  if(assAutoRefreshInFlight||subtitleSettingsSavePending){
-    clearTimeout(assAutoRefreshTimer);
-    assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(generation),600);
-    return;
-  }
-  const project=currentProject?.root;
-  if(!project||!layoutCorpusPersistable)return;
-  assAutoRefreshInFlight=true;
-  const status=document.getElementById('previewSaveStatus');
-  if(status){status.textContent='参数已保存；正在后台仅生成 ASS（不会更新 SRT 或自动渲染视频帧）…';status.className='small muted';}
-  try{
-    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/artifacts/refresh',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({expected_project_root:project,ass_only:true})
-    });
-    if(currentProject?.root!==project||generation!==assAutoRefreshGeneration)return;
-    if(result.job){
-      // In complete MKV mode the server owns ASS + container publication in
-      // one progress-visible job. A loose ASS is not a completed product.
-      if(status){status.textContent='样式已保存，正在后台将新 ASS 封入 MKV 并验证旧字幕已替换…';status.className='small muted';}
-      void watchJob(result.job);
-      return;
-    }
-    if(result.export_status)layoutCueApplyExportHealth(result.export_status);
-    const problem=String(result.artifact_error||result.refreshed?.ass_error||'');
-    if(status){
-      status.textContent=problem
-        ?'样式已保存，但 ASS 自动生成失败：'+problem+'。SRT 未改写。'
-        :'样式已自动保存，ASS 已按最新设置重新生成；SRT 未改写。';
-      status.className='small '+(problem?'status-bad':'status-ok');
-    }
-  }catch(err){
-    if(currentProject?.root===project&&generation===assAutoRefreshGeneration&&status){
-      status.textContent='样式设置已保存，但 ASS 自动生成尚未完成：'+shortError(err)+'；SRT 未改写。';
-      status.className='small status-warn';
-    }
-  }finally{
-    assAutoRefreshInFlight=false;
-    if(currentProject?.root===project&&generation!==assAutoRefreshGeneration){
-      clearTimeout(assAutoRefreshTimer);
-      assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(assAutoRefreshGeneration),1800);
-    }
-  }
-}
+// Settings autosave commits configuration only. Derived ASS and MKV remain
+// untouched until the user explicitly requests generation/export.
+// Real FFmpeg/libass preview is also an explicit action.
 function queueSubtitleSettingsAutosave(delay=650){
   if(!currentProject||fontImportTransactionActive)return;
   clearTimeout(subtitleSettingsAutosaveTimer);
@@ -7760,7 +7710,6 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
       queueSubtitleSettingsAutosave(150);
       return false; // Do not export an older settings snapshot.
     }
-    if(autosave)queueAutoAssRefresh();
     return true;
   }catch(err){
     if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
