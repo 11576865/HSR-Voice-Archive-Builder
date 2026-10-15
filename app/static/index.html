@@ -3543,7 +3543,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                 </label>
               </div>
             </div>
-            <div id="layoutTimelineViewport" class="layout-timeline-viewport" aria-label="字幕时间轴：选择字幕；拖动已选字幕的边界以修改显示时间">
+            <div id="layoutTimelineViewport" class="layout-timeline-viewport" aria-label="只读字幕时间轴：仅允许查看和选择字幕；时间由音频确定">
               <div id="layoutTimelineRuler" class="layout-timeline-ruler" aria-hidden="true"></div>
               <div id="layoutTimelineTracks" class="layout-timeline-tracks" role="group" aria-label="当前视窗中的字幕条目">
                 <p class="layout-timeline-empty">打开项目后显示按实际时间排列的字幕片段。</p>
@@ -8230,7 +8230,7 @@ function layoutTimelineRender(){
   if(status)status.textContent=formatClockTime(start)+' — '+formatClockTime(end)+' · 可见 '+visible.length+' 条'+
     (visible.length>rows.length?'（仅显示前 '+rows.length+' 条，请缩小视窗）':'')+
     (collisionCount?' · 重叠密集 '+collisionCount+' 条':'')+
-    (layoutCorpusPersistable?' · 可编辑显示时间':' · 仅演示');
+    (layoutCorpusPersistable?' · 音频派生 · 只读':' · 仅演示');
   const head=document.getElementById('layoutTimelinePlayhead');
   const selected=layoutCueRow(layoutCueActiveId);
   if(head?.style&&head?.classList&&selected){
@@ -8372,9 +8372,8 @@ function renderLayoutCorpusRail(){
       const tag=audit?.kind==='failed'?' <em class="layout-audit-failed">溢出</em>':
         audit?.kind==='scaled'?' <em class="layout-audit-scaled">缩小到 '+audit.scale+'%</em>':
         audit?.kind==='error'?' <em class="layout-audit-failed">检查错误</em>':'';
-      const timingBadge=sub.timing_conflict?' <em class="layout-audit-failed">时间轴冲突</em>':sub.timing_modified?' <em>时间已调整</em>':'';
-      const timingDraft=layoutCueTimingDrafts.get(String(sub.id));
-      const timeDirty=timingDraft&&(Number(timingDraft.start)!==timingDraft.savedStart||Number(timingDraft.end)!==timingDraft.savedEnd)?' <em>时间草稿</em>':'';
+      const timingBadge=''; // Historical display-time overlays are ignored.
+      const timeDirty=''; // No writable time drafts in this workbench.
       return '<button type="button" role="listitem" class="layout-corpus-item" data-layout-index="'+index+'"'+
         (active?' aria-current="true"':'')+' title="选取这条项目字幕进行预览">'+
         '<span class="layout-corpus-item-top"><span>#'+escapeHtml(String(sub.id))+'</span><span>'+escapeHtml(time)+'</span></span>'+
