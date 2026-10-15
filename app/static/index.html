@@ -3423,18 +3423,18 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
       </div>
       <p class="small muted">字幕工作流：快速计算版面 → 用 FFmpeg/libass 核对最终字形 → 保存样式或生成 ASS。几何求解状态不等于渲染验收。</p>
-      <div class="hsr-studio-toolbar" role="group" aria-label="排版问题工具" data-studio-scope="style">
+      <div class="hsr-studio-toolbar" role="group" aria-label="字幕条目浏览与排版检查">
         <span class="small muted">排版：字体、位置与安全区。动画和视频请切换到顶部「特效」。</span>
-        <button type="button" id="layoutAuditDrawerToggle" aria-expanded="false" aria-controls="layoutCorpusRail" title="按需打开排版问题筛选；校对字幕请到「校对」工作区">批量排版检查</button>
+        <button type="button" id="layoutAuditDrawerToggle" aria-expanded="false" aria-controls="layoutCorpusRail" title="浏览、搜索并选择当前项目的字幕条目">字幕条目 / 排版检查</button>
       </div>
       <div class="layout-workflow-strip" aria-label="字幕制作工作流">
         <span><b>01</b> 调整样式与几何</span><span><b>02</b> 实际渲染检视</span><span><b>03</b> 保存与生成</span>
       </div>
       <div class="preview-workbench studio-v3-workbench studio-v4-workbench" data-studio-pane="inspector">
 
-        <aside class="layout-corpus-rail" id="layoutCorpusRail" aria-label="批量排版检查与问题字幕定位" aria-hidden="true" inert>
+        <aside class="layout-corpus-rail" id="layoutCorpusRail" aria-label="项目字幕浏览器" aria-hidden="true" inert>
           <div class="layout-rail-title">
-            <div><span class="layout-eyebrow">BATCH LAYOUT QA</span><h3>排版问题检查</h3></div>
+            <div><span class="layout-eyebrow" id="layoutCorpusRailEyebrow">BATCH LAYOUT QA</span><h3 id="layoutCorpusRailTitle">排版问题检查</h3></div>
             <div class="layout-rail-head-actions">
               <span id="layoutCorpusCount" class="layout-rail-count">0 / 0</span>
               <button type="button" id="layoutCorpusRefreshBtn" title="重新读取项目字幕；保留本次会话未保存的正文草稿">刷新</button>
@@ -3523,44 +3523,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           </div>
           <nav class="studio-v3-pane-nav" aria-label="移动端工作台编辑区域" role="tablist">
-                        <button type="button" role="tab" id="studioV3TimelineTab" data-studio-pane-target="timeline" aria-controls="layoutTimelinePanel" aria-selected="false">时间轴</button>
             <button type="button" role="tab" id="studioV3CueTab" data-studio-pane-target="cue" aria-controls="layoutCueEditorPanel" aria-selected="false">当前字幕</button>
             <button type="button" role="tab" id="studioV3InspectorTab" data-studio-pane-target="inspector" aria-controls="studioV3Inspector" aria-selected="true">参数</button>
           </nav>
           <div class="studio-v3-editors" id="studioV3Editors" aria-label="连续字幕与显示时间编辑">
           <details id="studioV4Timing" class="studio-v4-timing">
-            <summary><span data-studio-scope="style">当前字幕</span><span data-studio-scope="effects">字幕时间轴</span><small>需要调整时展开</small></summary>
-          <section class="layout-timeline" data-studio-scope="effects" aria-label="连续字幕显示时间轴" id="layoutTimelinePanel">
-            <div class="layout-timeline-top">
-              <div><span class="layout-eyebrow">SUBTITLE TIMELINE</span><h3>字幕显示时间轴</h3></div>
-              <div class="layout-timeline-tools">
-                <button type="button" id="layoutTimelineFollowBtn" title="居中查看当前字幕">定位当前</button>
-                <label for="layoutTimelineZoom">视窗
-                  <select id="layoutTimelineZoom" aria-label="时间轴视窗跨度">
-                    <option value="12">12s</option><option value="30" selected>30s</option>
-                    <option value="60">60s</option><option value="120">120s</option><option value="300">300s</option>
-                  </select>
-                </label>
-              </div>
-            </div>
-            <div id="layoutTimelineViewport" class="layout-timeline-viewport" aria-label="只读字幕时间轴：仅允许查看和选择字幕；时间由音频确定">
-              <div id="layoutTimelineRuler" class="layout-timeline-ruler" aria-hidden="true"></div>
-              <div id="layoutTimelineTracks" class="layout-timeline-tracks" role="group" aria-label="当前视窗中的字幕条目">
-                <p class="layout-timeline-empty">打开项目后显示按实际时间排列的字幕片段。</p>
-              </div>
-              <div id="layoutTimelinePlayhead" class="layout-timeline-playhead hidden" aria-hidden="true"></div>
-            </div>
-            <div class="layout-timeline-navigation">
-              <button type="button" id="layoutTimelineEarlierBtn" aria-label="向前平移时间轴">←</button>
-              <input type="range" id="layoutTimelinePan" min="0" max="1000" value="0" step="1" aria-label="平移整个字幕显示时间轴" disabled/>
-              <button type="button" id="layoutTimelineLaterBtn" aria-label="向后平移时间轴">→</button>
-            </div>
-            <div class="layout-timeline-bottom">
-              <span id="layoutTimelineScope">尚无项目字幕</span>
-              <label><input id="layoutTimelineSnap" type="checkbox" checked/> 吸附相邻字幕边界</label>
-              <span id="layoutTimelineEditHint">单击条目查看字幕；所有起止时间由音频片段与间隔确定，不允许拖动修改</span>
-            </div>
-          </section>
+            <summary>当前字幕 <small>按需展开 · 起止时间由音频确定</small></summary>
           <section id="layoutCueEditorPanel" class="layout-cue-editor" aria-label="当前字幕条目编辑">
             <div class="layout-cue-heading">
               <div><span class="layout-eyebrow">CUE EDITOR</span><h3 id="layoutCueHeading">请选择字幕条目</h3></div>
@@ -9078,23 +9046,19 @@ function setHsrStudioMode(mode){
   const root=document.getElementById('subtitleLayoutPreviewCard');
   if(!root)return;
   const next=mode==='effects'?'effects':'style';
-  setStudioV3Pane(next==='effects'?'timeline':'inspector');
-  // QA belongs to Layout. Switching into Effects must collapse the optional
-  // rail, clear inert/ARIA state consistently, and keep keyboard focus visible.
-  if(next==='effects'){
-    const rail=document.getElementById('layoutCorpusRail');
-    const drawerToggle=document.getElementById('layoutAuditDrawerToggle');
-    const hadQaFocus=!!rail?.contains(document.activeElement)||
-      document.activeElement===drawerToggle;
-    if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);
-    // Both the rail and its top-level opener become hidden in Effects.
-    // Move focus before the layout-only toolbar disappears.
-    if(hadQaFocus){
-      const target=document.getElementById('studioEffectsTab');
-      target?.focus();
-    }
-  }
+  setStudioV3Pane(next==='effects'?'cue':'inspector');
+  // Shared project-cue browser serves both workbenches; no parallel timeline.
+  const sharedRail=document.getElementById('layoutCorpusRail');
+  if(sharedRail?.contains(document.activeElement))
+    document.getElementById('layoutAuditDrawerToggle')?.focus();
+  setHsrAuditDrawer(false);
   root.dataset.studioMode=next;
+  const cueRailTitle=document.getElementById('layoutCorpusRailTitle');
+  const cueRailEyebrow=document.getElementById('layoutCorpusRailEyebrow');
+  if(cueRailTitle)cueRailTitle.textContent=next==='effects'?'字幕条目':'排版问题检查';
+  if(cueRailEyebrow)cueRailEyebrow.textContent=next==='effects'?'CUE BROWSER':'BATCH LAYOUT QA';
+  const cueRailOpener=document.getElementById('layoutAuditDrawerToggle');
+  if(cueRailOpener)cueRailOpener.textContent=next==='effects'?'选择字幕条目':'批量排版检查';
   const heading=document.getElementById('hsrStudioTitle');
   if(heading)heading.textContent=next==='effects'?'特效':'排版';
   const eyebrow=document.getElementById('hsrStudioEyebrow');
@@ -9141,7 +9105,7 @@ function setHsrAuditDrawer(open){
   rail.toggleAttribute('inert',!open);
   rail.setAttribute('aria-hidden',open?'false':'true');
   toggle.setAttribute('aria-expanded',open?'true':'false');
-  toggle.textContent=open?'收起批量检查':'批量排版检查';
+  toggle.textContent=open?'收起字幕列表':(document.getElementById('subtitleLayoutPreviewCard')?.dataset.studioMode==='effects'?'选择字幕条目':'批量排版检查');
 }
 /* Touch inputs should be directly editable without a global lock. Native
    ranges remain the authoritative controls on fine-pointer desktops. On
