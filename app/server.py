@@ -648,11 +648,14 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
         expected_root = str(body.get("expected_project_root") or "").strip()
         if expected_root and expected_root != str(config.root):
             raise ValueError("Subtitle artifact retry project context changed")
+        # This route runs inside the ASGI event loop. libass invokes FFmpeg
+        # many times per archive; never block status polling or other requests.
         if body.get("ass_only") is True:
-            refreshed = refresh_ass_only(config, output_dir)
+            refreshed = await run_in_threadpool(refresh_ass_only, config, output_dir)
         else:
-            refreshed = refresh_derived_subtitle_exports(
-                config, output_dir, force_ass=body.get("force_ass") is True
+            refreshed = await run_in_threadpool(
+                refresh_derived_subtitle_exports,
+                config, output_dir, force_ass=body.get("force_ass") is True,
             )
         artifact_error = str(refreshed.get("ass_error") or "")
         auto_job = maybe_queue_complete_mkv(config) if not artifact_error else None
