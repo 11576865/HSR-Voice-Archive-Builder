@@ -414,9 +414,10 @@ def _voice_fade_windows(
 
     Durations are in whole centiseconds (ASS precision). The previous cue's
     outgoing fade and next cue's incoming fade share only real inter-voice
-    silence. If the sum exceeds the available gap, divide proportionally;
-    never borrow a millisecond from either utterance. The first fade may use
-    the intro silence; the last fade has no known trailing audio and is zero.
+    silence. If a requested pair exceeds the available gap, fail explicitly
+    instead of silently overriding author-selected fade durations. The first
+    fade can only use available intro silence; a final fade may extend after
+    the last PCM sample when the container video tail is preserved.
     Synthetic preview entries without audio_end_seconds keep legacy in-cue
     fade semantics and do not participate in voice-aware allocation.
     """
@@ -437,15 +438,17 @@ def _voice_fade_windows(
         end = round(float(entries[index].audio_end_seconds) * 100)
         start = round(float(entries[index + 1].start_seconds) * 100)
         available = max(0, start - end)
-        if incoming + outgoing <= available:
-            out_cs, in_cs = outgoing, incoming
-        elif incoming + outgoing:
-            out_cs = round(available * outgoing / (incoming + outgoing))
-            in_cs = available - out_cs
-        else:
-            out_cs = in_cs = 0
-        windows[index] = (windows[index][0], out_cs)
-        windows[index + 1] = (in_cs, windows[index + 1][1])
+        if incoming + outgoing > available:
+            raise ValueError(
+                "ASS 淡出+淡入超出实际语音静音间隔："
+                f"第 {index + 1} 与 {index + 2} 条之间只有 {available * 10} ms，"
+                f"需要 {(incoming + outgoing) * 10} ms。"
+                "请减小 Fade 时长，不会悄悄压缩动画。"
+            )
+        windows[index] = (windows[index][0], outgoing)
+        windows[index + 1] = (incoming, windows[index + 1][1])
+    if windows[-1] is not None:
+        windows[-1] = (windows[-1][0], outgoing)
     return windows
 
 
