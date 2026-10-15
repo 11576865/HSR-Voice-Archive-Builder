@@ -268,14 +268,34 @@ def render_ass_preview_png(
         root = Path(td)
         ass_path = root / "preview.ass"
         png_path = root / "preview.png"
-        write_ass(
-            [entry],
-            ass_path,
-            source_language=source_language or "en",
-            target_language=target_language or "zh-CN",
-            config=config,
-            overflow_report_path=root / "overflow.json",
-        )
+        try:
+            write_ass(
+                [entry],
+                ass_path,
+                source_language=source_language or "en",
+                target_language=target_language or "zh-CN",
+                config=config,
+                overflow_report_path=root / "overflow.json",
+            )
+        except ValueError as exc:
+            # The TemporaryDirectory is deleted on exit: never give clients an
+            # unreachable /tmp/.../overflow.json path as the only diagnostic.
+            overflow = root / "overflow.json"
+            if overflow.is_file():
+                try:
+                    records = json.loads(overflow.read_text(encoding="utf-8"))
+                except (OSError, ValueError):
+                    records = []
+                if records:
+                    first = records[0]
+                    raise ValueError(
+                        "当前字幕已尝试全部安全缩放档位，但仍无法在指定区域排下。"
+                        f"失败条件：{first.get('failed_condition') or 'OVERFLOW'}；"
+                        f"尝试缩放：{first.get('scale_attempts') or []}%。"
+                        "请缩短字幕或调整字号、双语区域比例、安全边距。"
+                        "该失败不等于字体文件无效。"
+                    ) from exc
+            raise
         escaped_ass = _escape_subtitles_filter_path(ass_path)
         font_env = _project_font_environment(
             config, font_dir, root, english=english_text, chinese=chinese_text,
