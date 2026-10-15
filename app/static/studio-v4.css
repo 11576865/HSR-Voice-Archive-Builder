@@ -301,8 +301,3 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.s
 #subtitleLayoutPreviewCard .studio-region-actions + .small {
   font-size:11px;line-height:1.4;
 }
-
-/* Non-authoritative guides over the real frame; never create a second glyph renderer. */
-#subtitleLayoutPreviewCard #previewSvg{position:absolute!important;inset:0!important;z-index:6!important;pointer-events:none!important}
-#subtitleLayoutPreviewCard #previewSvg.hidden,#subtitleLayoutPreviewCard #libassCompareImage.hidden{display:none!important}
-#subtitleLayoutPreviewCard #previewCompareBtn:disabled{opacity:.48;cursor:not-allowed}

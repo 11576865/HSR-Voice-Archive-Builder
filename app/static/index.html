@@ -3472,10 +3472,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="preview-stage" id="previewCanvasContainer">
           <img id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp" alt="" aria-hidden="true" decoding="async" style="position:absolute;inset:0;width:100%;height:100%;object-fit:cover;z-index:0;pointer-events:none">
           <canvas id="assCanvasPreview" width="1920" height="1080" class="hidden" aria-hidden="true" style="display:none;pointer-events:none"></canvas>
-          <svg id="previewSvg" class="hidden" viewBox="0 0 1920 1080" aria-label="真实 ASS 画面上的非权威辅助边界" style="position:absolute;inset:0;width:100%;height:100%;z-index:6;display:block;pointer-events:none;user-select:none"></svg>
+          <svg id="previewSvg" viewBox="0 0 1920 1080" style="width:100%;height:100%;display:block;user-select:none"></svg>
           <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="FFmpeg/libass 动态字幕预览（黑底或用户本地视频片段）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
 <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
-<img id="libassCompareImage" class="hidden" alt="同一字幕的上一版真实 ASS 帧" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000;pointer-events:none">
           <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
             <span id="previewModeLabel" class="layout-canvas-mode-label">等待实际 ASS 字形</span>
             <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
@@ -3488,8 +3487,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="使用真实 FFmpeg/libass 预览当前未保存的试调值；无需生成或导出 ASS 文件">预览当前字幕（不导出）</button>
-                    <button type="button" class="secondary" id="previewCompareBtn" disabled aria-pressed="false" title="同一字幕的两张已解码真实 ASS 帧瞬时切换，不重新渲染">对比修改前</button>
+                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="仅显示估算边界和安全线，不会渲染另一套字幕文字">辅助边界（非字幕）</button>
+                    <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
 <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
                     <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
@@ -3503,7 +3502,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           <!-- One immutable reference image. Final delivery settings remain independent. -->
           <input id="previewBackgroundMode" type="hidden" value="reference">
-          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">真实 ASS 字形为编辑依据。修改时可暂留标明过期的旧帧，新帧解码后支持前后瞬时比较；诊断估算框不代表实际字形边界。</div>
+          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">默认只展示 FFmpeg/libass 真实字形；等待/失败时不展示 SVG 替代字形。辅助几何仅供诊断，不能用于分句或排版定稿。</div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
             <span id="hsrEffectOperationDetail">点击「播放动态特效」生成可播放视频；完成后结果出现在上方画布。</span>
@@ -3866,14 +3865,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
 
 
 
-        <details class="preview-advanced" data-studio-scope="style" open>
-          <summary>画布与诊断 · 渲染前布局预估</summary>
-          <p class="small muted" style="margin:6px 0 8px">不生成 ASS 文件即可检查安全区与估算占位；字幕文字与分句只能以右侧真实 libass 预览为准。诊断框可叠加在真实画面上。</p>
-          <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="立即查看渲染前的布局估算框与安全线；不取消真实 ASS 预览，也不绘制替代字幕字形">渲染前预估（仅边界）</button>
+        <details class="preview-advanced" data-studio-scope="style">
+          <summary>画布与诊断</summary>
           <div style="display:flex;flex-wrap:wrap;gap:16px;align-items:center;font-size:12px;color:var(--muted);padding-top:8px">
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowSafeArea"> 安全区域</label>
             <label class="check" style="margin:0"><input type="checkbox" id="prevShowCentralGap"> 中央间隔</label>
-            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 估算文字框（非真实字形边界）</label>
+            <label class="check" style="margin:0"><input type="checkbox" id="prevShowBBox"> 文本包围盒</label>
           </div>
 
         </details>
@@ -6924,9 +6921,6 @@ let previewPreset = 'custom';
 let savedSubtitleSettings = null;
 let subtitleSettingsSavePending = false;
 let libassPreviewObjectUrl = null;
-let previousLibassPreviewObjectUrl = null;
-let lastLibassCueKey = null;
-let libassCompareBefore = false;
 let libassPreviewGeneration = 0;
 let liveRealPreviewArmed = false;
 let liveRealPreviewTimer = null;
@@ -7018,43 +7012,6 @@ function setHsrEffectOperation(phase, detail=''){
   if(text)text.textContent=detail;
   if(button)button.textContent=['preparing','encoding','decoding'].includes(phase)?'正在生成动态特效…':'播放动态特效';
 }
-function currentLibassCueKey(){
-  const p=libassPreviewPayload();
-  return JSON.stringify([currentProject?.root||currentProject?.name||null,
-    p.english_text,p.chinese_text,p.source_language,p.target_language,
-    p.preview_timestamp,p.preview_duration_seconds,p.word_alignments]);
-}
-function updateRealFrameComparison(){
-  const button=document.getElementById('previewCompareBtn');
-  const image=document.getElementById('libassCompareImage');
-  const valid=!!previousLibassPreviewObjectUrl&&!!libassPreviewObjectUrl&&
-    lastLibassCueKey===currentLibassCueKey();
-  if(button){
-    button.disabled=!valid;
-    button.textContent=libassCompareBefore&&valid?'显示修改后':'对比修改前';
-    button.setAttribute('aria-pressed',String(libassCompareBefore&&valid));
-  }
-  if(image){
-    if(valid&&libassCompareBefore){
-      image.src=previousLibassPreviewObjectUrl;
-      image.classList.remove('hidden');
-    }else{
-      image.classList.add('hidden');
-      image.removeAttribute?.('src');
-    }
-  }
-}
-function toggleRealFrameComparison(){
-  if(!previousLibassPreviewObjectUrl||!libassPreviewObjectUrl||
-     lastLibassCueKey!==currentLibassCueKey())return;
-  libassCompareBefore=!libassCompareBefore;
-  updateRealFrameComparison();
-  const status=document.getElementById('libassPreviewStatus');
-  if(status)status.textContent=libassCompareBefore
-    ?'正在查看修改前的真实 ASS 帧（非当前参数）；再点一次显示修改后。'
-    :'正在查看修改后的真实 ASS 帧；比较无需再次执行 FFmpeg。';
-}
-
 function setPreviewEvidence(mode, detail = '') {
   const root=document.querySelector('.layout-preview-evidence');
   const title=document.getElementById('previewEvidenceTitle');
@@ -7076,15 +7033,14 @@ function setPreviewEvidence(mode, detail = '') {
   // Geometry and FFmpeg/libass are mutually exclusive view layers.
   // Old SVG glyphs must never leak through real frame render or video.
   // Hide browser-shaped glyphs during actual rendering, staleness or failure.
-  // SVG only contains guide lines. Overlay it over genuine FFmpeg pixels.
-  const overlayVisible=geometryExplicitlyRequested&&!['video','video-image','video-footage'].includes(mode);
-  document.getElementById('previewSvg')?.classList.toggle('hidden',!overlayVisible);
-  document.getElementById('assCanvasPreview')?.classList.add('hidden');
+  const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested);
+  document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame);
+  document.getElementById('assCanvasPreview')?.classList.toggle('hidden',realFrame);
   if(title)title.textContent=current[0];
   if(description)description.textContent=detail||current[1];
   if(meta)meta.textContent=current[2];
   if(modeLabel)modeLabel.textContent=current[3];
-  document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',String(geometryExplicitlyRequested));
+  document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',String(mode==='geometry'&&geometryExplicitlyRequested));
   document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
   document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'||mode==='video-image'||mode==='video-footage'?'true':'false');
 }
@@ -7093,40 +7049,36 @@ function invalidateLibassPreview(){
   clearVideoPreview();
   libassPreviewGeneration++;
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
-  const button=document.getElementById('previewLibassBtn');
-  if(button)button.disabled=false;
+  const renderButton=document.getElementById('previewLibassBtn');
+  if(renderButton)renderButton.disabled=false;
   const img=document.getElementById('libassPreviewImage');
-  const sameCue=lastLibassCueKey!==null&&lastLibassCueKey===currentLibassCueKey();
-  if(!sameCue){
-    if(img){img.classList.add('hidden');img.removeAttribute?.('src');}
-    if(libassPreviewObjectUrl)URL.revokeObjectURL(libassPreviewObjectUrl);
-    if(previousLibassPreviewObjectUrl)URL.revokeObjectURL(previousLibassPreviewObjectUrl);
-    libassPreviewObjectUrl=null;
-    previousLibassPreviewObjectUrl=null;
-    lastLibassCueKey=null;
-  }else if(img&&libassPreviewObjectUrl)img.classList.remove('hidden');
-  libassCompareBefore=false;
-  updateRealFrameComparison();
+  if(img){img.classList.add('hidden');img.removeAttribute?.('src');}
+  const hadResult=!!libassPreviewObjectUrl;
   lastRenderedAssIdentity=null;
-  setPreviewEvidence(sameCue?'stale':'rendering');
-  const status=document.getElementById('libassPreviewStatus');
-  if(status){
-    status.textContent=sameCue
-      ?'画面仍是上一版真实 ASS 旧帧；当前设置尚未渲染成功，不能以旧字形定稿。'
-      :'已切换字幕或时间点，当前新帧正在生成。';
-    status.className='small status-warn';
+  if(libassPreviewObjectUrl){
+    URL.revokeObjectURL(libassPreviewObjectUrl);
+    libassPreviewObjectUrl=null;
   }
-}
-function showGeometryPreview(){
-  geometryExplicitlyRequested=!geometryExplicitlyRequested;
-  const mode=document.querySelector('.layout-preview-evidence')?.dataset.previewEvidence||'rendering';
-  setPreviewEvidence(mode);
-  // A diagnostic-only request must not abort or restart the true-ink renderer.
-  if(geometryExplicitlyRequested)void refreshDiagnosticGuides();
+  setPreviewEvidence(hadResult?'stale':'rendering');
   const status=document.getElementById('libassPreviewStatus');
-  if(status)status.textContent=geometryExplicitlyRequested
-    ?'辅助线已叠加于真实帧；安全区使用画布坐标，估算文字框不是 libass 实际字形边界。'
-    :'辅助线已关闭。真实 ASS 预览和前后对比没有被重置。';
+  if(status){status.textContent='参数或测试文本已变化；实际 ASS 预览需要重新生成。';status.className='small muted';}
+}
+
+function showGeometryPreview(){
+  geometryExplicitlyRequested=true;
+  clearVideoPreview();
+  libassPreviewGeneration++; // Explicit user choice wins over any in-flight render.
+  if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
+  const renderButton=document.getElementById('previewLibassBtn');
+  if(renderButton)renderButton.disabled=false;
+  const still=document.getElementById('libassPreviewImage');
+  if(still){still.classList.add('hidden');still.removeAttribute?.('src');}
+  liveRealPreviewArmed=false;
+  lastRenderedAssIdentity=null;
+  clearTimeout(liveRealPreviewTimer);
+  setPreviewEvidence('geometry');
+  const status=document.getElementById('libassPreviewStatus');
+  if(status){status.textContent='已手动切换辅助边界视图：这里没有字幕字形，不能用于分句定稿。下一次编辑将重新生成真实 ASS。';status.className='small status-warn';}
 }
 
 function libassPreviewPayload(){
@@ -7151,6 +7103,7 @@ function currentLibassPreviewIdentity(){
 
 async function renderLibassPreview(){
   lastLibassPreviewError=null;
+  geometryExplicitlyRequested=false;
   clearVideoPreview();
   const button=document.getElementById('previewLibassBtn');
   const status=document.getElementById('libassPreviewStatus');
@@ -7163,7 +7116,7 @@ async function renderLibassPreview(){
   libassPreviewController=controller;
   try{
     if(button)button.disabled=true;
-    // Keep the old *explicitly stale* decoded frame until the new one succeeds.
+    document.getElementById('libassPreviewImage')?.classList.add('hidden');
     setPreviewEvidence('rendering');
     if(status){status.textContent='正在调用 FFmpeg/libass 渲染当前试调值…';status.className='small muted';}
     const response=await fetch('/api/subtitle-layout/render-preview',{
@@ -7183,20 +7136,32 @@ async function renderLibassPreview(){
     if(!stillCurrent())return;
     if(!blob.size)throw new Error('实际 ASS 预览返回空图像');
     if(blob.type&&blob.type!=='image/png')throw new Error('实际 ASS 预览返回的不是 PNG 图像');
-    const pendingUrl=URL.createObjectURL(blob);
-    const pendingImage=new Image();
+    if(libassPreviewObjectUrl)URL.revokeObjectURL(libassPreviewObjectUrl);
+    libassPreviewObjectUrl=URL.createObjectURL(blob);
     const img=document.getElementById('libassPreviewImage');
     if(!img)throw new Error('实际 ASS 预览图像控件不存在');
-    try{
-      pendingImage.src=pendingUrl;
-      if(typeof pendingImage.decode==='function')await pendingImage.decode();
-      else await new Promise((resolve,reject)=>{
-        pendingImage.onload=resolve;
-        pendingImage.onerror=()=>reject(new Error('真实 PNG 解码失败'));
+    img.src=libassPreviewObjectUrl;
+    // HTTP success is not displayed-pixel evidence. Modern browsers support decode().
+    if(typeof img.decode==='function'){
+      await img.decode();
+    }else{
+      await new Promise((resolve,reject)=>{
+        if(img.complete){
+          if(img.naturalWidth>0)resolve();
+          else reject(new Error('实际 ASS 预览图像解码失败'));
+          return;
+        }
+        const cleanup=()=>{
+          img.removeEventListener('load',onLoad);
+          img.removeEventListener('error',onError);
+        };
+        const onLoad=()=>{cleanup();resolve();};
+        const onError=()=>{cleanup();reject(new Error('实际 ASS 预览图像解码失败'));};
+        img.addEventListener('load',onLoad,{once:true});
+        img.addEventListener('error',onError,{once:true});
       });
-    }catch(error){URL.revokeObjectURL(pendingUrl);throw error;}
-    if(!stillCurrent()){URL.revokeObjectURL(pendingUrl);return false;}
-
+    }
+    if(!stillCurrent())return;
     // Switch to exactly one visual owner. Old SVG/Canvas glyphs never blend
     // beneath decoded FFmpeg pixels following a font change.
     const svg=document.getElementById('previewSvg');
@@ -7206,16 +7171,7 @@ async function renderLibassPreview(){
       canvas.classList.add('hidden');canvas.style.display='none';
       canvas.getContext?.('2d')?.clearRect(0,0,canvas.width,canvas.height);
     }
-    const sameCue=lastLibassCueKey===currentLibassCueKey();
-    if(previousLibassPreviewObjectUrl)URL.revokeObjectURL(previousLibassPreviewObjectUrl);
-    previousLibassPreviewObjectUrl=sameCue?libassPreviewObjectUrl:null;
-    if(!sameCue&&libassPreviewObjectUrl)URL.revokeObjectURL(libassPreviewObjectUrl);
-    libassPreviewObjectUrl=pendingUrl;
-    lastLibassCueKey=currentLibassCueKey();
-    img.src=pendingUrl;
     img.classList.remove('hidden');
-    libassCompareBefore=false;
-    updateRealFrameComparison();
     lastRenderedAssIdentity=identity;
     setPreviewEvidence('libass');
     liveRealPreviewArmed=true;
@@ -7231,9 +7187,10 @@ async function renderLibassPreview(){
     if(!stillCurrent())return false;
     lastLibassPreviewError=shortError(err);
     const img=document.getElementById('libassPreviewImage');
-    if(img)img.classList.toggle('hidden',!libassPreviewObjectUrl);
+    if(img)img.classList.add('hidden');
+    if(libassPreviewObjectUrl){URL.revokeObjectURL(libassPreviewObjectUrl);libassPreviewObjectUrl=null;}
     lastRenderedAssIdentity=null;
-    setPreviewEvidence('failed','真实渲染失败：'+shortError(err)+'。如果画面仍有字幕，它是修改前的旧真实帧，并非当前参数。');
+    setPreviewEvidence('failed','真实渲染失败：'+shortError(err)+'。当前几何图不得作为字体、断行和最终导出依据。');
     liveRealPreviewArmed=false;
     if(status){status.textContent='实际 ASS 预览失败：'+shortError(err)+'。请勿依据辅助几何图定稿。';status.className='small status-bad';}
     setLog(String(err));
@@ -8610,28 +8567,20 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
   }
 }
 
-let diagnosticGeometryRefreshPending=false;
-function refreshDiagnosticGuides(){
-  // Consume synchronously at the beginning of the next production update.
-  // Keep updateLayoutPreview()'s signature stable for all cue/editor clients.
-  diagnosticGeometryRefreshPending=true;
-  return updateLayoutPreview();
-}
 async function updateLayoutPreview() {
-  const geometryOnly=diagnosticGeometryRefreshPending;
-  diagnosticGeometryRefreshPending=false;
   syncHsrTouchNumericEditors();
   if(currentProject&&document.body.dataset.workspaceTask==='layout'){
     // Switching corpus row/text invalidates previously decoded pixels even
     // when the caller bypasses scheduleLayoutPreviewUpdate().
-    if(!geometryOnly&&lastRenderedAssIdentity!==currentLibassPreviewIdentity()&&
+    if(lastRenderedAssIdentity!==currentLibassPreviewIdentity()&&
        (libassPreviewObjectUrl||libassPreviewController))
       invalidateLibassPreview();
     liveRealPreviewArmed=true;
   }
   // Independent request pipelines: a slow, rejected or cancelled SVG geometry
   // API must never prevent this cue's real FFmpeg/libass frame being scheduled.
-  if(!geometryOnly)queueLiveRealPreview();
+  queueLiveRealPreview();
+  if(currentProject&&document.body.dataset.workspace==='layout')geometryExplicitlyRequested=false;
   const generation=++geometryPreviewGeneration;
   if(geometryPreviewController)geometryPreviewController.abort();
   const controller=typeof AbortController==='function'?new AbortController():null;
@@ -8725,7 +8674,7 @@ async function updateLayoutPreview() {
         corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 需要由排版求解器缩放到 '+layout.scale_percent+'% 才能安全显示。';
         corpusStatus.className='small status-warn layout-corpus-status';
       }else{
-        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 的快速边界预估为 100%；实际字体占位和断行以真实 ASS 帧为准。';
+        corpusStatus.textContent='项目字幕 #'+layoutStressSample.id+' 几何估算为 100%；仍需核对本条真实 ASS 字形、断行和占位。';
         corpusStatus.className='small status-ok layout-corpus-status';
       }
     }
@@ -8741,6 +8690,7 @@ async function updateLayoutPreview() {
 
 function scheduleLayoutPreviewUpdate() {
   if(fontImportTransactionActive)return;
+  geometryExplicitlyRequested=false;
   geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
   if(geometryPreviewController){geometryPreviewController.abort();geometryPreviewController=null;}
   invalidateLibassPreview();
@@ -8779,8 +8729,8 @@ function renderPreviewCanvasSvg(data, options) {
     if (reasonEl) reasonEl.textContent = layout.failed_condition || 'OVERFLOW';
   } else {
     if (statusBadge) {
-      statusBadge.textContent = '仅预估边界 · 非真实验收';
-      statusBadge.style.color = 'var(--muted)';
+      statusBadge.textContent = '几何估算通过 · 非真实验收';
+      statusBadge.style.color = 'var(--ok)';
     }
     if (banner) banner.classList.add('hidden');
   }
@@ -8828,7 +8778,7 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#5d9cec';
 
-    if(options.showBBox){ // Solver estimate; never true libass glyph bounds.
+    { // Always show estimated line rectangles
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(93,156,236,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
@@ -8841,7 +8791,7 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#b78cff';
 
-    if(options.showBBox){ // Solver estimate; never true libass glyph bounds.
+    { // Always show estimated line rectangles
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(183,140,255,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
@@ -9440,7 +9390,7 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
 });
 
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('change',refreshDiagnosticGuides);
+  document.getElementById(id)?.addEventListener('change',updateLayoutPreview);
 });
 document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>{
   const label=document.getElementById('prevKaraokePreviewTimeVal');
@@ -9460,7 +9410,6 @@ document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>impor
 // Studio settings are explicit; removed orphaned "standard/plain/karaoke" preset buttons.
 
 document.getElementById('previewGeometryBtn')?.addEventListener('click',showGeometryPreview);
-document.getElementById('previewCompareBtn')?.addEventListener('click',toggleRealFrameComparison);
 document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);
 document.getElementById('previewVideoBtn')?.addEventListener('click',renderHsrEffectVideo);
 document.getElementById('effectBackgroundImageFile')?.addEventListener('change',event=>{

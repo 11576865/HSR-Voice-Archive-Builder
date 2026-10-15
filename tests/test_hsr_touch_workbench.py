@@ -58,7 +58,7 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertNotIn("const appearanceGeometryPreviewSpec=()=>",html)
         self.assertNotIn("elements.push(geometryStyledText(",html)
         self.assertIn("辅助边界图（无文字渲染）",html)
-        self.assertIn("if(options.showBBox){ // Solver estimate",html)
+        self.assertIn("Always show estimated line rectangles",html)
         # Assert the non-authoritative visual contract, not a legacy
         # literal sentence that was intentionally rewritten in PR #179.
         self.assertIn("geometry:['辅助边界图（无文字渲染）'",html)
@@ -67,8 +67,8 @@ class TouchWorkbenchTests(unittest.TestCase):
         # Real frame failures must not suggest a geometrically fake glyph
         # substitute. Assert the fail-closed evidence state rather than old copy.
         self.assertIn("真实渲染失败 · 不可定稿",html)
-        self.assertIn("const overlayVisible=geometryExplicitlyRequested",html)
-        self.assertIn("geometryExplicitlyRequested=!geometryExplicitlyRequested;",html)
+        self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
+        self.assertIn("geometryExplicitlyRequested=true;",html)
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
