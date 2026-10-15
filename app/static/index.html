@@ -6671,6 +6671,17 @@ let fontBrowserTargetId=null;
 let fontBrowserTimer=null;
 let previewBackgroundObjectUrl=null;
 const hostFontFaces=new Map();
+const hostFontEpochs=new Map();
+function invalidateHostFont(family){
+  const key=String(family||'').trim();
+  const old=hostFontFaces.get(key);
+  // Removing only Map state leaves a previous FontFace registered under the
+  // same CSS family alias. That leads to old and new glyphs being composed.
+  if(old?.face&&document.fonts?.delete)document.fonts.delete(old.face);
+  hostFontFaces.delete(key);
+  hostFontEpochs.set(key,(hostFontEpochs.get(key)||0)+1);
+}
+
 
 function hostFontAlias(family){
   const text=String(family||'').trim();
@@ -6680,6 +6691,10 @@ function hostFontAlias(family){
     hash=Math.imul(hash,16777619);
   }
   return 'HSRHostFont_'+(hash>>>0).toString(16);
+}
+
+function invalidateAllHostFonts(){
+  for(const family of [...hostFontFaces.keys()])invalidateHostFont(family);
 }
 
 function browserPreviewFontName(family){
@@ -6703,6 +6718,8 @@ async function ensureHostFontLoaded(family,{quiet=false}={}){
   }
 
   const alias=hostFontAlias(key);
+  const epoch=hostFontEpochs.get(key)||0;
+  const isCurrent=()=>epoch===(hostFontEpochs.get(key)||0);
   const promise=(async()=>{
     try{
       const response=await fetch('/api/subtitle-layout/font-file?family='+encodeURIComponent(key),{
@@ -6719,6 +6736,7 @@ async function ensureHostFontLoaded(family,{quiet=false}={}){
       if(!bytes.byteLength)throw new Error('字体文件为空');
       const face=new FontFace(alias,bytes);
       await face.load();
+      if(!isCurrent())return key; // An imported replacement superseded this fetch.
       document.fonts.add(face);
       hostFontFaces.set(key,{state:'loaded',alias,face,promise:null});
       if(!quiet){
@@ -6727,6 +6745,7 @@ async function ensureHostFontLoaded(family,{quiet=false}={}){
       }
       return alias;
     }catch(error){
+      if(!isCurrent())return key;
       hostFontFaces.set(key,{state:'failed',alias,error:String(error),promise:null});
       if(!quiet){
         const status=document.getElementById('fontResolveStatus');
@@ -6854,7 +6873,7 @@ async function importCurrentProjectFont(){
     if(currentProject?.root!==root)return;
     const family=String(data.font?.family||'');
     if(!family)throw new Error('服务器没有返回可识别的字体族名');
-    hostFontFaces.delete(family); // A prior browser fallback is no longer authoritative.
+    invalidateHostFont(family); // Remove previously registered FontFace, not just its cache record.
     const field=document.getElementById(target);
     if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
     const resolved=await ensureHostFontLoaded(family,{quiet:true});
@@ -7186,15 +7205,18 @@ async function loadWordAlignmentDiagnostics(){
         providerStatus.textContent='已安装 WhisperX / PyTorch'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；模型加载和对齐仍须实际验证。';
         providerStatus.className='small status-ok';
       }else{
-        const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
-        providerStatus.textContent='本机不能生成词级时间：缺少 '+missingPackages+'。请在支持 WhisperX/PyTorch 的电脑上生成本项目匹配的 JSON，再在此导入；不会伪造时间。';
-        providerStatus.className='small muted';
+        const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX / PyTorch';
+        providerStatus.textContent='当前设备不具备词级时间生成能力（缺少 '+missingPackages+'）。请使用「导入词级时间 JSON」；如需自动生成，须在安装了 WhisperX/PyTorch 的支持环境中运行。';
+        providerStatus.className='small status-warn';
       }
     }
     if(generateButton){
+      // An inert "Generate" action is not a feature. Only reveal it on a host
+      // where the necessary engine actually imports, and never fake syllable
+      // timestamps on unsupported Android/Termux installations.
       generateButton.disabled=!provider.available;
-      generateButton.hidden=false;
-      generateButton.title=provider.available?'尝试真实本地 WhisperX 对齐，仍需模型和音频可用':'本机缺少 WhisperX/PyTorch，禁用生成；可导入对齐 JSON';
+      generateButton.hidden=!provider.available;
+      generateButton.title=provider.available?'使用本地 WhisperX 生成真实词级时间；可能还需模型下载及音频依赖':'当前设备不支持本地生成，请导入有效的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
@@ -7619,6 +7641,10 @@ function renderLayoutExportHealthNotice(){
 }
 function layoutCueResetProject(projectKey){
   if(projectKey===layoutCueProjectKey)return;
+  // A different project's identically named family may refer to different bytes.
+  // Pure timeline module tests evaluate this function without font loader code.
+  // The full page provides the helper, while the isolated timeline stays usable.
+  if(typeof invalidateAllHostFonts==='function')invalidateAllHostFonts();
   layoutCueProjectKey=projectKey;
   const note=document.getElementById('layoutCueTimingStatus');
   if(note)note.dataset.committed='';
@@ -9167,6 +9193,21 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
     invalidateLayoutBatchAudit();
     scheduleLayoutPreviewUpdate();
   });
+});
+
+// Real ASS appearance values must have visible feedback even before the
+// user manually enables live FFmpeg preview. Debounce until a committed
+// change to avoid a subprocess for each slider pointer movement.
+function scheduleCommittedAppearancePreview(){
+  if(!currentProject?.root||document.body.dataset.workspace!=='layout')return;
+  liveRealPreviewArmed=true;
+  const status=document.getElementById('libassPreviewStatus');
+  if(status){status.textContent='正在按已提交的外观参数生成真实 FFmpeg/libass 预览…';status.className='small muted';}
+  queueLiveRealPreview();
+}
+['prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevEnableCard',
+ 'prevCardOpacity','prevEnableOutline'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',scheduleCommittedAppearancePreview);
 });
 
 ['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevAudioAwareFade','prevEnableSoftEntry','prevEnableArchiveHud'].forEach(id=>{

@@ -136,5 +136,20 @@ def import_project_font(output: Path, filename: str, encoded: str) -> dict[str, 
             handle.flush()
             os.fsync(handle.fileno())
         temporary.replace(destination)
+    # Exactly one selectable face per family. Leaving two content-addressed
+    # files with the same internal family in fontsdir makes Fontconfig/libass
+    # choose whichever it indexes first (often the old import). Only retire
+    # matching family files AFTER the new validated asset is durable.
+    replaced = []
+    for previous in list_project_fonts(output):
+        if (str(previous["family"]).casefold() != family.casefold()
+                or previous["filename"] == name):
+            continue
+        old_path = root / str(previous["filename"])
+        if old_path.is_symlink():
+            raise ValueError("Existing project font is an unsafe symlink")
+        old_path.unlink(missing_ok=True)
+        replaced.append(str(previous["filename"]))
     return {"filename": name, "family": family, "bytes": len(data),
-            "sha256": token, "preview_available": True}
+            "sha256": token, "preview_available": True,
+            "replaced_files": replaced}
