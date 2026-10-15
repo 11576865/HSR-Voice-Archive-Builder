@@ -6813,6 +6813,37 @@ async function loadFontBrowser(query=''){
   }
 }
 
+async function verifyImportedFontFace(family,target){
+  // A short representative cue tests the selected font, not whether a long
+  // authored subtitle can satisfy every layout constraint.
+  const payload=libassPreviewPayload();
+  const chinese=target==='prevChsFont';
+  payload.chinese_text=chinese?'字体测试':'';
+  payload.english_text=chinese?'':'Font test';
+  payload.word_alignments=null;
+  payload.preview_duration_seconds=2;
+  payload.preview_timestamp=1;
+  payload.base_chs_size=24;
+  payload.base_primary_size=24;
+  payload.primary_region_share=0.5;
+  payload.margin_left_percent=0.03;
+  payload.margin_top_percent=0.05;
+  payload.min_central_gap=16;
+  const response=await fetch('/api/subtitle-layout/render-preview',{
+    method:'POST',headers:{...headers(),'Content-Type':'application/json'},
+    body:JSON.stringify(payload),cache:'no-store'
+  });
+  if(!response.ok){
+    let message='HTTP '+response.status;
+    try{const data=await response.json();message=data.error||message}catch(_){}
+    throw new Error('字体短样本 FFmpeg/libass 核验失败：'+message);
+  }
+  const result=await response.blob();
+  if(!result.size||(result.type&&result.type!=='image/png'))
+    throw new Error('字体短样本验证没有返回有效 PNG');
+  return true;
+}
+
 async function importCurrentProjectFont(){
   if(fontImportTransactionActive)return;
   fontImportTransactionActive=true;
@@ -6864,19 +6895,15 @@ async function importCurrentProjectFont(){
     const resolveStatus=document.getElementById('fontResolveStatus');
     if(resolveStatus)resolveStatus.textContent='项目字体已加载，待实际 ASS 核验：'+family+'。';
     invalidateLibassPreview();
-    // "Import and apply" must survive reloading the project: the previous
-    // implementation only changed an unsaved input. Make the persistence
-    // contract explicit, and never report success when the save failed.
-    // FFmpeg confirmation is part of this transaction, not a footnote.
-    // Never report "applied" while ASS is rendering a fallback face.
-    const verified=await renderLibassPreview();
-    if(!verified||lastRenderedAssIdentity!==currentLibassPreviewIdentity())
-      throw new Error('实际 ASS 字体验证未通过或被取消'+(lastLibassPreviewError?'：'+lastLibassPreviewError:'；本次字体选择未保存，请重试'));
-    const persisted=await saveSubtitleLayoutSettings();
-    if(!persisted)throw new Error('已渲染，但项目设置保存失败');
+    // The imported font's identity must be verified independently from a long
+    // cue's layout. A long-cue overflow does not imply that the font is corrupt.
+    await verifyImportedFontFace(family,target);
+    if(currentProject?.root!==root)throw new Error('项目已切换，拒绝保存旧项目的字体');
+    const persisted=await saveSubtitleLayoutSettings({autosave:true});
+    if(!persisted)throw new Error('字体验证成功，但设置保存失败');
     fontChoiceSaved=true;
-    if(resolveStatus)resolveStatus.textContent='已保存并通过当前字幕的真实 ASS 验证：'+family+'。';
-    if(status){status.textContent='字体「'+family+'」已导入、实际渲染验证并保存。';status.className='small status-ok';}
+    if(resolveStatus)resolveStatus.textContent='项目字体已应用并通过短样本 FFmpeg/libass 字体匹配验证：'+family+'；长字幕仍需单独核对排版。';
+    if(status){status.textContent='字体「'+family+'」已保存并通过真实字体短样本验证；长字幕若溢出，请调整排版，而不必重复导入字体。';status.className='small status-ok';}
   }catch(error){
     if(!fontChoiceSaved&&field&&currentProject?.root===root&&field.value!==previousValue){
       field.value=previousValue;
@@ -6886,6 +6913,7 @@ async function importCurrentProjectFont(){
   }finally{
     fontImportTransactionActive=false;
     if(button)button.disabled=false;
+    if(currentProject?.root===root)scheduleLayoutPreviewUpdate();
   }
 }
 document.getElementById('projectFontImportBtn')?.addEventListener('click',importCurrentProjectFont);
