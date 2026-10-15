@@ -4,6 +4,7 @@ cd "$(dirname "$0")"
 
 command -v python >/dev/null 2>&1 || pkg install -y python
 command -v ffmpeg >/dev/null 2>&1 || pkg install -y ffmpeg
+command -v fc-match >/dev/null 2>&1 || pkg install -y fontconfig
 
 if ! command -v 7zz >/dev/null 2>&1 && ! command -v 7z >/dev/null 2>&1; then
   pkg install -y 7zip || pkg install -y p7zip

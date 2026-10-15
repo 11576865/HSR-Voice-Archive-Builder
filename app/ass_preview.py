@@ -17,7 +17,7 @@ from subtitle_layout.ass_writer import write_ass
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.fonts import validate_ass_font_name
 from .archive_bundle_exporter import image_extension, MAX_BACKGROUND_BYTES
-from .project_fonts import project_font_for_family
+from .project_fonts import project_font_for_family, project_font_face_names
 
 
 @dataclass
@@ -154,7 +154,7 @@ def _assert_project_font_selected(
             continue
         matcher = shutil.which("fc-match")
         if not matcher:
-            raise RuntimeError("无法确认项目字体：处理主机缺少 fontconfig 的 fc-match，请安装后重试。")
+            raise RuntimeError("无法确认项目字体：缺少 fontconfig 的 fc-match。Termux 请运行 pkg install fontconfig 后重试。")
         completed = subprocess.run(
             [matcher, "-f", "%{file}\\n", "--", family],
             env=env, capture_output=True, text=True, timeout=8, check=False,
@@ -193,6 +193,10 @@ def _assert_project_font_selected(
                    if f"fontselect: ({family.casefold()}," in line]
         expected_path = str(expected.resolve()).casefold()
         normalized_family = "".join(ch for ch in family.casefold() if ch.isalnum())
+        sfnt_faces = {
+            "".join(ch for ch in name.casefold() if ch.isalnum())
+            for name in project_font_face_names(expected)
+        }
         def libass_face_ok(line: str) -> bool:
             if "->" not in line:
                 return False
@@ -200,8 +204,11 @@ def _assert_project_font_selected(
             if "/" in selected or "\\" in selected:
                 return expected_path == str(Path(selected).resolve()).casefold()
             normalized_face = "".join(ch for ch in selected.casefold() if ch.isalnum())
-            # Face suffixes are common ("Name-Regular", "Name-Bold").
+            # Accept the actual face/full/PostScript names from the imported
+            # font, including non-standard weight suffixes such as "-55W".
+            # Keep conventional suffixes for hosts exposing synthetic faces.
             return bool(normalized_face and (
+                normalized_face in sfnt_faces or
                 normalized_face == normalized_family or
                 any(normalized_face == normalized_family + suffix
                     for suffix in ("regular", "bold", "italic", "medium",

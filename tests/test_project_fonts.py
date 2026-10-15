@@ -6,27 +6,77 @@ import shutil
 import struct
 import tempfile
 import unittest
+from types import SimpleNamespace
+from unittest.mock import patch
 from pathlib import Path
 
-from app.ass_preview import preview_config_from_payload, render_ass_preview_png
+from app.ass_preview import preview_config_from_payload, render_ass_preview_png, _assert_project_font_selected
 from app.project_fonts import (
     import_project_font,
     list_project_fonts,
     project_font_for_family,
     font_asset_directory,
+    project_font_face_names,
 )
 
 
-def fake_name_table_font(family: str = "Example Family") -> bytes:
-    label = family.encode("utf-16-be")
-    names = struct.pack(">HHH", 0, 1, 18)
-    names += struct.pack(">HHHHHH", 3, 1, 1033, 1, len(label), 0)
-    names += label
+def fake_name_table_font(family: str = "Example Family",
+                         postscript: str | None = None) -> bytes:
+    fields = [(1, family)]
+    if postscript is not None:
+        fields.append((6, postscript))
+    strings = b""
+    records = b""
+    for name_id, name in fields:
+        label = name.encode("utf-16-be")
+        records += struct.pack(">HHHHHH", 3, 1, 1033, name_id,
+                               len(label), len(strings))
+        strings += label
+    names = struct.pack(">HHH", 0, len(fields), 6 + 12 * len(fields))
+    names += records + strings
     return (b"\x00\x01\x00\x00" + struct.pack(">HHHH", 1, 0, 0, 0) +
             struct.pack(">4sIII", b"name", 0, 28, len(names)) + names)
 
 
 class ProjectFontTests(unittest.TestCase):
+    def test_nonstandard_postscript_face_is_verified_from_imported_sfnt(self):
+        # HYRunYuan-55W may be the PostScript face for family HYRunYuan.
+        # Reject unrelated faces instead of accepting an arbitrary prefix.
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td)
+            blob = fake_name_table_font("HYRunYuan", "HYRunYuan-55W")
+            added = import_project_font(
+                output, "HYRunYuan-55W.ttf",
+                base64.b64encode(blob).decode("ascii"))
+            font_file = font_asset_directory(output) / added["filename"]
+            self.assertIn("HYRunYuan-55W", project_font_face_names(font_file))
+            cfg = preview_config_from_payload({
+                "chs_font": "HYRunYuan", "primary_font": "Noto Sans"
+            })
+            matched = SimpleNamespace(stdout=str(font_file.resolve()) + "\n",
+                                      returncode=0)
+            with patch("app.ass_preview.shutil.which",
+                       return_value="/usr/bin/fc-match"), \
+                 patch("app.ass_preview.subprocess.run", return_value=matched):
+                _assert_project_font_selected(
+                    "fontselect: (HYRunYuan, 400, 0) -> HYRunYuan-55W, 0",
+                    cfg, font_asset_directory(output),
+                    english="", chinese="测试")
+                with self.assertRaisesRegex(RuntimeError, "不匹配的字体面"):
+                    _assert_project_font_selected(
+                        "fontselect: (HYRunYuan, 400, 0) -> HYRunYuan-66W, 0",
+                        cfg, font_asset_directory(output),
+                        english="", chinese="测试")
+
+    def test_termux_launchers_install_required_fontconfig(self):
+        root = Path(__file__).resolve().parents[1]
+        for name in ("run_termux.sh", "run_termux_lan.sh"):
+            with self.subTest(name=name):
+                script = (root / name).read_text("utf-8")
+                self.assertIn(
+                    "command -v fc-match >/dev/null 2>&1 || pkg install -y fontconfig",
+                    script)
+
     def test_import_family_identity_and_deduplicate(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
