@@ -108,6 +108,57 @@ class RedCloudAndStandaloneAssTests(unittest.TestCase):
         self.assertIn(r"\fad(", ass)
         self.assertNotIn(r"\fscx", ass)
 
+    def test_six_hundred_ms_fade_is_serialized_in_both_language_events(self):
+        cfg = SubtitleRenderConfig(
+            primary_color="#C9E3FF", chs_color="#FFFFFF",
+            fade_in_ms=600, fade_out_ms=600, enable_kinetic=True,
+        )
+        entries = [
+            SimpleNamespace(english="Hello", chinese="你好",
+                            start_seconds=1.0, audio_end_seconds=2.0,
+                            display_end_seconds=2.0),
+            SimpleNamespace(english="World", chinese="世界",
+                            start_seconds=3.5, audio_end_seconds=4.5,
+                            display_end_seconds=4.5),
+        ]
+        ass = render_ass(entries, config=cfg)
+        lines = [line for line in ass.splitlines() if line.startswith("Dialogue:")]
+        first = [line for line in lines if "0:00:00.40,0:00:02.60" in line]
+        self.assertEqual(len([line for line in first if ",Primary," in line]), 1)
+        self.assertEqual(len([line for line in first if ",CHS," in line]), 1)
+        self.assertTrue(all(r"\fad(600,600)" in line for line in first))
+        # Neither voice moment is consumed by transitions, and silence remains.
+        self.assertIn("0:00:02.90,0:00:04.50", ass)
+
+    def test_browser_and_servers_expose_two_distinct_user_commands(self):
+        root = Path(__file__).resolve().parents[1]
+        html = (root / "app/static/index.html").read_text(encoding="utf-8")
+        self.assertIn("生成 ASS（内）", html)
+        self.assertIn("生成 ASS（外）", html)
+        self.assertIn("'/api/output/ass/external'", html)
+        self.assertIn("startAssExport('internal')", html)
+        self.assertIn("startAssExport('external')", html)
+        self.assertIn('id="prevPrimaryColor"', html)
+        self.assertIn('id="prevChsColor"', html)
+        self.assertIn('fieldset hidden disabled style="display:none"', html)
+        for path in ("app/server.py", "app/lite_server.py"):
+            source = (root / path).read_text(encoding="utf-8")
+            self.assertIn('"/api/output/ass/external"', source)
+            self.assertIn("queue_external_ass_export(config, output)", source)
+            self.assertIn("normalize_subtitle_color", source)
+
+    def test_style_autosave_does_not_invoke_export_or_video_renderer(self):
+        html = (Path(__file__).resolve().parents[1] /
+                "app/static/index.html").read_text(encoding="utf-8")
+        start = html.index("async function saveSubtitleLayoutSettings(")
+        end = html.index("// Shared immutable", start)
+        save = html[start:end]
+        self.assertIn("'/api/subtitle-layout/settings'", save)
+        for forbidden in ("startAssExport(", "renderHsrEffectVideo(",
+                          "renderLibassPreview(", "/api/output/ass"):
+            self.assertNotIn(forbidden, save)
+
+
 
 if __name__ == "__main__":
     unittest.main()
