@@ -745,8 +745,8 @@ async def api_subtitle_layout_settings(request: Request):
             subtitle_preset=preset,
             subtitle_chs_font=validate_ass_font_name(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑"),
             subtitle_primary_font=validate_ass_font_name(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans"),
-            subtitle_chs_size=max(12, min(120, int(data.get("base_chs_size", config.subtitle_chs_size)))),
-            subtitle_primary_size=max(12, min(120, int(data.get("base_primary_size", config.subtitle_primary_size)))),
+            subtitle_chs_size=max(12, min(240, int(data.get("base_chs_size", config.subtitle_chs_size)))),
+            subtitle_primary_size=max(12, min(240, int(data.get("base_primary_size", config.subtitle_primary_size)))),
             subtitle_margin_horizontal_percent=max(
                 0.0, min(0.40, float(data.get("margin_horizontal_percent", config.subtitle_margin_horizontal_percent)))
             ),
@@ -768,19 +768,19 @@ async def api_subtitle_layout_settings(request: Request):
                 "enable_multi_layer_outline", config.subtitle_enable_multi_layer_outline
             ),
             subtitle_enable_kinetic=as_bool("enable_kinetic", config.subtitle_enable_kinetic),
-            subtitle_fade_in_ms=max(0, min(2000, int(data.get("fade_in_ms", config.subtitle_fade_in_ms)))),
-            subtitle_fade_out_ms=max(0, min(2000, int(data.get("fade_out_ms", config.subtitle_fade_out_ms)))),
+            subtitle_fade_in_ms=max(0, min(5000, int(data.get("fade_in_ms", config.subtitle_fade_in_ms)))),
+            subtitle_fade_out_ms=max(0, min(5000, int(data.get("fade_out_ms", config.subtitle_fade_out_ms)))),
             subtitle_use_audio_aware_fade=as_bool(
                 "use_audio_aware_fade", config.subtitle_use_audio_aware_fade
             ),
             subtitle_outline_width=max(
-                0.0, min(12.0, float(data.get("outline_width", config.subtitle_outline_width)))
+                0.0, min(24.0, float(data.get("outline_width", config.subtitle_outline_width)))
             ),
             subtitle_shadow_depth=max(
-                0.0, min(12.0, float(data.get("shadow_depth", config.subtitle_shadow_depth)))
+                0.0, min(24.0, float(data.get("shadow_depth", config.subtitle_shadow_depth)))
             ),
             subtitle_blur_radius=max(
-                0.0, min(5.0, float(data.get("blur_radius", config.subtitle_blur_radius)))
+                0.0, min(12.0, float(data.get("blur_radius", config.subtitle_blur_radius)))
             ),
             subtitle_card_opacity=max(
                 0.0, min(1.0, float(data.get("card_opacity", config.subtitle_card_opacity)))
@@ -789,9 +789,9 @@ async def api_subtitle_layout_settings(request: Request):
                 "enable_soft_entry", config.subtitle_enable_soft_entry
             ),
             subtitle_soft_entry_scale_percent=max(
-                90.0,
+                25.0,
                 min(
-                    100.0,
+                    300.0,
                     float(
                         data.get(
                             "soft_entry_scale_percent",
@@ -801,13 +801,13 @@ async def api_subtitle_layout_settings(request: Request):
                 ),
             ),
             subtitle_soft_entry_blur=max(
-                0.0, min(5.0, float(data.get("soft_entry_blur", config.subtitle_soft_entry_blur)))
+                0.0, min(12.0, float(data.get("soft_entry_blur", config.subtitle_soft_entry_blur)))
             ),
             subtitle_soft_entry_ms=max(
-                0, min(1000, int(data.get("soft_entry_ms", config.subtitle_soft_entry_ms)))
+                0, min(5000, int(data.get("soft_entry_ms", config.subtitle_soft_entry_ms)))
             ),
             subtitle_enable_archive_hud=as_bool("enable_archive_hud", config.subtitle_enable_archive_hud),
-            subtitle_archive_hud_font_size=max(12, min(48, int(data.get("archive_hud_font_size", config.subtitle_archive_hud_font_size)))),
+            subtitle_archive_hud_font_size=max(12, min(120, int(data.get("archive_hud_font_size", config.subtitle_archive_hud_font_size)))),
             subtitle_archive_hud_opacity=max(0.1, min(1.0, float(data.get("archive_hud_opacity", config.subtitle_archive_hud_opacity)))),
         )
         return {"ok": True, "project": project_summary(config)}
@@ -837,9 +837,9 @@ async def api_subtitle_layout_preview(request: Request):
             margin_left_percent=float(data.get("margin_left_percent") if data.get("margin_left_percent") is not None else 0.03),
             margin_top_percent=float(data.get("margin_top_percent") if data.get("margin_top_percent") is not None else 0.05),
             min_central_gap=float(data.get("min_central_gap") if data.get("min_central_gap") is not None else 20.0),
-            outline_width=max(0.0, min(12.0, float(data.get("outline_width", 3.0)))),
-            shadow_depth=max(0.0, min(12.0, float(data.get("shadow_depth", 2.0)))),
-            blur_radius=max(0.0, min(5.0, float(data.get("blur_radius", 0.0)))),
+            outline_width=max(0.0, min(24.0, float(data.get("outline_width", 3.0)))),
+            shadow_depth=max(0.0, min(24.0, float(data.get("shadow_depth", 2.0)))),
+            blur_radius=max(0.0, min(12.0, float(data.get("blur_radius", 0.0)))),
             enable_multi_layer_outline=str(data.get("enable_multi_layer_outline", "false")).lower() in {"true", "1", "on"},
             primary_region_share=max(0.20, min(0.80, float(data.get("primary_region_share") or 0.60))),
             chs_font=str(data.get("chs_font") or "汉仪旗黑"),
