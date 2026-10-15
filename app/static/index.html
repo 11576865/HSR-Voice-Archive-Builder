@@ -2927,8 +2927,6 @@ body[data-workspace="layout"] .preview-workbench .layout-preview-region{
 /* A single primary workspace nav now owns Layout/Effects switching. */
 #subtitleLayoutPreviewCard[data-studio-mode="style"] [data-studio-scope="effects"],
 #subtitleLayoutPreviewCard[data-studio-mode="effects"] [data-studio-scope="style"],
-#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel,
-#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutCueEditorPanel,
 #subtitleLayoutPreviewCard .layout-workflow-strip{display:none!important}
 #subtitleLayoutPreviewCard #libassVideoPreview:not(.hidden){display:block!important}
 #subtitleLayoutPreviewCard #libassVideoPreview.hidden{display:none!important}
@@ -3688,17 +3686,18 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <summary><span>位置与安全区</span><small>Position</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
+            <div class="studio-region-share" role="group" aria-label="双语画面空间占比">
+              <label for="prevPrimaryShare">双语区域比例 · 原文 / 中文</label>
+              <output id="prevPrimaryShareVal" for="prevPrimaryShare">60% / 40%</output>
+            </div>
+            <input type="range" id="prevPrimaryShare" min="20" max="80" value="60" step="1"
+                   aria-label="原文区域百分比，剩余百分比分配给中文字幕">
+            <div class="small muted">可直接拖动，或使用下方数字及 ± 按钮。默认原文 60%／中文字幕 40%。</div>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevCentralGap" style="margin:0">中央间隔</label>
               <span id="prevCentralGapVal" class="small muted">20 px</span>
             </div>
             <input type="range" id="prevCentralGap" min="0" max="100" value="20" step="1">
-            <div class="studio-region-share">
-              <label for="prevPrimaryShare">原文／中文字幕垂直区域</label>
-              <output id="prevPrimaryShareVal" for="prevPrimaryShare">60% / 40%</output>
-            </div>
-            <input type="range" id="prevPrimaryShare" min="20" max="80" value="60" step="1"
-                   aria-label="原文字幕高度占比，剩余部分自动分给中文字幕">
             <div style="display:flex;justify-content:space-between">
               <label for="prevMarginH" style="margin:0">水平安全边距</label>
               <span id="prevMarginHVal" class="small muted">3 % (58px)</span>
@@ -3709,19 +3708,6 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevMarginVVal" class="small muted">5 % (54px)</span>
             </div>
             <input type="range" id="prevMarginV" min="0" max="20" value="5" step="1">
-          </section>
-            </div>
-          </details>
-
-          <details class="layout-inspector-section layout-section-compact" hidden inert aria-hidden="true" data-studio-scope="style" name="hsr-style-parameter-groups">
-            <summary><span>预设</span><small>Presets</small></summary>
-            <div class="layout-inspector-section-body">
-              <section class="inspector-group">
-            <div class="actions" style="margin:8px 0">
-              <button type="button" class="small" id="prevPresetDefault">标准</button>
-              <button type="button" class="small" id="prevPresetPlain">纯净</button>
-              <button type="button" class="small" id="prevPresetKaraoke">K 歌</button>
-            </div>
           </section>
             </div>
           </details>
@@ -6880,7 +6866,10 @@ async function importCurrentProjectFont(){
     // contract explicit, and never report success when the save failed.
     const persisted=await saveSubtitleLayoutSettings();
     if(!persisted)throw new Error('字体已保存到项目，但当前字体选择尚未保存。请检查上方保存状态并重试');
-    if(status){status.textContent='字体「'+family+'」已导入、加载并保存为'+(target==='prevChsFont'?'中文':'原文')+'字体。可进一步用实际 ASS 渲染检查。';status.className='small status-ok';}
+    await renderLibassPreview();
+    if(document.querySelector('.layout-preview-evidence')?.dataset.previewEvidence!=='libass')
+      throw new Error('字体已保存，但 FFmpeg/libass 未确认实际字形，请检查预览错误，不应把回退字体标记为成功');
+    if(status){status.textContent='字体「'+family+'」已导入并保存，FFmpeg/libass 已完成真实渲染验证。';status.className='small status-ok';}
   }catch(error){
     if(status){status.textContent='字体导入失败：'+shortError(error);status.className='small status-bad';}
   }finally{
