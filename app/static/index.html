@@ -3334,7 +3334,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
         <details id="archiveBundlePanel" class="hsr-archive-bundle">
           <summary>默认完整 MKV · 自定义背景 + 主／章节 FLAC 音轨 + SRT／ASS 双字幕轨</summary>
-          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认与工作台相同的红云图片，可自定义背景；复制主连续 FLAC（默认音轨）；启用章节 FLAC 时也封入每个章节的独立可切换音轨，并封入 SRT 和 ASS 两条字幕轨及可选字体。原始 FLAC、SRT、ASS 独立保留；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
+          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认与工作台相同的红云图片，可自定义背景；复制主连续 FLAC（默认音轨）；启用章节 FLAC 时也封入每个章节的独立可切换音轨，并封入 SRT 和 ASS 两条字幕轨及可选字体。工作中间 FLAC／SRT／ASS 封装验证后会清理，按需可独立导出；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
           <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 的来源一致性与生成前提。</p>
           <div class="hsr-bundle-options">
             <label for="bundleBackgroundMode">背景类型
@@ -3581,7 +3581,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   </details>
 
                 
-<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色，不影响最终 MKV。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色；首次 MKV 也默认使用同一红云资产，可在成品设置中另选背景。</div>
 
 
         <div class="preview-controls" id="previewControls">
@@ -3710,7 +3710,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <input type="number" id="prevFadeIn" min="0" value="200" step="10" inputmode="numeric">
             <input type="hidden" id="prevFadeOut" value="200">
             <div id="hsrFadeBudgetStatus" class="small muted" role="status" aria-live="polite">淡出 + 后淡入不得超过最短相邻语音间隔；超过 60% 将提示警告。</div>
-            <label class="check" hidden><input type="checkbox" id="prevEnableSoftEntry" disabled> 柔和进入动画（暂不开放）</label>
+            <fieldset hidden disabled style="display:none">
+            <label class="check"><input type="checkbox" id="prevEnableSoftEntry" disabled> 柔和进入动画（暂不开放）</label>
             <div style="display:none">
               <label for="prevSoftEntryScale" style="margin:0">起始缩放</label>
               <span id="prevSoftEntryScaleVal" class="small muted">98%</span>
@@ -3726,7 +3727,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevSoftEntryMsVal" class="small muted">160 ms</span>
             </div>
             <input type="range" id="prevSoftEntryMs" min="0" max="5000" value="160" step="10">
-            <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：从所选起始缩放与 Blur 过渡到正常值。高倍率与长时长可能超过字幕区域，最终以真实 ASS 验收为准。</div>
+            <div class="small muted inspector-help">暂时关闭非 Fade 变换动画。</div>
+            </fieldset>
           </section>
             </div>
           </details>
