@@ -91,7 +91,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("#assCanvasPreview{display:none!important}",css)
         self.assertIn("studioV4Timing[open] #layoutTimelinePanel",css)
         self.assertIn('id="projectFontRefreshBtn" class="secondary" type="button" hidden',html)
-        self.assertIn("generateButton.hidden=!provider.available",html)
+        self.assertIn("generateButton.hidden=false",html)
 
     def test_persistent_share_wired_both_server_flavors_and_final_export(self):
         project=(ROOT/"app/project.py").read_text("utf-8")
