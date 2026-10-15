@@ -62,13 +62,14 @@ def resolve_timeline(
             gap_role = "chapter" if boundary else "between_voice"
             gap_samples = group_samples if boundary else same_samples
             next_start = audio_end + gap_samples
-            display_end = max(audio_end, next_start - max(1, round(0.001 * sample_rate)))
         else:
             gap_role = ""
             gap_samples = 0
             next_start = audio_end
-            display_end = audio_end
 
+        # Subtitle events end with their PCM voice, never at the next cue.
+        # Inter-voice and chapter gaps remain in the actual audio timeline.
+        display_end = audio_end
         gap_seconds = gap_samples / sample_rate
         segments.append({
             "type": "voice",
