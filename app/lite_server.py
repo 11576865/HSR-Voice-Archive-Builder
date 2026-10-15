@@ -33,7 +33,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, reserve_project_output_writer
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports, refresh_ass_only
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -902,18 +902,20 @@ class Handler(BaseHTTPRequestHandler):
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Project output directory is not configured")
-            if str(data.get("ass_only", "")).lower() in {"true", "1"}:
-                refreshed = refresh_ass_only(config, output)
-            else:
-                refreshed = refresh_derived_subtitle_exports(
-                    config, output, force_ass=str(data.get("force_ass", "")).lower() in {"true", "1"}
-                )
-            artifact_error = str(refreshed.get("ass_error") or "")
+            with reserve_project_output_writer(config.root):
+                if str(data.get("ass_only", "")).lower() in {"true", "1"}:
+                    refreshed = refresh_ass_only(config, output)
+                else:
+                    refreshed = refresh_derived_subtitle_exports(
+                        config, output, force_ass=str(data.get("force_ass", "")).lower() in {"true", "1"}
+                    )
+                artifact_error = str(refreshed.get("ass_error") or "")
+                export_status = read_subtitle_export_health(output)
             self._json({
                 "ok": True, "refreshed": refreshed,
                 "artifacts_current": not bool(artifact_error),
                 "artifact_error": artifact_error,
-                "export_status": read_subtitle_export_health(output),
+                "export_status": export_status,
             })
             return
 
@@ -1543,15 +1545,26 @@ class Handler(BaseHTTPRequestHandler):
                 raise FileNotFoundError("请先完成档案构建")
 
             def run(report_progress):
-                report_progress("render", "正在生成 ASS 字幕", 0, 1)
+                totals = {"count": 0}
+
+                def report_ass_progress(current: int, total: int) -> None:
+                    totals["count"] = total
+                    report_progress(
+                        "render", f"正在校验真实字幕字形：{current}/{total} 条",
+                        current, total,
+                    )
+
+                report_progress("prepare", "正在加载字幕并准备真实字形校验", 0, 0)
                 result = refresh_subtitle_artifacts_from_settings(
                     output,
                     source_language=config.source_text_language or "en",
                     target_language=config.target_language or "zh-CN",
                     generate_ass=True,
                     render_config=subtitle_render_config(config),
+                    ass_progress=report_ass_progress,
                 )
-                report_progress("render", "ASS 字幕已生成", 1, 1)
+                completed = max(totals["count"], 1)
+                report_progress("render", "ASS 字幕已生成", completed, completed)
                 return result
 
             job = create_job(
