@@ -778,7 +778,9 @@ class Handler(BaseHTTPRequestHandler):
                         word_alignments = parsed_word_alignments
                 except (TypeError, ValueError):
                     word_alignments = None
+            layout_capture: dict[str, object] = {}
             png = render_ass_preview_png(
+                layout_capture=layout_capture,
                 english_text=data.get("english_text", ""),
                 chinese_text=data.get("chinese_text", ""),
                 source_language=data.get("source_language", "en") or "en",
@@ -790,12 +792,14 @@ class Handler(BaseHTTPRequestHandler):
                 font_dir=_active_project_font_dir(),
                 use_studio_reference_background=_bool(data.get("use_studio_reference_background")),
             )
-            self._send_bytes(
-                200,
-                png,
-                "image/png",
-                extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
-            )
+            headers_out = {"X-HSR-Preview-Renderer": "ffmpeg-libass"}
+            if layout_capture:
+                encoded = base64.b64encode(json.dumps(
+                    layout_capture, ensure_ascii=False, separators=(",", ":")
+                ).encode("utf-8")).decode("ascii")
+                if len(encoded) <= 6000:
+                    headers_out["X-HSR-Verified-Layout"] = encoded
+            self._send_bytes(200, png, "image/png", extra_headers=headers_out)
             return
 
 
