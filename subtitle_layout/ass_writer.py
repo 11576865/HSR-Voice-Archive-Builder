@@ -10,6 +10,7 @@ from .config import SubtitleRenderConfig
 from .fonts import resolve_font_path, validate_ass_font_name
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
+from .collision import central_ink_reserve
 from .libass_ink import validate_real_ink, InkProbeUnavailable
 from .measure import measure_line_height, measure_text_width
 from .safe_area import DEFAULT_SAFE_AREA, SafeArea
@@ -377,6 +378,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         margin_top_percent=margin_v_pct,
         margin_bottom_percent=margin_v_pct,
     )
+    ink_gap_padding = central_ink_reserve(
+        cfg.outline_width, cfg.shadow_depth, cfg.blur_radius,
+        use_multi_layer_outline,
+    )
 
     dialogues: list[str] = []
     overflow_records: list[dict[str, object]] = []
@@ -417,6 +422,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             base_primary_size=int(cfg.base_primary_size),
             safe_area=safe_area,
             min_central_gap=float(cfg.min_central_gap),
+            central_ink_padding=ink_gap_padding,
             primary_region_share=float(cfg.primary_region_share),
             chs_font_path=chs_font_path,
             primary_font_path=primary_font_path,
@@ -447,6 +453,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                         base_primary_size=int(cfg.base_primary_size),
                         safe_area=safe_area,
                         min_central_gap=float(cfg.min_central_gap),
+                        central_ink_padding=ink_gap_padding,
                         primary_region_share=float(cfg.primary_region_share),
                         chs_font_path=chs_font_path, primary_font_path=primary_font_path,
                         primary_width_factor=p_ratio,
