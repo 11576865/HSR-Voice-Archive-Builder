@@ -119,18 +119,14 @@ class DynamicBackgroundImageTests(unittest.TestCase):
             for actual, expected in zip(decoded[:3], (0xef, 0x22, 0x99)):
                 self.assertLessEqual(abs(actual - expected), 24, list(decoded[:3]))
 
-    def test_frontend_validates_matching_image_payload_and_provenance(self):
+    def test_frontend_preview_has_one_reference_background(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
-        for value in (
-            'id="effectBackgroundImageFile"',
-            "payload.preview_background_image_base64=await effectFootageAsBase64(backgroundImage)",
-            "backgroundImage===effectBackgroundImageFile",
-            "'background-image'",
-            "actualBackground && actualBackground!==",
-            "effectBackgroundImageFile=event.target.files?.[0]||null",
-        ):
-            with self.subTest(value=value):
-                self.assertIn(value, html)
+        self.assertIn('use_studio_reference_background:true', html)
+        self.assertNotIn('id="effectBackgroundImageFile"', html)
+        self.assertNotIn('id="effectPreviewBackgroundColor"', html)
+        self.assertIn('id="effectFootageFile"', html)
+        # The backend can render supplied images for compatible clients,
+        # but the studio no longer exposes multiple overlapping backdrops.
 
 
 if __name__ == "__main__":

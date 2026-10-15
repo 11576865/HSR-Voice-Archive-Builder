@@ -37,6 +37,7 @@ from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subt
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
+from .api_word_alignment import generate_api_word_alignments, api_word_alignment_status
 from .reference_workbench import (
     decorate_subtitles,
     export_reference_pack,
@@ -327,6 +328,9 @@ class Handler(BaseHTTPRequestHandler):
                 ".js": "text/javascript; charset=utf-8",
                 ".svg": "image/svg+xml",
                 ".png": "image/png",
+                ".webp": "image/webp",
+                ".jpg": "image/jpeg",
+                ".jpeg": "image/jpeg",
             }.get(suffix, "application/octet-stream")
             self._send_bytes(200, target.read_bytes(), ctype)
             return
@@ -419,68 +423,6 @@ class Handler(BaseHTTPRequestHandler):
                 raise ValueError("Subtitle id is required")
             self._json({"ok": True, "alignment": get_word_alignment(output, item_id)})
             return
-        if path.startswith("/api/project/") and path.endswith("/word-alignments/generate"):
-            config = _active_config()
-            assert_project_idle(config.root)
-            output = resolve_project_path(config, config.output_dir)
-            if output is None:
-                raise ValueError("Project output directory is not configured")
-            if not (output / "manifest.json").is_file():
-                raise FileNotFoundError("请先完成档案构建")
-
-            raw_ids = data.get("item_ids") or "[]"
-            try:
-                item_ids = json.loads(raw_ids) if isinstance(raw_ids, str) else raw_ids
-            except (TypeError, ValueError) as exc:
-                raise ValueError("item_ids must be valid JSON") from exc
-            if not isinstance(item_ids, list):
-                raise ValueError("item_ids must be an array")
-            item_ids = [str(value) for value in item_ids if str(value).strip()]
-            force = _bool(data.get("force"))
-
-            provider = local_alignment_provider_status()
-            if not provider.get("available"):
-                missing = ", ".join(provider.get("missing_packages") or [])
-                raise RuntimeError(
-                    "本地强制对齐不可用"
-                    + (f"：缺少 {missing}" if missing else "")
-                    + "。可选安装：python -m pip install whisperx"
-                )
-
-            def run(report_progress):
-                result = generate_local_word_alignments(
-                    config,
-                    output,
-                    item_ids=item_ids or None,
-                    force=force,
-                    report_progress=report_progress,
-                )
-                report_progress("refresh", "正在刷新字幕成品", 0, 1)
-                refreshed = refresh_subtitle_artifacts_from_settings(
-                    output,
-                    source_language=config.source_text_language or "en",
-                    target_language=config.target_language or "zh-CN",
-                    generate_ass=(
-                        (output / "HSR_Voice_Archive.ass").is_file()
-                        or bool(getattr(config, "generate_ass", False))
-                    ),
-                    render_config=subtitle_render_config(config),
-                    strict_ass=False,
-                )
-                report_progress("refresh", "词级时间与字幕成品已刷新", 1, 1)
-                result["refreshed"] = refreshed
-                return result
-
-            job = create_job(
-                "word-align",
-                run,
-                with_progress=True,
-                project_root=config.root,
-                project_name=config.name,
-            )
-            self._json({"ok": True, "job": job.id, "provider": provider})
-            return
-
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
@@ -490,6 +432,7 @@ class Handler(BaseHTTPRequestHandler):
                 "ok": True,
                 "diagnostics": alignment_diagnostics(output),
                 "local_provider": local_alignment_provider_status(),
+                "api_provider": api_word_alignment_status(),
             })
             return
         if path.startswith("/api/project/") and "/subtitles/" in path and path.endswith("/audio"):
@@ -594,6 +537,81 @@ class Handler(BaseHTTPRequestHandler):
                 model=data.get("model", ""), timeout=20.0,
             ))
             return
+        if path.startswith("/api/project/") and path.endswith("/word-alignments/generate"):
+            config = _active_config()
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            if not (output / "manifest.json").is_file():
+                raise FileNotFoundError("请先完成档案构建")
+
+            raw_ids = data.get("item_ids") or "[]"
+            try:
+                item_ids = json.loads(raw_ids) if isinstance(raw_ids, str) else raw_ids
+            except (TypeError, ValueError) as exc:
+                raise ValueError("item_ids must be valid JSON") from exc
+            if not isinstance(item_ids, list):
+                raise ValueError("item_ids must be an array")
+            item_ids = [str(value) for value in item_ids if str(value).strip()]
+            force = _bool(data.get("force"))
+
+            api_mode = data.get("provider") == "whisper-api-words"
+            if api_mode:
+                if not _bool(data.get("confirm_audio_upload")):
+                    raise ValueError("请确认上传原始语音和可能产生的 API 费用")
+                if not 1 <= len(item_ids) <= 5:
+                    raise ValueError("API 模式必须明确选择 1–5 个条目")
+                provider = api_word_alignment_status()
+                if not provider["configured"]:
+                    raise ValueError("请先配置自己的 API Key")
+            else:
+                provider = local_alignment_provider_status()
+                if not provider.get("available"):
+                    missing = ", ".join(provider.get("missing_packages") or [])
+                    raise RuntimeError(
+                        "本地强制对齐不可用"
+                        + (f"：缺少 {missing}" if missing else "")
+                        + "。可选安装：python -m pip install whisperx"
+                    )
+
+            def run(report_progress):
+                if api_mode:
+                    result = generate_api_word_alignments(
+                        config, output, item_ids=item_ids,
+                        report_progress=report_progress,
+                    )
+                else:
+                    result = generate_local_word_alignments(
+                        config, output, item_ids=item_ids or None,
+                        force=force, report_progress=report_progress,
+                    )
+                report_progress("refresh", "正在刷新字幕成品", 0, 1)
+                refreshed = refresh_subtitle_artifacts_from_settings(
+                    output,
+                    source_language=config.source_text_language or "en",
+                    target_language=config.target_language or "zh-CN",
+                    generate_ass=(
+                        (output / "HSR_Voice_Archive.ass").is_file()
+                        or bool(getattr(config, "generate_ass", False))
+                    ),
+                    render_config=subtitle_render_config(config),
+                    strict_ass=False,
+                )
+                report_progress("refresh", "词级时间与字幕成品已刷新", 1, 1)
+                result["refreshed"] = refreshed
+                return result
+
+            job = create_job(
+                "word-align-api" if api_mode else "word-align",
+                run,
+                with_progress=True,
+                project_root=config.root,
+                project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id, "provider": provider})
+            return
+
         if path.startswith("/api/project/") and path.endswith("/word-alignments"):
             config = _active_config()
             assert_project_idle(config.root)

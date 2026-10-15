@@ -313,6 +313,12 @@ def desktop_check(browser, base_url, output, report):
            "Second subtitle editor should not exist in visible workspace")
     ensure(page.locator("#previewBackgroundMode").is_hidden(),
            "Preview has only one fixed red-clouds background")
+    # Word timestamp diagnostics live inside the one Effects Karaoke section.
+    # Expand the user-visible owner before checking its nested controls.
+    parent=page.locator('details.layout-inspector-section[data-studio-scope="effects"]').filter(
+        has=page.locator('#hsrKaraokeReadiness'))
+    ensure(parent.count()==1,"Word timing has lost its single Effects owner")
+    parent.locator(":scope > summary").click()
     ensure(page.locator("#hsrKaraokeReadiness").is_visible(),
            "Karaoke word-alignment disclosure is unavailable")
     ensure(not page.locator("#hsrKaraokeReadiness").evaluate("(el)=>el.open"),
@@ -352,14 +358,15 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#previewBackgroundImage").is_visible(),
            "Red-clouds image is missing from the actual stage")
     screenshot(page, output, "desktop_clean_effects_workspace")
-    # This is a real Chromium decoded-video interaction, but the API response
-    # is a deterministic MP4 fixture. Backend libass video is checked separately.
+    # The fixture must actually decode and display, and its provenance must
+    # reflect the fixed red-clouds reference. "video" would mean plain color;
+    # the production UI correctly calls this "video-image".
     page.locator("#previewVideoBtn").click()
     try:
         page.wait_for_function("""() => {
           const video=document.getElementById('libassVideoPreview');
           return video && video.readyState>=2 &&
-            document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video';
+            document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video-image';
         }""", timeout=20000)
     except Exception:
         details=page.evaluate("""() => {
@@ -387,21 +394,21 @@ def desktop_check(browser, base_url, output, report):
     ensure(not page.locator(".hsr-preview-media-disclosure").evaluate("(el) => el.open"),
            "Optional video upload settings should start collapsed")
     page.locator(".hsr-preview-media-disclosure > summary").click()
-    # An image must reach the actual video endpoint, rather than being used
-    # merely as decorative background in the browser's geometry preview.
-    png=b"\x89PNG\r\n\x1a\n"+b"browser-fixture"
-    page.locator("#effectBackgroundImageFile").set_input_files({
-        "name": "custom-image.png", "mimeType": "image/png", "buffer": png
-    })
+    ensure(page.locator("#effectBackgroundImageFile").count()==0,
+           "Alternate studio image picker returned")
+    ensure(page.locator("#effectPreviewBackgroundColor").count()==0,
+           "Alternate studio color picker returned")
+    page.locator("#prevEnableKinetic").uncheck()
     ensure(page.locator("#hsrEffectOperationStatus").get_attribute("data-phase")=="stale",
-           "Changing media retained false success state")
+           "Effect changes retained false successful playback")
     page.locator("#previewVideoBtn").click()
     page.wait_for_function("""() => {
       const video=document.getElementById('libassVideoPreview');
-      return video.readyState>=2 && document.getElementById('videoPreviewStatus')
-        .textContent.includes('本地背景图片');
+      return video.readyState>=2 &&
+        document.querySelector('.layout-preview-evidence')
+          .dataset.previewEvidence==='video-image';
     }""",timeout=20000)
-    screenshot(page, output, "desktop_image_background_effect_preview")
+    screenshot(page, output, "desktop_red_cloud_effect_preview")
     # File picker must forward actual source bytes and update evidence identity.
     page.locator("#effectFootageFile").set_input_files({
         "name": "user-footage.webm", "mimeType": "video/webm", "buffer": fixture_video
@@ -791,6 +798,18 @@ def touch_safety_check(browser, base_url, report):
            "Typography number input not visible")
     ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
            "60/40 bilingual region number input not visible")
+    ensure(page.locator("#studioRegionPercent").is_visible() and
+           page.locator('[data-share-percent="60"]').is_visible(),
+           "60/40 position controls must be conspicuous on a touch device")
+    page.locator('[data-share-percent="40"]').click()
+    ensure(page.locator("#prevPrimaryShare").input_value()=="40",
+           "40/60 quick choice did not reach authoritative region field")
+    page.wait_for_function("""() => document.getElementById('prevPrimaryShareVal')
+       .textContent.trim()==='40% / 60%'""", timeout=10000)
+    page.locator("#studioRegionPercent").fill("50")
+    page.locator("#studioRegionPercent").dispatch_event("change")
+    ensure(page.locator("#prevPrimaryShare").input_value()=="50",
+           "Explicit numeric region edit is not connected")
     style_sections.nth(2).locator(":scope > summary").click()
     ensure(style_sections.nth(2).evaluate("(el)=>el.open") and
            style_sections.nth(0).evaluate("(el)=>el.open") and

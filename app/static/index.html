@@ -3664,8 +3664,6 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
               <button id="projectFontImportBtn" class="secondary" type="button" disabled>导入并保存字体</button>
-              <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
-              <div id="projectFontList" class="hsr-project-font-list" hidden inert aria-hidden="true"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
@@ -3692,7 +3690,15 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
             <input type="range" id="prevPrimaryShare" min="20" max="80" value="60" step="1"
                    aria-label="原文区域百分比，剩余百分比分配给中文字幕">
-            <div class="small muted">可直接拖动，或使用下方数字及 ± 按钮。默认原文 60%／中文字幕 40%。</div>
+            <div class="studio-region-actions" role="group" aria-label="双语区域快捷比例">
+              <button type="button" data-share-percent="60" aria-pressed="true">60 / 40</button>
+              <button type="button" data-share-percent="50" aria-pressed="false">50 / 50</button>
+              <button type="button" data-share-percent="40" aria-pressed="false">40 / 60</button>
+              <label for="studioRegionPercent">原文比例
+                <input type="number" id="studioRegionPercent" min="20" max="80" value="60" step="1" inputmode="numeric"> %
+              </label>
+            </div>
+            <div class="small muted">输入原文百分比，剩余分配给中文；真实 ASS 使用相同设置。</div>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
               <label for="prevCentralGap" style="margin:0">中央间隔</label>
               <span id="prevCentralGapVal" class="small muted">20 px</span>
@@ -3784,7 +3790,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
-            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 逐词高亮</label>
+            <label class="check"><input type="checkbox" id="prevEnableKaraoke" disabled aria-describedby="wordAlignmentProviderStatus"> 逐词高亮（需有效词级时间）</label>
             <label for="prevKaraokeMode">高亮模式</label>
             <select id="prevKaraokeMode">
               <option value="k">逐词切换（\k）</option>
@@ -3804,6 +3810,20 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <pre id="hsrWordAlignmentExample">{"alignments":[{"id":11,"words":[{"word":"May","start":0.0,"end":0.35},{"word":"this","start":0.35,"end":0.65},{"word":"journey","start":0.65,"end":1.2}]}]}</pre>
               <p>示例的 <code>id:11</code> 和单词只是格式示意，不能直接导入任意项目；必须替换成真实字幕条目、完整原文词序和时间戳。</p>
             </details>
+<details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
+  <summary>逐词时间数据 <small>查看本机能力与导入</small></summary>
+  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">逐词高亮需要真实词级时间。尚未核验，功能暂不可用。</p>
+            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn" hidden disabled>本机生成（需 WhisperX）</button>
+              <button type="button" class="small secondary" id="generateApiWordAlignmentBtn" disabled>使用我的 API 生成当前语音词时间</button>
+              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
+              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
+            </div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">正在检查本地与 API 时间戳服务。</div>
+            <p class="small muted">API 方式会在确认后将当前一条原语音上传至你配置的服务商，可能产生费用。它属于转写时间戳，不是已知原文的强制对齐；词序和原文不完全匹配时将拒绝保存。</p>
+</details>
           </section>
             </div>
           </details>
@@ -3828,35 +3848,16 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
         </div>
-<details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
-  <summary>词级时间 <small>可选 · 生成或导入</small></summary>
-  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
-            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
-            <div class="actions" style="margin-top:6px">
-              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本机生成（需 WhisperX）</button>
-              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
-              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
-            </div>
-            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-</details>
 <details class="hsr-preview-media-disclosure" data-studio-scope="effects">
-  <summary>自选预览素材 <small>高级选项</small></summary>
+  <summary>预览短视频 <small>可选</small></summary>
   <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
-  <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
-  <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
-  <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
-  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
-  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
-  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
   <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
   <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
   <label for="effectFootageStart">源视频起始位置（秒）</label>
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
-  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除视频，恢复红云参考图</button>
+  <p class="small muted">可选择最多 24 MiB 的短视频，仅用于真实特效预览。未选择视频时使用唯一的红云参考图；最终 MKV 的背景在导出页面另行设置。</p>
 </div>
 
 </details>
@@ -6805,49 +6806,15 @@ async function loadFontBrowser(query=''){
   }
 }
 
-async function refreshProjectFontList(){
-  const root=currentProject?.root||null;
-  const list=document.getElementById('projectFontList');
-  if(!list)return;
-  list.textContent='';
-  if(!root){list.textContent='请先打开项目。';return;}
-  try{
-    const data=await api('/api/subtitle-layout/project-fonts');
-    if(currentProject?.root!==root)return;
-    const fonts=Array.isArray(data.fonts)?data.fonts:[];
-    if(!fonts.length){list.textContent='当前项目还没有导入字体。';return;}
-    for(const item of fonts){
-      const button=document.createElement('button');
-      button.type='button';button.className='secondary';
-      button.textContent=item.family+' · '+Math.round(Number(item.bytes||0)/1024)+' KiB';
-      button.onclick=async()=>{
-        const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
-        const input=document.getElementById(target);
-        const status=document.getElementById('projectFontImportStatus');
-        const projectAtStart=currentProject?.root;
-        try{
-          button.disabled=true;
-          const name=await ensureHostFontLoaded(item.family);
-          if(!hostFontFaces.has(item.family)||name===item.family)
-            throw new Error('浏览器未能加载此字体，尚未应用');
-          if(!currentProject||currentProject.root!==projectAtStart)return;
-          if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
-          if(!(await saveSubtitleLayoutSettings()))throw new Error('字体选择未成功保存，请检查上方状态');
-          if(status){status.textContent='已应用并保存 '+item.family+'；建议点击实际 ASS 渲染确认字形。';status.className='small status-ok';}
-        }catch(error){
-          if(status){status.textContent='应用项目字体失败：'+shortError(error);status.className='small status-bad';}
-        }finally{button.disabled=false;}
-      };
-      list.appendChild(button);
-    }
-  }catch(error){list.textContent='读取项目字体失败：'+shortError(error);}
-}
 async function importCurrentProjectFont(){
   const file=document.getElementById('projectFontFile')?.files?.[0];
   const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
   const status=document.getElementById('projectFontImportStatus');
   const button=document.getElementById('projectFontImportBtn');
   const root=currentProject?.root||null;
+  const field=document.getElementById(target);
+  const previousValue=field?.value||'';
+  let fontChoiceSaved=false;
   try{
     if(!root)throw new Error('请先打开项目，再导入字体');
     if(!file)throw new Error('请选择 TTF、OTF 或 TTC 文件');
@@ -6874,28 +6841,38 @@ async function importCurrentProjectFont(){
     const family=String(data.font?.family||'');
     if(!family)throw new Error('服务器没有返回可识别的字体族名');
     invalidateHostFont(family); // Remove previously registered FontFace, not just its cache record.
-    const field=document.getElementById(target);
-    if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
+    // Only mutate authoring state AFTER the browser actually loads the
+    // uploaded face. A failed import may leave an asset on disk, but it must
+    // not replace the previously working font in the current project.
     const resolved=await ensureHostFontLoaded(family,{quiet:true});
     const loaded=hostFontFaces.get(family)?.state==='loaded'&&resolved!==family;
-    if(!loaded)throw new Error('字体已保存，但浏览器加载失败；字体不能被标记为可用，请检查格式');
+    if(!loaded)throw new Error('字体文件已保存，但浏览器未能加载字形；原字体保持不变。请检查 TTF/OTF 格式');
+    if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
     if(status){status.textContent='已导入、加载并应用「'+family+'」作为'+(target==='prevChsFont'?'中文':'原文')+'字体。请使用实际 ASS 渲染核对字形。';status.className='small status-ok';}
     const resolveStatus=document.getElementById('fontResolveStatus');
     if(resolveStatus)resolveStatus.textContent='项目字体已加载：'+family+'。实际 ASS 字形仍需验证。';
-    await refreshProjectFontList();
     invalidateLibassPreview();
     scheduleLayoutPreviewUpdate();
     // "Import and apply" must survive reloading the project: the previous
     // implementation only changed an unsaved input. Make the persistence
     // contract explicit, and never report success when the save failed.
-    const persisted=await saveSubtitleLayoutSettings();
-    if(!persisted)throw new Error('字体已保存到项目，但当前字体选择尚未保存。请检查上方保存状态并重试');
+    // FFmpeg confirmation is part of this transaction, not a footnote.
+    // Never report "applied" while ASS is rendering a fallback face.
     await renderLibassPreview();
     if(document.querySelector('.layout-preview-evidence')?.dataset.previewEvidence!=='libass')
-      throw new Error('字体已保存，但 FFmpeg/libass 未确认实际字形，请检查预览错误，不应把回退字体标记为成功');
-    if(status){status.textContent='字体「'+family+'」已导入并保存，FFmpeg/libass 已完成真实渲染验证。';status.className='small status-ok';}
+      throw new Error('实际渲染未采用项目字体；未保存此字体选择，请查看 FFmpeg/libass 的回退诊断');
+    const persisted=await saveSubtitleLayoutSettings();
+    if(!persisted)throw new Error('已渲染，但项目设置保存失败');
+    fontChoiceSaved=true;
+    if(status){status.textContent='字体「'+family+'」已导入、实际渲染验证并保存。';status.className='small status-ok';}
   }catch(error){
-    if(status){status.textContent='字体导入失败：'+shortError(error);status.className='small status-bad';}
+    if(!fontChoiceSaved&&field&&currentProject?.root===root&&field.value!==previousValue){
+      field.value=previousValue;
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      invalidateLibassPreview();
+      scheduleLayoutPreviewUpdate();
+    }
+    if(status){status.textContent='字体未应用：'+shortError(error);status.className='small status-bad';}
   }finally{
     if(button)button.disabled=false;
   }
@@ -6906,10 +6883,7 @@ document.getElementById('projectFontFile')?.addEventListener('change',event=>{
   const button=document.getElementById('projectFontImportBtn');
   if(button)button.disabled=!file;
 });
-document.getElementById('projectFontRefreshBtn')?.addEventListener('click',refreshProjectFontList);
-document.getElementById('projectFontImporter')?.addEventListener('toggle',event=>{
-  if(event.target.open)refreshProjectFontList();
-});
+
 
 function openFontBrowser(targetId){
   fontBrowserTargetId=targetId;
@@ -7047,7 +7021,7 @@ function invalidateLibassPreview(){
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
   const img=document.getElementById('libassPreviewImage');
-  if(img)img.classList.add('hidden');
+  if(img){img.classList.add('hidden');img.removeAttribute?.('src');}
   const hadResult=!!libassPreviewObjectUrl;
   if(libassPreviewObjectUrl){
     URL.revokeObjectURL(libassPreviewObjectUrl);
@@ -7064,7 +7038,8 @@ function showGeometryPreview(){
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
-  document.getElementById('libassPreviewImage')?.classList.add('hidden');
+  const still=document.getElementById('libassPreviewImage');
+  if(still){still.classList.add('hidden');still.removeAttribute?.('src');}
   liveRealPreviewArmed=false;
   clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
@@ -7151,6 +7126,15 @@ async function renderLibassPreview(){
       });
     }
     if(!stillCurrent())return;
+    // Switch to exactly one visual owner. Old SVG/Canvas glyphs never blend
+    // beneath decoded FFmpeg pixels following a font change.
+    const svg=document.getElementById('previewSvg');
+    if(svg)svg.classList.add('hidden');
+    const canvas=document.getElementById('assCanvasPreview');
+    if(canvas){
+      canvas.classList.add('hidden');canvas.style.display='none';
+      canvas.getContext?.('2d')?.clearRect(0,0,canvas.width,canvas.height);
+    }
     img.classList.remove('hidden');
     setPreviewEvidence('libass');
     liveRealPreviewArmed=true;
@@ -7198,6 +7182,14 @@ async function loadWordAlignmentDiagnostics(){
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments');
     const d=data.diagnostics||{};
     const provider=data.local_provider||{};
+    const apiProvider=data.api_provider||{};
+    const apiButton=document.getElementById('generateApiWordAlignmentBtn');
+    if(apiButton){
+      apiButton.disabled=!apiProvider.configured;
+      apiButton.title=apiProvider.configured
+        ?'需主动确认上传当前语音及可能产生的费用；只保存完整匹配原文的时间戳'
+        :'请先在 AI API 配置中保存自己的 Key；服务商还须支持 whisper-1 逐词转写';
+    }
     const providerStatus=document.getElementById('wordAlignmentProviderStatus');
     const generateButton=document.getElementById('generateWordAlignmentBtn');
     if(providerStatus){
@@ -7206,7 +7198,8 @@ async function loadWordAlignmentDiagnostics(){
         providerStatus.className='small status-ok';
       }else{
         const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX / PyTorch';
-        providerStatus.textContent='当前设备不具备词级时间生成能力（缺少 '+missingPackages+'）。请使用「导入词级时间 JSON」；如需自动生成，须在安装了 WhisperX/PyTorch 的支持环境中运行。';
+        providerStatus.textContent='本机对齐器不可用（缺少 '+missingPackages+'）。'
+          +(apiProvider.configured?'可主动选择 API 逐词转写（会上传音频并计费），或导入匹配 JSON。':'API 也未配置；请导入有效 JSON，或先配置支持音频转写的 API。');
         providerStatus.className='small status-warn';
       }
     }
@@ -7219,6 +7212,14 @@ async function loadWordAlignmentDiagnostics(){
       generateButton.title=provider.available?'使用本地 WhisperX 生成真实词级时间；可能还需模型下载及音频依赖':'当前设备不支持本地生成，请导入有效的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
+    // An enabled-looking Karaoke checkbox with zero timestamped words is a
+    // fake affordance. Preserve saved intent, but forbid ineffective edits.
+    const karaokeToggle=document.getElementById('prevEnableKaraoke');
+    const karaokeMode=document.getElementById('prevKaraokeMode');
+    const previewTime=document.getElementById('prevKaraokePreviewTime');
+    for(const control of [karaokeToggle,karaokeMode,previewTime]){
+      if(control){control.disabled=usable<=0;control.title=usable<=0?'项目没有有效词级时间；请先导入匹配 JSON，或在支持 WhisperX 的主机生成。':'';}
+    }
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
     if(total<=0){
       setHsrKaraokeReadiness('尚无可诊断的项目字幕。先构建项目并选择真实语音。','warning');
@@ -7277,6 +7278,34 @@ async function generateLocalWordAlignments(){
     await loadWordAlignmentDiagnostics();
   }finally{
     if(button&&!button.hidden)button.disabled=false;
+  }
+}
+
+async function generateApiWordAlignments(){
+  const status=document.getElementById('wordAlignmentStatus');
+  const button=document.getElementById('generateApiWordAlignmentBtn');
+  try{
+    if(!currentProject)throw new Error('请先打开项目');
+    const itemId=String(layoutStressSample?.id??'').trim();
+    if(!itemId)throw new Error('请先在排版预览中选择一个真实的项目语音条目');
+    if(!window.confirm('是否将当前语音 #'+itemId+' 上传至你配置的 API 服务商生成词时间？可能产生费用。转写和原文不完全一致时不会保存任何词时间。'))return;
+    if(button)button.disabled=true;
+    if(status){status.textContent='已确认上传当前语音，正在提交 API 逐词转写任务…';status.className='small muted layout-corpus-status';}
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments/generate',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        provider:'whisper-api-words',
+        confirm_audio_upload:true,
+        item_ids:[itemId],force:false
+      })
+    });
+    if(status){status.textContent='逐词转写任务已启动；仅在词序与原文匹配时会写入。请在任务中心查看结果，并刷新词时间状态。';status.className='small muted layout-corpus-status';}
+    watchJob(result.job);
+  }catch(error){
+    if(status){status.textContent='API 逐词转写不可用：'+shortError(error);status.className='small status-bad layout-corpus-status';}
+    setHsrKaraokeReadiness('API 生成失败：'+shortError(error),'failed');
+  }finally{
+    if(button)button.disabled=false;
   }
 }
 
@@ -8506,6 +8535,10 @@ async function updateLayoutPreview() {
   const primaryShare = Number(document.getElementById('prevPrimaryShare')?.value||60);
   const shareLabel=document.getElementById('prevPrimaryShareVal');
   if(shareLabel)shareLabel.textContent=primaryShare+'% / '+(100-primaryShare)+'%';
+  const shareNumber=document.getElementById('studioRegionPercent');
+  if(shareNumber&&document.activeElement!==shareNumber)shareNumber.value=String(primaryShare);
+  for(const button of document.querySelectorAll('[data-share-percent]'))
+    button.setAttribute('aria-pressed',String(primaryShare)===button.dataset.sharePercent?'true':'false');
   const marginH = parseFloat(document.getElementById('prevMarginH')?.value || '3');
   const marginV = parseFloat(document.getElementById('prevMarginV')?.value || '5');
 
@@ -9018,7 +9051,7 @@ async function renderHsrEffectVideo(){
     });
     if(!stillCurrent())return;
     video.classList.remove('hidden');
-    setPreviewEvidence(footage?'video-footage':backgroundImage?'video-image':'video');
+    setPreviewEvidence(footage?'video-footage':(backgroundImage||usesReference)?'video-image':'video');
     setHsrEffectOperation('ready','视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
     // The render trigger lives in the Inspector, but playback lives on stage.
     // Reveal the successful result so the action is not perceived as inert.
@@ -9195,6 +9228,20 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
   });
 });
 
+function commitStudioShare(value){
+  const range=document.getElementById('prevPrimaryShare');
+  if(!range)return;
+  const n=Number(value);
+  if(!Number.isFinite(n))return;
+  range.value=String(Math.round(Math.min(80,Math.max(20,n))));
+  range.dispatchEvent(new Event('input',{bubbles:true}));
+  range.dispatchEvent(new Event('change',{bubbles:true}));
+}
+document.querySelectorAll('[data-share-percent]').forEach(button=>
+  button.addEventListener('click',()=>commitStudioShare(button.dataset.sharePercent)));
+document.getElementById('studioRegionPercent')?.addEventListener('change',e=>
+  commitStudioShare(e.target.value));
+
 // Real ASS appearance values must have visible feedback even before the
 // user manually enables live FFmpeg preview. Debounce until a committed
 // change to avoid a subprocess for each slider pointer movement.
@@ -9249,55 +9296,10 @@ document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>
   invalidateLibassPreview();
 });
 
-function applySubtitlePreset(name){
-  previewPreset=name;
-  const standard=()=>{
-    document.getElementById('prevChsFont').value='汉仪旗黑';
-    document.getElementById('prevPriFont').value='Noto Sans';
-    document.getElementById('prevChsSize').value=48;
-    document.getElementById('prevPriSize').value=42;
-    document.getElementById('prevCentralGap').value=20;
-    document.getElementById('prevPrimaryShare').value=60;
-    document.getElementById('prevMarginH').value=3;
-    document.getElementById('prevMarginV').value=5;
-    document.getElementById('prevEnableKinetic').checked=true;
-    document.getElementById('prevEnableKaraoke').checked=false;
-    document.getElementById('prevKaraokeMode').value='k';
-    document.getElementById('prevEnableCard').checked=false;
-    document.getElementById('prevEnableOutline').checked=false;
-    document.getElementById('prevFadeIn').value=200;
-    document.getElementById('prevFadeOut').value=200;
-    document.getElementById('prevAudioAwareFade').checked=true;
-    document.getElementById('prevOutlineWidth').value=3;
-    document.getElementById('prevShadowDepth').value=2;
-    document.getElementById('prevBlurRadius').value=0;
-    document.getElementById('prevCardOpacity').value=62;
-    document.getElementById('prevEnableSoftEntry').checked=false;
-    document.getElementById('prevSoftEntryScale').value=98;
-    document.getElementById('prevSoftEntryBlur').value=1.5;
-    document.getElementById('prevSoftEntryMs').value=160;
-    document.getElementById('prevEnableArchiveHud').checked=false;
-    document.getElementById('prevArchiveHudSize').value=22;
-    document.getElementById('prevArchiveHudOpacity').value=72;
-  };
-  standard();
-  if(name==='plain'){
-    document.getElementById('prevEnableKinetic').checked=false;
-    document.getElementById('prevAudioAwareFade').checked=false;
-  }
-  if(name==='karaoke'){
-    document.getElementById('prevEnableKaraoke').checked=true;
-    document.getElementById('prevKaraokeMode').value='kf';
-  }
-  markSubtitleSettingsDirty();
-  invalidateLayoutBatchAudit();
-  recordLayoutStyleHistory();
-  invalidateLibassPreview();
-  updateLayoutPreview();
-}
 
 document.getElementById('refreshWordAlignmentBtn')?.addEventListener('click',()=>loadWordAlignmentDiagnostics());
 document.getElementById('generateWordAlignmentBtn')?.addEventListener('click',generateLocalWordAlignments);
+document.getElementById('generateApiWordAlignmentBtn')?.addEventListener('click',generateApiWordAlignments);
 document.getElementById('importWordAlignmentBtn')?.addEventListener('click',()=>document.getElementById('wordAlignmentFile')?.click());
 document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>importWordAlignmentFile(e.target.files?.[0]));
 
