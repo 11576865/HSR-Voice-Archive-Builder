@@ -166,19 +166,33 @@ def _assert_project_font_selected(
                 f"导入字体 {family} 被回退为 {actual or '未知字体'}，"
                 f"而非导入文件 {expected.name}；请检查字体族名、字体文件和字形。"
             )
-        # Checking ONLY the requested family before the arrow is insufficient:
-        # libass can log "fontselect: (Family, 400, 0) -> /system/fallback.ttf".
-        # Verify the *actual selected file* for the requested font name.
+        # libass has two legitimate fontselect log formats:
+        #   (Family, 400, 0) -> /resolved/font-file.ttf, 0, ...
+        #   (Family, 400, 0) -> PostScriptFaceName, 0, ...
+        # A SHA-named project asset cannot appear in the second format; never
+        # require its path there. fc-match above is the file-identity proof.
         matched = [line for line in selections
                    if f"fontselect: ({family.casefold()}," in line]
         expected_path = str(expected.resolve()).casefold()
-        if not matched or not all(
-            "->" in line and expected_path in line.split("->", 1)[1]
-            for line in matched
-        ):
+        normalized_family = "".join(ch for ch in family.casefold() if ch.isalnum())
+        def libass_face_ok(line: str) -> bool:
+            if "->" not in line:
+                return False
+            selected = line.split("->", 1)[1].split(",", 1)[0].strip().strip('"')
+            if "/" in selected or "\\" in selected:
+                return expected_path == str(Path(selected).resolve()).casefold()
+            normalized_face = "".join(ch for ch in selected.casefold() if ch.isalnum())
+            # Face suffixes are common ("Name-Regular", "Name-Bold").
+            return bool(normalized_face and (
+                normalized_face == normalized_family or
+                any(normalized_face == normalized_family + suffix
+                    for suffix in ("regular", "bold", "italic", "medium",
+                                   "semibold", "light", "black"))
+            ))
+        if not matched or not all(libass_face_ok(line) for line in matched):
             selections_info = " / ".join(line[:260] for line in matched[:2]) or "无对应字体日志"
             raise RuntimeError(
-                f"libass 对 {family} 使用了回退字形，而非已导入的 {expected.name}："
+                f"libass 对 {family} 使用了不匹配的字体面，而非已导入的 {expected.name}："
                 f"{selections_info}。请检查字体族名、字形覆盖和 Fontconfig 配置。"
             )
 
