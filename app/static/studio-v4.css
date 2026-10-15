@@ -77,7 +77,6 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.s
 /* All geometric subtitle glyphs come from SVG. Do not stack another Canvas text layer. */
 #subtitleLayoutPreviewCard #assCanvasPreview{display:none!important}
 /* V4 timing is independent of Effects and must open normally in Layout. */
-#subtitleLayoutPreviewCard[data-studio-mode="style"] #studioV4Timing[open] #layoutTimelinePanel,
 #subtitleLayoutPreviewCard[data-studio-mode="style"] #studioV4Timing[open] #layoutCueEditorPanel{display:block!important}
 #subtitleLayoutPreviewCard #previewModeOverlay{z-index:7;top:8px!important;left:10px!important}
 #subtitleLayoutPreviewCard .studio-v3-command-bar{
