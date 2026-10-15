@@ -3705,7 +3705,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevFadeOutVal" class="small muted">200 ms</span>
             </div>
             <input type="number" id="prevFadeOut" min="0" value="200" step="10" inputmode="numeric">
-            <div id="hsrFadeBudgetStatus" class="small muted" role="status" aria-live="polite">淡出 + 后淡入不得超过最短同组语音间隔；超过 60% 将提示警告。</div>
+            <div id="hsrFadeBudgetStatus" class="small muted" role="status" aria-live="polite">淡出 + 后淡入不得超过最短相邻语音间隔；超过 60% 将提示警告。</div>
             <label class="check"><input type="checkbox" id="prevEnableSoftEntry"> 柔和进入动画</label>
             <div style="display:flex;justify-content:space-between">
               <label for="prevSoftEntryScale" style="margin:0">起始缩放</label>
@@ -7510,8 +7510,8 @@ function syncHsrFadeBudget(message=''){
   if(status){
     status.className='small '+(message?'status-bad':!kinetic?'muted':ratio>1?'status-bad':ratio>0.6?'status-warn':'status-ok');
     status.textContent=message||(!kinetic
-      ?'淡入淡出未启用；启用后按最短同组语音间隔校验。'
-      :'最短同组静音 '+gap+' ms；淡入 + 淡出 '+total+' ms，占 '+(Number.isFinite(ratio)?Math.round(ratio*100):'∞')+
+      ?'淡入淡出未启用；启用后按最短相邻语音间隔校验。'
+      :'最短相邻语音静音 '+gap+' ms；淡入 + 淡出 '+total+' ms，占 '+(Number.isFinite(ratio)?Math.round(ratio*100):'∞')+
        '%；空白 '+Math.max(0,gap-total)+' ms。'+(ratio>1?' 已超限：只允许缩短，不能继续增加。':ratio>0.6?' 警告：已超过 60%。':''));
   }
   return ratio;
@@ -7530,7 +7530,7 @@ function enforceHsrFadeBudget(input){
   if(document.getElementById('prevEnableKinetic')?.checked &&
      proposed+otherValue>gap && proposed>previous){
     input.value=String(previous);
-    syncHsrFadeBudget('已阻止增加：淡出 + 后淡入不能超过最短同组静音 '+gap+' ms。');
+    syncHsrFadeBudget('已阻止增加：淡出 + 后淡入不能超过最短相邻语音静音 '+gap+' ms。');
     return false;
   }
   input.dataset.lastValid=String(proposed);
