@@ -17,7 +17,7 @@ BUILD_KINDS = {"build", "quick-build"}
 # These jobs produce or invalidate files in one project's output directory.
 # Concurrent writers can overwrite a newer, validated MKV/ASS/FLAC artifact.
 PROJECT_OUTPUT_WRITERS = BUILD_KINDS | {
-    "ass-export", "black-video-export", "archive-bundle-export",
+    "ass-export", "ass-external", "black-video-export", "archive-bundle-export",
     "artifact-extract", "remote-update-apply",
 }
 
