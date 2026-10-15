@@ -7551,7 +7551,10 @@ function loadSubtitleLayoutSettings(config){
   set('prevPrimaryShare',Math.round(Number(config.subtitle_primary_region_share??0.60)*100));
   check('prevEnableKaraoke',config.subtitle_enable_karaoke);
   set('prevKaraokeMode',config.subtitle_karaoke_mode||'k');
-  set('prevKaraokeTiming',config.subtitle_karaoke_timing||'fixed');
+  // Make no-alignment Karaoke usable on first activation. Preserve explicit
+  // synced configurations when Karaoke is already enabled.
+  set('prevKaraokeTiming',config.subtitle_enable_karaoke
+    ?(config.subtitle_karaoke_timing||'aligned'):'fixed');
   set('prevKaraokeUnit',config.subtitle_karaoke_unit||'character');
   set('prevKaraokeSpeed',config.subtitle_karaoke_speed_ms??300);
   check('prevEnableCard',config.subtitle_enable_translucent_card);
