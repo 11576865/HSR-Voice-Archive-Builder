@@ -24,8 +24,8 @@ def font_asset_directory(output: Path) -> Path:
     return Path(output) / "subtitle_fonts"
 
 
-def _font_family(data: bytes) -> str:
-    """Read the SFNT name table (family 16 preferred; fallback family 1)."""
+def _font_name_records(data: bytes, allowed_ids: set[int]) -> list[tuple[int, int, str]]:
+    """Read validated SFNT name records from the first face of TTF/OTF/TTC."""
     offset = 0
     if data[:4] == b"ttcf":
         if len(data) < 16:
@@ -58,23 +58,51 @@ def _font_family(data: bytes) -> str:
     for i in range(entries):
         row = base + 6 + i * 12
         platform, encoding, language, name_id, length, string_offset = struct.unpack_from(">HHHHHH", data, row)
-        if name_id not in (1, 16) or not length or length > 512:
+        if name_id not in allowed_ids or not length or length > 512:
             continue
         start = base + storage + string_offset
         if start < base or start + length > base + size:
             continue
         blob = data[start:start + length]
         try:
-            family = blob.decode("utf-16-be" if platform in (0, 3) else "mac_roman").strip()
-            family = validate_ass_font_name(family)
+            name = blob.decode("utf-16-be" if platform in (0, 3) else "mac_roman").strip()
+            name = validate_ass_font_name(name)
         except (UnicodeError, ValueError):
             continue
-        rank = (0 if name_id == 16 else 1, 0 if platform == 3 else 1)
-        found.append((*rank, family))
+        found.append((name_id, platform, name))
+    return found
+
+
+def _font_family(data: bytes) -> str:
+    """Read the SFNT family name (typographic family 16, then family 1)."""
+    found = [
+        (0 if name_id == 16 else 1, 0 if platform == 3 else 1, family)
+        for name_id, platform, family in _font_name_records(data, {1, 16})
+    ]
     if not found:
         raise ValueError("Font has no readable family name")
     found.sort(key=lambda row: row[:2])
     return found[0][2]
+
+
+def project_font_face_names(font_file: Path) -> set[str]:
+    """Return names embedded in the imported SFNT, including PostScript name 6.
+
+    libass sometimes logs a PostScript face (e.g. HYRunYuan-55W) instead of
+    the family or the content-addressed filename. Parse the uploaded binary;
+    don't accept an arbitrary common-prefix face as proof of its identity.
+    """
+    try:
+        if (font_file.is_symlink() or not font_file.is_file()
+                or not 0 < font_file.stat().st_size <= MAX_FONT_BYTES):
+            return set()
+        return {
+            name for _, _, name in _font_name_records(
+                font_file.read_bytes(), {1, 4, 6, 16}
+            )
+        }
+    except (OSError, ValueError, struct.error):
+        return set()
 
 
 def list_project_fonts(output: Path) -> list[dict[str, object]]:

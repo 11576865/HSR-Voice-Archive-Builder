@@ -36,6 +36,14 @@ Local control URL: http://127.0.0.1:8765/
 Termux lightweight control server: http://127.0.0.1:8765/
 ```
 
+The launcher also installs Termux `fontconfig` when `fc-match` is missing.
+Actual FFmpeg/libass previews of imported fonts require this font identity
+check; browser geometry previews do not establish genuine ASS font selection.
+If you launched the server before installing fontconfig, run `pkg install
+fontconfig`, check `command -v fc-match`, then restart the server. The installed
+font file remains inside the selected project; no global font installation is
+needed.
+
 Keep Termux running and open `http://127.0.0.1:8765/` in the browser.
 
 ## Translation
