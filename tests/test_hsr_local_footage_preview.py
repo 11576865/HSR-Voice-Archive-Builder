@@ -234,7 +234,7 @@ class LocalFootageContractTests(unittest.TestCase):
                         "payload.source_video_base64", "payload.source_start_seconds",
                         "X-HSR-Preview-Background", "'video-footage'",
                         'id="effectFootageAudio"', "payload.include_source_audio",
-                        'id="effectBackgroundImageFile"', "payload.preview_background_image_base64"):
+                        "use_studio_reference_background:true"):
             self.assertIn(literal, html)
 
 
