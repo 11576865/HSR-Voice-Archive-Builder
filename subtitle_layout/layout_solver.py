@@ -61,7 +61,10 @@ def solve_subtitle_layout(
     # ASS positioning anchors are NOT the visible glyph edges. Reserve extra
     # room for physical stroke/shadow spill; keep the requested central gap
     # as the minimum separation between actual rendered ink.
-    anchor_gap = max(0.0, float(min_central_gap)) + max(0.0, float(central_ink_padding))
+    bilingual = bool(english_text.strip() and chinese_text.strip()) and not same_chinese
+    anchor_gap = max(0.0, float(min_central_gap)) + (
+        max(0.0, float(central_ink_padding)) if bilingual else 0.0
+    )
     available_height = max(0.0, safe_area.max_printable_height - anchor_gap)
     primary_region_height = available_height * max(0.20, min(0.80, float(primary_region_share)))
     y_center_top = round(safe_area.y_min + primary_region_height)
