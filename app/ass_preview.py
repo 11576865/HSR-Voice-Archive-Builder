@@ -596,6 +596,28 @@ def render_ass_preview_video(
         _assert_project_font_selected(completed.stderr, config, font_dir,
                                       english=english_text, chinese=chinese_text,
                                       env=font_env)
+        if audio_source_path is not None:
+            ffprobe = shutil.which("ffprobe")
+            if not ffprobe:
+                raise RuntimeError("不能验证有声特效预览：FFprobe 不可用")
+            probe = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries",
+                 "stream=codec_type:format=duration", "-of", "json",
+                 str(result_path)],
+                capture_output=True, text=True, timeout=20, check=False,
+            )
+            if probe.returncode != 0:
+                raise RuntimeError("无法回读动态预览音轨，拒绝将静音视频标记为有声")
+            try:
+                metadata = json.loads(probe.stdout)
+                audio_present = any(
+                    item.get("codec_type") == "audio"
+                    for item in metadata.get("streams", [])
+                )
+            except (ValueError, AttributeError, TypeError) as exc:
+                raise RuntimeError("动态预览音轨元数据无效") from exc
+            if not audio_present:
+                raise RuntimeError("动态预览没有真实音轨，拒绝返回静音视频")
         if result_path.stat().st_size > 16 * 1024 * 1024:
             raise RuntimeError("Dynamic preview exceeds 16 MiB output limit")
         return result_path.read_bytes()
