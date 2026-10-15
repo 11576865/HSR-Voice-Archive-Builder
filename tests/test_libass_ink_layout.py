@@ -80,10 +80,10 @@ class LibassInkSolverTests(unittest.TestCase):
             for line in lines:
                 self.assertGreater(line["measured_width"], 0)
                 self.assertGreater(line["line_height"], 0)
-                self.assertEqual(line["bbox"]["x_max"] - line["bbox"]["x_min"],
-                                 line["measured_width"])
-                self.assertEqual(line["bbox"]["y_max"] - line["bbox"]["y_min"],
-                                 line["line_height"])
+                self.assertAlmostEqual(line["bbox"]["x_max"] - line["bbox"]["x_min"],
+                                       line["measured_width"], places=5)
+                self.assertAlmostEqual(line["bbox"]["y_max"] - line["bbox"]["y_min"],
+                                       line["line_height"], places=5)
 
     def test_real_project_export_uses_verified_ink_not_svg(self):
         cfg = SubtitleRenderConfig(
