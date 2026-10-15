@@ -128,7 +128,7 @@ class RedCloudAndStandaloneAssTests(unittest.TestCase):
         self.assertEqual(len([line for line in first if ",CHS," in line]), 1)
         self.assertTrue(all(r"\fad(600,600)" in line for line in first))
         # Neither voice moment is consumed by transitions, and silence remains.
-        self.assertIn("0:00:02.90,0:00:04.50", ass)
+        self.assertIn("0:00:02.90,0:00:05.10", ass)
 
     def test_browser_and_servers_expose_two_distinct_user_commands(self):
         root = Path(__file__).resolve().parents[1]
