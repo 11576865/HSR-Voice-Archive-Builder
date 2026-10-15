@@ -258,6 +258,15 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
         old_source_paths["wav_source"],
         str(config.reference_language or "auto"),
     )
+    if "subtitle_fade_in_ms" in changes or "subtitle_fade_out_ms" in changes:
+        # Current authoring phase owns one symmetric fade duration. Treat the
+        # incoming value as authoritative; never persist a mismatched pair.
+        fade_ms = int(changes.get(
+            "subtitle_fade_in_ms",
+            changes.get("subtitle_fade_out_ms", config.subtitle_fade_in_ms),
+        ))
+        changes["subtitle_fade_in_ms"] = fade_ms
+        changes["subtitle_fade_out_ms"] = fade_ms
     if any(name in changes for name in (
         "subtitle_fade_in_ms", "subtitle_fade_out_ms", "subtitle_enable_kinetic",
     )):
