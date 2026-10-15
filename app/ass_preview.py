@@ -171,7 +171,7 @@ def _assert_project_font_selected(
         # successful uploaded-font render. Detect it using the libass log,
         # rather than reporting success based only on fc-match's family.
         missing_glyphs = []
-        for match in re.finditer(r"Glyph\\s+0x([0-9a-fA-F]+)\\s+not\\s+found", log, re.IGNORECASE):
+        for match in re.finditer(r"Glyph\s+0x([0-9a-fA-F]+)\s+not\s+found", log, re.IGNORECASE):
             try:
                 character = chr(int(match.group(1), 16))
             except (ValueError, OverflowError):
