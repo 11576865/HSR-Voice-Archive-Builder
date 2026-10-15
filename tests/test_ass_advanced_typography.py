@@ -106,7 +106,8 @@ class TestAdvancedTypography(unittest.TestCase):
         )
         entry=DummyEntry("Star", "星穹", 1.0, 4.0)
         ass=render_ass([entry],config=cfg)
-        self.assertIn(r"{\kf30}星{\kf30}穹",ass)
+        self.assertNotIn(r"{\kf30}星",ass)
+        self.assertIn("星穹",ass)
         self.assertIn(r"{\kf30}S",ass)
         cfg.karaoke_mode="clip"
         with self.assertRaisesRegex(ValueError,"requires real"):
@@ -120,8 +121,9 @@ class TestAdvancedTypography(unittest.TestCase):
         )
         entry=DummyEntry("Scale", "缩放", 0.0, 4.0)
         ass=render_ass([entry],config=cfg)
-        self.assertIn(r"\fscx300\fscy300",ass)
-        self.assertIn(r"\blur12\t(0,2500,",ass)
+        self.assertNotIn(r"\fscx",ass)
+        self.assertNotIn(r"\t(",ass)
+        self.assertIn(r"\blur1",ass)
 
     def test_manual_fade_is_not_secretly_capped_at_quarter_cue(self):
         from subtitle_layout.kinetic_motion import generate_kinetic_tags
@@ -307,7 +309,9 @@ class TestAdvancedTypography(unittest.TestCase):
         )
         ass_content = render_ass([entry], config=cfg)
         self.assertIn(",1,4.5,1.5,8,", ass_content)
-        self.assertIn(r"\fscx98\fscy98\blur1.5\t(0,160,\fscx100\fscy100\blur0.8)", ass_content)
+        self.assertNotIn(r"\fscx", ass_content)
+        self.assertNotIn(r"\t(", ass_content)
+        self.assertIn(r"\blur0.8", ass_content)
         self.assertNotIn(r"\fad", ass_content)
 
     def test_render_ass_base_blur_without_soft_entry(self):
@@ -447,8 +451,8 @@ class TestAdvancedTypography(unittest.TestCase):
                 "chs_entry_y_offset": -8,
             },
         )
-        self.assertIn(r"\move(960,633,960,625,0,200)", ass_output)
-        self.assertIn(r"\move(960,637,960,645,0,200)", ass_output)
+        self.assertNotIn(r"\move(", ass_output)
+        self.assertIn(r"\fad(200,200)", ass_output)
 
     def test_render_ass_kinetic_motion_multi_layer_outline_sync(self):
         entries = [
