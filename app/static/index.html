@@ -3491,7 +3491,11 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="选取项目字幕后，按真实语音时长与静音淡入淡出生成带原声的动态预览；无自选素材时使用红云参考背景">播放动态特效</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn" data-studio-scope="effects">保存当前设置</button>
-                    <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
+                    <details class="hsr-export-advanced"><summary>生成文件</summary>
+                      <div class="actions">
+                        <button type="button" id="generateSubtitleAssBtn" title="更新 MKV 内的 ASS 字幕轨道">生成 ASS（内）</button>
+                        <button type="button" class="secondary" id="generateSubtitleExternalAssBtn" title="新建独立 ASS，不覆盖已有 ASS 与 MKV">生成 ASS（外）</button>
+                      </div></details>
                   </div>
                   <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
                     <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
@@ -5399,6 +5403,7 @@ function setRunReport(title,body,open=true){
 function completedReport(job){
   const r=job?.result||{};
   if(job?.kind==='remote-update-apply')return '已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。\n项目来源已更新，请重新构建成品。';
+  if(job?.kind==='ass-external')return '新 ASS 已独立另存且未覆盖现有 MKV/ASS：'+(r.ass_file||'');
   if(job?.kind==='ass-export')return r.delivery==='complete-mkv'
     ? '新 ASS 已替换完整 MKV 内的旧字幕轨道，逐轨校验与封存已通过：'+(r.output||'HSR_Voice_Archive_Bundle.mkv')
     : '独立 ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
@@ -5561,6 +5566,10 @@ async function watchJob(id){
             const r=x.job.result||{};
             setRunReport('增量更新已应用',completedReport(x.job),false);
             setLog(r);
+          }else if(x.job.kind==='ass-external'){
+            const status=document.getElementById('optionalOutputStatus');
+            if(status)status.textContent='独立 ASS 已另存，旧 ASS／MKV 未覆盖：'+(x.job.result?.ass_file||'');
+            setRunReport('外部 ASS 已生成',completedReport(x.job),false);
           }else if(x.job.kind==='ass-export'){
             const status=document.getElementById('optionalOutputStatus');
             const isBundle=x.job.result?.delivery==='complete-mkv';
@@ -5598,7 +5607,7 @@ async function watchJob(id){
         }else if(x.job.state==='failed'){
           terminal=true;
           setLog(x.job.error||x.job);
-          if(['ass-export','black-video-export','archive-bundle-export'].includes(x.job.kind)){
+          if(['ass-export','ass-external','black-video-export','archive-bundle-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
           }
@@ -5780,7 +5789,19 @@ document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();awa
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
-async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
+async function startAssExport(mode='internal'){
+  const external=mode==='external',button=document.getElementById(external?'generateSubtitleExternalAssBtn':'generateSubtitleAssBtn');
+  const status=document.getElementById('optionalOutputStatus');
+  try{
+    if(button)button.disabled=true;
+    if(status)status.textContent=external?'正在另存独立 ASS（不修改 MKV）…':'正在更新 MKV 内 ASS…';
+    const job=await api(external?'/api/output/ass/external':'/api/output/ass',{method:'POST'});
+    watchJob(job.job);
+  }catch(error){
+    if(status)status.textContent='ASS 生成失败：'+shortError(error);
+    setLog(String(error));
+  }finally{if(button)button.disabled=false}
+}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
 const bundleControls=['bundleBackgroundMode','bundleBackgroundColor','bundleGradientFirst',
   'bundleGradientSecond','bundleGradientThird','bundleGradientDirection',
@@ -7680,8 +7701,10 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
   subtitleSettingsSavePending=true;
   const saveButton=document.getElementById('saveSubtitleLayoutBtn');
   const exportButton=document.getElementById('generateSubtitleAssBtn');
+  const externalExportButton=document.getElementById('generateSubtitleExternalAssBtn');
   if(saveButton)saveButton.disabled=true;
   if(exportButton)exportButton.disabled=true;
+  if(externalExportButton)externalExportButton.disabled=true;
   try{
     if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
     const submittedProject=currentProject.root||currentProject.name;
@@ -7719,6 +7742,7 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
     subtitleSettingsSavePending=false;
     if(saveButton)saveButton.disabled=false;
     if(exportButton)exportButton.disabled=false;
+    if(externalExportButton)externalExportButton.disabled=false;
     for(const resolve of subtitleSettingsSaveWaiters.splice(0))resolve();
   }
 }
@@ -9660,7 +9684,10 @@ document.getElementById('effectFootageClearBtn')?.addEventListener('click',()=>{
 });
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
-  if(await saveSubtitleLayoutSettings())await startAssExport();
+  if(await saveSubtitleLayoutSettings())await startAssExport('internal');
+});
+document.getElementById('generateSubtitleExternalAssBtn')?.addEventListener('click',async()=>{
+  if(await saveSubtitleLayoutSettings())await startAssExport('external');
 });
 
 updateLayoutPreview();
