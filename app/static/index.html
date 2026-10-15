@@ -3502,7 +3502,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           <!-- One immutable reference image. Final delivery settings remain independent. -->
           <input id="previewBackgroundMode" type="hidden" value="reference">
-          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">默认展示 FFmpeg/libass 真实字形；字幕渲染前预览仅为浏览器近似效果，不代表真实 ASS。</div>
+          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">调整参数时默认使用浏览器字幕快速预览；点击「实际 ASS 渲染」才请求 FFmpeg/libass 生成真实帧。</div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
             <span id="hsrEffectOperationDetail">点击「播放动态特效」生成可播放视频；完成后结果出现在上方画布。</span>
@@ -3510,7 +3510,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="layout-preview-evidence" role="status" aria-live="polite" aria-atomic="true" data-preview-evidence="geometry">
             <div class="layout-preview-evidence-main">
               <span class="layout-evidence-dot" aria-hidden="true"></span>
-              <div><strong id="previewEvidenceTitle">等待实际 ASS 渲染</strong><p id="previewEvidenceDetail">当前字幕在真实帧解码前不可定稿</p></div>
+              <div><strong id="previewEvidenceTitle">字幕渲染前快速预览</strong><p id="previewEvidenceDetail">浏览器近似显示，只有手动执行的 FFmpeg/libass 渲染才可验证真实字形</p></div>
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
           </div>
@@ -4455,8 +4455,15 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   // Task switching within the shared canvas must not strand a stale real frame.
   // The renderer's own identity guard skips an unchanged frame.
   if(visibleWorkspace==='layout'&&previousWorkspace==='layout'&&currentProject){
-    liveRealPreviewArmed=true;
-    queueLiveRealPreview();
+    if(name==='layout'){
+      // Switching from Effects must show Layout fast preview, not schedule ASS.
+      liveRealPreviewArmed=false;
+      geometryExplicitlyRequested=true;
+      updateLayoutPreview();
+    }else{
+      liveRealPreviewArmed=true;
+      queueLiveRealPreview();
+    }
   }
   if(visibleWorkspace==='layout'&&previousWorkspace!=='layout'&&typeof updateLayoutPreview==='function'){
     const projectKey=currentProject?.root||currentProject?.name||null;
@@ -6926,6 +6933,9 @@ let geometryExplicitlyRequested = false;
 function queueLiveRealPreview(){
   if(fontImportTransactionActive)return;
   clearTimeout(liveRealPreviewTimer);
+  // Layout's FFmpeg/libass still preview is strictly click-to-render.
+  // Keep existing Effects scheduling separate.
+  if(document.body.dataset.workspaceTask==='layout')return;
   // Layout and Effects are two tasks on the same layout canvas. Never
   // accidentally disable the authoritative renderer in Effects mode.
   if(typeof videoPreviewController!=='undefined'&&videoPreviewController)return;
@@ -7054,7 +7064,7 @@ function invalidateLibassPreview(){
   }
   setPreviewEvidence(hadResult?'stale':'rendering');
   const status=document.getElementById('libassPreviewStatus');
-  if(status){status.textContent='参数或测试文本已变化；实际 ASS 预览需要重新生成。';status.className='small muted';}
+  if(status){status.textContent='参数或字幕已变化；浏览器快速预览会更新。实际 ASS 仅在点击按钮后重新渲染。';status.className='small muted';}
 }
 
 function showGeometryPreview(){
@@ -7071,7 +7081,7 @@ function showGeometryPreview(){
   clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
   const status=document.getElementById('libassPreviewStatus');
-  if(status){status.textContent='已切换浏览器字幕快速预览；此图是近似排版，下一次编辑会重新触发真实 ASS 渲染。';status.className='small status-warn';}
+  if(status){status.textContent='已切换浏览器字幕快速预览；修改参数只更新近似预览，不会自动执行实际 ASS 渲染。';status.className='small status-warn';}
 }
 
 function libassPreviewPayload(){
@@ -7167,7 +7177,7 @@ async function renderLibassPreview(){
     img.classList.remove('hidden');
     lastRenderedAssIdentity=identity;
     setPreviewEvidence('libass');
-    liveRealPreviewArmed=true;
+    liveRealPreviewArmed=document.body.dataset.workspaceTask==='effects';
     if(status){
       const timingNote=Array.isArray(layoutStressSample?.word_alignments)&&layoutStressSample.word_alignments.length
         ? '，使用项目词级时间'
@@ -7498,10 +7508,9 @@ function subtitleSettingsPayload(){
 
 function loadSubtitleLayoutSettings(config){
   if(!config)return;
-  // Loading a project arms authoritative rendering for its next actual cue.
-  // Explicit geometry inspection can still temporarily opt out.
-  liveRealPreviewArmed=!!currentProject;
-  geometryExplicitlyRequested=false;
+  // Layout opens in fast, approximate preview. Real ASS still rendering is manual.
+  liveRealPreviewArmed=false;
+  geometryExplicitlyRequested=true;
   lastRenderedAssIdentity=null;
   clearTimeout(liveRealPreviewTimer);
   const set=(id,value)=>{const el=document.getElementById(id);if(el&&value!==undefined&&value!==null)el.value=value;};
@@ -8581,15 +8590,12 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
 async function updateLayoutPreview() {
   syncHsrTouchNumericEditors();
   if(currentProject&&document.body.dataset.workspaceTask==='layout'){
-    // Switching corpus row/text invalidates previously decoded pixels even
-    // when the caller bypasses scheduleLayoutPreviewUpdate().
+    // Switching corpus row/text invalidates old real pixels, but never arms FFmpeg.
     if(lastRenderedAssIdentity!==currentLibassPreviewIdentity()&&
        (libassPreviewObjectUrl||libassPreviewController))
       invalidateLibassPreview();
-    liveRealPreviewArmed=true;
   }
-  // Independent request pipelines: a slow, rejected or cancelled SVG geometry
-  // API must never prevent this cue's real FFmpeg/libass frame being scheduled.
+  // Browser layout updates are independent of the optional real-render action.
   queueLiveRealPreview();
   const generation=++geometryPreviewGeneration;
   if(geometryPreviewController)geometryPreviewController.abort();
@@ -8670,8 +8676,9 @@ async function updateLayoutPreview() {
 
     if(generation!==geometryPreviewGeneration)return;
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
-    // Geometry is informational only; the real render was already queued
-    // before any asynchronous font-loading/geometry work began.
+    if(document.body.dataset.workspaceTask==='layout'&&geometryExplicitlyRequested)
+      setPreviewEvidence('geometry');
+    // Browser geometry remains approximate; real ASS is invoked only by its button.
     const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
     if(corpusStatus&&layoutStressSample){
       const layout=res?.layout||{};
@@ -8698,14 +8705,18 @@ async function updateLayoutPreview() {
 
 function scheduleLayoutPreviewUpdate() {
   if(fontImportTransactionActive)return;
-  geometryExplicitlyRequested=false;
+  if(document.body.dataset.workspaceTask==='layout'){
+    geometryExplicitlyRequested=true;
+    liveRealPreviewArmed=false;
+    clearTimeout(liveRealPreviewTimer);
+  }
   geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
   if(geometryPreviewController){geometryPreviewController.abort();geometryPreviewController=null;}
   invalidateLibassPreview();
+  if(document.body.dataset.workspaceTask==='layout')
+    setPreviewEvidence('geometry','参数已修改，正在更新浏览器近似字幕；实际 ASS 不会自动渲染。');
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
-  // Start the true-render debounce immediately rather than waiting for the
-  // optional geometry endpoint, which can fail or be repeatedly aborted.
   queueLiveRealPreview();
 }
 
@@ -9377,9 +9388,9 @@ document.querySelectorAll('[data-share-percent]').forEach(button=>
 // change to avoid a subprocess for each slider pointer movement.
 function scheduleCommittedAppearancePreview(){
   if(!currentProject?.root||document.body.dataset.workspace!=='layout')return;
-  liveRealPreviewArmed=true;
+  liveRealPreviewArmed=document.body.dataset.workspaceTask==='effects';
   const status=document.getElementById('libassPreviewStatus');
-  if(status){status.textContent='正在按已提交的外观参数生成真实 FFmpeg/libass 预览…';status.className='small muted';}
+  if(status){status.textContent='外观参数已更新；实际 ASS 仅在点击按钮后渲染。';status.className='small muted';}
   queueLiveRealPreview();
 }
 ['prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevEnableCard',
