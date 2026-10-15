@@ -312,7 +312,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("自动 Fade 正在按语音间隔决定时长",html)
         self.assertIn("const timing=document.getElementById('prevKaraokeTiming')?.value||'fixed';",html)
         self.assertIn("set('prevKaraokeTiming',config.subtitle_enable_karaoke",html)
-        self.assertIn("unit === \"pixel\"", (Path(__file__).resolve().parents[1] /
+        self.assertIn('unit == "pixel"', (Path(__file__).resolve().parents[1] /
             "subtitle_layout/ass_writer.py").read_text("utf-8"))
 
 
