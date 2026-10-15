@@ -17,7 +17,7 @@ class StudioV3ArchitectureTests(unittest.TestCase):
         for ident in (
             "studioV3Visual", "studioV3Editors", "studioV3Inspector",
             "previewCanvasContainer", "previewQuickBtn", "previewLibassBtn", "previewVideoBtn",
-            "layoutTimelinePanel", "layoutCueEditorPanel", "layoutCueClockOrigin",
+            "layoutCorpusList", "layoutCueEditorPanel", "layoutCueClockOrigin",
             "previewBackgroundMode", "hsrKaraokeReadiness", "previewSaveStatus",
             "layoutAuditDrawerToggle", "layoutCorpusRail",
         ):
@@ -33,17 +33,18 @@ class StudioV3ArchitectureTests(unittest.TestCase):
 
     def test_mobile_task_switcher_has_real_aria_keyboard_and_no_second_workspace(self):
         for panel, name, ctl in (
-            ("timeline", "studioV3TimelineTab", "layoutTimelinePanel"),
             ("cue", "studioV3CueTab", "layoutCueEditorPanel"),
             ("inspector", "studioV3InspectorTab", "studioV3Inspector"),
         ):
             self.assertEqual(HTML.count(f'id="{name}"'), 1)
             self.assertIn(f'data-studio-pane-target="{panel}" aria-controls="{ctl}"', HTML)
+        self.assertNotIn('id="studioV3TimelineTab"', HTML)
+        self.assertNotIn('id="layoutTimelinePanel"', HTML)
         self.assertIn("function setStudioV3Pane(pane,{focus=false}={})", HTML)
         self.assertIn("button.setAttribute('aria-selected',active?'true':'false')", HTML)
         self.assertIn("button.tabIndex=active?0:-1", HTML)
         self.assertIn("['ArrowLeft','ArrowRight']", HTML)
-        self.assertIn("setStudioV3Pane(next==='effects'?'timeline':'inspector')", HTML)
+        self.assertIn("setStudioV3Pane(next==='effects'?'cue':'inspector')", HTML)
         self.assertIn('.studio-v3-pane-nav{display:none!important}', CSS)
         self.assertIn('studio-v4-timing', CSS)
         self.assertIn('overflow:visible!important', CSS)
