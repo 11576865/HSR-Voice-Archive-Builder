@@ -3817,10 +3817,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
               <button type="button" class="small secondary" id="generateWordAlignmentBtn" hidden disabled>本机生成（需 WhisperX）</button>
+              <button type="button" class="small secondary" id="generateApiWordAlignmentBtn" disabled>使用我的 API 生成当前语音词时间</button>
               <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
-            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">正在检查本地与 API 时间戳服务。</div>
+            <p class="small muted">API 方式会在确认后将当前一条原语音上传至你配置的服务商，可能产生费用。它属于转写时间戳，不是已知原文的强制对齐；词序和原文不完全匹配时将拒绝保存。</p>
 </details>
           </section>
             </div>
@@ -7180,6 +7182,14 @@ async function loadWordAlignmentDiagnostics(){
     const data=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments');
     const d=data.diagnostics||{};
     const provider=data.local_provider||{};
+    const apiProvider=data.api_provider||{};
+    const apiButton=document.getElementById('generateApiWordAlignmentBtn');
+    if(apiButton){
+      apiButton.disabled=!apiProvider.configured;
+      apiButton.title=apiProvider.configured
+        ?'需主动确认上传当前语音及可能产生的费用；只保存完整匹配原文的时间戳'
+        :'请先在 AI API 配置中保存自己的 Key；服务商还须支持 whisper-1 逐词转写';
+    }
     const providerStatus=document.getElementById('wordAlignmentProviderStatus');
     const generateButton=document.getElementById('generateWordAlignmentBtn');
     if(providerStatus){
@@ -7188,7 +7198,8 @@ async function loadWordAlignmentDiagnostics(){
         providerStatus.className='small status-ok';
       }else{
         const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX / PyTorch';
-        providerStatus.textContent='当前设备不具备词级时间生成能力（缺少 '+missingPackages+'）。请使用「导入词级时间 JSON」；如需自动生成，须在安装了 WhisperX/PyTorch 的支持环境中运行。';
+        providerStatus.textContent='本机对齐器不可用（缺少 '+missingPackages+'）。'
+          +(apiProvider.configured?'可主动选择 API 逐词转写（会上传音频并计费），或导入匹配 JSON。':'API 也未配置；请导入有效 JSON，或先配置支持音频转写的 API。');
         providerStatus.className='small status-warn';
       }
     }
@@ -7267,6 +7278,34 @@ async function generateLocalWordAlignments(){
     await loadWordAlignmentDiagnostics();
   }finally{
     if(button&&!button.hidden)button.disabled=false;
+  }
+}
+
+async function generateApiWordAlignments(){
+  const status=document.getElementById('wordAlignmentStatus');
+  const button=document.getElementById('generateApiWordAlignmentBtn');
+  try{
+    if(!currentProject)throw new Error('请先打开项目');
+    const itemId=String(layoutStressSample?.id??'').trim();
+    if(!itemId)throw new Error('请先在排版预览中选择一个真实的项目语音条目');
+    if(!window.confirm('是否将当前语音 #'+itemId+' 上传至你配置的 API 服务商生成词时间？可能产生费用。转写和原文不完全一致时不会保存任何词时间。'))return;
+    if(button)button.disabled=true;
+    if(status){status.textContent='已确认上传当前语音，正在提交 API 逐词转写任务…';status.className='small muted layout-corpus-status';}
+    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments/generate',{
+      method:'POST',headers:{'Content-Type':'application/json'},
+      body:JSON.stringify({
+        provider:'whisper-api-words',
+        confirm_audio_upload:true,
+        item_ids:[itemId],force:false
+      })
+    });
+    if(status){status.textContent='逐词转写任务已启动；仅在词序与原文匹配时会写入。请在任务中心查看结果，并刷新词时间状态。';status.className='small muted layout-corpus-status';}
+    watchJob(result.job);
+  }catch(error){
+    if(status){status.textContent='API 逐词转写不可用：'+shortError(error);status.className='small status-bad layout-corpus-status';}
+    setHsrKaraokeReadiness('API 生成失败：'+shortError(error),'failed');
+  }finally{
+    if(button)button.disabled=false;
   }
 }
 
@@ -9260,6 +9299,7 @@ document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>
 
 document.getElementById('refreshWordAlignmentBtn')?.addEventListener('click',()=>loadWordAlignmentDiagnostics());
 document.getElementById('generateWordAlignmentBtn')?.addEventListener('click',generateLocalWordAlignments);
+document.getElementById('generateApiWordAlignmentBtn')?.addEventListener('click',generateApiWordAlignments);
 document.getElementById('importWordAlignmentBtn')?.addEventListener('click',()=>document.getElementById('wordAlignmentFile')?.click());
 document.getElementById('wordAlignmentFile')?.addEventListener('change',e=>importWordAlignmentFile(e.target.files?.[0]));
 
