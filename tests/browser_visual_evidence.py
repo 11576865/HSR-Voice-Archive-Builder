@@ -238,7 +238,7 @@ def load_studio(page):
         }};
         showWorkspace('layout',{scroll:false});
     }""")
-    page.wait_for_function("document.querySelectorAll('[data-timeline-cue]').length >= 3", timeout=12000)
+    page.wait_for_function("layoutCorpusItems.length >= 3", timeout=12000)
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
     # A separate effects workbench owns timing, Karaoke and playable preview.
     # The style view intentionally hides those controls.
@@ -457,8 +457,8 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.evaluate("document.body.dataset.workspaceTask") == "effects",
            "Effects task identity lost")
     page.locator("#studioV4Timing > summary").click()
-    ensure(page.locator("#layoutTimelineViewport").is_visible(),
-           "Opt-in timeline cannot be opened")
+    ensure(page.locator("#layoutTimelineViewport").count()==0,
+           "Removed timeline UI should not be mounted")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Layout QA rail leaks into the Effects task")
     ensure(page.locator("#layoutCorpusRail").get_attribute("aria-hidden") == "true",
@@ -470,8 +470,8 @@ def desktop_check(browser, base_url, output, report):
     # Programmatic task switches must not strand keyboard focus in a newly
     # inert subtree or on the layout-only (now hidden) drawer opener.
     page.locator('#studioStyleTab').click()
-    ensure(page.locator("#layoutTimelinePanel").is_visible(),
-           "Layout timeline remains inaccessible despite expanded timing disclosure")
+    ensure(page.locator("#layoutCueEditorPanel").is_visible(),
+           "Current subtitle editor must remain after timeline UI removal")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
@@ -488,60 +488,33 @@ def desktop_check(browser, base_url, output, report):
            "Focused QA rail did not close when entering Effects")
     stage = rect(page, ".preview-workbench .layout-preview-region")
     inspector = rect(page, ".preview-workbench .preview-inspector")
-    timeline = rect(page, "#layoutTimelineViewport")
     canvas = rect(page, ".preview-workbench .preview-stage")
     ensure(stage["x"] + stage["width"] <= inspector["x"] + 8,
            "Effects inspector overlaps two-column stage")
     ensure(inspector["width"] >= 320, "Effects inspector width below useful minimum")
     ensure(abs(canvas["width"] / canvas["height"] - 16/9) < 0.1,
            "Preview stage is not approximately 16:9")
-    ensure(timeline["width"] > 400, "Desktop timeline has insufficient width")
-    ensure(page.locator('[data-timeline-cue="11"]').count() == 1, "Cue 11 not visible")
-    ensure(page.locator('[data-timeline-cue="12"]').count() == 1, "Cue 12 not visible")
+    ensure(page.locator("#layoutCueEditorPanel").is_visible(), "Current subtitle panel missing")
     screenshot(page, output, "desktop_studio_before_edit")
 
-    # Use real browser pointer events to move selected cue END near next cue start.
+    # The timeline display was removed by explicit request. Exercise the
+    # retained cue timing editor and its actual backend persistence instead.
     page.evaluate("() => layoutTimelineSelect(11)")
-    page.wait_for_function("String(layoutCueActiveId)==='11' && document.querySelector('[data-timeline-edge=\"end\"]')!==null")
-    handle = page.locator('[data-timeline-edge="end"]')
-    handle.scroll_into_view_if_needed()
-    hbox = handle.bounding_box()
-    ensure(hbox["y"] >= 0 and hbox["y"] + hbox["height"] <= 900,
-           f"Drag handle outside browser viewport after scroll: {hbox}")
-    vp = rect(page, "#layoutTimelineViewport")
-    start, duration = page.evaluate("[layoutTimelineWindowStart,layoutTimelineWindowSeconds]")
-    target_x = vp["x"] + (7.39 - start) / duration * vp["width"]
-    target_y = hbox["y"] + hbox["height"]/2
-    page.mouse.move(hbox["x"] + hbox["width"]/2, target_y)
-    page.mouse.down()
-    armed = page.evaluate("layoutTimelineDrag")
-    ensure(armed is not None and str(armed.get("id")) == "11",
-           f"Real pointerdown did not arm the selected cue edge: {armed}")
-    page.mouse.move(target_x, target_y, steps=8)
-    page.mouse.up()
-    actual = page.evaluate("""() => ({
-      selected: layoutCueActiveId, value: document.getElementById('layoutCueTimingEnd').value,
-      state: layoutTimingState(layoutCueRow(layoutCueActiveId)),
-      drag: layoutTimelineDrag, left: layoutTimelineWindowStart,
-      zoom: layoutTimelineWindowSeconds
-    })""")
-    print("CHROMIUM DRAG DIAGNOSTIC", json.dumps(actual, ensure_ascii=False), flush=True)
-    page.wait_for_function("Number(document.getElementById('layoutCueTimingEnd').value) > 7.1", timeout=3000)
-    end_draft = float(page.locator("#layoutCueTimingEnd").input_value())
-    ensure(abs(end_draft - 7.4) < 0.051, f"Pointer snapping failed: {end_draft}")
-    ensure(not writes, "Pointer drag persisted timing without explicit save")
-    ensure(page.locator("#layoutCueTimingSaveBtn").is_enabled(), "Save not offered for changed draft")
-    screenshot(page, output, "desktop_studio_unsaved_drag")
-    # The time controls are deliberately disclosed, not permanently stacked
-    # ahead of the Effects preview; expand before a real user click.
+    page.wait_for_function("String(layoutCueActiveId)==='11'")
     page.locator(".hsr-cue-timing-disclosure > summary").click()
+    timing_end=page.locator("#layoutCueTimingEnd")
+    timing_end.fill("7.4")
+    timing_end.dispatch_event("input")
+    ensure(not writes, "Timing draft persisted without explicit commit")
+    ensure(page.locator("#layoutCueTimingSaveBtn").is_enabled(),
+           "Save not offered for a changed timing draft")
+    screenshot(page, output, "desktop_studio_unsaved_timing")
     page.locator("#layoutCueTimingSaveBtn").click()
     page.wait_for_function("document.getElementById('layoutCueTimingSaveBtn').disabled === true")
     ensure(len(writes) == 1 and abs(writes[0]["end"] - 7.4) < 0.05, "Saved timing mismatch")
-    ensure(abs(rows[0]["source_end"] - 7.0) < 0.001, "Source audio time mutated by subtitle save")
-    page.locator("#layoutTimelineZoom").select_option("60")
-    ensure(page.locator("#layoutTimelineRuler .layout-timeline-tick").count() >= 2, "Zoom ruler empty")
-    screenshot(page, output, "desktop_studio_saved_zoom")
+    ensure(abs(rows[0]["source_end"] - 7.0) < 0.001,
+           "Source audio time mutated by subtitle save")
+    screenshot(page, output, "desktop_studio_saved_timing")
     # Fixture-injected failed receipt in the *real* Chromium-rendered app.
     # Exercise the existing independent retry control without resubmitting
     # either text or timing edits.
@@ -632,7 +605,6 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     ensure(not page.locator("#studioV4Timing").evaluate("(n)=>n.open"),
            f"{label}: time editing should be collapsed by default")
     page.locator("#studioV4Timing > summary").click()
-    vp=rect(page,"#layoutTimelineViewport")
     cue=rect(page,"#layoutCueEditorPanel")
     inspector=rect(page,".studio-v3-inspector")
     ensure(page.locator("#layoutCueTimingStart").is_enabled(),
@@ -798,7 +770,7 @@ def touch_safety_check(browser, base_url, report):
            "Typography number input not visible")
     ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
            "60/40 bilingual region number input not visible")
-    ensure(page.locator("#studioRegionPercent").is_visible() and
+    ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible() and
            page.locator('[data-share-percent="60"]').is_visible(),
            "60/40 position controls must be conspicuous on a touch device")
     page.locator('[data-share-percent="40"]').click()
@@ -806,8 +778,8 @@ def touch_safety_check(browser, base_url, report):
            "40/60 quick choice did not reach authoritative region field")
     page.wait_for_function("""() => document.getElementById('prevPrimaryShareVal')
        .textContent.trim()==='40% / 60%'""", timeout=10000)
-    page.locator("#studioRegionPercent").fill("50")
-    page.locator("#studioRegionPercent").dispatch_event("change")
+    page.locator("#prevPrimaryShareTouchNumber").fill("50")
+    page.locator("#prevPrimaryShareTouchNumber").dispatch_event("change")
     ensure(page.locator("#prevPrimaryShare").input_value()=="50",
            "Explicit numeric region edit is not connected")
     style_sections.nth(2).locator(":scope > summary").click()
