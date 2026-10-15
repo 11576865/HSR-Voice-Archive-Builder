@@ -48,6 +48,7 @@ def solve_subtitle_layout(
     primary_font_path: str | None = None,
     primary_width_factor: float = 1.0,
     chs_width_factor: float = 1.0,
+    central_ink_padding: float = 0.0,
     ink_validator: Callable[[SolvedLayout], tuple[bool, str | None]] | None = None,
 ) -> SolvedLayout:
     same_chinese = source_language == target_language == "zh-CN"
@@ -57,10 +58,14 @@ def solve_subtitle_layout(
     # After reserving the central gap, allocate the remaining safe-area height
     # 60% to the primary/source subtitle region above the gap and 40% to the
     # Chinese target subtitle region below it.
-    available_height = max(0.0, safe_area.max_printable_height - min_central_gap)
+    # ASS positioning anchors are NOT the visible glyph edges. Reserve extra
+    # room for physical stroke/shadow spill; keep the requested central gap
+    # as the minimum separation between actual rendered ink.
+    anchor_gap = max(0.0, float(min_central_gap)) + max(0.0, float(central_ink_padding))
+    available_height = max(0.0, safe_area.max_printable_height - anchor_gap)
     primary_region_height = available_height * max(0.20, min(0.80, float(primary_region_share)))
     y_center_top = round(safe_area.y_min + primary_region_height)
-    y_center_bottom = round(y_center_top + min_central_gap)
+    y_center_bottom = round(y_center_top + anchor_gap)
 
     scale_attempts: list[int] = []
     last_failure_condition: str | None = None
