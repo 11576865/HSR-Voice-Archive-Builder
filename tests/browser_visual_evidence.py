@@ -791,6 +791,18 @@ def touch_safety_check(browser, base_url, report):
            "Typography number input not visible")
     ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
            "60/40 bilingual region number input not visible")
+    ensure(page.locator("#studioRegionPercent").is_visible() and
+           page.locator('[data-share-percent="60"]').is_visible(),
+           "60/40 position controls must be conspicuous on a touch device")
+    page.locator('[data-share-percent="40"]').click()
+    ensure(page.locator("#prevPrimaryShare").input_value()=="40",
+           "40/60 quick choice did not reach authoritative region field")
+    page.wait_for_function("""() => document.getElementById('prevPrimaryShareVal')
+       .textContent.trim()==='40% / 60%'""", timeout=10000)
+    page.locator("#studioRegionPercent").fill("50")
+    page.locator("#studioRegionPercent").dispatch_event("change")
+    ensure(page.locator("#prevPrimaryShare").input_value()=="50",
+           "Explicit numeric region edit is not connected")
     style_sections.nth(2).locator(":scope > summary").click()
     ensure(style_sections.nth(2).evaluate("(el)=>el.open") and
            style_sections.nth(0).evaluate("(el)=>el.open") and
