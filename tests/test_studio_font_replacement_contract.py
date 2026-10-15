@@ -58,6 +58,30 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertIn("unloadedFonts",source)
         self.assertIn("不能据此判断实际 ASS 的字号和断行",source)
 
+    def test_verified_real_ass_plan_is_reused_only_for_identical_layout_snapshot(self):
+        s=self.html
+        self.assertIn("X-HSR-Verified-Layout",s)
+        self.assertIn("lastVerifiedAssLayout=verifiedLayout?{identity,layout:verifiedLayout}:null",s)
+        self.assertIn("verified?.identity===currentLibassPreviewIdentity()",s)
+        self.assertIn("document.body.dataset.workspaceTask==='layout'&&",s)
+        self.assertIn("res.layout={...res.layout,...verified.layout};",s)
+        self.assertIn("if(lastVerifiedAssLayout?.identity!==currentLibassPreviewIdentity())",s)
+        self.assertIn("void updateLayoutPreview();",s)
+        ass=(ROOT/"subtitle_layout/ass_writer.py").read_text("utf-8")
+        preview=(ROOT/"app/ass_preview.py").read_text("utf-8")
+        fastapi=(ROOT/"app/server.py").read_text("utf-8")
+        lite=(ROOT/"app/lite_server.py").read_text("utf-8")
+        self.assertIn('"evidence": "libass-validated-ass-plan"',ass)
+        self.assertIn('layout_capture=layout_capture',preview)
+        for server in (fastapi,lite):
+            self.assertIn('X-HSR-Verified-Layout',server)
+            self.assertIn('if len(encoded) <= 6000:',server)
+        # The explicit real button remains the only still-render trigger.
+        self.assertIn("addEventListener('click',renderLibassPreview)",s)
+        scheduler=s[s.index("function queueLiveRealPreview(){"):
+                    s.index("let geometryPreviewGeneration = 0;")]
+        self.assertNotIn("renderLibassPreview()",scheduler)
+
     def test_real_import_twice_without_duplicate_validation_or_false_failure(self):
         """Run the production browser handler: first + repeat + real failure."""
         source=self.html
