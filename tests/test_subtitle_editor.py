@@ -285,7 +285,9 @@ class TestSubtitleEditor(unittest.TestCase):
             # Complete delivery regenerates independent ASS and SRT by default.
             ass_file = out / "HSR_Voice_Archive.ass"
             srt_file = out / "HSR_Voice_Archive.srt"
-            self.assertTrue(ass_file.is_file())
+            self.assertTrue(ass_file.is_file(),
+                json.loads((out / "subtitle_export_receipt.json").read_text("utf-8"))
+                .get("artifact_error", "No export receipt"))
             self.assertTrue(srt_file.is_file())
 
             srt_content = srt_file.read_text(encoding="utf-8-sig")
