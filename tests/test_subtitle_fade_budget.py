@@ -77,6 +77,34 @@ class FadeBudgetTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             validate_fade_update(self.config, 2100, 1600)
 
+    def test_project_update_blocks_increased_fade_before_mutation(self):
+        from unittest.mock import patch
+        from app.project import ProjectConfig, update_project
+        config = ProjectConfig(
+            schema_version=1, name="fade-test", root=str(self.root),
+            index_csv="index.csv", wav_source="wav", output_dir="output",
+            same_group_gap=1.0, group_gap=5.0,
+        )
+        with patch("app.project.save_project"):
+            with self.assertRaises(ValueError):
+                update_project(config, subtitle_fade_in_ms=1200, subtitle_fade_out_ms=100)
+            self.assertEqual(config.subtitle_fade_in_ms, 200)
+            self.assertEqual(config.subtitle_fade_out_ms, 200)
+            # 100% is allowed and must be persisted unchanged.
+            update_project(config, subtitle_fade_in_ms=700, subtitle_fade_out_ms=300)
+            self.assertEqual(config.subtitle_fade_in_ms, 700)
+            self.assertEqual(config.subtitle_fade_out_ms, 300)
+
+    def test_ui_has_no_arbitrary_five_second_max_and_feedback_is_visible(self):
+        html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text(encoding="utf-8")
+        self.assertIn('id="hsrFadeBudgetStatus"', html)
+        self.assertIn('id="prevFadeIn" min="0"', html)
+        self.assertIn('id="prevFadeOut" min="0"', html)
+        self.assertNotIn('id="prevFadeIn" min="0" max="5000"', html)
+        self.assertNotIn('id="prevFadeOut" min="0" max="5000"', html)
+        self.assertIn("ratio>0.6", html)
+        self.assertIn("proposed+otherValue>gap", html)
+
     def test_zero_silence_blocks_positive_fade_increase(self):
         self.set_entries([
             {"index": 1, "start_seconds": 0, "audio_end_seconds": 1},
