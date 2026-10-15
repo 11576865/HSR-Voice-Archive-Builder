@@ -761,6 +761,9 @@ async def api_subtitle_layout_settings(request: Request):
             )))),
             subtitle_enable_karaoke=as_bool("enable_karaoke", config.subtitle_enable_karaoke),
             subtitle_karaoke_mode=(str(data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").lower() if str(data.get("karaoke_mode", config.subtitle_karaoke_mode) or "k").lower() in {"k", "kf", "clip"} else "k"),
+            subtitle_karaoke_timing=str(data.get("karaoke_timing", config.subtitle_karaoke_timing) or "aligned").lower() if str(data.get("karaoke_timing", config.subtitle_karaoke_timing) or "aligned").lower() in {"aligned", "fixed", "cue"} else "aligned",
+            subtitle_karaoke_unit=str(data.get("karaoke_unit", config.subtitle_karaoke_unit) or "character").lower() if str(data.get("karaoke_unit", config.subtitle_karaoke_unit) or "character").lower() in {"character", "word"} else "character",
+            subtitle_karaoke_speed_ms=max(10, min(2000, int(data.get("karaoke_speed_ms", config.subtitle_karaoke_speed_ms)))),
             subtitle_enable_translucent_card=as_bool(
                 "enable_translucent_card", config.subtitle_enable_translucent_card
             ),
