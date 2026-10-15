@@ -119,8 +119,8 @@ ctx.geometryExplicitlyRequested=true;
 ctx.setPreviewEvidence('geometry');
 assert.equal(node('previewSvg').classList.contains('hidden'),false);
 ctx.setPreviewEvidence('rendering');
-assert.equal(node('previewSvg').classList.contains('hidden'),true);
-process.stdout.write('Only manual geometry may show non-authoritative glyphs: OK\n');
+assert.equal(node('previewSvg').classList.contains('hidden'),false);
+process.stdout.write('Guides remain transparent overlay on real pixels: OK\n');
 """
         script="const source = "+json.dumps(code,ensure_ascii=False)+";\n"+harness
         p=subprocess.run(["node","-"],input=script,capture_output=True,text=True,timeout=10)
@@ -138,131 +138,101 @@ process.stdout.write('Only manual geometry may show non-authoritative glyphs: OK
         self.assertIn("if(typeof videoPreviewController!=='undefined'&&videoPreviewController)return;",scheduler)
         self.assertIn("!videoPreviewController&&",scheduler)
 
-    def test_stale_libass_responses_and_manual_geometry_choice(self) -> None:
-        html = (Path(__file__).resolve().parents[1] / "app/static" / "index.html").read_text(
-            encoding="utf-8"
-        )
+    def test_stale_real_frames_and_instant_before_after_comparison(self) -> None:
+        html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
         start = html.index("let previewDebounceTimer = null;")
         end = html.index("async function loadWordAlignmentDiagnostics(){", start)
-        production_js = html[start:end]
-
+        production = html[start:end]
         harness = r"""
-const vm = require('node:vm');
-const assert = require('node:assert/strict');
-const nodes = new Map();
-function node(id) {
-  if (!nodes.has(id)) {
-    const classes = new Set(['hidden']);
-    nodes.set(id, {
-      value: '',
-      textContent: '',
-      className: '',
-      disabled: false,
-      dataset: {},
-      style: {},
-      attributes: {},
-      classList: {
-        add: cls => classes.add(cls),
-        remove: cls => classes.delete(cls),
-        contains: cls => classes.has(cls),
-        toggle: (cls,force) => { const add=force===undefined?!classes.has(cls):!!force; if(add)classes.add(cls);else classes.delete(cls);return add; }
-      },
-      setAttribute(name, value) { this.attributes[name] = value; }
+const vm=require('node:vm'), assert=require('node:assert/strict');
+const nodes=new Map(),pending=[],decodes=[],urls=[],revoked=[];
+function node(id){
+  if(!nodes.has(id)){
+    const classes=new Set(['hidden']);
+    nodes.set(id,{value:'',textContent:'',disabled:false,className:'',
+      dataset:{},style:{},attributes:{},src:'',
+      classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),
+        contains:x=>classes.has(x),
+        toggle:(x,force)=>{const v=force===undefined?!classes.has(x):!!force;
+           if(v)classes.add(x);else classes.delete(x);return v;}},
+      setAttribute(k,v){this.attributes[k]=v;},
+      removeAttribute(k){if(k==='src')this.src='';}
     });
   }
   return nodes.get(id);
 }
-const pending = [];
-const madeUrls = [];
-const decodes = [];
-const sandbox = {
-  document: {
-    getElementById: node,
-    querySelector: () => node('evidence-root')
-  },
-  currentProject: {name:'fixture-project', config:{}},
-  layoutStressSample: null,
-  subtitleSettingsPayload: () => ({chs_font:'Fixture', base_chs_size:48}),
-  fetch: () => new Promise(resolve => pending.push(resolve)),
-  headers: () => ({}),
-  shortError: e => String(e.message || e),
-  setLog: () => {},
-  URL: {
-    createObjectURL: () => { const url = 'blob:fixture-' + (madeUrls.length + 1); madeUrls.push(url); return url; },
-    revokeObjectURL: () => {}
-  },
-  console,
-  setTimeout,
-  clearTimeout
+const ctx={
+ document:{getElementById:node,querySelector:()=>node('evidence')},
+ currentProject:{name:'project',config:{}},layoutStressSample:null,
+ subtitleSettingsPayload:()=>({chs_font:'Fixture',base_chs_size:Number(node('prevChsSize').value||48)}),
+ fetch:()=>new Promise(r=>pending.push(r)),headers:()=>({}),
+ shortError:e=>String(e.message||e),setLog:()=>{},
+ updateLayoutPreview:()=>Promise.resolve(),refreshDiagnosticGuides:()=>Promise.resolve(),
+ Image:class{decode(){return new Promise((resolve,reject)=>decodes.push({resolve,reject}));}},
+ URL:{createObjectURL:()=>{const u='blob:frame-'+(urls.length+1);urls.push(u);return u;},
+   revokeObjectURL:u=>revoked.push(u)},
+ console,setTimeout,clearTimeout
 };
-vm.createContext(sandbox);
-vm.runInContext(source, sandbox);
-node('libassPreviewImage').decode = () => new Promise((resolve,reject)=>decodes.push({resolve,reject}));
-async function settle() { await new Promise(resolve=>setImmediate(resolve)); }
-function complete() {
-  const resolve = pending.shift();
-  assert.ok(resolve, 'expected a pending backend request');
-  resolve({ok:true,blob:async()=>({size:100,type:'image/png'})});
-}
-(async () => {
-  // Request 1: edit occurs before its response, so it cannot publish an old frame.
-  const old = vm.runInContext('renderLibassPreview()', sandbox);
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
-  node('prevChsText').value = 'changed';
-  vm.runInContext('invalidateLibassPreview()', sandbox);
-  complete();
-  await old;
-  assert.equal(madeUrls.length, 0, 'obsolete response must not allocate a new image URL');
-  assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
+vm.createContext(ctx);vm.runInContext(source,ctx);
+const settle=()=>new Promise(r=>setImmediate(r));
+function respond(){const f=pending.shift();assert.ok(f,'pending FFmpeg response');
+ f({ok:true,blob:async()=>({size:300,type:'image/png'})});}
+(async()=>{
+ const obsolete=vm.runInContext('renderLibassPreview()',ctx);
+ node('prevChsText').value='cue one';
+ vm.runInContext('invalidateLibassPreview()',ctx);
+ respond();await obsolete;
+ assert.equal(urls.length,0,'obsolete network reply must not create blob');
 
-  // Request 2: transport success is not yet decoded-image success.
-  const current = vm.runInContext('renderLibassPreview()', sandbox);
-  complete();
-  await settle();
-  assert.equal(decodes.length, 1);
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
-  assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
-  decodes.shift().resolve();
-  await current;
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'libass');
-  assert.equal(node('libassPreviewImage').classList.contains('hidden'), false);
-  assert.equal(node('previewLibassBtn').attributes['aria-pressed'], 'true');
+ const first=vm.runInContext('renderLibassPreview()',ctx);
+ respond();await settle();
+ assert.equal(decodes.length,1);
+ assert.equal(node('libassPreviewImage').classList.contains('hidden'),true);
+ decodes.shift().resolve();await first;
+ assert.equal(node('evidence').dataset.previewEvidence,'libass');
+ assert.equal(node('libassPreviewImage').src,'blob:frame-1');
 
-  // Request 3: choosing Geometry while rendering wins over late success.
-  const racing = vm.runInContext('renderLibassPreview()', sandbox);
-  vm.runInContext('showGeometryPreview()', sandbox);
-  complete();
-  await racing;
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'geometry');
-  assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
-  assert.equal(madeUrls.length, 1, 'manual geometry choice must suppress stale frame publishing');
+ node('prevChsSize').value='58';
+ vm.runInContext('invalidateLibassPreview()',ctx);
+ assert.equal(node('libassPreviewImage').classList.contains('hidden'),false,
+     'old genuine frame remains visible with stale badge');
+ assert.equal(node('evidence').dataset.previewEvidence,'stale');
+ const second=vm.runInContext('renderLibassPreview()',ctx);
+ vm.runInContext('showGeometryPreview()',ctx);
+ assert.equal(node('previewSvg').classList.contains('hidden'),false,
+   'guides overlay live preview without cancelling FFmpeg');
+ respond();await settle();decodes.shift().resolve();await second;
+ assert.equal(node('evidence').dataset.previewEvidence,'libass');
+ assert.equal(node('libassPreviewImage').src,'blob:frame-2');
+ assert.equal(node('previewCompareBtn').disabled,false);
+ vm.runInContext('toggleRealFrameComparison()',ctx);
+ assert.equal(node('libassCompareImage').src,'blob:frame-1');
+ assert.equal(node('libassCompareImage').classList.contains('hidden'),false);
+ vm.runInContext('toggleRealFrameComparison()',ctx);
+ assert.equal(node('libassCompareImage').classList.contains('hidden'),true);
 
-  // Request 4: a non-decodable image must never claim renderer evidence.
-  const invalid = vm.runInContext('renderLibassPreview()', sandbox);
-  complete();
-  await settle();
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
-  decodes.shift().reject(new Error('Invalid PNG bytes'));
-  await invalid;
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'failed');
-  assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
-  assert.equal(node('previewLibassBtn').disabled, false);
-  process.stdout.write('Subtitle preview identity and image decode regression: OK\n');
-})().catch(e => { console.error(e); process.exitCode = 1; });
+ node('prevChsSize').value='65';
+ vm.runInContext('invalidateLibassPreview()',ctx);
+ const invalid=vm.runInContext('renderLibassPreview()',ctx);
+ respond();await settle();decodes.shift().reject(new Error('Invalid PNG'));
+ await invalid;
+ assert.equal(node('evidence').dataset.previewEvidence,'failed');
+ assert.equal(node('libassPreviewImage').classList.contains('hidden'),false,
+   'failed render retains last good frame but never accepts it as new proof');
+
+ node('prevChsText').value='different cue';
+ vm.runInContext('invalidateLibassPreview()',ctx);
+ assert.equal(node('libassPreviewImage').classList.contains('hidden'),true);
+ assert.equal(node('previewCompareBtn').disabled,true);
+ assert.ok(revoked.includes('blob:frame-1')&&revoked.includes('blob:frame-2'),
+   'switching cue releases both stale frame URLs');
+ process.stdout.write('Stale true frames, visual compare and cue-safe memory: OK\n');
+})().catch(e=>{console.error(e);process.exitCode=1;});
 """
-        script = "const source = " + json.dumps(production_js, ensure_ascii=False) + ";\n" + harness
-        completed = subprocess.run(
-            ["node", "-"],
-            input=script,
-            text=True,
-            capture_output=True,
-            timeout=15,
-            check=False,
-        )
-        self.assertEqual(
-            completed.returncode, 0, completed.stdout + "\n" + completed.stderr
-        )
+        script = "const source=" + json.dumps(production, ensure_ascii=False) + ";\n" + harness
+        p = subprocess.run(["node", "-"], input=script, text=True,
+                           capture_output=True, timeout=15, check=False)
+        self.assertEqual(p.returncode, 0, p.stdout + "\n" + p.stderr)
 
 
 if __name__ == "__main__":

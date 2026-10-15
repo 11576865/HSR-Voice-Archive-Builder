@@ -131,8 +131,8 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
 
     def test_full_libass_preview_excludes_geometry_and_duplicate_canvas(self):
         s = self.html
-        self.assertIn("document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame)", s)
-        self.assertIn("document.getElementById('assCanvasPreview')?.classList.toggle('hidden',realFrame)", s)
+        self.assertIn("document.getElementById('previewSvg')?.classList.toggle('hidden',!overlayVisible)", s)
+        self.assertIn("document.getElementById('assCanvasPreview')?.classList.add('hidden')", s)
         self.assertIn("overlay.getContext('2d')?.clearRect", s)
         self.assertIn("overlay.style.display='none'", s)
         self.assertNotIn("renderCanvasSubtitleOverlay(data);", s)
