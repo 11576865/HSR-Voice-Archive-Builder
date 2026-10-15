@@ -57,7 +57,8 @@ class TouchWorkbenchTests(unittest.TestCase):
         html=self.html
         self.assertIn("const appearanceGeometryPreviewSpec=()=>",html)
         self.assertIn("const appearance=appearanceGeometryPreviewSpec()",html)
-        self.assertIn("geometryStyledText(line",html)
+        self.assertNotIn("elements.push(geometryStyledText(",html)
+        self.assertIn("辅助边界图（无文字渲染）",html)
         self.assertIn("if(appearance.card)elements.push(geometryCard(bbox))",html)
         self.assertIn("hsr-geometry-style-blur",html)
         # Assert the non-authoritative visual contract, not a legacy

@@ -127,7 +127,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("liveRealPreviewArmed=true;",html)
         self.assertIn("几何估算通过 · 非真实验收",html)
         self.assertIn("不代表全项目通过",html)
-        self.assertIn("辅助几何（非成品）",html)
+        self.assertIn("辅助边界（非字幕）",html)
         self.assertIn("font-weight=\"400\"",html)
 
     def test_persistent_share_wired_both_server_flavors_and_final_export(self):

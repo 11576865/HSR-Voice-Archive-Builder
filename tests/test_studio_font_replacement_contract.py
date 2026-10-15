@@ -11,6 +11,29 @@ class StudioFontReplacementContract(unittest.TestCase):
         cls.html = (ROOT / "app/static/index.html").read_text("utf-8")
         cls.fonts = (ROOT / "app/project_fonts.py").read_text("utf-8")
 
+    def test_font_import_proof_is_serialized(self):
+        s=self.html
+        start=s.index("async function importCurrentProjectFont(){")
+        end=s.index("document.getElementById('projectFontImportBtn')?.addEventListener",start)
+        fn=s[start:end]
+        self.assertIn("if(fontImportTransactionActive)return;",fn)
+        self.assertIn("fontImportTransactionActive=true;",fn)
+        self.assertIn("fontImportTransactionActive=false;",fn)
+        self.assertIn("if(field)field.value=family;",fn)
+        self.assertNotIn("field.dispatchEvent(new Event('input'",fn)
+        self.assertIn("const verified=await renderLibassPreview();",fn)
+        self.assertIn("lastRenderedAssIdentity!==currentLibassPreviewIdentity()",fn)
+        self.assertIn("lastLibassPreviewError",fn)
+        self.assertIn("if(fontImportTransactionActive)return;\n  clearTimeout(liveRealPreviewTimer)",s)
+
+    def test_geometry_is_boxes_not_a_second_caption(self):
+        s=self.html
+        block=s[s.index("function renderPreviewCanvasSvg("):s.index("async function updateLayoutPreview()")]
+        self.assertNotIn("geometryStyledText(",block)
+        self.assertNotIn("escapeHtml(line.text)",block)
+        self.assertIn("const boxW = bbox.x_max - bbox.x_min",block)
+        self.assertIn("辅助边界图（无文字渲染）",s)
+
     def test_old_registered_fontface_is_removed_not_only_cache_entry(self):
         s = self.html
         self.assertIn("function invalidateHostFont(family)", s)
