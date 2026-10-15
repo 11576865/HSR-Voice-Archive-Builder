@@ -423,6 +423,7 @@ class SubtitleSettingsApiTests(unittest.TestCase):
         self.assertEqual(kwargs["word_alignments"][0]["word"], "Hello")
         self.assertEqual(kwargs["duration_seconds"], 2.5)
         self.assertEqual(kwargs["timestamp"], 1.25)
+        self.assertIsInstance(kwargs["layout_capture"], dict)
 
 
 if __name__ == "__main__":
