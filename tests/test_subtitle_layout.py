@@ -122,7 +122,7 @@ class SubtitleLayoutTests(unittest.TestCase):
         tags_spacious = generate_kinetic_tags(2.0, voice_gap_seconds=1.5)
         self.assertIn(r"\fad(300,300)", tags_spacious)
 
-    def test_audio_aware_pre_roll_fade(self) -> None:
+    def test_audio_aware_fade_never_pre_rolls_into_silence(self) -> None:
         entry1 = SimpleNamespace(
             english="First sentence.",
             chinese="第一句。",
@@ -136,10 +136,11 @@ class SubtitleLayoutTests(unittest.TestCase):
             start_seconds=4.0,
             display_end_seconds=6.0,
         )
-        # Delta T = 1.0s. pre_roll = min(1.0/2, 200ms) = 0.2s = 200ms.
-        # So entry2 render start_time should be shifted from 4.0s (0:00:04.00) to 3.8s (0:00:03.80).
+        # Strict voice-only subtitle windows: do not show the second
+        # sentence during the 3.0s–4.0s silence, even for kinetic fade.
         ass_output = render_ass([entry1, entry2], source_language="en", target_language="zh-CN")
-        self.assertIn("0:00:03.80,0:00:06.00", ass_output)
+        self.assertIn("0:00:04.00,0:00:06.00", ass_output)
+        self.assertNotIn("0:00:03.80,0:00:06.00", ass_output)
 
     def test_render_ass_with_voice_gap_adaptation(self) -> None:
         entry_compact = SimpleNamespace(
