@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 
 def _non_negative_seconds(value: float, name: str) -> float:
@@ -263,6 +263,7 @@ def write_ass(
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
     config: Any | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
     enable_karaoke: bool | None = None,
     enable_frosted_glass: bool | None = None,
     enable_multi_layer_outline: bool | None = None,
@@ -270,6 +271,7 @@ def write_ass(
     kinetic_options: dict[str, Any] | None = None,
 ) -> None:
     from subtitle_layout import write_ass as _layout_write_ass
+    progress_kwargs = ({"progress_callback": progress_callback} if progress_callback is not None else {})
     _layout_write_ass(
         entries,
         path,
@@ -282,6 +284,7 @@ def write_ass(
         enable_multi_layer_outline=enable_multi_layer_outline,
         enable_kinetic=enable_kinetic,
         kinetic_options=kinetic_options,
+        **progress_kwargs,
     )
 
 
