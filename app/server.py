@@ -32,7 +32,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, reserve_project_output_writer
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports, refresh_ass_only
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -648,22 +648,25 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
         expected_root = str(body.get("expected_project_root") or "").strip()
         if expected_root and expected_root != str(config.root):
             raise ValueError("Subtitle artifact retry project context changed")
-        # This route runs inside the ASGI event loop. libass invokes FFmpeg
-        # many times per archive; never block status polling or other requests.
-        if body.get("ass_only") is True:
-            refreshed = await run_in_threadpool(refresh_ass_only, config, output_dir)
-        else:
-            refreshed = await run_in_threadpool(
-                refresh_derived_subtitle_exports,
-                config, output_dir, force_ass=body.get("force_ass") is True,
-            )
-        artifact_error = str(refreshed.get("ass_error") or "")
+        # Acquire the project's output-writer slot before yielding the ASGI
+        # event loop; ordinary jobs are excluded until the worker completes.
+        with reserve_project_output_writer(config.root):
+            if body.get("ass_only") is True:
+                refreshed = await run_in_threadpool(refresh_ass_only, config, output_dir)
+            else:
+                refreshed = await run_in_threadpool(
+                    refresh_derived_subtitle_exports,
+                    config, output_dir, force_ass=body.get("force_ass") is True,
+                )
+            artifact_error = str(refreshed.get("ass_error") or "")
+            export_status = read_subtitle_export_health(output_dir)
+        # Follow-up mux is submitted only AFTER releasing the output slot.
         auto_job = maybe_queue_complete_mkv(config) if not artifact_error else None
         return {
             "ok": True, "refreshed": refreshed, "auto_bundle_job": auto_job,
             "artifacts_current": not bool(artifact_error),
             "artifact_error": artifact_error,
-            "export_status": read_subtitle_export_health(output_dir),
+            "export_status": export_status,
         }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
