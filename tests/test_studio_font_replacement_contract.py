@@ -28,7 +28,9 @@ class StudioFontReplacementContract(unittest.TestCase):
 
     def test_geometry_is_boxes_not_a_second_caption(self):
         s=self.html
-        block=s[s.index("function renderPreviewCanvasSvg("):s.index("async function updateLayoutPreview()")]
+        start=s.index("function renderPreviewCanvasSvg(")
+        end=s.index("svg.innerHTML = elements.join('');",start)
+        block=s[start:end]
         self.assertNotIn("geometryStyledText(",block)
         self.assertNotIn("escapeHtml(line.text)",block)
         self.assertIn("const boxW = bbox.x_max - bbox.x_min",block)
