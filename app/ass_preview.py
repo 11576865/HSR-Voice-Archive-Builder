@@ -137,6 +137,20 @@ def _project_font_environment(config: SubtitleRenderConfig, font_dir: Path | Non
     return env
 
 
+def _find_fc_match() -> str | None:
+    """Find installed fontconfig even when Termux/Python PATH was altered."""
+    found = shutil.which("fc-match")
+    if found:
+        return found
+    prefix = os.environ.get("PREFIX", "")
+    locations = [Path(prefix) / "bin" / "fc-match"] if prefix else []
+    locations.append(Path("/data/data/com.termux/files/usr/bin/fc-match"))
+    for path in locations:
+        if path.is_file() and os.access(path, os.X_OK):
+            return str(path)
+    return None
+
+
 def _assert_project_font_selected(
     log: str, config: SubtitleRenderConfig, font_dir: Path | None,
     *, english: str, chinese: str, env: dict[str, str] | None = None,
@@ -152,9 +166,9 @@ def _assert_project_font_selected(
         expected = project_font_for_family(font_dir.parent, family)
         if expected is None:
             continue
-        matcher = shutil.which("fc-match")
+        matcher = _find_fc_match()
         if not matcher:
-            raise RuntimeError("无法确认项目字体：缺少 fontconfig 的 fc-match。Termux 请运行 pkg install fontconfig 后重试。")
+            raise RuntimeError("无法确认项目字体：当前 HSR 进程找不到 fontconfig 的 fc-match。请在运行 HSR 的 Termux 执行 pkg install -y fontconfig，确认 command -v fc-match 有输出，然后停止旧服务并通过 bash run_termux.sh 重新启动；浏览器刷新或 GitHub 更新无法安装系统依赖。")
         completed = subprocess.run(
             [matcher, "-f", "%{file}\\n", "--", family],
             env=env, capture_output=True, text=True, timeout=8, check=False,
