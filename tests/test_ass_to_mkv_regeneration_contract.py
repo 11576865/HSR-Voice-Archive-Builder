@@ -21,15 +21,17 @@ class AssToMkvWorkflowContracts(unittest.TestCase):
                 self.assertIn("queue_ass_regeneration(config, output_dir)", backend)
             self.assertIn('"delivery": "complete-mkv"', backend)
 
-    def test_browser_automatic_ass_refresh_waits_for_mkv_job(self):
+    def test_browser_autosave_does_not_start_mkv_job(self):
         html = (Path(__file__).resolve().parents[1] /
                 "app/static/index.html").read_text(encoding="utf-8")
-        start = html.index("async function runAutoAssRefresh(")
-        end = html.index("function queueSubtitleSettingsAutosave(", start)
-        body = html[start:end]
-        self.assertIn("if(result.job)", body)
-        self.assertIn("watchJob(result.job)", body)
-        self.assertIn("将新 ASS 封入 MKV", body)
+        self.assertNotIn("queueAutoAssRefresh", html)
+        self.assertNotIn("runAutoAssRefresh", html)
+        self.assertIn("function queueSubtitleSettingsAutosave(", html)
+        self.assertIn("async function saveSubtitleLayoutSettings(", html)
+        # An explicit Generate action is the only layout/settings UI path
+        # that starts the unified ASS -> verified MKV background job.
+        self.assertIn("if(await saveSubtitleLayoutSettings())await startAssExport();", html)
+        self.assertIn("void watchJob(j.job)", html) if "void watchJob(j.job)" in html else self.assertIn("watchJob(j.job)", html)
 
     def test_mkv_tracks_are_compared_semantically_before_atomic_replace(self):
         exporter = (Path(__file__).resolve().parents[1] /
