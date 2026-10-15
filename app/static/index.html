@@ -3664,8 +3664,6 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="projectFontTarget">导入后应用于</label>
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
               <button id="projectFontImportBtn" class="secondary" type="button" disabled>导入并保存字体</button>
-              <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
-              <div id="projectFontList" class="hsr-project-font-list" hidden inert aria-hidden="true"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
@@ -3812,6 +3810,18 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <pre id="hsrWordAlignmentExample">{"alignments":[{"id":11,"words":[{"word":"May","start":0.0,"end":0.35},{"word":"this","start":0.35,"end":0.65},{"word":"journey","start":0.65,"end":1.2}]}]}</pre>
               <p>示例的 <code>id:11</code> 和单词只是格式示意，不能直接导入任意项目；必须替换成真实字幕条目、完整原文词序和时间戳。</p>
             </details>
+<details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
+  <summary>词级时间 <small>可选 · 生成或导入</small></summary>
+  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
+            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
+            <div class="actions" style="margin-top:6px">
+              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本机生成（需 WhisperX）</button>
+              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
+              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
+            </div>
+            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
+</details>
           </section>
             </div>
           </details>
@@ -3836,35 +3846,16 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             </div>
           </details>
         </div>
-<details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
-  <summary>词级时间 <small>可选 · 生成或导入</small></summary>
-  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
-            <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
-            <div class="actions" style="margin-top:6px">
-              <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本机生成（需 WhisperX）</button>
-              <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
-              <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
-            </div>
-            <div id="wordAlignmentProviderStatus" class="small muted" style="margin-top:5px">本地对齐器状态尚未检查。</div>
-</details>
 <details class="hsr-preview-media-disclosure" data-studio-scope="effects">
-  <summary>自选预览素材 <small>高级选项</small></summary>
+  <summary>预览短视频 <small>可选</small></summary>
   <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
-  <label for="effectPreviewBackgroundColor">无本地视频时的真实渲染底色</label>
-  <input type="color" id="effectPreviewBackgroundColor" value="#000000" aria-label="选择 FFmpeg 动态视频的背景颜色" />
-  <p class="small muted hsr-footage-color-note">将用于 FFmpeg 输出的实际视频帧，而不仅是网页画布。选择视频后，视频画面优先，纯色用于补边。</p>
-  <label for="effectBackgroundImageFile">真实动态视频背景图片（可选 PNG/JPEG/WebP，≤64 MiB）</label>
-  <input id="effectBackgroundImageFile" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" />
-  <button type="button" id="effectBackgroundImageClearBtn" class="small secondary" disabled>清除背景图片</button>
-  <p class="small muted">图片会逐帧进入 FFmpeg/libass 输出，不只是网页装饰。已选择本地视频时视频优先；图片和纯色不会覆盖视频画面。</p>
   <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
   <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
   <label for="effectFootageStart">源视频起始位置（秒）</label>
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
-  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除本地视频，使用背景图片或纯色</button>
-  <p class="small muted">最多 24 MiB 的本地短片；最长渲染 8 秒。视频优先于背景图片（≤64 MiB）及纯色。只读取选定的片段；源音轨可选，不接入归档 WAV，不保存输入到项目。</p>
+  <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除视频，恢复红云参考图</button>
+  <p class="small muted">可选择最多 24 MiB 的短视频，仅用于真实特效预览。未选择视频时使用唯一的红云参考图；最终 MKV 的背景在导出页面另行设置。</p>
 </div>
 
 </details>
@@ -6813,43 +6804,6 @@ async function loadFontBrowser(query=''){
   }
 }
 
-async function refreshProjectFontList(){
-  const root=currentProject?.root||null;
-  const list=document.getElementById('projectFontList');
-  if(!list)return;
-  list.textContent='';
-  if(!root){list.textContent='请先打开项目。';return;}
-  try{
-    const data=await api('/api/subtitle-layout/project-fonts');
-    if(currentProject?.root!==root)return;
-    const fonts=Array.isArray(data.fonts)?data.fonts:[];
-    if(!fonts.length){list.textContent='当前项目还没有导入字体。';return;}
-    for(const item of fonts){
-      const button=document.createElement('button');
-      button.type='button';button.className='secondary';
-      button.textContent=item.family+' · '+Math.round(Number(item.bytes||0)/1024)+' KiB';
-      button.onclick=async()=>{
-        const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
-        const input=document.getElementById(target);
-        const status=document.getElementById('projectFontImportStatus');
-        const projectAtStart=currentProject?.root;
-        try{
-          button.disabled=true;
-          const name=await ensureHostFontLoaded(item.family);
-          if(!hostFontFaces.has(item.family)||name===item.family)
-            throw new Error('浏览器未能加载此字体，尚未应用');
-          if(!currentProject||currentProject.root!==projectAtStart)return;
-          if(input){input.value=item.family;input.dispatchEvent(new Event('input',{bubbles:true}));}
-          if(!(await saveSubtitleLayoutSettings()))throw new Error('字体选择未成功保存，请检查上方状态');
-          if(status){status.textContent='已应用并保存 '+item.family+'；建议点击实际 ASS 渲染确认字形。';status.className='small status-ok';}
-        }catch(error){
-          if(status){status.textContent='应用项目字体失败：'+shortError(error);status.className='small status-bad';}
-        }finally{button.disabled=false;}
-      };
-      list.appendChild(button);
-    }
-  }catch(error){list.textContent='读取项目字体失败：'+shortError(error);}
-}
 async function importCurrentProjectFont(){
   const file=document.getElementById('projectFontFile')?.files?.[0];
   const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
@@ -6895,7 +6849,6 @@ async function importCurrentProjectFont(){
     if(status){status.textContent='已导入、加载并应用「'+family+'」作为'+(target==='prevChsFont'?'中文':'原文')+'字体。请使用实际 ASS 渲染核对字形。';status.className='small status-ok';}
     const resolveStatus=document.getElementById('fontResolveStatus');
     if(resolveStatus)resolveStatus.textContent='项目字体已加载：'+family+'。实际 ASS 字形仍需验证。';
-    await refreshProjectFontList();
     invalidateLibassPreview();
     scheduleLayoutPreviewUpdate();
     // "Import and apply" must survive reloading the project: the previous
@@ -6928,10 +6881,7 @@ document.getElementById('projectFontFile')?.addEventListener('change',event=>{
   const button=document.getElementById('projectFontImportBtn');
   if(button)button.disabled=!file;
 });
-document.getElementById('projectFontRefreshBtn')?.addEventListener('click',refreshProjectFontList);
-document.getElementById('projectFontImporter')?.addEventListener('toggle',event=>{
-  if(event.target.open)refreshProjectFontList();
-});
+
 
 function openFontBrowser(targetId){
   fontBrowserTargetId=targetId;
@@ -9299,52 +9249,6 @@ document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>
   invalidateLibassPreview();
 });
 
-function applySubtitlePreset(name){
-  previewPreset=name;
-  const standard=()=>{
-    document.getElementById('prevChsFont').value='汉仪旗黑';
-    document.getElementById('prevPriFont').value='Noto Sans';
-    document.getElementById('prevChsSize').value=48;
-    document.getElementById('prevPriSize').value=42;
-    document.getElementById('prevCentralGap').value=20;
-    document.getElementById('prevPrimaryShare').value=60;
-    document.getElementById('prevMarginH').value=3;
-    document.getElementById('prevMarginV').value=5;
-    document.getElementById('prevEnableKinetic').checked=true;
-    document.getElementById('prevEnableKaraoke').checked=false;
-    document.getElementById('prevKaraokeMode').value='k';
-    document.getElementById('prevEnableCard').checked=false;
-    document.getElementById('prevEnableOutline').checked=false;
-    document.getElementById('prevFadeIn').value=200;
-    document.getElementById('prevFadeOut').value=200;
-    document.getElementById('prevAudioAwareFade').checked=true;
-    document.getElementById('prevOutlineWidth').value=3;
-    document.getElementById('prevShadowDepth').value=2;
-    document.getElementById('prevBlurRadius').value=0;
-    document.getElementById('prevCardOpacity').value=62;
-    document.getElementById('prevEnableSoftEntry').checked=false;
-    document.getElementById('prevSoftEntryScale').value=98;
-    document.getElementById('prevSoftEntryBlur').value=1.5;
-    document.getElementById('prevSoftEntryMs').value=160;
-    document.getElementById('prevEnableArchiveHud').checked=false;
-    document.getElementById('prevArchiveHudSize').value=22;
-    document.getElementById('prevArchiveHudOpacity').value=72;
-  };
-  standard();
-  if(name==='plain'){
-    document.getElementById('prevEnableKinetic').checked=false;
-    document.getElementById('prevAudioAwareFade').checked=false;
-  }
-  if(name==='karaoke'){
-    document.getElementById('prevEnableKaraoke').checked=true;
-    document.getElementById('prevKaraokeMode').value='kf';
-  }
-  markSubtitleSettingsDirty();
-  invalidateLayoutBatchAudit();
-  recordLayoutStyleHistory();
-  invalidateLibassPreview();
-  updateLayoutPreview();
-}
 
 document.getElementById('refreshWordAlignmentBtn')?.addEventListener('click',()=>loadWordAlignmentDiagnostics());
 document.getElementById('generateWordAlignmentBtn')?.addEventListener('click',generateLocalWordAlignments);
