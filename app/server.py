@@ -777,8 +777,8 @@ async def api_subtitle_layout_settings(request: Request):
                 "enable_multi_layer_outline", config.subtitle_enable_multi_layer_outline
             ),
             subtitle_enable_kinetic=as_bool("enable_kinetic", config.subtitle_enable_kinetic),
-            subtitle_fade_in_ms=max(0, min(5000, int(data.get("fade_in_ms", config.subtitle_fade_in_ms)))),
-            subtitle_fade_out_ms=max(0, min(5000, int(data.get("fade_out_ms", config.subtitle_fade_out_ms)))),
+            subtitle_fade_in_ms=max(0, int(data.get("fade_in_ms", config.subtitle_fade_in_ms))),
+            subtitle_fade_out_ms=max(0, int(data.get("fade_out_ms", config.subtitle_fade_out_ms))),
             subtitle_use_audio_aware_fade=as_bool(
                 "use_audio_aware_fade", config.subtitle_use_audio_aware_fade
             ),
