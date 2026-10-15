@@ -8861,16 +8861,30 @@ function renderPreviewCanvasSvg(data, options) {
   });
 
   svg.innerHTML = elements.join('');
-  // Browser approximation: one SVG glyph layer. Never stack a second Canvas layer.
+  // Browser quick preview consumes the solved ASS line plan, not browser
+  // measurements. Without an explicit textLength the SVG remeasures each
+  // wrapped line independently and renders a different visual width.
+  // Shared, testable mapping: no second wrapping, scaling or baseline solver.
   const drawQuickSubtitleLine=(line,family)=>{
+    const size=Number(line.font_size);
+    const box=line.bbox||{};
+    const height=Number(line.line_height)||size*1.25;
+    const measuredWidth=Number(line.measured_width);
     const el=document.createElementNS('http://www.w3.org/2000/svg','text');
-    el.setAttribute('x',String(line.x));
-    el.setAttribute('y',String(line.bbox.y_min));
+    el.setAttribute('x',String(Number(line.x)));
+    // SVG "hanging" starts at the glyph em-box; center its em height within
+    // the same 1.25em line box used by the Python ASS layout solver.
+    el.setAttribute('y',String(Number(box.y_min)+(height-size)/2));
     el.setAttribute('text-anchor','middle');
     el.setAttribute('dominant-baseline','hanging');
     el.setAttribute('font-family',browserPreviewFontName(family));
-    el.setAttribute('font-size',String(line.font_size));
+    el.setAttribute('font-size',String(size));
     el.setAttribute('font-weight','400');
+    el.setAttribute('font-kerning','normal');
+    if(Number.isFinite(measuredWidth)&&measuredWidth>0){
+      el.setAttribute('textLength',String(measuredWidth));
+      el.setAttribute('lengthAdjust','spacingAndGlyphs');
+    }
     el.setAttribute('paint-order','stroke');
     el.setAttribute('stroke','#101010');
     el.setAttribute('stroke-width',String(Math.max(0,Number(document.getElementById('prevOutlineWidth')?.value||0)*2)));
