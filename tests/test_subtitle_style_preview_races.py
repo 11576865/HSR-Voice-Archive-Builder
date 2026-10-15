@@ -52,6 +52,7 @@ const state = {
   document: {body: {dataset: {workspace: 'layout', workspaceTask: 'layout'}}},
   currentLibassPreviewIdentity: () => 'cue-1',
   renderLibassPreview: () => {invocationCount++; return Promise.resolve();},
+  videoPreviewController: null,
   clearTimeout: () => { active = null; },
   setTimeout: (callback, ms) => { assert.equal(ms, 850); active = callback; return 1; }
 };
@@ -86,6 +87,55 @@ process.stdout.write('Live libass scheduler decoupled from geometry: OK\n');
             check=False,
         )
         self.assertEqual(completed.returncode, 0, completed.stdout + "\n" + completed.stderr)
+
+    def test_geometry_glyphs_are_explicit_diagnostics_only(self) -> None:
+        html=(Path(__file__).resolve().parents[1]/"app/static/index.html").read_text("utf-8")
+        start=html.index("function setPreviewEvidence(mode, detail = '') {")
+        end=html.index("function invalidateLibassPreview()",start)
+        code=html[start:end]
+        harness=r"""
+const vm=require('node:vm'), assert=require('node:assert/strict');
+const nodes=new Map();
+function node(id){
+ if(!nodes.has(id)){
+  const classes=new Set();
+  nodes.set(id,{dataset:{},textContent:'',attributes:{},
+   classList:{add:x=>classes.add(x),remove:x=>classes.delete(x),
+    contains:x=>classes.has(x),toggle:(x,hidden)=>hidden?classes.add(x):classes.delete(x)},
+   setAttribute(k,v){this.attributes[k]=v;}
+  });
+ }
+ return nodes.get(id);
+}
+const ctx={document:{getElementById:node,querySelector:()=>node('evidence')},
+  geometryExplicitlyRequested:false};
+vm.createContext(ctx); vm.runInContext(source,ctx);
+for(const mode of ['geometry','rendering','stale','failed','libass']){
+ ctx.setPreviewEvidence(mode);
+ assert.equal(node('previewSvg').classList.contains('hidden'),true,mode);
+}
+ctx.geometryExplicitlyRequested=true;
+ctx.setPreviewEvidence('geometry');
+assert.equal(node('previewSvg').classList.contains('hidden'),false);
+ctx.setPreviewEvidence('rendering');
+assert.equal(node('previewSvg').classList.contains('hidden'),true);
+process.stdout.write('Only manual geometry may show non-authoritative glyphs: OK\n');
+"""
+        script="const source = "+json.dumps(code,ensure_ascii=False)+";\n"+harness
+        p=subprocess.run(["node","-"],input=script,capture_output=True,text=True,timeout=10)
+        self.assertEqual(p.returncode,0,p.stdout+"\n"+p.stderr)
+
+    def test_user_video_preempts_auto_still_render(self) -> None:
+        html=(Path(__file__).resolve().parents[1]/"app/static/index.html").read_text("utf-8")
+        block=html[html.index("async function renderHsrEffectVideo(){"):][:450]
+        self.assertLess(block.index("clearTimeout(liveRealPreviewTimer)"),
+                        block.index("clearVideoPreview()"))
+        self.assertLess(block.index("liveRealPreviewArmed=false;"),
+                        block.index("clearVideoPreview()"))
+        scheduler=html[html.index("function queueLiveRealPreview(){"):
+                       html.index("let geometryPreviewGeneration = 0;")]
+        self.assertIn("if(typeof videoPreviewController!=='undefined'&&videoPreviewController)return;",scheduler)
+        self.assertIn("!videoPreviewController&&",scheduler)
 
     def test_stale_libass_responses_and_manual_geometry_choice(self) -> None:
         html = (Path(__file__).resolve().parents[1] / "app/static" / "index.html").read_text(
