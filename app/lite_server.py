@@ -74,6 +74,7 @@ from .remote_index import exclude_applied_updates, exclude_indexed_updates, remo
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
+from subtitle_layout.config import normalize_subtitle_color
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -688,6 +689,8 @@ class Handler(BaseHTTPRequestHandler):
                 config,
                 subtitle_preset=preset,
                 subtitle_chs_font=validate_ass_font_name(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑"),
+                subtitle_primary_color=normalize_subtitle_color(data.get("primary_color", config.subtitle_primary_color)),
+                subtitle_chs_color=normalize_subtitle_color(data.get("chs_color", config.subtitle_chs_color)),
                 subtitle_primary_font=validate_ass_font_name(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans"),
                 subtitle_chs_size=max(12, min(240, _int(data.get("base_chs_size"), config.subtitle_chs_size))),
                 subtitle_primary_size=max(12, min(240, _int(data.get("base_primary_size"), config.subtitle_primary_size))),
@@ -718,7 +721,7 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_shadow_depth=max(0.0, min(24.0, _float(data.get("shadow_depth"), config.subtitle_shadow_depth))),
                 subtitle_blur_radius=max(0.0, min(12.0, _float(data.get("blur_radius"), config.subtitle_blur_radius))),
                 subtitle_card_opacity=max(0.0, min(1.0, _float(data.get("card_opacity"), config.subtitle_card_opacity))),
-                subtitle_enable_soft_entry=_bool(data.get("enable_soft_entry", str(config.subtitle_enable_soft_entry))),
+                subtitle_enable_soft_entry=False,  # only Fade is available in current effects phase
                 subtitle_soft_entry_scale_percent=max(25.0, min(300.0, _float(data.get("soft_entry_scale_percent"), config.subtitle_soft_entry_scale_percent))),
                 subtitle_soft_entry_blur=max(0.0, min(12.0, _float(data.get("soft_entry_blur"), config.subtitle_soft_entry_blur))),
                 subtitle_soft_entry_ms=max(0, min(5000, _int(data.get("soft_entry_ms"), config.subtitle_soft_entry_ms))),
