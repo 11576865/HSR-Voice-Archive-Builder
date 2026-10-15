@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "task_id": "hsr-ass-export-stage-boundary-20261016",
+  "goal": "Remove redundant per-cue FFmpeg/libass ink probes from edited and full ASS artifact generation while preserving explicit real-preview evidence and safe output-writer semantics.",
+  "status": "agent_execution_complete_pending_external_validation",
+  "current_bounded_work_unit": "User-requested ASS export phase separation: skip libass raster validation on artifact writes and retain bounded geometric layout, overflow report, exports and actual preview.",
+  "completed_units": [
+    {
+      "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
+      "commit": "bc1df83b543d30e5105157a8e986d0a282fead55",
+      "validation": "CI failed; unrelated baseline assertions and review gaps require separate resolution"
+    },
+    {
+      "summary": "Fixed per-project writer reservation across offloaded FastAPI refresh and asynchronous output jobs; mirrored progress/reservation in Termux Lite",
+      "commit": "033915fe4d74f452d7bd3a8400b0a5a04ed268bd",
+      "validation": "Pending exact-head CI"
+    },
+    {
+      "summary": "Disable per-cue real-ink probes for full derived ASS and ASS-only regeneration while retaining geometry solving and explicit libass preview. Add targeted regression tests, correct progress messaging, revert unnecessary cache enlargement.",
+      "commit": "a51e54685b84510717c2fda1caa6e002d1c37400",
+      "validation": "Pending exact-head CI"
+    }
+  ],
+  "next_units": [
+    "Check exact-head Python/Termux and browser/FFmpeg CI only when requested or at explicit next continuation.",
+    "Compare any failures to main baseline and repair only attributable regressions.",
+    "Perform realistic large-corpus export timing and Android/Termux field acceptance before merge or release."
+  ],
+  "branch": "fix/ass-export-progress-20261016",
+  "pr": 185,
+  "latest_durable_commit": "a51e54685b84510717c2fda1caa6e002d1c37400",
+  "external_validation": {
+    "previous_head": "bc1df83b543d30e5105157a8e986d0a282fead55",
+    "previous_ci": "completed_failure",
+    "current_head": "a51e54685b84510717c2fda1caa6e002d1c37400",
+    "current_ci": "pending",
+    "physical_termux": "pending",
+    "full_corpus_pixel_validation": "deliberately_not_performed_in_export"
+  },
+  "blockers": [
+    "Existing CI failures have not yet been isolated against an exact main baseline.",
+    "No physical Android or user-edited large-corpus export benchmark yet."
+  ],
+  "updated_at": "2026-10-16"
+}
