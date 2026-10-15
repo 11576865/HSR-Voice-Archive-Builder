@@ -91,15 +91,20 @@ class FadeBudgetTests(unittest.TestCase):
             self.assertEqual(config.subtitle_fade_in_ms, 200)
             self.assertEqual(config.subtitle_fade_out_ms, 200)
             # 100% is allowed and must be persisted unchanged.
-            update_project(config, subtitle_fade_in_ms=700, subtitle_fade_out_ms=300)
-            self.assertEqual(config.subtitle_fade_in_ms, 700)
+            update_project(config, subtitle_fade_in_ms=500, subtitle_fade_out_ms=500)
+            self.assertEqual(config.subtitle_fade_in_ms, 500)
+            self.assertEqual(config.subtitle_fade_out_ms, 500)
+            # Even old clients posting distinct values cannot persist a pair.
+            update_project(config, subtitle_fade_in_ms=300, subtitle_fade_out_ms=10)
+            self.assertEqual(config.subtitle_fade_in_ms, 300)
             self.assertEqual(config.subtitle_fade_out_ms, 300)
 
     def test_ui_has_no_arbitrary_five_second_max_and_feedback_is_visible(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text(encoding="utf-8")
         self.assertIn('id="hsrFadeBudgetStatus"', html)
         self.assertIn('id="prevFadeIn" min="0"', html)
-        self.assertIn('id="prevFadeOut" min="0"', html)
+        self.assertIn('type="hidden" id="prevFadeOut"', html)
+        self.assertIn("fade_out_ms: parseInt(document.getElementById('prevFadeIn')", html)
         self.assertNotIn('id="prevFadeIn" min="0" max="5000"', html)
         self.assertNotIn('id="prevFadeOut" min="0" max="5000"', html)
         self.assertIn("ratio>0.6", html)
