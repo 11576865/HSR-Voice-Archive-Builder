@@ -49,9 +49,16 @@ class BundleLifecycleTests(unittest.TestCase):
         self.assertEqual((self.root / OUTPUT).read_bytes(), b"prior verified mux file")
         self.assertEqual(load_previous_bundle_image(self.root), PNG)
 
-    def test_subtitle_revision_marks_existing_mkv_stale(self):
+    def test_current_subtitle_revision_marks_existing_mkv_stale(self):
         self._record()
+        # Obsolete display-only timing overrides are no longer read by the
+        # subtitle writer and must not falsely mark a current MKV stale.
         (self.root / "subtitle_timing_overrides.json").write_text(
+            '{"entry":12}', encoding="utf-8"
+        )
+        self.assertEqual(bundle_export_status(self.root)["state"], "current")
+        # Human text overrides ARE an authoritative revision.
+        (self.root / "subtitles_overrides.json").write_text(
             '{"entry":12}', encoding="utf-8"
         )
         self.assertEqual(bundle_export_status(self.root)["state"], "stale")
