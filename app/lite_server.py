@@ -22,7 +22,7 @@ from .credentials import (
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv
+from .auto_delivery import maybe_queue_complete_mkv, publish_generated_ass_complete_mkv
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -1554,7 +1554,7 @@ class Handler(BaseHTTPRequestHandler):
                         current, total,
                     )
 
-                report_progress("prepare", "正在加载字幕并准备真实字形校验", 0, 0)
+                report_progress("prepare", "正在加载字幕并准备生成 ASS", 0, 0)
                 result = refresh_subtitle_artifacts_from_settings(
                     output,
                     source_language=config.source_text_language or "en",
@@ -1564,7 +1564,12 @@ class Handler(BaseHTTPRequestHandler):
                     ass_progress=report_ass_progress,
                 )
                 completed = max(totals["count"], 1)
-                report_progress("render", "ASS 字幕已生成", completed, completed)
+                if config.delivery_mode == "complete":
+                    report_progress("render", "新 ASS 已生成，正在替换 MKV 内旧字幕", completed, completed)
+                    bundle = publish_generated_ass_complete_mkv(config, output, report_progress)
+                    return {**result, "bundle": bundle, "delivery": "complete-mkv",
+                            "output": bundle.get("output")}
+                report_progress("render", "独立 ASS 字幕已生成", completed, completed)
                 return result
 
             job = create_job(
