@@ -45,8 +45,20 @@ class StudioFontAndRegionTests(unittest.TestCase):
                                                   english="",chinese="汉字")
                 false_success="fontselect: (ProjectChinese, 400, 0) -> /host/fallback.ttf, 0, Fallback"
                 with patch("app.ass_preview.subprocess.run",return_value=result):
-                    with self.assertRaisesRegex(RuntimeError,"libass.*回退字形"):
+                    with self.assertRaisesRegex(RuntimeError,"libass.*不匹配的字体面"):
                         _assert_project_font_selected(false_success,resolved,fonts,
+                                                      english="",chinese="汉字")
+                # Some libass builds report PostScript face names, not paths.
+                # An exact matching face is valid only alongside fc-match's
+                # independent verified uploaded-file identity.
+                face_only="fontselect: (ProjectChinese, 400, 0) -> ProjectChinese-Regular, 0"
+                with patch("app.ass_preview.subprocess.run",return_value=result):
+                    _assert_project_font_selected(face_only,resolved,fonts,
+                                                  english="",chinese="汉字")
+                wrong_face="fontselect: (ProjectChinese, 400, 0) -> NotoSans, 0"
+                with patch("app.ass_preview.subprocess.run",return_value=result):
+                    with self.assertRaisesRegex(RuntimeError,"不匹配的字体面"):
+                        _assert_project_font_selected(wrong_face,resolved,fonts,
                                                       english="",chinese="汉字")
                 bad=type("MatchResult",(),{"stdout":"/host/fallback.ttf","returncode":0})()
                 with patch("app.ass_preview.subprocess.run",return_value=bad):
