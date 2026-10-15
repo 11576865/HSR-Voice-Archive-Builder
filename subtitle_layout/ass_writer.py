@@ -322,6 +322,7 @@ def _karaoke_units(text: str, mode: str) -> list[str]:
 def format_generated_karaoke(
     lines: list[object], duration_sec: float, *, timing: str,
     unit: str, speed_ms: int, mode: str,
+    font_path: str | None = None,
 ) -> str:
     """Generate deliberate *unsynchronized* ASS progression, never word alignment."""
     tag = "kf" if mode == "kf" else "k"
@@ -334,6 +335,14 @@ def format_generated_karaoke(
         total_cs = max(unit_count, int(round(max(0.0, duration_sec) * 100)))
         base, remainder = divmod(total_cs, unit_count)
         ticks = [base + (1 if n < remainder else 0) for n in range(unit_count)]
+    elif unit == "pixel":
+        # ms per 100px of actual measured text width: constant sweep speed.
+        ticks = [
+            max(1, round(measure_text_width(part, int(getattr(line, "font_size", 42)), font_path)
+                         * speed_ms / 1000.0))
+            for line, items in zip(lines, groups)
+            for part in items
+        ]
     else:
         ticks = [max(1, round(speed_ms / 10))] * unit_count
     result: list[str] = []
@@ -354,6 +363,7 @@ def format_multiline_karaoke(
     timing: str = "aligned",
     unit: str = "character",
     speed_ms: int = 300,
+    font_path: str | None = None,
 ) -> str:
     """Either true word alignment or explicitly unsynchronized generated timing."""
     if not lines:
@@ -362,7 +372,7 @@ def format_multiline_karaoke(
     if timing in {"fixed", "cue"}:
         return format_generated_karaoke(
             lines, duration_sec, timing=timing, unit=unit,
-            speed_ms=speed_ms, mode=mode,
+            speed_ms=speed_ms, mode=mode, font_path=font_path,
         )
     if not word_alignments or len(lines) != 1:
         return plain
@@ -683,6 +693,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     timing=karaoke_timing,
                     unit=karaoke_unit,
                     speed_ms=karaoke_speed_ms,
+                    font_path=primary_font_path,
                 )
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
@@ -756,6 +767,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     timing=karaoke_timing,
                     unit=karaoke_unit,
                     speed_ms=karaoke_speed_ms,
+                    font_path=chs_font_path,
                 )
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
