@@ -1550,7 +1550,7 @@ class Handler(BaseHTTPRequestHandler):
                 def report_ass_progress(current: int, total: int) -> None:
                     totals["count"] = total
                     report_progress(
-                        "render", f"正在校验真实字幕字形：{current}/{total} 条",
+                        "render", f"正在生成 ASS 字幕：{current}/{total} 条",
                         current, total,
                     )
 
