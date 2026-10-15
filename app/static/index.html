@@ -3641,12 +3641,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="prevChsSize" style="margin:0">中文基础字号</label>
               <span id="prevChsSizeVal" class="small muted">48 px</span>
             </div>
-            <input type="range" id="prevChsSize" min="38" max="64" value="48" step="1">
+            <input type="range" id="prevChsSize" min="12" max="240" value="48" step="1">
             <div style="display:flex;justify-content:space-between">
               <label for="prevPriSize" style="margin:0">原文基础字号</label>
               <span id="prevPriSizeVal" class="small muted">42 px</span>
             </div>
-            <input type="range" id="prevPriSize" min="32" max="54" value="42" step="1">
+            <input type="range" id="prevPriSize" min="12" max="240" value="42" step="1">
           </section>
             </div>
           </details>
@@ -3699,17 +3699,17 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="prevOutlineWidth" style="margin:0">描边宽度</label>
               <span id="prevOutlineWidthVal" class="small muted">3.0</span>
             </div>
-            <input type="range" id="prevOutlineWidth" min="0" max="12" value="3" step="0.25">
+            <input type="range" id="prevOutlineWidth" min="0" max="24" value="3" step="0.25">
             <div style="display:flex;justify-content:space-between">
               <label for="prevShadowDepth" style="margin:0">阴影强度</label>
               <span id="prevShadowDepthVal" class="small muted">2.0</span>
             </div>
-            <input type="range" id="prevShadowDepth" min="0" max="12" value="2" step="0.25">
+            <input type="range" id="prevShadowDepth" min="0" max="24" value="2" step="0.25">
             <div style="display:flex;justify-content:space-between">
               <label for="prevBlurRadius" style="margin:0">柔化描边 / Blur</label>
               <span id="prevBlurRadiusVal" class="small muted">0.0</span>
             </div>
-            <input type="range" id="prevBlurRadius" min="0" max="5" value="0" step="0.1">
+            <input type="range" id="prevBlurRadius" min="0" max="12" value="0" step="0.1">
             <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层柔和轮廓</label>
             <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
             <div style="display:flex;justify-content:space-between">
@@ -3732,28 +3732,28 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="prevFadeIn" style="margin:0">淡入时长</label>
               <span id="prevFadeInVal" class="small muted">200 ms</span>
             </div>
-            <input type="range" id="prevFadeIn" min="0" max="600" value="200" step="10">
+            <input type="range" id="prevFadeIn" min="0" max="5000" value="200" step="10">
             <div style="display:flex;justify-content:space-between">
               <label for="prevFadeOut" style="margin:0">淡出时长</label>
               <span id="prevFadeOutVal" class="small muted">200 ms</span>
             </div>
-            <input type="range" id="prevFadeOut" min="0" max="600" value="200" step="10">
+            <input type="range" id="prevFadeOut" min="0" max="5000" value="200" step="10">
             <label class="check"><input type="checkbox" id="prevEnableSoftEntry"> 柔和进入动画</label>
             <div style="display:flex;justify-content:space-between">
               <label for="prevSoftEntryScale" style="margin:0">起始缩放</label>
               <span id="prevSoftEntryScaleVal" class="small muted">98%</span>
             </div>
-            <input type="range" id="prevSoftEntryScale" min="94" max="100" value="98" step="0.5">
+            <input type="range" id="prevSoftEntryScale" min="25" max="300" value="98" step="0.5">
             <div style="display:flex;justify-content:space-between">
               <label for="prevSoftEntryBlur" style="margin:0">起始 Blur</label>
               <span id="prevSoftEntryBlurVal" class="small muted">1.5</span>
             </div>
-            <input type="range" id="prevSoftEntryBlur" min="0" max="3" value="1.5" step="0.1">
+            <input type="range" id="prevSoftEntryBlur" min="0" max="12" value="1.5" step="0.1">
             <div style="display:flex;justify-content:space-between">
               <label for="prevSoftEntryMs" style="margin:0">进入时长</label>
               <span id="prevSoftEntryMsVal" class="small muted">160 ms</span>
             </div>
-            <input type="range" id="prevSoftEntryMs" min="60" max="400" value="160" step="10">
+            <input type="range" id="prevSoftEntryMs" min="0" max="5000" value="160" step="10">
             <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：轻微缩放与 Blur 在短时间内回到正常值，不加入弹跳。</div>
           </section>
             </div>
@@ -3810,7 +3810,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="prevArchiveHudSize" style="margin:0">信息字号</label>
               <span id="prevArchiveHudSizeVal" class="small muted">22 px</span>
             </div>
-            <input type="range" id="prevArchiveHudSize" min="12" max="36" value="22" step="1">
+            <input type="range" id="prevArchiveHudSize" min="12" max="120" value="22" step="1">
             <div style="display:flex;justify-content:space-between">
               <label for="prevArchiveHudOpacity" style="margin:0">信息不透明度</label>
               <span id="prevArchiveHudOpacityVal" class="small muted">72%</span>
