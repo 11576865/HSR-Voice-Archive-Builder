@@ -65,7 +65,11 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("geometry:['辅助几何图（非排版成品）'",html)
         self.assertIn("未经真实验证",html)
         self.assertIn("不要依据此图定稿；等待自动真实渲染",html)
-        self.assertIn("浏览器近似 · 渲染失败",html)
+        # Real frame failures must not suggest a geometrically fake glyph
+        # substitute. Assert the fail-closed evidence state rather than old copy.
+        self.assertIn("真实渲染失败 · 不可定稿",html)
+        self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
+        self.assertIn("geometryExplicitlyRequested=true;",html)
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
