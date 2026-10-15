@@ -1,0 +1,50 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-HSR-Voice-Archive-Builder-38718399235-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "tests: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/HSR-Voice-Archive-Builder",
+  "source_event": "workflow_run",
+  "source_ref": "fix/hsr-real-frame-compare-overlay-20261015",
+  "source_sha": "692864174010760a4f4b0030dc2a205ff45ab5cb",
+  "source_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/actions/runs/38718399235",
+  "created_at": "2026-10-15T10:11:32+00:00",
+  "dedupe_key": "workflow_run:11576865/HSR-Voice-Archive-Builder:38718399235:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "tests",
+    "run_id": "38718399235",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 116366621752,
+        "name": "unit (3.13)",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "unit (3.13)",
+        "number": 7,
+        "name": "Run unit tests",
+        "conclusion": "failure"
+      },
+      {
+        "job": "unit (3.12)",
+        "number": 7,
+        "name": "Run unit tests",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
