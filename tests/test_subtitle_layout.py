@@ -48,8 +48,24 @@ class SubtitleLayoutTests(unittest.TestCase):
         )
         ass_output = render_ass([entry], source_language="en", target_language="zh-CN")
         self.assertIn("WrapStyle: 2", ass_output)
-        self.assertIn(r"{\an2\pos(960,625)", ass_output)
-        self.assertIn(r"{\an8\pos(960,645)", ass_output)
+        self.assertIn(r"{\an2\pos(960,618)", ass_output)
+        self.assertIn(r"{\an8\pos(960,650)", ass_output)
+
+    def test_ass_central_ink_gap_reserves_fixed_border_not_font_scale(self) -> None:
+        from subtitle_layout.collision import central_ink_reserve
+        from subtitle_layout.preview import preview_subtitle_layout
+        # Default 3px border and 2px shadow require physical bleed reserve.
+        self.assertEqual(central_ink_reserve(3, 2, 0, False), 12)
+        self.assertEqual(central_ink_reserve(10, 6, 0, False), 30)
+        layout = preview_subtitle_layout(
+            english_text="Primary sentence", chinese_text="中文字幕",
+            outline_width=3, shadow_depth=2, min_central_gap=20,
+        )
+        self.assertEqual(layout["central_gap"]["anchor_gap"], 32)
+        self.assertEqual(layout["central_gap"]["visible_min_gap"], 20)
+        self.assertEqual(layout["central_gap"]["ink_padding"], 12)
+        self.assertEqual(layout["layout"]["primary_lines"][0]["y"], 618)
+        self.assertEqual(layout["layout"]["chs_lines"][0]["y"], 650)
 
     def test_kinetic_tags_duration_capping(self) -> None:
         # Long duration line (2.0s = 2000ms): base 200ms entry and 200ms exit applied
@@ -205,8 +221,8 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(len(chs_dialogue), 1)
         self.assertIn(r"\N", primary_dialogue[0])
         self.assertIn(r"\N", chs_dialogue[0])
-        self.assertIn(r"{\an2\pos(960,625)", primary_dialogue[0])
-        self.assertIn(r"{\an8\pos(960,645)", chs_dialogue[0])
+        self.assertIn(r"{\an2\pos(960,618)", primary_dialogue[0])
+        self.assertIn(r"{\an8\pos(960,650)", chs_dialogue[0])
 
     def test_long_english_text_layout(self) -> None:
         english = "This is a very long sentence designed to test the automatic line breaking capabilities of the ASS subtitle layout engine when processing English text."
