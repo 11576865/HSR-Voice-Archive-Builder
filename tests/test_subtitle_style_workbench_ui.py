@@ -131,7 +131,9 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('id="prevShowSafeArea"', inspector)
         self.assertIn('id="prevShowCentralGap"', inspector)
         self.assertIn('id="prevShowBBox"', inspector)
-        self.assertIn("updateLayoutPreview({geometryOnly:true})", html)
+        self.assertIn("function refreshDiagnosticGuides()", html)
+        self.assertIn("const geometryOnly=diagnosticGeometryRefreshPending", html)
+        self.assertIn("document.getElementById(id)?.addEventListener('change',refreshDiagnosticGuides)", html)
         self.assertIn("if(!geometryOnly)queueLiveRealPreview()", html)
         self.assertIn("if(!geometryOnly&&lastRenderedAssIdentity", html)
 
