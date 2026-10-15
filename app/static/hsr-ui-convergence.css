@@ -15,9 +15,13 @@ body[data-workspace-task="effects"]{--workspace-accent:var(--purple)}
 }
 #layoutAuditDrawerToggle[aria-expanded="true"]{border-color:var(--layout-evidence-accent)}
 #subtitleLayoutPreviewCard .preview-workbench:not(.audit-open) .layout-corpus-rail{display:none!important}
-/* Layout's specialist diagnostics must not remain visible in Effects if a
-   future call path forgets to close the drawer. The JS owns the ARIA state. */
-#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail{display:none!important}
+/* The same cue browser serves Layout and Effects. In Effects, hide
+   layout-only audit actions while retaining cue search, selection and paging. */
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] #layoutAuditBtn,
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] #layoutAuditCancelBtn,
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] #layoutAuditStatus,
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] [data-layout-filter="pressure"],
+#subtitleLayoutPreviewCard[data-studio-mode="effects"] [data-layout-filter="issues"]{display:none!important}
 /* Studio V3 owns this geometry in studio-v3.css. */
 #subtitleLayoutPreviewCard .hsr-preview-trial {
  margin:9px 13px;border:1px solid var(--layout-border);border-radius:8px;
