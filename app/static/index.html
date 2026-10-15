@@ -3749,7 +3749,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div class="small muted">固定速度、字形宽度恒速、整句均分都不需要词级对齐，也不会修改字幕起止时间；未完成的高亮会在字幕事件结束时截断。</div>
             <label for="prevKaraokeMode">高亮模式</label>
             <select id="prevKaraokeMode">
-              <option value="k">逐词切换（\k）</option>
+              <option value="k">分段切换（\k）</option>
               <option value="kf">平滑扫光（\kf）</option>
               <option value="clip">动态裁剪扫光（\clip + \t）</option>
             </select>
@@ -8610,7 +8610,9 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
     const chs=String(selected.final_chs??selected.official_chs??selected.api_chs??selected.original_chs??'');
     const primary=String(selected.source_text||'');
     let alignment=null;
-    if(selected.word_alignment_ready){
+    // No synchronized word timing is needed for a synthetic fixed-speed run.
+    const needsRealAlignment=karaokeEnabled&&document.getElementById('prevKaraokeTiming')?.value==='aligned';
+    if(needsRealAlignment&&selected.word_alignment_ready){
       try{
         const timing=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/word-alignments/'+encodeURIComponent(selected.id));
         alignment=timing.alignment||null;
@@ -9181,7 +9183,7 @@ function initHsrTouchNumericEditors(){
       if(editor.value.trim()===''||!Number.isFinite(proposed)){editor.value=range.value;return;}
       const min=Number(range.min),max=Number(range.max);
       if(proposed<min||proposed>max){
-        editor.setCustomValidity('允许范围 '+min+'–'+max+'；超出当前渲染安全范围。');
+        editor.setCustomValidity('当前工作台允许范围 '+min+'–'+max+'（非 ASS 格式上限）。');
         editor.reportValidity();
         editor.value=range.value;
         editor.setCustomValidity('');
