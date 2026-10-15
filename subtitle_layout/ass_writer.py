@@ -136,6 +136,7 @@ def generate_clip_karaoke_overlay(
     word_alignments: list[object] | None,
     *,
     font_path: str | None = None,
+    time_offset_ms: int = 0,
 ) -> str | None:
     """Build a progressive rectangular clip overlay from verified word timing.
 
@@ -178,8 +179,8 @@ def generate_clip_karaoke_overlay(
     tags = [f"\\clip({x1},{y1},{x1},{y2})"]
     covered_width = 0.0
     for (word, start, end, _word_duration), width in zip(details, widths, strict=True):
-        start_ms = max(0, round(start * 1000))
-        end_ms = max(start_ms + 1, round(end * 1000))
+        start_ms = max(0, int(time_offset_ms) + round(start * 1000))
+        end_ms = max(start_ms + 1, int(time_offset_ms) + round(end * 1000))
         covered_width += width
         reveal_x = x1 + round((x2 - x1) * min(1.0, covered_width / total_width))
         tags.append(
@@ -405,6 +406,49 @@ def format_multiline_karaoke(
     )
 
 
+
+def _voice_fade_windows(
+    entries: list[object], fade_in_ms: int, fade_out_ms: int,
+) -> list[tuple[int, int] | None]:
+    """Assign non-overlapping ASS fade margins outside authoritative voice clips.
+
+    Durations are in whole centiseconds (ASS precision). The previous cue's
+    outgoing fade and next cue's incoming fade share only real inter-voice
+    silence. If the sum exceeds the available gap, divide proportionally;
+    never borrow a millisecond from either utterance. The first fade may use
+    the intro silence; the last fade has no known trailing audio and is zero.
+    Synthetic preview entries without audio_end_seconds keep legacy in-cue
+    fade semantics and do not participate in voice-aware allocation.
+    """
+    windows: list[tuple[int, int] | None] = [
+        (0, 0) if getattr(entry, "audio_end_seconds", None) is not None else None
+        for entry in entries
+    ]
+    incoming = max(0, round(fade_in_ms / 10))
+    outgoing = max(0, round(fade_out_ms / 10))
+    if not entries:
+        return windows
+    if windows[0] is not None:
+        begin = max(0, round(float(entries[0].start_seconds) * 100))
+        windows[0] = (min(incoming, begin), 0)
+    for index in range(len(entries) - 1):
+        if windows[index] is None or windows[index + 1] is None:
+            continue
+        end = round(float(entries[index].audio_end_seconds) * 100)
+        start = round(float(entries[index + 1].start_seconds) * 100)
+        available = max(0, start - end)
+        if incoming + outgoing <= available:
+            out_cs, in_cs = outgoing, incoming
+        elif incoming + outgoing:
+            out_cs = round(available * outgoing / (incoming + outgoing))
+            in_cs = available - out_cs
+        else:
+            out_cs = in_cs = 0
+        windows[index] = (windows[index][0], out_cs)
+        windows[index + 1] = (in_cs, windows[index + 1][1])
+    return windows
+
+
 def render_ass(
     entries: Iterable[object],
     *,
@@ -479,10 +523,14 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     dialogues: list[str] = []
     overflow_records: list[dict[str, object]] = []
 
-    # Only count the input when a caller requests progress; this preserves
-    # streaming behavior for other renderers and legacy unit tests.
-    if progress_callback is not None:
+    # Accurate neighbor gap information is required to divide the silent
+    # interval between an outgoing fade and the following incoming fade.
+    if progress_callback is not None or use_kinetic:
         entries = list(entries)
+    voice_windows = _voice_fade_windows(
+        entries, cfg.fade_in_ms, cfg.fade_out_ms,
+    ) if use_kinetic else None
+    if progress_callback is not None:
         progress_total = len(entries)
         progress_last = 0.0
 
@@ -617,17 +665,30 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "evidence": "libass-validated-ass-plan",
             })
 
-        # Strict silence contract: no kinetic pre-roll may paint a future cue
-        # before its PCM voice begins. Effects stay inside the voice event.
-        fade_in_ms = cfg.fade_in_ms
-        fade_out_ms = cfg.fade_out_ms
-        start_time = _ass_time(start_sec)
+        # Keep voice timing authoritative: fades occupy *neighboring silence*,
+        # while the event's fully opaque interval matches the PCM voice.
         raw_audio_end = getattr(entry, "audio_end_seconds", None)
         if raw_audio_end is not None:
             end_sec = min(end_sec, float(raw_audio_end))
-            end_time = _ass_time(end_sec)
-        duration_sec = max(0.01, end_sec - start_sec)
-        karaoke_duration_sec = duration_sec
+        voice_start_cs = max(0, round(start_sec * 100))
+        voice_end_cs = max(voice_start_cs + 1, round(end_sec * 100))
+        karaoke_duration_sec = (voice_end_cs - voice_start_cs) / 100.0
+        transition = voice_windows[entry_number - 1] if voice_windows is not None else None
+        if transition is not None:
+            in_cs, out_cs = transition
+            event_start_cs = max(0, voice_start_cs - in_cs)
+            event_end_cs = voice_end_cs + out_cs
+            fade_in_ms = in_cs * 10
+            fade_out_ms = out_cs * 10
+            karaoke_offset_cs = voice_start_cs - event_start_cs
+        else:
+            event_start_cs, event_end_cs = voice_start_cs, voice_end_cs
+            fade_in_ms = cfg.fade_in_ms
+            fade_out_ms = cfg.fade_out_ms
+            karaoke_offset_cs = 0
+        start_time = _ass_time(event_start_cs / 100)
+        end_time = _ass_time(event_end_cs / 100)
+        duration_sec = max(0.01, (event_end_cs - event_start_cs) / 100.0)
 
         if cfg.enable_archive_hud:
             character = _clean_ass_text(
@@ -683,7 +744,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
                     entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
-                    voice_gap_seconds=voice_gap_sec if cfg.use_audio_aware_fade else None,
+                    voice_gap_seconds=(
+                        voice_gap_sec if transition is None and cfg.use_audio_aware_fade else None
+                    ),
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{pri_motion_tags}"
@@ -724,6 +787,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     speed_ms=karaoke_speed_ms,
                     font_path=primary_font_path,
                 )
+                if karaoke_offset_cs and re.search(r"\{\\k(?:f)?\d+", pri_text):
+                    # ASS v4++ \kt is an absolute start relative to the event.
+                    pri_text = f"{{\\kt{karaoke_offset_cs}}}" + pri_text
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{pri_text}"
@@ -736,6 +802,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     duration_sec,
                     pri_alignments,
                     font_path=primary_font_path,
+                    time_offset_ms=karaoke_offset_cs * 10,
                 )
                 if clip_tags:
                     clip_text = getattr(layout.primary_lines[0], "text", str(layout.primary_lines[0]))
@@ -757,7 +824,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
                     entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
-                    voice_gap_seconds=voice_gap_sec if cfg.use_audio_aware_fade else None,
+                    voice_gap_seconds=(
+                        voice_gap_sec if transition is None and cfg.use_audio_aware_fade else None
+                    ),
                     **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{chs_motion_tags}"
@@ -798,6 +867,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     speed_ms=karaoke_speed_ms,
                     font_path=chs_font_path,
                 )
+                if karaoke_offset_cs and re.search(r"\{\\k(?:f)?\d+", chs_text):
+                    chs_text = f"{{\\kt{karaoke_offset_cs}}}" + chs_text
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
@@ -810,6 +881,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     duration_sec,
                     chs_alignments,
                     font_path=chs_font_path,
+                    time_offset_ms=karaoke_offset_cs * 10,
                 )
                 if clip_tags:
                     clip_text = getattr(layout.chs_lines[0], "text", str(layout.chs_lines[0]))
