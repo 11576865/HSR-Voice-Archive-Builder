@@ -12,15 +12,13 @@ class AssToMkvWorkflowContracts(unittest.TestCase):
         self.assertIn("def queue_ass_regeneration(", service)
         self.assertIn("publish_generated_ass_complete_mkv(", service)
         self.assertIn('"delivery": "complete-mkv"', service)
-        self.assertIn('raise ValueError("ASS 生成失败,', service)
+        self.assertIn('raise ValueError("ASS 生成失败，MKV 未更新："', service)
 
         for name in ("app/server.py", "app/lite_server.py"):
             backend = (root / name).read_text(encoding="utf-8")
             self.assertIn("queue_ass_regeneration(config, output)", backend)
-            self.assertIn("queue_ass_regeneration(config, output_dir)", backend
-                          if name.endswith("server.py") and not name.endswith("lite_server.py")
-                          else backend.replace("queue_ass_regeneration(config, output)",
-                                               "queue_ass_regeneration(config, output_dir)"))
+            if name == "app/server.py":
+                self.assertIn("queue_ass_regeneration(config, output_dir)", backend)
             self.assertIn('"delivery": "complete-mkv"', backend)
 
     def test_browser_automatic_ass_refresh_waits_for_mkv_job(self):
