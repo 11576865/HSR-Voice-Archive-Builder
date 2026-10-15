@@ -22,7 +22,7 @@ from .credentials import (
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv, publish_generated_ass_complete_mkv
+from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -648,6 +648,11 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
         expected_root = str(body.get("expected_project_root") or "").strip()
         if expected_root and expected_root != str(config.root):
             raise ValueError("Subtitle artifact retry project context changed")
+        if body.get("ass_only") is True and config.delivery_mode == "complete":
+            # Schedule the exact same full-MKV job as the manual generate
+            # action; never acknowledge only a loose ASS as final product.
+            job = queue_ass_regeneration(config, output_dir)
+            return {"ok": True, "job": job.id, "delivery": "complete-mkv"}
         # Acquire the project's output-writer slot before yielding the ASGI
         # event loop; ordinary jobs are excluded until the worker completes.
         with reserve_project_output_writer(config.root):
@@ -1858,41 +1863,7 @@ def api_output_ass():
         if not (output / "manifest.json").is_file():
             raise FileNotFoundError("请先完成档案构建")
 
-        def run(report_progress):
-            # Report completed dialogue entries during lightweight ASS writing;
-            # real libass ink probes belong to explicit preview, not export.
-            totals = {"count": 0}
-
-            def report_ass_progress(current: int, total: int) -> None:
-                totals["count"] = total
-                report_progress(
-                    "render",
-                    f"正在生成 ASS 字幕：{current}/{total} 条",
-                    current, total,
-                )
-
-            report_progress("prepare", "正在加载字幕并准备生成 ASS", 0, 0)
-            result = refresh_subtitle_artifacts_from_settings(
-                output,
-                source_language=config.source_text_language or "en",
-                target_language=config.target_language or "zh-CN",
-                generate_ass=True,
-                render_config=subtitle_render_config(config),
-                ass_progress=report_ass_progress,
-            )
-            completed = max(totals["count"], 1)
-            if config.delivery_mode == "complete":
-                report_progress("render", "新 ASS 已生成，正在替换 MKV 内旧字幕", completed, completed)
-                bundle = publish_generated_ass_complete_mkv(config, output, report_progress)
-                return {**result, "bundle": bundle, "delivery": "complete-mkv",
-                        "output": bundle.get("output")}
-            report_progress("render", "独立 ASS 字幕已生成", completed, completed)
-            return result
-
-        job = create_job(
-            "ass-export", run, with_progress=True,
-            project_root=config.root, project_name=config.name,
-        )
+        job = queue_ass_regeneration(config, output)
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
