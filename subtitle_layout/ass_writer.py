@@ -665,7 +665,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "failed": False,
                 "primary_lines": capture_lines(layout.primary_lines, primary_font_path, True),
                 "chs_lines": capture_lines(layout.chs_lines, chs_font_path, False),
-                "evidence": "libass-validated-ass-plan",
+                "evidence": (
+                    "libass-validated-ass-plan" if cfg.verify_libass_layout
+                    else "geometry-only-ass-plan"
+                ),
             })
 
         # Keep voice timing authoritative: fades occupy *neighboring silence*,
