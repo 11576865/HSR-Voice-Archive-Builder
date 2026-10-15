@@ -8168,18 +8168,7 @@ function layoutTimelineRender(){
       '" style="left:'+left.toFixed(4)+'%;width:'+width.toFixed(4)+'%;top:'+(lane*40+5)+'px" title="'+
       escapeHtml(label)+'" aria-label="'+escapeHtml(label)+'">'+
       escapeHtml('#'+String(sub.id)+' '+text.slice(0,34))+'</button>');
-    if(false){ // Display-only timeline: no time-edge drag affordances.
-      for(const edge of ['start','end']){
-        const t=item[edge];
-        if(t<start||t>end)continue;
-        const x=percent(t);
-        parts.push('<button type="button" class="layout-timeline-edge" data-timeline-edge="'+edge+
-          '" style="left:calc('+x.toFixed(4)+'% - 9px);top:'+(lane*40+5)+'px"'+
-          ' title="拖动调整'+(edge==='start'?'开始':'结束')+'时间 · 左右键每次 0.1 秒"'+
-          ' aria-label="调整字幕 #'+escapeHtml(String(sub.id))+(edge==='start'?'开始':'结束')+'时间"'+
-          ' aria-keyshortcuts="ArrowLeft ArrowRight">Ⅱ</button>');
-      }
-    }
+    // Audio-derived cue boundaries are navigable but never draggable.
   }
   track.innerHTML=parts.join('')||'<p class="layout-timeline-empty">这个时间窗口内没有字幕。请平移时间轴或扩大视窗。</p>';
   const pan=document.getElementById('layoutTimelinePan');
