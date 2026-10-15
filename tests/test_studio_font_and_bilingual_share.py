@@ -38,11 +38,16 @@ class StudioFontAndRegionTests(unittest.TestCase):
                 resolved=_project_font_config(cfg,fonts)
                 self.assertEqual(resolved.chs_font_path,str(path))
                 self.assertEqual(resolved.primary_font_path,None)
-                selected_log="fontselect: (ProjectChinese, 400, 0) -> ProjectChinese, 0, ProjectChinese"
+                selected_log=f"fontselect: (ProjectChinese, 400, 0) -> {path.resolve()}, 0, ProjectChinese"
                 result=type("MatchResult",(),{"stdout":str(path),"returncode":0})()
                 with patch("app.ass_preview.subprocess.run",return_value=result):
                     _assert_project_font_selected(selected_log,resolved,fonts,
                                                   english="",chinese="汉字")
+                false_success="fontselect: (ProjectChinese, 400, 0) -> /host/fallback.ttf, 0, Fallback"
+                with patch("app.ass_preview.subprocess.run",return_value=result):
+                    with self.assertRaisesRegex(RuntimeError,"libass.*回退字形"):
+                        _assert_project_font_selected(false_success,resolved,fonts,
+                                                      english="",chinese="汉字")
                 bad=type("MatchResult",(),{"stdout":"/host/fallback.ttf","returncode":0})()
                 with patch("app.ass_preview.subprocess.run",return_value=bad):
                     with self.assertRaisesRegex(RuntimeError,"被回退"):
@@ -56,6 +61,13 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("primary_region_share:primaryShare/100",html)
         self.assertIn("primary_region_share: Number(document.getElementById('prevPrimaryShare')",html)
         self.assertIn("overlay?.getContext('2d')?.clearRect",html)
+        self.assertIn("const realFrame=mode==='libass'",html)
+        self.assertIn("document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame)",html)
+        self.assertIn("queueLiveRealPreview()",html)
+        self.assertIn("await renderLibassPreview()",html)
+        self.assertIn("studio-region-share + #prevPrimaryShare",css)
+        self.assertIn("id=\"studioV4Timing\"",html)
+        self.assertNotIn('#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel,',html)
         self.assertNotIn("renderCanvasSubtitleOverlay(data);",html)
         self.assertIn("#assCanvasPreview{display:none!important}",css)
         self.assertIn("studioV4Timing[open] #layoutTimelinePanel",css)
