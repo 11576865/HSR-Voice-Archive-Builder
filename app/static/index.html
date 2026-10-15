@@ -7004,6 +7004,11 @@ function setPreviewEvidence(mode, detail = '') {
   };
   const current=states[mode]||states.geometry;
   if(root)root.dataset.previewEvidence=mode;
+  // Geometry and FFmpeg/libass are mutually exclusive view layers.
+  // Old SVG glyphs must never leak through real frame render or video.
+  const realFrame=mode==='libass'||mode==='video'||mode==='video-image'||mode==='video-footage';
+  document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame);
+  document.getElementById('assCanvasPreview')?.classList.toggle('hidden',realFrame);
   if(title)title.textContent=current[0];
   if(description)description.textContent=detail||current[1];
   if(meta)meta.textContent=current[2];
