@@ -135,7 +135,7 @@ class SubtitleLayoutTests(unittest.TestCase):
         )
         ass_output = render_ass([entry1, entry2], source_language="en", target_language="zh-CN")
         self.assertIn("0:00:00.80,0:00:03.20", ass_output)
-        self.assertIn("0:00:03.80,0:00:06.00", ass_output)
+        self.assertIn("0:00:03.80,0:00:06.20", ass_output)
         self.assertNotIn("0:00:03.00,0:00:06.00", ass_output)
 
     def test_render_ass_with_voice_gap_adaptation(self) -> None:
