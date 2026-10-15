@@ -42,6 +42,40 @@ class LibassInkSolverTests(unittest.TestCase):
         self.assertEqual(result.failed_condition, "LIBASS_VISIBLE_INK_OVERFLOW")
         self.assertEqual(len(result.scale_attempts), len(SCALE_FACTORS))
 
+    @unittest.skipUnless(shutil.which("ffmpeg"), "system FFmpeg not installed")
+    def test_real_bilingual_gap_survives_outline_shadow_at_every_scale(self):
+        # The regression was a 20px anchor gap becoming only ~12px between
+        # visible libass ink. Shrinking down to 25% did not fix fixed borders.
+        from subtitle_layout.collision import central_ink_reserve
+        cfg = SubtitleRenderConfig(
+            primary_font="DejaVu Sans", chs_font="DejaVu Sans",
+            enable_kinetic=False, enable_multi_layer_outline=False,
+            outline_width=3.0, shadow_depth=2.0, blur_radius=0.0,
+            min_central_gap=20.0,
+        )
+        text = ("Wantonly editing memories or burning them all up without a second thought.", 
+                "将记忆随意剪辑，抑或不由分说地将它们焚尽。")
+        unreserved = solve_subtitle_layout(*text)
+        before = validate_real_ink(unreserved, cfg, SafeArea())
+        self.assertEqual(before.reason, "LIBASS_CENTRAL_COLLISION")
+        reserve = central_ink_reserve(
+            cfg.outline_width, cfg.shadow_depth, cfg.blur_radius,
+            cfg.enable_multi_layer_outline,
+        )
+        for scale in (1.0, 0.5, 0.25):
+            fixed = solve_subtitle_layout(
+                *text, base_chs_size=round(48*scale),
+                base_primary_size=round(42*scale),
+                min_central_gap=cfg.min_central_gap,
+                central_ink_padding=reserve,
+            )
+            verdict = validate_real_ink(fixed, cfg, SafeArea())
+            self.assertTrue(verdict.ok, (scale, verdict.reason))
+            self.assertGreaterEqual(
+                verdict.chinese.top - verdict.primary.bottom,
+                cfg.min_central_gap,
+            )
+
     def test_real_probe_fails_closed_when_ffmpeg_unavailable(self):
         cfg = SubtitleRenderConfig(verify_libass_layout=True)
         candidate = solve_subtitle_layout("Real ink must be measured", "")
