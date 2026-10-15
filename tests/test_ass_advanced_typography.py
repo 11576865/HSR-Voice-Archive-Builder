@@ -7,6 +7,7 @@ from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.ass_writer import (
     format_karaoke_text,
     format_multiline_karaoke,
+    format_generated_karaoke,
     generate_frosted_glass_card,
     render_ass,
     write_ass,
@@ -53,6 +54,46 @@ class TestAdvancedTypography(unittest.TestCase):
 
         default_ass = render_ass(entries, config=default_cfg)
         self.assertIn(r"\fad(200,200)", default_ass)
+
+    def test_unsynced_fixed_karaoke_has_real_ass_tags_without_alignments(self):
+        from types import SimpleNamespace
+        lines=[SimpleNamespace(text="星穹"),SimpleNamespace(text="铁道")]
+        text=format_generated_karaoke(
+            lines,2.0,timing="fixed",unit="character",speed_ms=300,mode="kf"
+        )
+        self.assertEqual(text, r"{\kf30}星{\kf30}穹\N{\kf30}铁{\kf30}道")
+        words=format_generated_karaoke(
+            [SimpleNamespace(text="one two")],2.0,timing="fixed",
+            unit="word",speed_ms=1000,mode="k"
+        )
+        self.assertEqual(words,r"{\k100}one {\k100}two")
+        even=format_generated_karaoke(
+            [SimpleNamespace(text="abc")],1.0,timing="cue",
+            unit="character",speed_ms=999,mode="kf"
+        )
+        self.assertEqual(even,r"{\kf34}a{\kf33}b{\kf33}c")
+        cfg=SubtitleRenderConfig(
+            enable_karaoke=True,karaoke_timing="fixed",karaoke_unit="character",
+            karaoke_speed_ms=300,karaoke_mode="kf",enable_kinetic=False
+        )
+        entry=DummyEntry("Star", "星穹", 1.0, 4.0)
+        ass=render_ass([entry],config=cfg)
+        self.assertIn(r"{\kf30}星{\kf30}穹",ass)
+        self.assertIn(r"{\kf30}S",ass)
+        cfg.karaoke_mode="clip"
+        with self.assertRaisesRegex(ValueError,"requires real"):
+            render_ass([entry],config=cfg)
+
+    def test_expanded_manual_soft_entry_is_in_real_ass_output(self):
+        cfg=SubtitleRenderConfig(
+            enable_kinetic=False,enable_soft_entry=True,
+            soft_entry_scale_percent=300.0,soft_entry_blur=12.0,
+            soft_entry_ms=2500,blur_radius=1.0,
+        )
+        entry=DummyEntry("Scale", "缩放", 0.0, 4.0)
+        ass=render_ass([entry],config=cfg)
+        self.assertIn(r"\fscx300\fscy300",ass)
+        self.assertIn(r"\blur12\t(0,2500,",ass)
 
     def test_karaoke_without_word_timing_degrades_to_plain_text(self):
         english = "May this journey lead us starward."
