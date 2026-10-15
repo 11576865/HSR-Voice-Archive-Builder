@@ -7205,15 +7205,18 @@ async function loadWordAlignmentDiagnostics(){
         providerStatus.textContent='已安装 WhisperX / PyTorch'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；模型加载和对齐仍须实际验证。';
         providerStatus.className='small status-ok';
       }else{
-        const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
-        providerStatus.textContent='本机不能生成词级时间：缺少 '+missingPackages+'。请在支持 WhisperX/PyTorch 的电脑上生成本项目匹配的 JSON，再在此导入；不会伪造时间。';
-        providerStatus.className='small muted';
+        const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX / PyTorch';
+        providerStatus.textContent='当前设备不具备词级时间生成能力（缺少 '+missingPackages+'）。请使用「导入词级时间 JSON」；如需自动生成，须在安装了 WhisperX/PyTorch 的支持环境中运行。';
+        providerStatus.className='small status-warn';
       }
     }
     if(generateButton){
+      // An inert "Generate" action is not a feature. Only reveal it on a host
+      // where the necessary engine actually imports, and never fake syllable
+      // timestamps on unsupported Android/Termux installations.
       generateButton.disabled=!provider.available;
-      generateButton.hidden=false;
-      generateButton.title=provider.available?'尝试真实本地 WhisperX 对齐，仍需模型和音频可用':'本机缺少 WhisperX/PyTorch，禁用生成；可导入对齐 JSON';
+      generateButton.hidden=!provider.available;
+      generateButton.title=provider.available?'使用本地 WhisperX 生成真实词级时间；可能还需模型下载及音频依赖':'当前设备不支持本地生成，请导入有效的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
