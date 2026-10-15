@@ -432,6 +432,12 @@ def _voice_fade_windows(
     if windows[0] is not None:
         begin = max(0, round(float(entries[0].start_seconds) * 100))
         windows[0] = (min(incoming, begin), 0)
+    # Preview-only: the selected last/only cue may have a known, bounded
+    # silent tail. The full archive still has no speculative last-cue tail.
+    last_margin = getattr(entries[-1], "preview_end_margin_ms", 0)
+    if windows[-1] is not None and last_margin:
+        windows[-1] = (windows[-1][0],
+                       min(outgoing, max(0, round(int(last_margin) / 10))))
     for index in range(len(entries) - 1):
         if windows[index] is None or windows[index + 1] is None:
             continue
