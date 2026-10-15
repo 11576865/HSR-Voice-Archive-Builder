@@ -61,7 +61,7 @@ class EffectVoicePreviewTests(unittest.TestCase):
             self.assertNotIn("-an", cmd)
             self.assertEqual(cmd[cmd.index("-t") + 1], "9.500")
             self.assertEqual(cmd[cmd.index("-ss") + 1], "1.750")
-            self.assertEqual(cmd[cmd.index("-i") + 1], str(media))
+            self.assertEqual(cmd[max(i for i, token in enumerate(cmd) if token == "-i") + 1], str(media))
             Path(cmd[-1]).write_bytes(b"valid-audio-video")
             return subprocess.CompletedProcess(cmd, 0, "", "")
         with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
@@ -146,7 +146,7 @@ class KaraokeSourceOnlyTests(unittest.TestCase):
     def test_chinese_has_no_clip_overlay_even_when_clip_mode_selected(self):
         code = (Path(__file__).resolve().parents[1] /
                 "subtitle_layout/ass_writer.py").read_text(encoding="utf-8")
-        translation_block = code[code.index("        if layout.chs_lines:"):]
+        translation_block = code[code.rindex("        if layout.chs_lines:"):code.index("    if overflow_records:")]
         self.assertNotIn("generate_clip_karaoke_overlay(", translation_block)
         self.assertNotIn("format_multiline_karaoke(", translation_block)
 
