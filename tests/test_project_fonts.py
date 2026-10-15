@@ -83,6 +83,41 @@ class ProjectFontTests(unittest.TestCase):
             self.assertFalse(font_asset_directory(root).exists())
 
     @unittest.skipUnless(shutil.which("ffmpeg"), "Real FFmpeg unavailable")
+    def test_real_libass_uses_reimported_same_family_font(self):
+        try:
+            from subtitle_layout.fonts import resolve_font_path
+            path = resolve_font_path("DejaVu Sans")
+        except (ValueError, FileNotFoundError):
+            path = None
+        if not path or not Path(path).is_file():
+            self.skipTest("Installed DejaVu Sans required for real FFmpeg regression")
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td)
+            original = Path(path).read_bytes()
+            first = import_project_font(
+                output, "first.ttf", base64.b64encode(original).decode("ascii"))
+            # Appending a byte leaves the SFNT table offsets, checksums and glyphs
+            # unchanged but changes the content-addressed project asset identity.
+            replacement = original + b"\\0"
+            second = import_project_font(
+                output, "replacement.ttf",
+                base64.b64encode(replacement).decode("ascii"))
+            self.assertEqual(first["family"], second["family"])
+            self.assertEqual(second["replaced_files"], [first["filename"]])
+            cfg = preview_config_from_payload({
+                "chs_font": second["family"], "primary_font": second["family"],
+                "enable_kinetic": False,
+            })
+            frame = render_ass_preview_png(
+                english_text="Second imported font",
+                chinese_text="Updated font preview",
+                source_language="en", target_language="en",
+                config=cfg, duration_seconds=1.5, timestamp=0.5,
+                font_dir=font_asset_directory(output))
+            self.assertTrue(frame.startswith(b"\\x89PNG\\r\\n\\x1a\\n"))
+            self.assertGreater(len(frame), 1500)
+
+    @unittest.skipUnless(shutil.which("ffmpeg"), "Real FFmpeg unavailable")
     def test_real_libass_can_read_imported_ttf_from_project_folder(self):
         try:
             from subtitle_layout.fonts import resolve_font_path
