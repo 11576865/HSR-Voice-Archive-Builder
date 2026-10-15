@@ -85,8 +85,10 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
             {("0:00:00.80", "0:00:02.20"),
              ("0:00:04.80", "0:00:06.00")},
         )
-        first = next(line for line in lines if "Hello" in line and ",Primary," in line)
-        last = next(line for line in lines if "Next" in line and ",Primary," in line)
+        first = next(line for line in lines if ",Primary," in line
+                     and "0:00:00.80," in line)
+        last = next(line for line in lines if ",Primary," in line
+                    and "0:00:04.80," in line)
         self.assertIn(r"\fad(200,200)", first)
         self.assertIn(r"\fad(200,0)", last)
         self.assertIn(r"{\kt20}", first)
