@@ -16,6 +16,11 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
+      - name: Install real subtitle renderer for authoring proof
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          ffmpeg -hide_banner -filters | grep -E ' subtitles | ass '
       - name: Install dependencies
         run: python -m pip install -r requirements-test.txt
       - name: Compile Python sources
