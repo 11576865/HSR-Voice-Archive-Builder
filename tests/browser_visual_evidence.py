@@ -358,14 +358,15 @@ def desktop_check(browser, base_url, output, report):
     ensure(page.locator("#previewBackgroundImage").is_visible(),
            "Red-clouds image is missing from the actual stage")
     screenshot(page, output, "desktop_clean_effects_workspace")
-    # This is a real Chromium decoded-video interaction, but the API response
-    # is a deterministic MP4 fixture. Backend libass video is checked separately.
+    # The fixture must actually decode and display, and its provenance must
+    # reflect the fixed red-clouds reference. "video" would mean plain color;
+    # the production UI correctly calls this "video-image".
     page.locator("#previewVideoBtn").click()
     try:
         page.wait_for_function("""() => {
           const video=document.getElementById('libassVideoPreview');
           return video && video.readyState>=2 &&
-            document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video';
+            document.querySelector('.layout-preview-evidence').dataset.previewEvidence==='video-image';
         }""", timeout=20000)
     except Exception:
         details=page.evaluate("""() => {
