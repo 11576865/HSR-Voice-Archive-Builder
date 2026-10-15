@@ -48,6 +48,7 @@ class SubtitleEntryAdapter:
         start_seconds: float,
         display_end_seconds: float,
         word_alignments: list[object] | None = None,
+        audio_end_seconds: float | None = None,
         group: str = "",
         filename: str = "",
         source_member_id: str = "",
@@ -58,6 +59,9 @@ class SubtitleEntryAdapter:
         self.chinese = chinese
         self.start_seconds = start_seconds
         self.display_end_seconds = display_end_seconds
+        # Karaoke is bounded by the PCM voice, not the subtitle's hold over
+        # the following inter-voice silence.
+        self.audio_end_seconds = audio_end_seconds
         self.word_alignments = word_alignments
         self.group = group
         self.filename = filename
@@ -247,7 +251,11 @@ def _subtitle_adapters(
                 ),
                 start_seconds=start,
                 display_end_seconds=end,
-                word_alignments=(
+                audio_end_seconds=(
+                    max(start, min(end, float(entry["audio_end_seconds"])))
+                    if entry.get("audio_end_seconds") is not None else None
+                ),
+                word_alignments=
                     None if entry_id in timing_overrides
                     else (entry.get("word_alignments") or entry.get("words") or None)
                 ),
