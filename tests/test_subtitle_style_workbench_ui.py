@@ -259,54 +259,38 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn('id="layoutCueStart"',html)
         self.assertIn('id="layoutCueEnd"',html)
 
-    def test_layout_only_removes_timeline_ui_without_touching_effects(self) -> None:
-        html = self.html
-        css = (Path(__file__).resolve().parents[1] / "app/static/studio-v4.css").read_text("utf-8")
-        self.assertIn('id="layoutTimelinePanel"', html)  # Effects still owns timeline
-        self.assertIn('class="layout-timeline" data-studio-scope="effects"', html)
-        self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel{display:none!important}', css)
-        self.assertIn('data-studio-scope="style">当前字幕</span>', html)
-        self.assertIn('data-studio-scope="effects">字幕时间轴</span>', html)
-        self.assertIn('id="layoutCueEditorPanel"', html)
-        self.assertNotIn('id="layoutCueTimingSaveBtn"', html)
-        self.assertIn('function layoutTimelineRender()', html)
-        self.assertIn('function layoutTimelinePointerDown(event)', html)
-        self.assertIn('function layoutTimelineSnapSeconds(value,field)', html)
-        self.assertIn('async function saveLayoutCueTiming(', html)
-        self.assertNotIn('id="studioRegionPercent"', html)
-        self.assertNotIn('画布与诊断</summary>', html)
-        for guide in ("prevShowSafeArea", "prevShowCentralGap", "prevShowBBox"):
-            self.assertEqual(html.count(f'id="{guide}"'), 1)
-        self.assertIn('drawQuickSubtitleLine', html)
-        self.assertIn('queueSubtitleSettingsAutosave', html)
+    def test_layout_and_effects_reuse_cue_browser_without_timeline(self) -> None:
+        html=self.html
+        root=Path(__file__).resolve().parents[1]
+        shared=(root/"app/static/hsr-ui-convergence.css").read_text("utf-8")
+        for name in ("layoutTimelinePanel","layoutTimelineViewport",
+                     "layoutTimelineTracks","studioV3TimelineTab"):
+            self.assertNotIn(f'id="{name}"',html)
+        self.assertEqual(html.count('id="layoutCorpusRail"'),1)
+        self.assertEqual(html.count('id="layoutCorpusSearch"'),1)
+        self.assertEqual(html.count('id="layoutCorpusList"'),1)
+        self.assertIn("setStudioV3Pane(next==='effects'?'cue':'inspector')",html)
+        self.assertIn("next==='effects'?'选择字幕条目':'批量排版检查'",html)
+        self.assertIn("function selectLayoutCorpusByIndex(index)",html)
+        self.assertIn("loadLayoutStressSample({force:true,selectId:sub.id})",html)
+        self.assertNotIn('[data-studio-mode="effects"] .layout-corpus-rail{display:none!important}',shared)
+        self.assertIn('[data-studio-mode="effects"] #layoutAuditBtn',shared)
+        self.assertIn('id="layoutCueEditorPanel"',html)
+        self.assertNotIn('id="studioRegionPercent"',html)
+        for name in ("prevShowSafeArea","prevShowCentralGap","prevShowBBox"):
+            self.assertEqual(html.count(f'id="{name}"'),1)
+        self.assertIn('queueSubtitleSettingsAutosave',html)
+        self.assertIn('drawQuickSubtitleLine',html)
 
-    def test_effects_timeline_remains_read_only_and_navigable(self) -> None:
-        html = self.html
-        for element_id in (
-            "layoutTimelinePanel",
-            "layoutTimelineViewport",
-            "layoutTimelineRuler",
-            "layoutTimelineTracks",
-            "layoutTimelineZoom",
-            "layoutTimelinePan",
-            "layoutTimelineFollowBtn",
-            "layoutTimelineEarlierBtn",
-            "layoutTimelineLaterBtn",
-            "layoutTimelineSnap",
-            "layoutTimelinePlayhead",
-            "layoutTimelineScope",
-        ):
-            self.assertEqual(html.count(f'id="{element_id}"'), 1)
-        self.assertIn("layoutTimelineWindowSeconds=30;", html)
-        self.assertIn("function layoutTimelineRender()", html)
-        self.assertIn("function layoutTimelinePointerDown(event)", html)
-        self.assertIn("function layoutTimelinePointerMove(event)", html)
-        self.assertIn("function layoutTimelineSnapSeconds(value,field)", html)
-        self.assertIn("layoutTimelineFollowSelected=false; // Keep the viewport stationary", html)
-        self.assertIn("const rows=visible.slice(0,140)", html)
-        self.assertNotIn('data-timeline-edge="start"', html)
-        self.assertIn('Audio-derived cue boundaries are navigable but never draggable.',html)
-
+    def test_effects_karaoke_has_aligned_and_unsynchronized_modes(self) -> None:
+        html=self.html
+        for value in ("fixed","cue","aligned"):
+            self.assertIn(f'<option value="{value}">',html)
+        for name in ("prevKaraokeTiming","prevKaraokeUnit","prevKaraokeSpeed"):
+            self.assertEqual(html.count(f'id="{name}"'),1)
+        self.assertIn("timing==='aligned'&&hsrAlignedUsableCount===0",html)
+        self.assertIn("karaoke_timing: document.getElementById('prevKaraokeTiming')",html)
+        self.assertIn("karaoke_speed_ms:parseInt(document.getElementById('prevKaraokeSpeed')",html)
 
 
 if __name__ == "__main__":
