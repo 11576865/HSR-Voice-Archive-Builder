@@ -134,7 +134,10 @@ def preview_subtitle_layout(
         font_path=chs_font_path,
     )
 
-    anchor_gap = min_central_gap + ink_padding
+    bilingual = bool(english_text.strip() and chinese_text.strip()) and not (
+        source_language == target_language == "zh-CN"
+    )
+    anchor_gap = min_central_gap + (ink_padding if bilingual else 0.0)
     available_height = max(0.0, safe_area.max_printable_height - anchor_gap)
     primary_region_height = available_height * max(0.20, min(0.80, float(primary_region_share)))
     y_center_top = round(safe_area.y_min + primary_region_height)
