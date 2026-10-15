@@ -47,7 +47,7 @@ const context={
         subtitles:rows,persistable:true,
         export_status:{
           state:'failed',artifacts_current:false,ass_required:true,
-          artifact_error:'SRT disk full'
+          artifact_error:'ASS overflow'
         }
       });
     if(url.endsWith('/subtitles/artifacts/refresh'))
@@ -68,14 +68,14 @@ const run=x=>vm.runInContext(x,context);
 (async()=>{
   await run('loadLayoutStressSample({force:true,selectId:21})');
   assert.equal(node('layoutExportHealthNotice').hidden,false,'persisted failure must survive reload');
-  assert.match(node('layoutExportHealthDetail').textContent,/SRT disk full/);
+  assert.match(node('layoutExportHealthDetail').textContent,/ASS overflow/);
   assert.equal(node('layoutExportHealthRetryBtn').hidden,false);
   assert.equal(node('layoutCueTimingRetryExportBtn').hidden,false);
   const retry=run('layoutCueRetryArtifactExport()');
   assert.equal(requests.length,1);
   assert.match(requests[0].url,/subtitles\/artifacts\/refresh$/);
   assert.equal(requests[0].body.expected_project_root,'/project-qa');
-  assert.equal(requests[0].body.force_ass,true);
+  assert.equal(requests[0].body.ass_only,true);
   requests.shift().resolve({
     artifacts_current:true,artifact_error:'',
     refreshed:{ass_error:''},
