@@ -7351,6 +7351,27 @@ function travelLayoutStyleHistory(delta){
   scheduleLayoutPreviewUpdate();
 }
 
+function syncDependentStyleControls(){
+  // Active-looking controls that have no effect on either ASS or FFmpeg are
+  // misleading. Explain the dependency and keep both slider and touch editor
+  // genuinely disabled until the associated rendering feature is enabled.
+  const dependencies=[
+    ['prevEnableCard',['prevCardOpacity'],'请先启用半透明底板'],
+    ['prevEnableSoftEntry',['prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs'],'请先启用柔和进入动画'],
+    ['prevEnableKinetic',['prevFadeIn','prevFadeOut','prevAudioAwareFade'],'请先启用平滑淡入淡出'],
+  ];
+  for(const [toggleId,ids,hint] of dependencies){
+    const active=!!document.getElementById(toggleId)?.checked;
+    for(const id of ids){
+      const el=document.getElementById(id);
+      if(!el)continue;
+      el.disabled=!active;
+      el.title=active?'':hint;
+    }
+  }
+  syncHsrTouchNumericEditors();
+}
+
 function subtitleSettingsPayload(){
   return {
     preset: previewPreset,
@@ -7423,6 +7444,7 @@ function loadSubtitleLayoutSettings(config){
   check('prevEnableArchiveHud',config.subtitle_enable_archive_hud);
   set('prevArchiveHudSize',config.subtitle_archive_hud_font_size??22);
   set('prevArchiveHudOpacity',Number(config.subtitle_archive_hud_opacity??0.72)*100);
+  syncDependentStyleControls();
   savedSubtitleSettings=JSON.stringify(subtitleSettingsPayload());
   resetLayoutStyleHistory();
   invalidateLayoutBatchAudit();
@@ -8870,6 +8892,7 @@ function initHsrTouchNumericEditors(){
   });
 }
 initHsrTouchNumericEditors();
+syncDependentStyleControls();
 document.getElementById('layoutAuditDrawerToggle')?.addEventListener('click',()=>{
   const root=document.querySelector('#subtitleLayoutPreviewCard .preview-workbench');
   setHsrAuditDrawer(!root?.classList.contains('audit-open'));
@@ -9143,6 +9166,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
     invalidateLayoutBatchAudit();
+    syncDependentStyleControls();
     invalidateLibassPreview();
     updateLayoutPreview();
     queueLiveRealPreview();
