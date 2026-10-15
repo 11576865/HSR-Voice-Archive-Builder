@@ -6913,6 +6913,15 @@ let savedSubtitleSettings = null;
 let subtitleSettingsSavePending = false;
 let libassPreviewObjectUrl = null;
 let libassPreviewGeneration = 0;
+let liveRealPreviewArmed = false;
+let liveRealPreviewTimer = null;
+function queueLiveRealPreview(){
+  clearTimeout(liveRealPreviewTimer);
+  if(!liveRealPreviewArmed||!currentProject||document.body.dataset.workspace!=='layout')return;
+  // Never start a full FFmpeg process on every slider movement. One render
+  // after a committed adjustment is the cost-bounded WYSIWYG fallback.
+  liveRealPreviewTimer=setTimeout(()=>{if(liveRealPreviewArmed)void renderLibassPreview();},650);
+}
 let geometryPreviewGeneration = 0;
 let libassPreviewController = null;
 let geometryPreviewController = null;
@@ -7032,6 +7041,8 @@ function showGeometryPreview(){
   const renderButton=document.getElementById('previewLibassBtn');
   if(renderButton)renderButton.disabled=false;
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
+  liveRealPreviewArmed=false;
+  clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
   const status=document.getElementById('libassPreviewStatus');
   if(status){status.textContent='正在显示浏览器几何求解结果；实际渲染画面已收起。';status.className='small muted';}
@@ -7118,6 +7129,7 @@ async function renderLibassPreview(){
     if(!stillCurrent())return;
     img.classList.remove('hidden');
     setPreviewEvidence('libass');
+    liveRealPreviewArmed=true;
     if(status){
       const timingNote=Array.isArray(layoutStressSample?.word_alignments)&&layoutStressSample.word_alignments.length
         ? '，使用项目词级时间'
@@ -7131,6 +7143,7 @@ async function renderLibassPreview(){
     if(img)img.classList.add('hidden');
     if(libassPreviewObjectUrl){URL.revokeObjectURL(libassPreviewObjectUrl);libassPreviewObjectUrl=null;}
     setPreviewEvidence('failed','真实渲染失败：'+shortError(err)+'。画布仅保留几何求解结果。');
+    liveRealPreviewArmed=false;
     if(status){status.textContent='实际 ASS 预览失败：'+shortError(err);status.className='small status-bad';}
     setLog(String(err));
   }finally{
@@ -7374,6 +7387,8 @@ function subtitleSettingsPayload(){
 
 function loadSubtitleLayoutSettings(config){
   if(!config)return;
+  liveRealPreviewArmed=false;
+  clearTimeout(liveRealPreviewTimer);
   const set=(id,value)=>{const el=document.getElementById(id);if(el&&value!==undefined&&value!==null)el.value=value;};
   const check=(id,value)=>{const el=document.getElementById(id);if(el)el.checked=!!value;};
   previewPreset=config.subtitle_preset||'standard';
@@ -9114,6 +9129,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 
 
 ['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity'].forEach(id=>{
+  document.getElementById(id)?.addEventListener('change',queueLiveRealPreview);
   document.getElementById(id)?.addEventListener('input',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();
@@ -9129,6 +9145,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
     invalidateLayoutBatchAudit();
     invalidateLibassPreview();
     updateLayoutPreview();
+    queueLiveRealPreview();
     if(id==='prevEnableKaraoke'){
       const panel=document.getElementById('hsrKaraokeReadiness');
       if(panel&&document.getElementById('prevEnableKaraoke')?.checked)panel.open=true;
@@ -9144,6 +9161,7 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
   invalidateLayoutBatchAudit();
   invalidateLibassPreview();
   updateLayoutPreview();
+  queueLiveRealPreview();
   loadWordAlignmentDiagnostics();
 });
 
