@@ -304,7 +304,7 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         self.assertIn("function layoutTimelineSnapSeconds(value,field)", html)
         self.assertIn("layoutTimelineFollowSelected=false; // Keep the viewport stationary", html)
         self.assertIn("const rows=visible.slice(0,140)", html)
-        self.assertNotIn('data-timeline-edge="\'+edge', html) if False else None
+        self.assertNotIn('data-timeline-edge="start"', html)
         self.assertIn('if(false){ // Display-only timeline',html)
 
 
