@@ -783,7 +783,7 @@ def touch_safety_check(browser, base_url, report):
     # The old preset accordion is intentionally hidden. Exercise a visible
     # category and then a direct numeric edit, never force-click hidden UI.
     style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
-    ensure(style_sections.count()==4,"Style controls unexpectedly lost a section")
+    ensure(style_sections.count()==3,"Layout must expose only font, position and readability sections")
     style_sections.nth(3).locator(":scope > summary").click()
     ensure(style_sections.nth(3).evaluate("(el)=>el.open"),
            "Appearance section cannot be expanded")
