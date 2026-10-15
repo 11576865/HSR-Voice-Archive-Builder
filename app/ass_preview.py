@@ -166,6 +166,24 @@ def _assert_project_font_selected(
                 f"导入字体 {family} 被回退为 {actual or '未知字体'}，"
                 f"而非导入文件 {expected.name}；请检查字体族名、字体文件和字形。"
             )
+        # Fontconfig may resolve the requested face correctly and libass may
+        # still fetch a *different* face for a missing glyph. That is not a
+        # successful uploaded-font render. Detect it using the libass log,
+        # rather than reporting success based only on fc-match's family.
+        missing_glyphs = []
+        for match in re.finditer(r"Glyph\\s+0x([0-9a-fA-F]+)\\s+not\\s+found", log, re.IGNORECASE):
+            try:
+                character = chr(int(match.group(1), 16))
+            except (ValueError, OverflowError):
+                continue
+            if character in str(used) and character.isprintable() and not character.isspace():
+                missing_glyphs.append(f"U+{ord(character):04X}")
+        if missing_glyphs:
+            raise RuntimeError(
+                f"已导入字体 {family} 缺少当前字幕中的字形 "
+                + ", ".join(sorted(set(missing_glyphs))[:12])
+                + "，libass 可能自动回退其他字体；请换用具有这些字形的字体。"
+            )
         # libass has two legitimate fontselect log formats:
         #   (Family, 400, 0) -> /resolved/font-file.ttf, 0, ...
         #   (Family, 400, 0) -> PostScriptFaceName, 0, ...
