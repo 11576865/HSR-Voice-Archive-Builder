@@ -62,6 +62,9 @@ class ProjectConfig:
     subtitle_primary_region_share: float = 0.60
     subtitle_enable_karaoke: bool = False
     subtitle_karaoke_mode: str = "k"
+    subtitle_karaoke_timing: str = "aligned"  # aligned | fixed | cue
+    subtitle_karaoke_unit: str = "character"  # character | word
+    subtitle_karaoke_speed_ms: int = 300
     subtitle_enable_translucent_card: bool = False
     subtitle_enable_multi_layer_outline: bool = False
     subtitle_enable_kinetic: bool = True
