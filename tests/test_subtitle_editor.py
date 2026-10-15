@@ -4,6 +4,8 @@ import json
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import patch
 
 from fastapi.testclient import TestClient
 
@@ -256,7 +258,14 @@ class TestSubtitleEditor(unittest.TestCase):
                     }
                 ]
             }
-            resp = self.client.post("/api/project/active/subtitles", json=update_payload, headers=self.headers)
+            # This tests human text-edit persistence, not libass raster ink.
+            # The dedicated real-libass CI job exercises the actual oracle.
+            with patch("subtitle_layout.ass_writer.validate_real_ink") as ink:
+                ink.return_value = SimpleNamespace(
+                    ok=True, reason=None,
+                    primary_width_ratio=1.0, chinese_width_ratio=1.0,
+                )
+                resp = self.client.post("/api/project/active/subtitles", json=update_payload, headers=self.headers)
             self.assertEqual(resp.status_code, 200)
             data = resp.json()
             self.assertTrue(data["ok"])
@@ -285,7 +294,9 @@ class TestSubtitleEditor(unittest.TestCase):
             # Complete delivery regenerates independent ASS and SRT by default.
             ass_file = out / "HSR_Voice_Archive.ass"
             srt_file = out / "HSR_Voice_Archive.srt"
-            self.assertTrue(ass_file.is_file())
+            self.assertTrue(ass_file.is_file(),
+                json.loads((out / "subtitle_export_receipt.json").read_text("utf-8"))
+                .get("artifact_error", "No export receipt"))
             self.assertTrue(srt_file.is_file())
 
             srt_content = srt_file.read_text(encoding="utf-8-sig")
@@ -325,7 +336,14 @@ class TestSubtitleEditor(unittest.TestCase):
                 json.dumps(rebuilt, ensure_ascii=False),
                 encoding="utf-8",
             )
-            refresh_subtitle_artifacts(cfg, out)
+            # Revalidate edit persistence with a mocked raster decision; an
+            # independent CI job tests true FFmpeg/libass pixels.
+            with patch("subtitle_layout.ass_writer.validate_real_ink") as ink:
+                ink.return_value = SimpleNamespace(
+                    ok=True, reason=None,
+                    primary_width_ratio=1.0, chinese_width_ratio=1.0,
+                )
+                refresh_subtitle_artifacts(cfg, out)
             rebuilt_saved = json.loads((out / "manifest.json").read_text(encoding="utf-8"))
             self.assertEqual(rebuilt_saved["entries"][0]["target_text"], "规矩就是用来打破的！")
             self.assertEqual(rebuilt_saved["entries"][0]["final_chs"], "规则，就是用来打破的！")

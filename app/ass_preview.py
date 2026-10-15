@@ -262,7 +262,8 @@ def render_ass_preview_png(
         display_end_seconds=duration,
         word_alignments=word_alignments,
     )
-    config = _project_font_config(config, font_dir)
+    config = replace(_project_font_config(config, font_dir),
+                     verify_libass_layout=True)
     with tempfile.TemporaryDirectory(prefix="hsr-ass-preview-") as td:
         root = Path(td)
         ass_path = root / "preview.ass"

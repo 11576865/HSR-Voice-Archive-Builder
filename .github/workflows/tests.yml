@@ -49,3 +49,20 @@ jobs:
           import app.lite_server
           print("Termux lite dependency surface: OK")
           PY
+
+  real-libass-ink-evidence:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install actual renderer and fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          ffmpeg -hide_banner -filters | grep -E ' subtitles | ass '
+      - name: Install minimal test dependencies
+        run: python -m pip install -r requirements-test.txt
+      - name: Validate real rendered ink evidence
+        run: python -m unittest tests.test_libass_ink_layout -v

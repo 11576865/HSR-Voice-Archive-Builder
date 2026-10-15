@@ -10,6 +10,7 @@ from .config import SubtitleRenderConfig
 from .fonts import resolve_font_path, validate_ass_font_name
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
+from .libass_ink import validate_real_ink, InkProbeUnavailable
 from .measure import measure_line_height, measure_text_width
 from .safe_area import DEFAULT_SAFE_AREA, SafeArea
 
@@ -400,6 +401,12 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         if voice_gap_sec is not None:
             voice_gap_sec = float(voice_gap_sec)
 
+        ink_evidence = {}
+        def validate_ink_candidate(candidate):
+            verdict = validate_real_ink(candidate, cfg, safe_area)
+            ink_evidence["latest"] = verdict
+            return verdict.ok, verdict.reason
+
         layout = solve_subtitle_layout(
             english_text=clean_source,
             chinese_text=clean_target,
@@ -412,7 +419,43 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             primary_region_share=float(cfg.primary_region_share),
             chs_font_path=chs_font_path,
             primary_font_path=primary_font_path,
+            ink_validator=validate_ink_candidate if cfg.verify_libass_layout else None,
         )
+
+        # After checking a candidate with real rendered ink, use the observed
+        # per-language width ratio to propose a *different line-break plan*
+        # at the original base font size. Accept only when the new plan is
+        # independently rerendered and retains or reduces the line count.
+        # No font-wide magic multiplier is applied to arbitrary future cues.
+        if cfg.verify_libass_layout and not layout.failed:
+            verdict = ink_evidence.get("latest")
+            if verdict is not None:
+                p_ratio = verdict.primary_width_ratio
+                c_ratio = verdict.chinese_width_ratio
+                needs_reflow = (
+                    (layout.primary_lines and len(layout.primary_lines) > 1 and
+                     (p_ratio < 0.90 or p_ratio > 1.10)) or
+                    (layout.chs_lines and len(layout.chs_lines) > 1 and
+                     (c_ratio < 0.90 or c_ratio > 1.10))
+                )
+                if needs_reflow:
+                    proposed = solve_subtitle_layout(
+                        english_text=clean_source, chinese_text=clean_target,
+                        source_language=source_language, target_language=target_language,
+                        base_chs_size=int(cfg.base_chs_size),
+                        base_primary_size=int(cfg.base_primary_size),
+                        safe_area=safe_area,
+                        min_central_gap=float(cfg.min_central_gap),
+                        primary_region_share=float(cfg.primary_region_share),
+                        chs_font_path=chs_font_path, primary_font_path=primary_font_path,
+                        primary_width_factor=p_ratio,
+                        chs_width_factor=c_ratio,
+                        ink_validator=validate_ink_candidate,
+                    )
+                    if (not proposed.failed and
+                        len(proposed.primary_lines) <= len(layout.primary_lines) and
+                        len(proposed.chs_lines) <= len(layout.chs_lines)):
+                        layout = proposed
 
         if layout.failed:
             subtitle_id = str(getattr(entry, "index", getattr(entry, "id", getattr(entry, "filename", ""))))
