@@ -15,7 +15,7 @@ def generate_kinetic_tags(
     voice_gap_seconds: float | None = None,
     base_entry_ms: int | None = None,
     base_exit_ms: int | None = None,
-    max_portion: float = 0.25,
+    max_portion: float = 1.0,
     initial_scale: int | None = None,
     peak_scale: int | None = None,
     exit_scale: int | None = None,
@@ -46,8 +46,11 @@ def generate_kinetic_tags(
     t_out = min(max(0, out_ms), max_anim_ms)
 
     if t_in + t_out > duration_ms:
-        t_in = duration_ms // 2
-        t_out = duration_ms // 2
+        # Preserve the author's chosen in/out ratio, instead of secretly
+        # discarding both durations and forcing a symmetric half-cue fade.
+        total = t_in + t_out
+        t_in = round(duration_ms * t_in / total)
+        t_out = duration_ms - t_in
 
     tags: list[str] = []
 
