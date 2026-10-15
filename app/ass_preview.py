@@ -248,6 +248,7 @@ def render_ass_preview_png(
     timestamp: float = 1.0,
     font_dir: Path | None = None,
     use_studio_reference_background: bool = False,
+    layout_capture: dict[str, object] | None = None,
 ) -> bytes:
     """Render one representative subtitle frame through FFmpeg/libass."""
     ffmpeg = shutil.which("ffmpeg")
@@ -276,6 +277,7 @@ def render_ass_preview_png(
                 target_language=target_language or "zh-CN",
                 config=config,
                 overflow_report_path=root / "overflow.json",
+                layout_capture=layout_capture,
             )
         except ValueError as exc:
             # The TemporaryDirectory is deleted on exit: never give clients an
