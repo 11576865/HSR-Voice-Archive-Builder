@@ -3790,7 +3790,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <summary><span>逐词同步</span><small>Karaoke / alignment</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
-            <label class="check"><input type="checkbox" id="prevEnableKaraoke"> 逐词高亮</label>
+            <label class="check"><input type="checkbox" id="prevEnableKaraoke" disabled aria-describedby="wordAlignmentProviderStatus"> 逐词高亮（需有效词级时间）</label>
             <label for="prevKaraokeMode">高亮模式</label>
             <select id="prevKaraokeMode">
               <option value="k">逐词切换（\k）</option>
@@ -3811,12 +3811,12 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <p>示例的 <code>id:11</code> 和单词只是格式示意，不能直接导入任意项目；必须替换成真实字幕条目、完整原文词序和时间戳。</p>
             </details>
 <details id="hsrKaraokeReadiness" class="hsr-karaoke-readiness" data-studio-scope="effects" aria-label="逐词时间管理">
-  <summary>词级时间 <small>可选 · 生成或导入</small></summary>
-  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">正在等待词级时间诊断。</p>
+  <summary>逐词时间数据 <small>查看本机能力与导入</small></summary>
+  <p id="hsrKaraokeReadinessDetail" class="small muted" role="status" aria-live="polite">逐词高亮需要真实词级时间。尚未核验，功能暂不可用。</p>
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本机生成（需 WhisperX）</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn" hidden disabled>本机生成（需 WhisperX）</button>
               <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
@@ -7201,6 +7201,14 @@ async function loadWordAlignmentDiagnostics(){
       generateButton.title=provider.available?'使用本地 WhisperX 生成真实词级时间；可能还需模型下载及音频依赖':'当前设备不支持本地生成，请导入有效的词级时间 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
+    // An enabled-looking Karaoke checkbox with zero timestamped words is a
+    // fake affordance. Preserve saved intent, but forbid ineffective edits.
+    const karaokeToggle=document.getElementById('prevEnableKaraoke');
+    const karaokeMode=document.getElementById('prevKaraokeMode');
+    const previewTime=document.getElementById('prevKaraokePreviewTime');
+    for(const control of [karaokeToggle,karaokeMode,previewTime]){
+      if(control){control.disabled=usable<=0;control.title=usable<=0?'项目没有有效词级时间；请先导入匹配 JSON，或在支持 WhisperX 的主机生成。':'';}
+    }
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
     if(total<=0){
       setHsrKaraokeReadiness('尚无可诊断的项目字幕。先构建项目并选择真实语音。','warning');
