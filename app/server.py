@@ -1871,7 +1871,7 @@ def api_output_ass():
                     current, total,
                 )
 
-            report_progress("prepare", "正在加载字幕并准备真实字形校验", 0, 0)
+            report_progress("prepare", "正在加载字幕并准备生成 ASS", 0, 0)
             result = refresh_subtitle_artifacts_from_settings(
                 output,
                 source_language=config.source_text_language or "en",
