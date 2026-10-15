@@ -128,11 +128,12 @@ class TestAdvancedTypography(unittest.TestCase):
         self.assertIn(r"\fad(2400,2100)",generate_kinetic_tags(
             6.0,fade_in_ms=2400,fade_out_ms=2100,
         ))
-        self.assertIn(r"\fad(1000,1000)",generate_kinetic_tags(
+        self.assertIn(r"\fad(1500,1500)",generate_kinetic_tags(
             2.0,fade_in_ms=1500,fade_out_ms=1500,
         ))
-        # Audio gap automation is a *different* mode with explicit priority.
-        self.assertIn(r"\fad(80,80)",generate_kinetic_tags(
+        # A gap is the source of the safety budget, never an opaque preset
+        # that silently overrides these manually configured times.
+        self.assertIn(r"\fad(2400,2100)",generate_kinetic_tags(
             6.0,fade_in_ms=2400,fade_out_ms=2100,voice_gap_seconds=0.1,
         ))
 
