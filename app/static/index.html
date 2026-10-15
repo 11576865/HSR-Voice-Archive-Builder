@@ -3742,10 +3742,11 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <select id="prevKaraokeUnit">
               <option value="character">逐字符</option>
               <option value="word">逐词（按空格分组）</option>
+              <option value="pixel">按字形宽度恒速扫光</option>
             </select>
-            <label for="prevKaraokeSpeed">固定速度：每单位毫秒</label>
+            <label for="prevKaraokeSpeed">推进速度：每字符/词 ms，或每 100px 的 ms</label>
             <input type="range" id="prevKaraokeSpeed" min="10" max="2000" value="300" step="10">
-            <div class="small muted">固定速度和整句时长模式不需要词级对齐，不会改动字幕起止时间；超出字幕显示时长的动画会被字幕事件截断。</div>
+            <div class="small muted">固定速度、字形宽度恒速、整句均分都不需要词级对齐，也不会修改字幕起止时间；未完成的高亮会在字幕事件结束时截断。</div>
             <label for="prevKaraokeMode">高亮模式</label>
             <select id="prevKaraokeMode">
               <option value="k">逐词切换（\k）</option>
