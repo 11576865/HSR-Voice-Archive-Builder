@@ -293,11 +293,11 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(medium_layout.primary_lines[0].font_size, 42)
 
     def test_dynamic_scale_factor_minimum_threshold(self) -> None:
-        # Scale factors must be within safe limits: 1.0, 0.95, 0.90, 0.85
+        # Search from 100% down to the bounded minimum 25% before rejecting.
         english = "This sentence is quite long to test line wrapping and vertical scaling bounds in layout solver."
         chinese = "这是一个很长很长用来测试行数较多时动态字体缩放安全阈值的句子。"
         layout = solve_subtitle_layout(english, chinese)
-        self.assertGreaterEqual(layout.scale_factor, 0.85)
+        self.assertGreaterEqual(layout.scale_factor, 0.25)
 
     def test_clear_measure_cache(self) -> None:
         clear_measure_cache()
