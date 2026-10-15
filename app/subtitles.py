@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -326,6 +326,18 @@ def invalidate_subtitle_stages(config: ProjectConfig) -> None:
         (state_dir / relative).unlink(missing_ok=True)
 
 
+def _ass_artifact_render_config(
+    cfg: SubtitleRenderConfig | None,
+) -> SubtitleRenderConfig | None:
+    """ASS writing is serialization, not a corpus-wide FFmpeg/libass raster audit.
+
+    Keep bounded layout/overflow solving, and let explicit real-ASS previews
+    perform their own authoritative libass measurements. Do not mutate the
+    shared settings object, which other rendering paths may still use.
+    """
+    return replace(cfg, verify_libass_layout=False) if cfg is not None else None
+
+
 def refresh_subtitle_artifacts_from_settings(
     output_dir: Path,
     *,
@@ -405,7 +417,7 @@ def refresh_subtitle_artifacts_from_settings(
                 ass_file,
                 source_language=source_language,
                 target_language=target_language,
-                config=render_config,
+                config=_ass_artifact_render_config(render_config),
                 **({"progress_callback": ass_progress} if ass_progress is not None else {}),
             )
         except Exception as exc:
@@ -526,7 +538,7 @@ def refresh_ass_only(
                 adapters, ass_path,
                 source_language=config.source_text_language or "en",
                 target_language=config.target_language or "zh-CN",
-                config=subtitle_render_config(config),
+                config=_ass_artifact_render_config(subtitle_render_config(config)),
                 overflow_report_path=output_dir / "ass_layout_overflow_report.json",
                 **({"progress_callback": ass_progress} if ass_progress is not None else {}),
             )
