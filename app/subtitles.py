@@ -21,7 +21,7 @@ from .subtitle_timing import (
     update_subtitle_display_timing,
 )
 from .word_alignment import apply_cached_word_alignments
-from subtitle_layout.config import SubtitleRenderConfig
+from subtitle_layout.config import SubtitleRenderConfig, normalize_subtitle_color
 from subtitle_layout.fonts import validate_ass_font_name
 from .project_fonts import project_font_for_family
 
@@ -281,6 +281,8 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
     chs_path = project_font_for_family(output, config.subtitle_chs_font) if output else None
     primary_path = project_font_for_family(output, config.subtitle_primary_font) if output else None
     return SubtitleRenderConfig(
+        primary_color=normalize_subtitle_color(config.subtitle_primary_color),
+        chs_color=normalize_subtitle_color(config.subtitle_chs_color),
         enable_karaoke=bool(config.subtitle_enable_karaoke),
         karaoke_mode=(
             str(config.subtitle_karaoke_mode or "k").lower()
@@ -300,7 +302,7 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         shadow_depth=max(0.0, min(24.0, float(config.subtitle_shadow_depth))),
         blur_radius=max(0.0, min(12.0, float(config.subtitle_blur_radius))),
         card_opacity=max(0.0, min(1.0, float(config.subtitle_card_opacity))),
-        enable_soft_entry=bool(config.subtitle_enable_soft_entry),
+        enable_soft_entry=False,  # future transforms are disabled until re-enabled
         soft_entry_scale_percent=max(25.0, min(300.0, float(config.subtitle_soft_entry_scale_percent))),
         soft_entry_blur=max(0.0, min(12.0, float(config.subtitle_soft_entry_blur))),
         soft_entry_ms=max(0, min(5000, int(config.subtitle_soft_entry_ms))),
