@@ -3489,7 +3489,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewQuickBtn" data-studio-scope="style" aria-pressed="false" title="浏览器近似预览当前字幕文字；字体和断行以 FFmpeg/libass 为准">字幕渲染前预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
-                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
+                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="选取项目字幕后，按真实语音时长与静音淡入淡出生成带原声的动态预览；无自选素材时使用红云参考背景">播放动态特效</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn" data-studio-scope="effects">保存当前设置</button>
                     <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
                   </div>
@@ -3809,7 +3809,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除视频，恢复红云参考图</button>
-  <p class="small muted">可选择最多 24 MiB 的短视频，仅作 0.5–8 秒 FFmpeg/libass 动画效果验收；背景素材不产生动画，真正效果由上方参数与 ASS 标签决定。未选择视频时使用红云参考图；最终 MKV 背景仍在导出页设置。</p>
+  <p class="small muted">可选择最多 24 MiB 的短视频，仅作选中语音的真实时长 FFmpeg/libass 动画效果验收（含语音与可用静音过渡）；不再固定 8 秒。默认使用项目 FLAC／已验证 MKV 音轨，背景素材不产生动画；最终 MKV 背景仍在导出页设置。</p>
 </div>
 
 </details>
@@ -7064,7 +7064,7 @@ function showGeometryPreview(){
 
 function libassPreviewPayload(){
   const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
-  const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
+  const previewDuration=Math.max(0.01,Number(layoutStressSample?.duration_seconds||3));
   return {
     ...subtitleSettingsPayload(),
     english_text:document.getElementById('prevPriText')?.value||'',
@@ -8622,7 +8622,8 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
     layoutStressSample={
       id:selected.id,
       score:bestScore,
-      duration_seconds:Number(alignment?.duration_seconds||Math.max(0.25,Number(selected.end||0)-Number(selected.start||0))||3),
+      duration_seconds:Math.max(0.01,
+        Number(selected.source_end??selected.end??0)-Number(selected.source_start??selected.start??0)),
       word_alignments:alignment?.valid&&Array.isArray(alignment.words)?alignment.words:null
     };
     layoutSampleSource='sample';
@@ -9262,9 +9263,12 @@ async function renderHsrEffectVideo(){
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
   const payload=libassPreviewPayload();
-  const originalDuration=Number(payload.preview_duration_seconds||3);
-  payload.preview_duration_seconds=Math.min(8,Math.max(0.5,originalDuration));
-  if(originalDuration>8)payload.word_alignments=null; // do not misapply out-of-clip timing
+  if(layoutSampleSource!=='sample'||layoutStressSample?.id===undefined||layoutStressSample?.id===null)
+    throw new Error('请先选择一条有真实语音的项目字幕；自定义测试文本没有可同步的项目音频。');
+  payload.project_voice_entry_id=layoutStressSample.id;
+  payload.expected_project_root=currentProject?.root||null;
+  // The server resolves the exact PCM clock and fade margins; no fixed 8s.
+  payload.preview_duration_seconds=Math.max(0.01,Number(layoutStressSample.duration_seconds));
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
   const backgroundImage=effectBackgroundImageFile;
@@ -9288,7 +9292,7 @@ async function renderHsrEffectVideo(){
     const player=document.getElementById('libassVideoPreview');
     payload.preview_format=player?.canPlayType?.('video/webm; codecs="vp8"')?'webm':'mp4';
     payload.source_start_seconds=effectFootageOffset();
-    payload.include_source_audio=!!footage&&footageAudio;
+    payload.include_source_audio=!!footage&&footageAudio; // project voice takes precedence
     payload.preview_background_color=backgroundColor;
     payload.use_studio_reference_background=usesReference;
     if(footage)payload.source_video_base64=await effectFootageAsBase64(footage);
@@ -9316,6 +9320,12 @@ async function renderHsrEffectVideo(){
     const expectedType=payload.preview_format==='webm'?'video/webm':'video/mp4';
     if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
     setHsrEffectOperation('decoding','处理主机已返回视频，正在等待浏览器解码第一帧。');
+    const actualDuration=Number(response.headers.get('X-HSR-Preview-Duration'));
+    if(!Number.isFinite(actualDuration)||actualDuration<=0)
+      throw new Error('服务器没有返回已核准的真实语音预览时长');
+    const previewAudio=response.headers.get('X-HSR-Preview-Audio');
+    if(previewAudio!=='project')
+      throw new Error('预览中没有选中语音的真实音轨，拒绝以静音视频冒充');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
     if(actualBackground && actualBackground!==(footage?'local-footage':(backgroundImage||usesReference)?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
       throw new Error('服务器响应的背景来源与当前选择不一致');
@@ -9344,7 +9354,7 @@ async function renderHsrEffectVideo(){
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
+    if(status)status.textContent='真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
     if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
