@@ -93,7 +93,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("primary_region_share:primaryShare/100",html)
         self.assertIn("primary_region_share: Number(document.getElementById('prevPrimaryShare')",html)
         self.assertIn("overlay.style.display='none'",html)
-        self.assertIn("const realFrame=mode==='libass'",html)
+        self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
         self.assertIn("document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame)",html)
         self.assertIn("queueLiveRealPreview()",html)
         self.assertIn("await renderLibassPreview()",html)

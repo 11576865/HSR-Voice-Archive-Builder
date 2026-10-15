@@ -68,6 +68,14 @@ class ProjectFontTests(unittest.TestCase):
                         cfg, font_asset_directory(output),
                         english="", chinese="测试")
 
+    def test_termux_launchers_install_native_pillow_for_real_font_metrics(self):
+        root=Path(__file__).resolve().parents[1]
+        for name in ("run_termux.sh","run_termux_lan.sh"):
+            source=(root/name).read_text("utf-8")
+            self.assertIn("pkg install -y python-pillow",source)
+            self.assertIn("from PIL import ImageFont",source)
+            self.assertIn("Missing imported-font measurement support",source)
+
     def test_termux_launchers_install_fontconfig_utils_and_verify_executable(self):
         root = Path(__file__).resolve().parents[1]
         for name in ("run_termux.sh", "run_termux_lan.sh"):

@@ -86,3 +86,8 @@ python -m app.credentials model qwen3.7-plus
 ```
 
 Translation keeps batch checkpoints, exact ID validation and bounded retry behavior. Checkpoints are bound to provider + Base URL + model.
+
+
+### Accurate-enough font advances are a prerequisite, not libass proof
+
+The Termux launchers also install native `python-pillow` when `PIL.ImageFont` is missing. Earlier installations could silently substitute per-character width ratios for actual imported TTF/OTF advances. Pillow measures the selected font rather than guesses, but its shaping/line heights are **not pixel-identical to FFmpeg/libass**. The normal Layout canvas therefore never displays SVG glyphs as fallback while the true frame is rendering, stale or failed. Auxiliary SVG is opt-in and cannot authorize a final line break; whole-corpus real-ink acceptance remains separate.

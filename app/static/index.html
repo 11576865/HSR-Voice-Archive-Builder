@@ -3476,7 +3476,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="FFmpeg/libass 动态字幕预览（黑底或用户本地视频片段）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
 <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
           <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
-            <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
+            <span id="previewModeLabel" class="layout-canvas-mode-label">等待实际 ASS 字形</span>
             <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
           </div>
           <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
@@ -3487,7 +3487,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="仅检查粗略布局辅助线；字体与断行可能与真实 ASS 不同，不可据此定稿">辅助几何（非成品）</button>
+                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="仅检查粗略布局辅助线；字体与断行可能与真实 ASS 不同，不可据此定稿">辅助几何（非成品）</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
 <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
@@ -3502,7 +3502,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </div>
           <!-- One immutable reference image. Final delivery settings remain independent. -->
           <input id="previewBackgroundMode" type="hidden" value="reference">
-          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">进入排版后会自动生成当前字幕的 FFmpeg/libass 真实帧；几何图不能用于最终分句和字形验收。</div>
+          <div id="libassPreviewStatus" class="small muted" style="margin:-4px 0 10px">默认只展示 FFmpeg/libass 真实字形；等待/失败时不展示 SVG 替代字形。辅助几何仅供诊断，不能用于分句或排版定稿。</div>
           <div id="hsrEffectOperationStatus" class="hsr-effect-operation-status" data-studio-scope="effects" data-phase="idle" role="status" aria-live="polite" aria-atomic="true">
             <strong id="hsrEffectOperationTitle">动态特效未开始</strong>
             <span id="hsrEffectOperationDetail">点击「播放动态特效」生成可播放视频；完成后结果出现在上方画布。</span>
@@ -3510,7 +3510,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="layout-preview-evidence" role="status" aria-live="polite" aria-atomic="true" data-preview-evidence="geometry">
             <div class="layout-preview-evidence-main">
               <span class="layout-evidence-dot" aria-hidden="true"></span>
-              <div><strong id="previewEvidenceTitle">几何预览</strong><p id="previewEvidenceDetail">非真实渲染</p></div>
+              <div><strong id="previewEvidenceTitle">等待实际 ASS 渲染</strong><p id="previewEvidenceDetail">当前字幕在真实帧解码前不可定稿</p></div>
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
           </div>
@@ -4458,6 +4458,12 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(panelCollapseMode==='auto')requestAnimationFrame(()=>applyAutoPanelState(visibleWorkspace));
   if(visibleWorkspace==='layout'){
     setHsrStudioMode(name==='effects'?'effects':'style');
+  }
+  // Task switching within the shared canvas must not strand a stale real frame.
+  // The renderer's own identity guard skips an unchanged frame.
+  if(visibleWorkspace==='layout'&&previousWorkspace==='layout'&&currentProject){
+    liveRealPreviewArmed=true;
+    queueLiveRealPreview();
   }
   if(visibleWorkspace==='layout'&&previousWorkspace!=='layout'&&typeof updateLayoutPreview==='function'){
     const projectKey=currentProject?.root||currentProject?.name||null;
@@ -6916,16 +6922,23 @@ let liveRealPreviewTimer = null;
 // A decoded frame is authoritative only for the exact current sample+settings.
 // Rapid sample changes must never leave an old bitmap mistaken for a fresh one.
 let lastRenderedAssIdentity = null;
+// SVG glyphs are available only through explicit auxiliary inspection.
+let geometryExplicitlyRequested = false;
 function queueLiveRealPreview(){
   clearTimeout(liveRealPreviewTimer);
+  // Layout and Effects are two tasks on the same layout canvas. Never
+  // accidentally disable the authoritative renderer in Effects mode.
+  if(typeof videoPreviewController!=='undefined'&&videoPreviewController)return;
   if(!liveRealPreviewArmed||!currentProject||
      document.body.dataset.workspace!=='layout'||
-     document.body.dataset.workspaceTask!=='layout')return;
+     !['layout','effects'].includes(document.body.dataset.workspaceTask))return;
   // FFmpeg/libass is the visual source of truth. Coalesce fast edits, then
   // render the actual ASS frame instead of treating SVG estimates as final.
   liveRealPreviewTimer=setTimeout(()=>{
     if(liveRealPreviewArmed&&currentProject&&
-       document.body.dataset.workspaceTask==='layout'&&
+       !videoPreviewController&&
+       document.body.dataset.workspace==='layout'&&
+       ['layout','effects'].includes(document.body.dataset.workspaceTask)&&
        lastRenderedAssIdentity!==currentLibassPreviewIdentity())
       void renderLibassPreview();
   },850);
@@ -7000,26 +7013,27 @@ function setPreviewEvidence(mode, detail = '') {
   const modeLabel=document.getElementById('previewModeLabel');
   const states={
     geometry:['辅助几何图（非排版成品）','字体、断行、行高和视觉占位均可能与 FFmpeg/libass 不同。不要依据此图定稿；等待自动真实渲染。','未经真实验证','辅助几何 · 不可据此定稿'],
-    rendering:['实际 ASS 渲染中','当前仍是非权威几何图；正在生成此条字幕的真实 ASS 字形与断行。','正在验证当前字幕','真实画面生成中 · 尚未定稿'],
+    rendering:['实际 ASS 渲染中','正在生成当前字幕的 FFmpeg/libass 字形；不使用 SVG 字形冒充成品。','尚未验证','真实画面生成中 · 尚未定稿'],
     libass:['FFmpeg/libass 实际渲染','本条字幕的真实字形、断行与样式；并非整部档案逐条验收，且不代表已保存/导出。','当前字幕真实帧','实际 ASS · 当前字幕'],
     video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时纯色视频。','可播放视频 · 非正式导出','真实动态特效 · 纯色背景'],
     'video-image':['FFmpeg/libass 图片背景合成','真实解码本地图片作为连续视频帧，再由 libass 渲染动态字幕；不保存图片到项目。','图片帧 + 动态 ASS · 非正式导出','真实动态特效 · 图片背景'],
     'video-footage':['FFmpeg/libass 视频合成','真实读取本次选择的本地视频画面并叠加 ASS 字幕；源音频取决于本次音轨选项，不保存原素材。','源素材叠加 · 非正式导出','真实动态特效 · 本地素材'],
-    stale:['真实渲染结果已过期','样本或参数改变，当前只显示辅助几何图；新一轮真实 ASS 生成后才能据此定稿。','真实画面已过期','几何辅助 · 等待真实结果'],
-    failed:['真实渲染失败','真实渲染未完成；画布仅显示浏览器近似外观，不代表 libass。','渲染未验证','浏览器近似 · 渲染失败']
+    stale:['真实渲染结果已过期','旧真实画面已撤销；新一轮实际 ASS 成功前不提供可定稿字形。','真实画面已过期','等待真实画面 · 不可定稿'],
+    failed:['真实渲染失败','真实字形渲染未完成，不显示误导性 SVG 替代结果；请查看诊断并重试。','当前字幕未验证','真实渲染失败 · 不可定稿']
   };
   const current=states[mode]||states.geometry;
   if(root)root.dataset.previewEvidence=mode;
   // Geometry and FFmpeg/libass are mutually exclusive view layers.
   // Old SVG glyphs must never leak through real frame render or video.
-  const realFrame=mode==='libass'||mode==='video'||mode==='video-image'||mode==='video-footage';
+  // Hide browser-shaped glyphs during actual rendering, staleness or failure.
+  const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested);
   document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame);
   document.getElementById('assCanvasPreview')?.classList.toggle('hidden',realFrame);
   if(title)title.textContent=current[0];
   if(description)description.textContent=detail||current[1];
   if(meta)meta.textContent=current[2];
   if(modeLabel)modeLabel.textContent=current[3];
-  document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',mode==='libass'?'false':'true');
+  document.getElementById('previewGeometryBtn')?.setAttribute('aria-pressed',String(mode==='geometry'&&geometryExplicitlyRequested));
   document.getElementById('previewLibassBtn')?.setAttribute('aria-pressed',mode==='libass'?'true':'false');
   document.getElementById('previewVideoBtn')?.setAttribute('aria-pressed',mode==='video'||mode==='video-image'||mode==='video-footage'?'true':'false');
 }
@@ -7038,12 +7052,13 @@ function invalidateLibassPreview(){
     URL.revokeObjectURL(libassPreviewObjectUrl);
     libassPreviewObjectUrl=null;
   }
-  setPreviewEvidence(hadResult?'stale':'geometry');
+  setPreviewEvidence(hadResult?'stale':'rendering');
   const status=document.getElementById('libassPreviewStatus');
   if(status){status.textContent='参数或测试文本已变化；实际 ASS 预览需要重新生成。';status.className='small muted';}
 }
 
 function showGeometryPreview(){
+  geometryExplicitlyRequested=true;
   clearVideoPreview();
   libassPreviewGeneration++; // Explicit user choice wins over any in-flight render.
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
@@ -7080,6 +7095,7 @@ function currentLibassPreviewIdentity(){
 }
 
 async function renderLibassPreview(){
+  geometryExplicitlyRequested=false;
   clearVideoPreview();
   const button=document.getElementById('previewLibassBtn');
   const status=document.getElementById('libassPreviewStatus');
@@ -7481,6 +7497,7 @@ function loadSubtitleLayoutSettings(config){
   // Loading a project arms authoritative rendering for its next actual cue.
   // Explicit geometry inspection can still temporarily opt out.
   liveRealPreviewArmed=!!currentProject;
+  geometryExplicitlyRequested=false;
   lastRenderedAssIdentity=null;
   clearTimeout(liveRealPreviewTimer);
   const set=(id,value)=>{const el=document.getElementById(id);if(el&&value!==undefined&&value!==null)el.value=value;};
@@ -8549,6 +8566,10 @@ async function updateLayoutPreview() {
       invalidateLibassPreview();
     liveRealPreviewArmed=true;
   }
+  // Independent request pipelines: a slow, rejected or cancelled SVG geometry
+  // API must never prevent this cue's real FFmpeg/libass frame being scheduled.
+  queueLiveRealPreview();
+  if(currentProject&&document.body.dataset.workspace==='layout')geometryExplicitlyRequested=false;
   const generation=++geometryPreviewGeneration;
   if(geometryPreviewController)geometryPreviewController.abort();
   const controller=typeof AbortController==='function'?new AbortController():null;
@@ -8630,9 +8651,8 @@ async function updateLayoutPreview() {
 
     if(generation!==geometryPreviewGeneration)return;
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
-    // This provisional estimate is never the editing authority: draw the
-    // real ASS image for the very same current sample as soon as possible.
-    queueLiveRealPreview();
+    // Geometry is informational only; the real render was already queued
+    // before any asynchronous font-loading/geometry work began.
     const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
     if(corpusStatus&&layoutStressSample){
       const layout=res?.layout||{};
@@ -8658,11 +8678,15 @@ async function updateLayoutPreview() {
 }
 
 function scheduleLayoutPreviewUpdate() {
+  geometryExplicitlyRequested=false;
   geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
   if(geometryPreviewController){geometryPreviewController.abort();geometryPreviewController=null;}
   invalidateLibassPreview();
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
+  // Start the true-render debounce immediately rather than waiting for the
+  // optional geometry endpoint, which can fail or be repeatedly aborted.
+  queueLiveRealPreview();
 }
 
 function renderPreviewCanvasSvg(data, options) {
@@ -9068,6 +9092,10 @@ document.getElementById('layoutAuditDrawerToggle')?.addEventListener('click',()=
 
 
 async function renderHsrEffectVideo(){
+  // Dynamic video preempts delayed stills: do not abort a user-initiated encode.
+  clearTimeout(liveRealPreviewTimer);
+  liveRealPreviewArmed=false;
+  geometryExplicitlyRequested=false;
   const button=document.getElementById('previewVideoBtn');
   const status=document.getElementById('videoPreviewStatus');
   clearVideoPreview();
