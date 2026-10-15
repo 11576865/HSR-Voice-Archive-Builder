@@ -105,6 +105,58 @@ def publish_generated_ass_complete_mkv(
     return result
 
 
+
+def queue_ass_regeneration(config: ProjectConfig, output: Path):
+    """One progress-visible job for every explicit or auto ASS regeneration.
+
+    In complete mode, success means that the ASS has been embedded into the
+    verified current MKV; an intermediate loose ASS is never a success signal.
+    """
+    from .subtitles import (
+        refresh_subtitle_artifacts_from_settings, subtitle_render_config,
+    )
+
+    def run(report_progress):
+        counts = {"total": 0}
+
+        def on_cue(current: int, total: int) -> None:
+            counts["total"] = total
+            report_progress(
+                "render", f"正在生成 ASS 字幕：{current}/{total} 条", current, total,
+            )
+
+        report_progress("prepare", "正在读取字幕并准备 ASS", 0, 0)
+        result = refresh_subtitle_artifacts_from_settings(
+            output,
+            source_language=config.source_text_language or "en",
+            target_language=config.target_language or "zh-CN",
+            generate_ass=True,
+            render_config=subtitle_render_config(config),
+            ass_progress=on_cue,
+        )
+        if result.get("ass_error"):
+            raise ValueError("ASS 生成失败，MKV 未更新：" + str(result["ass_error"]))
+        done = max(counts["total"], 1)
+        if config.delivery_mode == "complete":
+            report_progress(
+                "render", "新 ASS 已生成，正在更新 MKV 内的字幕轨道", done, done,
+            )
+            bundle = publish_generated_ass_complete_mkv(
+                config, output, report_progress,
+            )
+            return {
+                **result, "bundle": bundle, "delivery": "complete-mkv",
+                "output": bundle.get("output"),
+            }
+        report_progress("render", "独立 ASS 字幕已生成", done, done)
+        return result
+
+    return create_job(
+        "ass-export", run, with_progress=True,
+        project_root=config.root, project_name=config.name,
+    )
+
+
 def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     """Enqueue at most once for each changed certified source generation.
 
