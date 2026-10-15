@@ -30,7 +30,8 @@ class AssToMkvWorkflowContracts(unittest.TestCase):
         self.assertIn("async function saveSubtitleLayoutSettings(", html)
         # An explicit Generate action is the only layout/settings UI path
         # that starts the unified ASS -> verified MKV background job.
-        self.assertIn("if(await saveSubtitleLayoutSettings())await startAssExport();", html)
+        self.assertIn("if(await saveSubtitleLayoutSettings())await startAssExport('internal');", html)
+        self.assertIn("if(await saveSubtitleLayoutSettings())await startAssExport('external');", html)
         self.assertIn("void watchJob(j.job)", html) if "void watchJob(j.job)" in html else self.assertIn("watchJob(j.job)", html)
 
     def test_mkv_tracks_are_compared_semantically_before_atomic_replace(self):
