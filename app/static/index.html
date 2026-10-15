@@ -7676,6 +7676,13 @@ async function runAutoAssRefresh(generation){
       body:JSON.stringify({expected_project_root:project,ass_only:true})
     });
     if(currentProject?.root!==project||generation!==assAutoRefreshGeneration)return;
+    if(result.job){
+      // In complete MKV mode the server owns ASS + container publication in
+      // one progress-visible job. A loose ASS is not a completed product.
+      if(status){status.textContent='样式已保存，正在后台将新 ASS 封入 MKV 并验证旧字幕已替换…';status.className='small muted';}
+      void watchJob(result.job);
+      return;
+    }
     if(result.export_status)layoutCueApplyExportHealth(result.export_status);
     const problem=String(result.artifact_error||result.refreshed?.ass_error||'');
     if(status){
