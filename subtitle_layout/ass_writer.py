@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import unicodedata
 import tempfile
 from pathlib import Path
 from typing import Any, Iterable
@@ -296,17 +298,72 @@ def generate_frosted_glass_card(
     return card_text, (x1_i, y1_i, x2_i, y2_i)
 
 
+def _karaoke_units(text: str, mode: str) -> list[str]:
+    """Split into visual units while preserving spaces and common grapheme joins."""
+    if mode == "word":
+        return re.findall(r"\S+\s*|\s+", text)
+    result: list[str] = []
+    join_next = False
+    for char in text:
+        codepoint = ord(char)
+        attach = (unicodedata.combining(char) != 0
+                  or codepoint in (0x200D, 0x200C)
+                  or 0xFE00 <= codepoint <= 0xFE0F
+                  or 0x1F3FB <= codepoint <= 0x1F3FF
+                  or join_next)
+        if attach and result:
+            result[-1] += char
+        else:
+            result.append(char)
+        join_next = codepoint == 0x200D
+    return result
+
+
+def format_generated_karaoke(
+    lines: list[object], duration_sec: float, *, timing: str,
+    unit: str, speed_ms: int, mode: str,
+) -> str:
+    """Generate deliberate *unsynchronized* ASS progression, never word alignment."""
+    tag = "kf" if mode == "kf" else "k"
+    line_texts = [str(getattr(line, "text", line)) for line in lines]
+    groups = [_karaoke_units(value, unit) for value in line_texts]
+    unit_count = sum(len(items) for items in groups)
+    if unit_count == 0:
+        return r"\N".join(line_texts)
+    if timing == "cue":
+        total_cs = max(unit_count, int(round(max(0.0, duration_sec) * 100)))
+        base, remainder = divmod(total_cs, unit_count)
+        ticks = [base + (1 if n < remainder else 0) for n in range(unit_count)]
+    else:
+        ticks = [max(1, round(speed_ms / 10))] * unit_count
+    result: list[str] = []
+    pos = 0
+    for items in groups:
+        result.append("".join(f"{{\\{tag}{ticks[pos + index]}}}{piece}"
+                              for index, piece in enumerate(items)))
+        pos += len(items)
+    return r"\N".join(result)
+
+
 def format_multiline_karaoke(
     lines: list[object],
     duration_sec: float,
     word_alignments: list[object] | None = None,
     is_cjk: bool = False,
     mode: str = "k",
+    timing: str = "aligned",
+    unit: str = "character",
+    speed_ms: int = 300,
 ) -> str:
-    """Apply karaoke only when timings can be mapped without inventing timing."""
+    """Either true word alignment or explicitly unsynchronized generated timing."""
     if not lines:
         return ""
     plain = "\\N".join(getattr(pos, "text", str(pos)) for pos in lines)
+    if timing in {"fixed", "cue"}:
+        return format_generated_karaoke(
+            lines, duration_sec, timing=timing, unit=unit,
+            speed_ms=speed_ms, mode=mode,
+        )
     if not word_alignments or len(lines) != 1:
         return plain
     return format_karaoke_text(
@@ -361,6 +418,11 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     karaoke_mode = str(getattr(cfg, "karaoke_mode", "k") or "k").lower()
     if karaoke_mode not in {"k", "kf", "clip"}:
         karaoke_mode = "k"
+    karaoke_timing = str(getattr(cfg, "karaoke_timing", "aligned") or "aligned").lower()
+    karaoke_unit = str(getattr(cfg, "karaoke_unit", "character") or "character").lower()
+    karaoke_speed_ms = max(10, min(2000, int(getattr(cfg,"karaoke_speed_ms",300))))
+    if use_karaoke and karaoke_timing in {"fixed","cue"} and karaoke_mode == "clip":
+        raise ValueError("Clip Karaoke requires real per-word alignment; select k or kf for generated progression")
     use_frosted_glass = cfg.enable_frosted_glass if enable_frosted_glass is None else enable_frosted_glass
     use_multi_layer_outline = cfg.enable_multi_layer_outline if enable_multi_layer_outline is None else enable_multi_layer_outline
     use_kinetic = cfg.enable_kinetic if enable_kinetic is None else enable_kinetic
@@ -618,6 +680,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     word_alignments=pri_alignments,
                     is_cjk=source_language.startswith("zh"),
                     mode=karaoke_mode,
+                    timing=karaoke_timing,
+                    unit=karaoke_unit,
+                    speed_ms=karaoke_speed_ms,
                 )
             else:
                 pri_text = "\\N".join(pos.text for pos in layout.primary_lines)
@@ -688,6 +753,9 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     word_alignments=chs_alignments,
                     is_cjk=True,
                     mode=karaoke_mode,
+                    timing=karaoke_timing,
+                    unit=karaoke_unit,
+                    speed_ms=karaoke_speed_ms,
                 )
             else:
                 chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
