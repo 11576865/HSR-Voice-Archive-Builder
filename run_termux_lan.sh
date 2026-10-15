@@ -4,7 +4,12 @@ cd "$(dirname "$0")"
 
 command -v python >/dev/null 2>&1 || pkg install -y python
 command -v ffmpeg >/dev/null 2>&1 || pkg install -y ffmpeg
-command -v fc-match >/dev/null 2>&1 || pkg install -y fontconfig
+# Termux 2.18.x splits fc-match into fontconfig-utils, not fontconfig.
+command -v fc-match >/dev/null 2>&1 || pkg install -y fontconfig-utils
+if ! command -v fc-match >/dev/null 2>&1; then
+  echo "Missing fc-match: install Termux fontconfig-utils (pkg install -y fontconfig-utils)." >&2
+  exit 1
+fi
 
 if ! command -v 7zz >/dev/null 2>&1 && ! command -v 7z >/dev/null 2>&1; then
   pkg install -y 7zip || pkg install -y p7zip

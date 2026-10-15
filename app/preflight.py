@@ -129,7 +129,7 @@ def dependency_status() -> dict[str, Any]:
     if termux and not fontconfig:
         warnings.append(
             "Imported-font ASS verification unavailable: fc-match missing. "
-            "Run 'pkg install -y fontconfig', then restart HSR via 'bash run_termux.sh'."
+            "Run 'pkg install -y fontconfig-utils' (fc-match is not in Termux fontconfig), then restart HSR via 'bash run_termux.sh'."
         )
     if not ffmpeg:
         warnings.append("FFmpeg not found: FLAC building is unavailable until it is installed.")

@@ -68,14 +68,24 @@ class ProjectFontTests(unittest.TestCase):
                         cfg, font_asset_directory(output),
                         english="", chinese="测试")
 
-    def test_termux_launchers_install_required_fontconfig(self):
+    def test_termux_launchers_install_fontconfig_utils_and_verify_executable(self):
         root = Path(__file__).resolve().parents[1]
         for name in ("run_termux.sh", "run_termux_lan.sh"):
             with self.subTest(name=name):
                 script = (root / name).read_text("utf-8")
                 self.assertIn(
-                    "command -v fc-match >/dev/null 2>&1 || pkg install -y fontconfig",
+                    "command -v fc-match >/dev/null 2>&1 || pkg install -y fontconfig-utils",
                     script)
+                self.assertIn("if ! command -v fc-match >/dev/null 2>&1; then", script)
+                self.assertIn("exit 1", script)
+                self.assertNotIn("pkg install -y fontconfig\n", script)
+
+    def test_termux_fontconfig_runtime_guidance_names_providing_package(self):
+        root = Path(__file__).resolve().parents[1]
+        for name in ("app/ass_preview.py", "app/preflight.py", "docs/termux.md"):
+            with self.subTest(name=name):
+                text = (root / name).read_text("utf-8")
+                self.assertIn("fontconfig-utils", text)
 
     def test_import_family_identity_and_deduplicate(self):
         with tempfile.TemporaryDirectory() as td:

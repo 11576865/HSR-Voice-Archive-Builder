@@ -36,13 +36,25 @@ Local control URL: http://127.0.0.1:8765/
 Termux lightweight control server: http://127.0.0.1:8765/
 ```
 
-The launcher also installs Termux `fontconfig` when `fc-match` is missing.
-Actual FFmpeg/libass previews of imported fonts require this font identity
-check; browser geometry previews do not establish genuine ASS font selection.
-If you launched the server before installing fontconfig, run `pkg install
-fontconfig`, check `command -v fc-match`, then restart the server. The installed
-font file remains inside the selected project; no global font installation is
-needed.
+**Termux package split (confirmed on 2.18.1):** `fontconfig` may already be
+installed while `fc-match` is missing. The `fc-match` executable belongs to
+**`fontconfig-utils`**, not the core `fontconfig` package. The launcher installs
+`fontconfig-utils` when `fc-match` is absent and stops with a diagnostic if
+the executable remains unavailable. To repair an already-running installation:
+
+```bash
+pkg install -y fontconfig-utils
+command -v fc-match
+fc-match -V
+python -c 'import shutil; print(shutil.which("fc-match"))'
+```
+
+Stop the existing HSR process and restart via `bash run_termux.sh` (or
+`bash run_termux_lan.sh` in LAN mode). A GitHub pull, browser reload or
+installation of `fontconfig` alone does not provision `fc-match`. Actual
+FFmpeg/libass previews of imported fonts require its identity check; browser
+geometry/SVG previews do not establish genuine ASS font selection. The font
+file stays in the project and need not be installed globally.
 
 Keep Termux running and open `http://127.0.0.1:8765/` in the browser.
 
