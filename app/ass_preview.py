@@ -44,6 +44,9 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
     return SubtitleRenderConfig(
         enable_karaoke=as_bool("enable_karaoke", False),
         karaoke_mode=(str(data.get("karaoke_mode", "k") or "k").lower() if str(data.get("karaoke_mode", "k") or "k").lower() in {"k", "kf", "clip"} else "k"),
+        karaoke_timing=(str(data.get("karaoke_timing", "aligned") or "aligned").lower() if str(data.get("karaoke_timing","aligned") or "aligned").lower() in {"aligned","fixed","cue"} else "aligned"),
+        karaoke_unit=(str(data.get("karaoke_unit","character") or "character").lower() if str(data.get("karaoke_unit","character") or "character").lower() in {"character","word"} else "character"),
+        karaoke_speed_ms=max(10,min(2000,int(data.get("karaoke_speed_ms",300)))),
         enable_frosted_glass=as_bool("enable_translucent_card", False),
         enable_multi_layer_outline=as_bool("enable_multi_layer_outline", False),
         enable_kinetic=as_bool("enable_kinetic", True),
