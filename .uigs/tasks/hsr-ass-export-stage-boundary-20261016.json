@@ -3,7 +3,7 @@
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Ship HSR edited ASS export reliability, complete MKV subtitle replacement, voice-anchored Karaoke and fade transition envelopes with source-aware gap budgets.",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "Fade envelope and budget implementation: author-selected Fade-in/Fade-out outside PCM speech; 60% warning, 100% no-increase block against real minimum adjacent silence; remove old arbitrary caps and auto override.",
+  "current_bounded_work_unit": "Symmetric Fade plus complete-MKV correctness: unify manual/auto/Termux ASS jobs and verify staged MKV embedded ASS Style/Dialogue content before atomic publication.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -29,29 +29,40 @@
       "summary": "60% shortest-gap warning / 100% no-increase enforcement in project save & UI. Remove 5000ms caps, 80/150/300ms automatic Fade replacements, implicit cue-duration clamps. Tests cover status, short gap, old-config reduction, SRT/ASS/cue effects and updated manual behavior.",
       "commit": "faf82053aa93f0ff1115c60be0e1643ccee1499c",
       "validation": "Pending exact-head CI and user acceptance."
+    },
+    {
+      "summary": "Normalized one symmetric Fade duration on save (FastAPI/Lite/project/preview/ASS); single numeric inspector and source-derived 60/100 budget; updated incompatible Fade tests.",
+      "commit": "47484b1a6b731f671713e45d4f0c00cc90bde29a",
+      "validation": "Prior head CI completed failure; exact new head pending."
+    },
+    {
+      "summary": "Added embedded ASS demux-and-semantic-compare publication gate, full FFmpeg regression fixture, unified manual/style auto regeneration with verified MKV and observable job status, across both servers.",
+      "commit": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
+      "validation": "Exact-head CI pending. Existing static/baseline CI failures not all attributable to this PR."
     }
   ],
   "next_units": [
-    "Review exact-head CI; repair only directly attributable failure in a bounded follow-up.",
-    "Verify true rendered FFmpeg/libass temporal fades, karaoke onset and every layer on Android/Termux.",
-    "Validate large project smallest PCM gaps and full MKV re-mux/new subtitle track evidence before merge."
+    "Check exact new-head CI once when resumed; separate introduced defects from known baseline stale tests and visual assertions.",
+    "Verify actual latest embedded ASS payload on long HSR MKV in Termux, plus preservation on injected stream mismatch and failover.",
+    "Measure time to regenerate long bundle: FFmpeg demux readback costs and unchanged audio/background stream behavior.",
+    "Run physical device plus rendered libass verification of symmetric fades and Karaoke onset before merge."
   ],
   "branch": "fix/ass-export-progress-20261016",
   "pr": 185,
-  "latest_durable_commit": "a51e54685b84510717c2fda1caa6e002d1c37400",
+  "latest_durable_commit": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
   "external_validation": {
-    "previous_head": "bc1df83b543d30e5105157a8e986d0a282fead55",
+    "previous_head": "b32b27e6563aca4000bb3e592e3dd1a03eca4d22",
     "previous_ci": "completed_failure",
-    "current_head": "a51e54685b84510717c2fda1caa6e002d1c37400",
+    "current_head": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
     "current_ci": "pending",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
     "actual_ffmpeg_temporal_fade": "pending"
   },
   "blockers": [
-    "No exact-head CI verdict available at this execution boundary.",
-    "No Android/Termux end-to-end edited ASS + verified MKV and true fade proof yet.",
-    "Synthetic single-cue preview parity with full audio-anchored fade envelopes requires acceptance."
+    "Latest exact-head CI pending; prior head failed in multiple UI/baseline assertions and at least one added test.",
+    "No actual device/Termux edited-ASS to MKV end-to-end timing or player acceptance yet.",
+    "Embedded ASS semantic check compares Style/Dialogue rows, not byte-for-byte MKV or actual libass visual proof."
   ],
   "updated_at": "2026-10-16"
 }
