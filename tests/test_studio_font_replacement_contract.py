@@ -41,6 +41,23 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertIn("svg.appendChild(el)",s)
         self.assertNotIn("renderCanvasSubtitleOverlay(data);",s)
 
+    def test_quick_svg_uses_backend_line_widths_and_not_browser_reflow(self):
+        """The browser renders ASS solver line decisions, not fresh HTML wraps."""
+        source=self.html
+        start=source.index("function renderPreviewCanvasSvg(data, options) {")
+        end=source.index("function renderCanvasSubtitleOverlay(data)",start)
+        renderer=source[start:end]
+        backend=(ROOT / "subtitle_layout/preview.py").read_text("utf-8")
+        self.assertIn('"measured_width": width',backend)
+        self.assertIn('"line_height": line_height',backend)
+        self.assertIn("el.setAttribute('textLength',String(measuredWidth));",renderer)
+        self.assertIn("el.setAttribute('lengthAdjust','spacingAndGlyphs');",renderer)
+        self.assertIn("Number(box.y_min)+(height-size)/2",renderer)
+        self.assertIn("el.textContent=String(line.text||'');",renderer)
+        self.assertNotIn("renderCanvasSubtitleOverlay(data);",renderer)
+        self.assertIn("unloadedFonts",source)
+        self.assertIn("不能据此判断实际 ASS 的字号和断行",source)
+
     def test_real_import_twice_without_duplicate_validation_or_false_failure(self):
         """Run the production browser handler: first + repeat + real failure."""
         source=self.html
