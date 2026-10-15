@@ -23,9 +23,9 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertIn("fontImportTransactionActive=false;",fn)
         self.assertIn("if(field)field.value=family;",fn)
         self.assertNotIn("field.dispatchEvent(new Event('input'",fn)
-        self.assertIn("const verified=await renderLibassPreview();",fn)
-        self.assertIn("lastRenderedAssIdentity!==currentLibassPreviewIdentity()",fn)
-        self.assertIn("lastLibassPreviewError",fn)
+        self.assertIn("await verifyImportedFontFace(family,target);",fn)
+        self.assertIn("saveSubtitleLayoutSettings({autosave:true})",fn)
+        self.assertIn("fontChoiceSaved=true;",fn)
         self.assertIn("if(fontImportTransactionActive)return;\n  clearTimeout(liveRealPreviewTimer)",s)
 
     def test_fast_preview_uses_only_one_svg_caption_layer(self):
@@ -76,11 +76,11 @@ const ctx={
  currentLibassPreviewIdentity:()=>JSON.stringify(fields.prevChsFont.value),
  lastRenderedAssIdentity:null,
  lastLibassPreviewError:null,
- renderLibassPreview:()=>{renderCount++;return new Promise(resolve=>{completeRender=ok=>{
-   if(ok)ctx.lastRenderedAssIdentity=ctx.currentLibassPreviewIdentity();
-   else ctx.lastLibassPreviewError='libass font face mismatch';
-   resolve(ok);
+ verifyImportedFontFace:()=>{renderCount++;return new Promise((resolve,reject)=>{completeRender=ok=>{
+   if(ok)resolve(true);
+   else reject(new Error('libass font face mismatch'));
  };});},
+ scheduleLayoutPreviewUpdate:()=>{},
  saveSubtitleLayoutSettings:async()=>{saveCount++;return true;},
  shortError:err=>String(err.message||err)
 };
@@ -97,14 +97,14 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
  assert.equal(uploadCount,1,'double-tap must not upload/validate twice');
  completeRender(true); await first;
  assert.equal(saveCount,1);assert.equal(ctx.fontImportTransactionActive,false);
- assert.match(fields.projectFontImportStatus.textContent,/验证并保存/);
+ assert.match(fields.projectFontImportStatus.textContent,/已保存并通过/);
  assert.equal(fields.projectFontImportBtn.disabled,false);
 
  const repeat=vm.runInContext('importCurrentProjectFont()',ctx);
  await settle();assert.equal(uploadCount,2);assert.equal(renderCount,2);
  completeRender(true);await repeat;
  assert.equal(saveCount,2,'re-import of identical font must remain idempotent');
- assert.match(fields.projectFontImportStatus.textContent,/验证并保存/);
+ assert.match(fields.projectFontImportStatus.textContent,/已保存并通过/);
 
  fields.prevChsFont.value='BeforeFont';
  const bad=vm.runInContext('importCurrentProjectFont()',ctx);
@@ -141,10 +141,10 @@ const settle=()=>new Promise(resolve=>setImmediate(resolve));
         self.assertNotIn("renderCanvasSubtitleOverlay(data);", s)
         self.assertIn("if(!stillCurrent())return;", s)
 
-    def test_appearance_edits_commit_real_libass_preview_not_just_svg(self):
+    def test_layout_appearance_uses_manual_libass_and_effects_retains_scheduler(self):
         s = self.html
         self.assertIn("function scheduleCommittedAppearancePreview()", s)
-        self.assertIn("liveRealPreviewArmed=true;", s)
+        self.assertIn("liveRealPreviewArmed=document.body.dataset.workspaceTask===\'effects\'", s)
         self.assertIn("['prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevEnableCard',", s)
         self.assertIn("document.getElementById(id)?.addEventListener('change',scheduleCommittedAppearancePreview)", s)
 
