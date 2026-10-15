@@ -61,13 +61,12 @@ class BackgroundColorTests(unittest.TestCase):
         for channel, expected in zip(rgb, (0x23, 0x45, 0x67)):
             self.assertLessEqual(abs(channel - expected), 18, (list(rgb), expected))
 
-    def test_frontend_background_wiring(self):
+    def test_studio_uses_fixed_reference_while_backend_accepts_color(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
-        self.assertIn('id="effectPreviewBackgroundColor"', html)
-        self.assertIn("payload.preview_background_color=backgroundColor", html)
-        self.assertIn("backgroundColor===(document.getElementById('effectPreviewBackgroundColor')", html)
-        self.assertIn("actualBackground && actualBackground!==", html)
-        self.assertIn("addEventListener('input',()=>{", html)
+        self.assertNotIn('id="effectPreviewBackgroundColor"', html)
+        self.assertNotIn('id="effectBackgroundImageFile"', html)
+        self.assertIn('use_studio_reference_background:true', html)
+        self.assertIn('id="effectFootageFile"', html)
 
 
 if __name__ == "__main__":
