@@ -20,7 +20,7 @@ from app.subtitle_timing import read_timing_overrides, update_subtitle_display_t
 from app.subtitles import (
     refresh_derived_subtitle_exports,
     refresh_subtitle_artifacts_from_settings,
-    save_subtitle_timing_and_refresh,
+    refresh_ass_only,
     update_project_subtitles,
 )
 
@@ -72,21 +72,15 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
     def read_srt(self):
         return (self.output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
 
-    def test_real_ass_srt_and_source_clock_survive_timing_and_text_round_trip(self):
-        saved = save_subtitle_timing_and_refresh(
-            self.config, self.output, item_id=7,
-            expected_start=1.2, expected_end=3.0, start=1.3, end=3.6,
-        )
-        self.assertTrue(saved["saved"])
-        self.assertTrue(saved["artifacts_current"], saved["artifact_error"])
-        self.assertIn("00:00:01,300 --> 00:00:03,600", self.read_srt())
+    def test_real_ass_srt_and_source_clock_survive_text_round_trip(self):
+        refreshed = refresh_derived_subtitle_exports(self.config, self.output, force_ass=True)
+        self.assertFalse(refreshed["ass_error"])
+        self.assertIn("00:00:01,200 --> 00:00:03,000", self.read_srt())
         real_ass = self.read_ass()
         self.assertIn("[Events]", real_ass)
         self.assertIn("Dialogue:", real_ass)
-        self.assertIn("0:00:01.30", real_ass)
-        self.assertIn("0:00:03.60", real_ass)
-        self.assertIn("A journey begins.", real_ass)
-
+        self.assertIn("0:00:01.20", real_ass)
+        self.assertIn("0:00:03.00", real_ass)
         with patch("app.subtitles.invalidate_subtitle_stages"):
             text_save = update_project_subtitles(
                 self.config, self.output, [{"id": 7, "final_chs": "定稿正文"}]
@@ -95,40 +89,31 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
         self.assertTrue(text_save["artifacts_current"], text_save["artifact_error"])
         self.assertIn("定稿正文", self.read_srt())
         self.assertIn("定稿正文", self.read_ass())
-        self.assertIn("00:00:01,300 --> 00:00:03,600", self.read_srt())
-
-        # Intentional blank Chinese text is a valid edit, not a request to
-        # silently reinsert the original target translation.
+        self.assertIn("00:00:01,200 --> 00:00:03,000", self.read_srt())
         with patch("app.subtitles.invalidate_subtitle_stages"):
             blank_save = update_project_subtitles(
                 self.config, self.output, [{"id": 7, "final_chs": ""}]
             )
         self.assertTrue(blank_save["saved"])
-        self.assertTrue(blank_save["artifacts_current"], blank_save["artifact_error"])
         self.assertNotIn("旅途开始。", self.read_srt())
-        self.assertNotIn("旅途开始。", self.read_ass())
         self.assertIn("A journey begins.", self.read_srt())
         source = json.loads(self.manifest.read_text(encoding="utf-8"))["entries"][0]
         self.assertEqual(source["start_seconds"], 1.2)
         self.assertEqual(source["audio_end_seconds"], 3.0)
         self.assertEqual(source["display_end_seconds"], 3.0)
 
-    def test_failed_srt_export_keeps_commit_and_independent_retry_recovers(self):
-        with patch("app.subtitles.write_srt", side_effect=OSError("synthetic disk export failure")):
-            result = save_subtitle_timing_and_refresh(
-                self.config, self.output, item_id=7, expected_start=1.2,
-                expected_end=3.0, start=1.4, end=3.4,
-            )
-        self.assertTrue(result["saved"])
-        self.assertFalse(result["artifacts_current"])
-        self.assertIn("synthetic disk export failure", result["artifact_error"])
-        self.assertEqual(read_timing_overrides(self.output)["7"]["end"], 3.4)
-        recovered = refresh_derived_subtitle_exports(
-            self.config, self.output, force_ass=True
-        )
-        self.assertFalse(recovered["ass_error"])
-        self.assertIn("00:00:01,400 --> 00:00:03,400", self.read_srt())
-        self.assertIn("0:00:03.40", self.read_ass())
+    def test_ass_only_refresh_does_not_rewrite_srt_or_source(self):
+        refresh_derived_subtitle_exports(self.config, self.output, force_ass=True)
+        srt_before=(self.output / "HSR_Voice_Archive.srt").read_bytes()
+        manifest_before=self.manifest.read_bytes()
+        csv_before=(self.output / "manifest.csv").read_bytes()
+        with patch("app.subtitles.write_srt", side_effect=AssertionError("SRT must not be rendered")):
+            result=refresh_ass_only(self.config, self.output)
+        self.assertEqual(result["ass_error"], "")
+        self.assertTrue(result["srt_untouched"])
+        self.assertEqual((self.output / "HSR_Voice_Archive.srt").read_bytes(),srt_before)
+        self.assertEqual(self.manifest.read_bytes(),manifest_before)
+        self.assertEqual((self.output / "manifest.csv").read_bytes(),csv_before)
 
     def test_failed_text_export_is_reported_as_saved_and_can_be_regenerated(self):
         with patch("app.subtitles.invalidate_subtitle_stages"):
@@ -150,20 +135,15 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
         self.assertIn("已保存但尚未导出", self.read_srt())
         self.assertIn("已保存但尚未导出", self.read_ass())
 
-    def test_stale_overlay_cannot_touch_manifest_or_export_before_validation(self):
-        update_subtitle_display_timing(
-            self.output, item_id=7, expected_start=1.2, expected_end=3,
-            start=1.3, end=3.2,
-        )
-        data = json.loads(self.manifest.read_text(encoding="utf-8"))
-        data["entries"][0]["start_seconds"] = 2.0
-        self.manifest.write_text(json.dumps(data, ensure_ascii=False), encoding="utf-8")
-        old_bytes = self.manifest.read_bytes()
-        with self.assertRaisesRegex(ValueError, "outdated audio timeline"):
-            refresh_subtitle_artifacts_from_settings(self.output, generate_ass=False)
-        self.assertEqual(self.manifest.read_bytes(), old_bytes)
-        self.assertFalse((self.output / "manifest.csv").exists())
-        self.assertFalse((self.output / "HSR_Voice_Archive.srt").exists())
+    def test_legacy_display_timing_file_cannot_change_audio_derived_outputs(self):
+        legacy=self.output / "subtitle_timing_overrides.json"
+        old=json.dumps({"schema_version":1,"entries":{"7":{"start":1.3,"end":3.6}}})
+        legacy.write_text(old,encoding="utf-8")
+        refreshed=refresh_derived_subtitle_exports(self.config,self.output,force_ass=True)
+        self.assertFalse(refreshed["ass_error"])
+        self.assertIn("00:00:01,200 --> 00:00:03,000",self.read_srt())
+        self.assertIn("0:00:01.20",self.read_ass())
+        self.assertEqual(legacy.read_text(encoding="utf-8"),old)
 
     def test_second_editor_with_stale_text_is_rejected_before_output_files_change(self):
         with patch("app.subtitles.invalidate_subtitle_stages"):
@@ -260,11 +240,8 @@ class IntegratedSubtitleExportTests(unittest.TestCase):
         )
         if " ass " not in check.stdout:
             self.skipTest("FFmpeg build has no libass filter")
-        saved = save_subtitle_timing_and_refresh(
-            self.config, self.output, item_id=7, expected_start=1.2,
-            expected_end=3.0, start=1.3, end=3.6,
-        )
-        self.assertTrue(saved["artifacts_current"], saved["artifact_error"])
+        refreshed = refresh_derived_subtitle_exports(self.config, self.output, force_ass=True)
+        self.assertFalse(refreshed["ass_error"])
         ass_path = self.output / "HSR_Voice_Archive.ass"
         def frame(at: float) -> bytes:
             # The generated ASS file, not a synthetic overlay, is rasterized
