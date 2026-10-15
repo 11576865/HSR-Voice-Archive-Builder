@@ -33,7 +33,7 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
-from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports
+from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports, refresh_ass_only
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
 from .local_word_alignment import generate_local_word_alignments, local_alignment_provider_status
@@ -648,9 +648,12 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
         expected_root = str(body.get("expected_project_root") or "").strip()
         if expected_root and expected_root != str(config.root):
             raise ValueError("Subtitle artifact retry project context changed")
-        refreshed = refresh_derived_subtitle_exports(
-            config, output_dir, force_ass=body.get("force_ass") is True
-        )
+        if body.get("ass_only") is True:
+            refreshed = refresh_ass_only(config, output_dir)
+        else:
+            refreshed = refresh_derived_subtitle_exports(
+                config, output_dir, force_ass=body.get("force_ass") is True
+            )
         artifact_error = str(refreshed.get("ass_error") or "")
         auto_job = maybe_queue_complete_mkv(config) if not artifact_error else None
         return {
