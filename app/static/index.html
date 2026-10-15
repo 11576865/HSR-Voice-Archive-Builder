@@ -8610,7 +8610,7 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
   }
 }
 
-async let diagnosticGeometryRefreshPending=false;
+let diagnosticGeometryRefreshPending=false;
 function refreshDiagnosticGuides(){
   // Consume synchronously at the beginning of the next production update.
   // Keep updateLayoutPreview()'s signature stable for all cue/editor clients.
