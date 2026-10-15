@@ -4,7 +4,7 @@ import json
 import os
 import tempfile
 from pathlib import Path
-from typing import Any, Iterable
+from typing import Any, Callable, Iterable
 
 
 def _non_negative_seconds(value: float, name: str) -> float:
@@ -62,13 +62,14 @@ def resolve_timeline(
             gap_role = "chapter" if boundary else "between_voice"
             gap_samples = group_samples if boundary else same_samples
             next_start = audio_end + gap_samples
-            display_end = max(audio_end, next_start - max(1, round(0.001 * sample_rate)))
         else:
             gap_role = ""
             gap_samples = 0
             next_start = audio_end
-            display_end = audio_end
 
+        # Subtitle events end with their PCM voice, never at the next cue.
+        # Inter-voice and chapter gaps remain in the actual audio timeline.
+        display_end = audio_end
         gap_seconds = gap_samples / sample_rate
         segments.append({
             "type": "voice",
@@ -263,6 +264,7 @@ def write_ass(
     target_language: str = "zh-CN",
     overflow_report_path: Path | None = None,
     config: Any | None = None,
+    progress_callback: Callable[[int, int], None] | None = None,
     enable_karaoke: bool | None = None,
     enable_frosted_glass: bool | None = None,
     enable_multi_layer_outline: bool | None = None,
@@ -270,6 +272,7 @@ def write_ass(
     kinetic_options: dict[str, Any] | None = None,
 ) -> None:
     from subtitle_layout import write_ass as _layout_write_ass
+    progress_kwargs = ({"progress_callback": progress_callback} if progress_callback is not None else {})
     _layout_write_ass(
         entries,
         path,
@@ -282,6 +285,7 @@ def write_ass(
         enable_multi_layer_outline=enable_multi_layer_outline,
         enable_kinetic=enable_kinetic,
         kinetic_options=kinetic_options,
+        **progress_kwargs,
     )
 
 

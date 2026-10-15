@@ -55,10 +55,16 @@ def _entry_id(entry: dict[str, Any]) -> str:
 
 
 def source_subtitle_window(entry: dict[str, Any]) -> tuple[float, float]:
-    return (
-        float(entry.get("start_seconds", 0.0)),
-        float(entry.get("display_end_seconds", entry.get("audio_end_seconds", 0.0))),
-    )
+    """Canonical subtitle window: voice samples only, without following gaps.
+
+    Older manifests already contain the true PCM end but often retained a
+    display_end_seconds extended toward the next voice. Prefer the audio end
+    during edits, subtitle regeneration and UI display without rewriting the
+    original manifest/audio timing provenance.
+    """
+    start = float(entry.get("start_seconds", 0.0))
+    end = float(entry.get("audio_end_seconds", entry.get("display_end_seconds", 0.0)))
+    return start, end
 
 
 def read_timing_overrides(output_dir: Path) -> dict[str, dict[str, float]]:

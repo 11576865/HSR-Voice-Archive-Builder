@@ -258,6 +258,25 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
         old_source_paths["wav_source"],
         str(config.reference_language or "auto"),
     )
+    if "subtitle_fade_in_ms" in changes or "subtitle_fade_out_ms" in changes:
+        # Current authoring phase owns one symmetric fade duration. Treat the
+        # incoming value as authoritative; never persist a mismatched pair.
+        fade_ms = int(changes.get(
+            "subtitle_fade_in_ms",
+            changes.get("subtitle_fade_out_ms", config.subtitle_fade_in_ms),
+        ))
+        changes["subtitle_fade_in_ms"] = fade_ms
+        changes["subtitle_fade_out_ms"] = fade_ms
+    if any(name in changes for name in (
+        "subtitle_fade_in_ms", "subtitle_fade_out_ms", "subtitle_enable_kinetic",
+    )):
+        from .subtitle_fade_budget import validate_fade_update
+        validate_fade_update(
+            config,
+            int(changes.get("subtitle_fade_in_ms", config.subtitle_fade_in_ms)),
+            int(changes.get("subtitle_fade_out_ms", config.subtitle_fade_out_ms)),
+            enable_kinetic=bool(changes.get("subtitle_enable_kinetic", config.subtitle_enable_kinetic)),
+        )
     for key, value in changes.items():
         if key not in allowed or key in {"schema_version", "root"}:
             continue
@@ -839,10 +858,12 @@ def project_summary(config: ProjectConfig) -> dict[str, Any]:
     )
     legacy = output_groups["legacy_outputs"]["HSR_Voice_Archive_Black.mkv"]
     legacy.update(role="legacy_independent_video", freshness="unverified")
+    from .subtitle_fade_budget import fade_budget
     return {
         "name": config.name,
         "root": config.root,
         "output_path": str(output),
+        "fade_budget": fade_budget(config),
         "bundle_export": bundle_health,
         "config": asdict(config),
         "has_manifest": manifest.is_file(),

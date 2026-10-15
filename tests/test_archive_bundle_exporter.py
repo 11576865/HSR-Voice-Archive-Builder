@@ -208,6 +208,46 @@ class BundleRealFFmpegTests(unittest.TestCase):
                 exporter.export(audio, ass, target, require_current_ass=True)
             self.assertEqual(target.read_bytes(), previous)
 
+    def test_edited_ass_replaces_embedded_subtitle_and_bad_embedded_track_preserves_old_mkv(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            output = root / "HSR_Voice_Archive_Bundle.mkv"
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            exporter.export(audio, ass, output, require_current_ass=True)
+            original = output.read_bytes()
+
+            edited = ass.read_text(encoding="utf-8")
+            self.assertIn("Test \\N soft subtitle", edited)
+            ass.write_text(
+                edited.replace("Test \\N soft subtitle", "New edited subtitle"),
+                encoding="utf-8",
+            )
+            record_subtitle_export(root, state="current", ass_required=True)
+            with patch.object(exporter, "_verify_embedded_ass",
+                              side_effect=RuntimeError("staged ASS mismatch")):
+                with self.assertRaisesRegex(RuntimeError, "staged ASS mismatch"):
+                    exporter.export(audio, ass, output, require_current_ass=True)
+            self.assertEqual(output.read_bytes(), original,
+                             "Old verified MKV must survive failed replacement")
+
+            exporter.export(audio, ass, output, require_current_ass=True)
+            self.assertNotEqual(output.read_bytes(), original)
+            # Extract the *actual* embedded ASS, not the loose output file.
+            probe = subprocess.run(
+                ["ffmpeg", "-v", "error", "-i", str(output), "-map", "0:s:0",
+                 "-c:s", "copy", "-f", "ass", "-"],
+                capture_output=True, check=True, timeout=45,
+            )
+            content = probe.stdout.decode("utf-8-sig")
+            self.assertIn("New edited subtitle", content)
+            self.assertNotIn("Test \\N soft subtitle", content)
+            self.assertEqual(
+                exporter._ass_content_signature(content),
+                exporter._ass_content_signature(ass.read_text(encoding="utf-8")),
+            )
+
     def test_stale_ass_blocks_new_mkv_and_preserves_previous_valid_archive(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)

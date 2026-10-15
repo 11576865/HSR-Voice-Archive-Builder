@@ -22,7 +22,7 @@ from .credentials import (
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv
+from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -33,7 +33,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, reserve_project_output_writer
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports, refresh_ass_only
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -710,8 +710,8 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_enable_translucent_card=_bool(data.get("enable_translucent_card", str(config.subtitle_enable_translucent_card))),
                 subtitle_enable_multi_layer_outline=_bool(data.get("enable_multi_layer_outline", str(config.subtitle_enable_multi_layer_outline))),
                 subtitle_enable_kinetic=_bool(data.get("enable_kinetic", str(config.subtitle_enable_kinetic))),
-                subtitle_fade_in_ms=max(0, min(5000, _int(data.get("fade_in_ms"), config.subtitle_fade_in_ms))),
-                subtitle_fade_out_ms=max(0, min(5000, _int(data.get("fade_out_ms"), config.subtitle_fade_out_ms))),
+                subtitle_fade_in_ms=max(0, _int(data.get("fade_in_ms"), config.subtitle_fade_in_ms)),
+                subtitle_fade_out_ms=max(0, _int(data.get("fade_in_ms", data.get("fade_out_ms")), config.subtitle_fade_in_ms)),
                 subtitle_use_audio_aware_fade=_bool(data.get("use_audio_aware_fade", str(config.subtitle_use_audio_aware_fade))),
                 subtitle_outline_width=max(0.0, min(24.0, _float(data.get("outline_width"), config.subtitle_outline_width))),
                 subtitle_shadow_depth=max(0.0, min(24.0, _float(data.get("shadow_depth"), config.subtitle_shadow_depth))),
@@ -902,18 +902,24 @@ class Handler(BaseHTTPRequestHandler):
             output = resolve_project_path(config, config.output_dir)
             if output is None:
                 raise ValueError("Project output directory is not configured")
-            if str(data.get("ass_only", "")).lower() in {"true", "1"}:
-                refreshed = refresh_ass_only(config, output)
-            else:
-                refreshed = refresh_derived_subtitle_exports(
-                    config, output, force_ass=str(data.get("force_ass", "")).lower() in {"true", "1"}
-                )
-            artifact_error = str(refreshed.get("ass_error") or "")
+            if _bool(data.get("ass_only")) and config.delivery_mode == "complete":
+                job = queue_ass_regeneration(config, output)
+                self._json({"ok": True, "job": job.id, "delivery": "complete-mkv"})
+                return
+            with reserve_project_output_writer(config.root):
+                if str(data.get("ass_only", "")).lower() in {"true", "1"}:
+                    refreshed = refresh_ass_only(config, output)
+                else:
+                    refreshed = refresh_derived_subtitle_exports(
+                        config, output, force_ass=str(data.get("force_ass", "")).lower() in {"true", "1"}
+                    )
+                artifact_error = str(refreshed.get("ass_error") or "")
+                export_status = read_subtitle_export_health(output)
             self._json({
                 "ok": True, "refreshed": refreshed,
                 "artifacts_current": not bool(artifact_error),
                 "artifact_error": artifact_error,
-                "export_status": read_subtitle_export_health(output),
+                "export_status": export_status,
             })
             return
 
@@ -1542,22 +1548,7 @@ class Handler(BaseHTTPRequestHandler):
             if not (output / "manifest.json").is_file():
                 raise FileNotFoundError("请先完成档案构建")
 
-            def run(report_progress):
-                report_progress("render", "正在生成 ASS 字幕", 0, 1)
-                result = refresh_subtitle_artifacts_from_settings(
-                    output,
-                    source_language=config.source_text_language or "en",
-                    target_language=config.target_language or "zh-CN",
-                    generate_ass=True,
-                    render_config=subtitle_render_config(config),
-                )
-                report_progress("render", "ASS 字幕已生成", 1, 1)
-                return result
-
-            job = create_job(
-                "ass-export", run, with_progress=True,
-                project_root=config.root, project_name=config.name,
-            )
+            job = queue_ass_regeneration(config, output)
             self._json({"ok": True, "job": job.id})
             return
 

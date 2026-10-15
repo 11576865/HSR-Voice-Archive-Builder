@@ -2,9 +2,9 @@ from __future__ import annotations
 
 import csv
 import json
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from .builder import atomic_write_text, write_csv_rows
 from .project import ProjectConfig, resolve_project_path
@@ -48,6 +48,7 @@ class SubtitleEntryAdapter:
         start_seconds: float,
         display_end_seconds: float,
         word_alignments: list[object] | None = None,
+        audio_end_seconds: float | None = None,
         group: str = "",
         filename: str = "",
         source_member_id: str = "",
@@ -58,6 +59,9 @@ class SubtitleEntryAdapter:
         self.chinese = chinese
         self.start_seconds = start_seconds
         self.display_end_seconds = display_end_seconds
+        # Karaoke is bounded by the PCM voice, not the subtitle's hold over
+        # the following inter-voice silence.
+        self.audio_end_seconds = audio_end_seconds
         self.word_alignments = word_alignments
         self.group = group
         self.filename = filename
@@ -247,6 +251,10 @@ def _subtitle_adapters(
                 ),
                 start_seconds=start,
                 display_end_seconds=end,
+                audio_end_seconds=(
+                    max(start, min(end, float(entry["audio_end_seconds"])))
+                    if entry.get("audio_end_seconds") is not None else None
+                ),
                 word_alignments=(
                     None if entry_id in timing_overrides
                     else (entry.get("word_alignments") or entry.get("words") or None)
@@ -283,8 +291,8 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
         enable_frosted_glass=bool(config.subtitle_enable_translucent_card),
         enable_multi_layer_outline=bool(config.subtitle_enable_multi_layer_outline),
         enable_kinetic=bool(config.subtitle_enable_kinetic),
-        fade_in_ms=max(0, min(5000, int(config.subtitle_fade_in_ms))),
-        fade_out_ms=max(0, min(5000, int(config.subtitle_fade_out_ms))),
+        fade_in_ms=max(0, int(config.subtitle_fade_in_ms)),
+        fade_out_ms=max(0, int(config.subtitle_fade_in_ms)),
         use_audio_aware_fade=bool(config.subtitle_use_audio_aware_fade),
         outline_width=max(0.0, min(24.0, float(config.subtitle_outline_width))),
         shadow_depth=max(0.0, min(24.0, float(config.subtitle_shadow_depth))),
@@ -326,6 +334,18 @@ def invalidate_subtitle_stages(config: ProjectConfig) -> None:
         (state_dir / relative).unlink(missing_ok=True)
 
 
+def _ass_artifact_render_config(
+    cfg: SubtitleRenderConfig | None,
+) -> SubtitleRenderConfig | None:
+    """ASS writing is serialization, not a corpus-wide FFmpeg/libass raster audit.
+
+    Keep bounded layout/overflow solving, and let explicit real-ASS previews
+    perform their own authoritative libass measurements. Do not mutate the
+    shared settings object, which other rendering paths may still use.
+    """
+    return replace(cfg, verify_libass_layout=False) if cfg is not None else None
+
+
 def refresh_subtitle_artifacts_from_settings(
     output_dir: Path,
     *,
@@ -335,6 +355,7 @@ def refresh_subtitle_artifacts_from_settings(
     render_config: SubtitleRenderConfig | None = None,
     manifest_data: dict[str, Any] | None = None,
     strict_ass: bool = True,
+    ass_progress: Callable[[int, int], None] | None = None,
 ) -> dict[str, Any]:
     """Apply human overrides as a derived layer without mutating source provenance."""
 
@@ -404,7 +425,8 @@ def refresh_subtitle_artifacts_from_settings(
                 ass_file,
                 source_language=source_language,
                 target_language=target_language,
-                config=render_config,
+                config=_ass_artifact_render_config(render_config),
+                **({"progress_callback": ass_progress} if ass_progress is not None else {}),
             )
         except Exception as exc:
             ass_file.unlink(missing_ok=True)
@@ -494,7 +516,10 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
 
 
 
-def refresh_ass_only(config: ProjectConfig, output_dir: Path) -> dict[str, Any]:
+def refresh_ass_only(
+    config: ProjectConfig, output_dir: Path,
+    *, ass_progress: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
     """Rebuild only the styled ASS artifact from audio-derived timing.
 
     Neither SRT bytes nor manifest/CSV/human text are written in this path.
@@ -521,8 +546,9 @@ def refresh_ass_only(config: ProjectConfig, output_dir: Path) -> dict[str, Any]:
                 adapters, ass_path,
                 source_language=config.source_text_language or "en",
                 target_language=config.target_language or "zh-CN",
-                config=subtitle_render_config(config),
+                config=_ass_artifact_render_config(subtitle_render_config(config)),
                 overflow_report_path=output_dir / "ass_layout_overflow_report.json",
+                **({"progress_callback": ass_progress} if ass_progress is not None else {}),
             )
         except Exception as exc:
             ass_path.unlink(missing_ok=True)

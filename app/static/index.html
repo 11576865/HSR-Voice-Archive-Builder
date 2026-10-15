@@ -3695,17 +3695,13 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 平滑淡入淡出</label>
-            <label class="check"><input type="checkbox" id="prevAudioAwareFade" checked> 按相邻语音间隔自动调整 Fade（启用后覆盖手动时长）</label>
             <div style="display:flex;justify-content:space-between">
-              <label for="prevFadeIn" style="margin:0">淡入时长</label>
+              <label for="prevFadeIn" style="margin:0">淡入／淡出共同时间</label>
               <span id="prevFadeInVal" class="small muted">200 ms</span>
             </div>
-            <input type="range" id="prevFadeIn" min="0" max="5000" value="200" step="10">
-            <div style="display:flex;justify-content:space-between">
-              <label for="prevFadeOut" style="margin:0">淡出时长</label>
-              <span id="prevFadeOutVal" class="small muted">200 ms</span>
-            </div>
-            <input type="range" id="prevFadeOut" min="0" max="5000" value="200" step="10">
+            <input type="number" id="prevFadeIn" min="0" value="200" step="10" inputmode="numeric">
+            <input type="hidden" id="prevFadeOut" value="200">
+            <div id="hsrFadeBudgetStatus" class="small muted" role="status" aria-live="polite">淡出 + 后淡入不得超过最短相邻语音间隔；超过 60% 将提示警告。</div>
             <label class="check"><input type="checkbox" id="prevEnableSoftEntry"> 柔和进入动画</label>
             <div style="display:flex;justify-content:space-between">
               <label for="prevSoftEntryScale" style="margin:0">起始缩放</label>
@@ -5382,7 +5378,15 @@ function jobProgressPercent(job){
     if(job.phase==='audio')return 88;
     if(job.phase==='final'||job.phase==='done')return 100;
   }
-  if(['black-video-export','ass-export','archive-bundle-export'].includes(job.kind))return tot>0?Math.round(ratio*100):5;
+  if(job.kind==='ass-export'){
+    if(job.state==='succeeded')return 100;
+    if(job.phase==='render')return Math.min(20,Math.round(ratio*20));
+    if(job.phase==='prepare-bundle')return 23;
+    if(job.phase==='encode-bundle')return 25+Math.round(ratio*70);
+    if(job.phase==='verify-bundle')return 97;
+    return 3;
+  }
+  if(['black-video-export','archive-bundle-export'].includes(job.kind))return tot>0?Math.round(ratio*100):5;
   return tot>0?Math.round(ratio*100):5;
 }
 function setRunReport(title,body,open=true){
@@ -5395,7 +5399,9 @@ function setRunReport(title,body,open=true){
 function completedReport(job){
   const r=job?.result||{};
   if(job?.kind==='remote-update-apply')return '已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。\n项目来源已更新，请重新构建成品。';
-  if(job?.kind==='ass-export')return 'ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
+  if(job?.kind==='ass-export')return r.delivery==='complete-mkv'
+    ? '新 ASS 已替换完整 MKV 内的旧字幕轨道，逐轨校验与封存已通过：'+(r.output||'HSR_Voice_Archive_Bundle.mkv')
+    : '独立 ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
   if(job?.kind==='black-video-export')return '黑屏 MKV 已生成：'+(r.output||'');
   if(job?.kind==='archive-bundle-export')return '完整 MKV 已生成：'+(r.output||'')+' · 字体附件 '+Number(r.font_attachments||0)+' 个';
   if(['build','quick-build'].includes(job?.kind))return '构建完成。\n成品文件已放至：'+(currentProject?.output_path||'项目 output 目录');
@@ -5557,8 +5563,11 @@ async function watchJob(id){
             setLog(r);
           }else if(x.job.kind==='ass-export'){
             const status=document.getElementById('optionalOutputStatus');
-            if(status)status.textContent='ASS 字幕已生成。';
-            setRunReport('ASS 字幕已生成',completedReport(x.job),false);
+            const isBundle=x.job.result?.delivery==='complete-mkv';
+            if(status)status.textContent=isBundle
+              ? 'MKV 内 ASS 已替换并通过校验；独立 ASS 仅作为中间文件使用。'
+              : '独立 ASS 字幕已生成。';
+            setRunReport(isBundle?'完整 MKV 字幕已更新':'独立 ASS 字幕已生成',completedReport(x.job),false);
           }else if(x.job.kind==='archive-bundle-export'){
             const status=document.getElementById('bundleOutputStatus');
             const result=x.job.result||{};
@@ -7378,7 +7387,7 @@ async function importWordAlignmentFile(file){
 const layoutStyleControlIds=[
   'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV',
   'prevEnableKaraoke','prevKaraokeMode','prevKaraokeTiming','prevKaraokeUnit','prevKaraokeSpeed','prevEnableCard','prevEnableOutline',
-  'prevEnableKinetic','prevFadeIn','prevFadeOut','prevAudioAwareFade',
+  'prevEnableKinetic','prevFadeIn',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
   'prevEnableSoftEntry','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs',
   'prevEnableArchiveHud','prevArchiveHudSize','prevArchiveHudOpacity'
@@ -7466,7 +7475,7 @@ function syncDependentStyleControls(){
   const dependencies=[
     ['prevEnableCard',['prevCardOpacity'],'请先启用半透明底板'],
     ['prevEnableSoftEntry',['prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs'],'请先启用柔和进入动画'],
-    ['prevEnableKinetic',['prevFadeIn','prevFadeOut','prevAudioAwareFade'],'请先启用平滑淡入淡出'],
+    ['prevEnableKinetic',['prevFadeIn'],'请先启用平滑淡入淡出'],
   ];
   for(const [toggleId,ids,hint] of dependencies){
     const active=!!document.getElementById(toggleId)?.checked;
@@ -7477,17 +7486,51 @@ function syncDependentStyleControls(){
       el.title=active?'':hint;
     }
   }
-  // Automatic voice-gap Fade overrides the numerical in/out values.
-  // Disable inactive numbers rather than letting them look effective.
-  const autoFade=!!document.getElementById('prevAudioAwareFade')?.checked;
-  const kinetic=!!document.getElementById('prevEnableKinetic')?.checked;
-  for(const id of ['prevFadeIn','prevFadeOut']){
-    const el=document.getElementById(id);
-    if(!el)continue;
-    el.disabled=!kinetic||autoFade;
-    el.title=!kinetic?'先启用平滑淡入淡出':autoFade?'自动 Fade 正在按语音间隔决定时长；关闭自动后可使用手动数值':'';
-  }
+  // Fade values remain author-selected; no 80/150/300ms override.
+  syncHsrFadeBudget();
   syncHsrKaraokeControls();
+}
+
+function hsrFadeGapMs(){
+  const budget=currentProject?.fade_budget;
+  if(budget&&Number.isFinite(Number(budget.min_gap_ms)))return Math.max(0,Number(budget.min_gap_ms));
+  return Math.max(0,Math.round(Number(currentProject?.config?.same_group_gap??2.5)*1000));
+}
+function syncHsrFadeBudget(message=''){
+  const status=document.getElementById('hsrFadeBudgetStatus');
+  const kinetic=!!document.getElementById('prevEnableKinetic')?.checked;
+  const fade=Number(document.getElementById('prevFadeIn')?.value??0);
+  const gap=hsrFadeGapMs(),total=fade*2;
+  const ratio=gap?total/gap:(total>0?Infinity:0);
+  if(status){
+    status.className='small '+(message?'status-bad':!kinetic?'muted':ratio>1?'status-bad':ratio>0.6?'status-warn':'status-ok');
+    status.textContent=message||(!kinetic
+      ?'淡入淡出未启用；启用后按最短相邻语音间隔校验。'
+      :'最短相邻语音静音 '+gap+' ms；淡入 + 淡出 '+total+' ms，占 '+(Number.isFinite(ratio)?Math.round(ratio*100):'∞')+
+       '%；空白 '+Math.max(0,gap-total)+' ms。'+(ratio>1?' 已超限：只允许缩短，不能继续增加。':ratio>0.6?' 警告：已超过 60%。':''));
+  }
+  return ratio;
+}
+function enforceHsrFadeBudget(input){
+  if(!input)return true;
+  const proposed=Number(input.value),previous=Number(input.dataset.lastValid??'0');
+  if(input.value===''||!Number.isFinite(proposed)||!Number.isInteger(proposed)||proposed<0){
+    input.value=String(previous);
+    syncHsrFadeBudget('淡入淡出时长必须是非负整数毫秒。');
+    return false;
+  }
+  const gap=hsrFadeGapMs();
+  if(document.getElementById('prevEnableKinetic')?.checked &&
+     proposed*2>gap && proposed>previous){
+    input.value=String(previous);
+    syncHsrFadeBudget('已阻止增加：淡出 + 后淡入不能超过最短相邻语音静音 '+gap+' ms。');
+    return false;
+  }
+  input.dataset.lastValid=String(proposed);
+  const mirror=document.getElementById('prevFadeOut');
+  if(mirror)mirror.value=String(proposed);
+  syncHsrFadeBudget();
+  return true;
 }
 
 function subtitleSettingsPayload(){
@@ -7510,8 +7553,8 @@ function subtitleSettingsPayload(){
     enable_multi_layer_outline: !!document.getElementById('prevEnableOutline')?.checked,
     enable_kinetic: !!document.getElementById('prevEnableKinetic')?.checked,
     fade_in_ms: parseInt(document.getElementById('prevFadeIn')?.value || '200',10),
-    fade_out_ms: parseInt(document.getElementById('prevFadeOut')?.value || '200',10),
-    use_audio_aware_fade: !!document.getElementById('prevAudioAwareFade')?.checked,
+    fade_out_ms: parseInt(document.getElementById('prevFadeIn')?.value || '200',10),
+    use_audio_aware_fade: true,
     outline_width: parseFloat(document.getElementById('prevOutlineWidth')?.value || '3'),
     shadow_depth: parseFloat(document.getElementById('prevShadowDepth')?.value || '2'),
     blur_radius: parseFloat(document.getElementById('prevBlurRadius')?.value || '0'),
@@ -7561,8 +7604,9 @@ function loadSubtitleLayoutSettings(config){
   check('prevEnableOutline',config.subtitle_enable_multi_layer_outline);
   check('prevEnableKinetic',config.subtitle_enable_kinetic!==false);
   set('prevFadeIn',config.subtitle_fade_in_ms??200);
-  set('prevFadeOut',config.subtitle_fade_out_ms??200);
-  check('prevAudioAwareFade',config.subtitle_use_audio_aware_fade!==false);
+  set('prevFadeOut',config.subtitle_fade_in_ms??200);
+  const fadeInput=document.getElementById('prevFadeIn');
+  if(fadeInput)fadeInput.dataset.lastValid=fadeInput.value;
   set('prevOutlineWidth',config.subtitle_outline_width??3);
   set('prevShadowDepth',config.subtitle_shadow_depth??2);
   set('prevBlurRadius',config.subtitle_blur_radius??0);
@@ -7632,6 +7676,13 @@ async function runAutoAssRefresh(generation){
       body:JSON.stringify({expected_project_root:project,ass_only:true})
     });
     if(currentProject?.root!==project||generation!==assAutoRefreshGeneration)return;
+    if(result.job){
+      // In complete MKV mode the server owns ASS + container publication in
+      // one progress-visible job. A loose ASS is not a completed product.
+      if(status){status.textContent='样式已保存，正在后台将新 ASS 封入 MKV 并验证旧字幕已替换…';status.className='small muted';}
+      void watchJob(result.job);
+      return;
+    }
     if(result.export_status)layoutCueApplyExportHealth(result.export_status);
     const problem=String(result.artifact_error||result.refreshed?.ass_error||'');
     if(status){
@@ -8710,7 +8761,7 @@ async function updateLayoutPreview() {
   syncRangeLabel('prevBlurRadius','prevBlurRadiusVal',v=>v.toFixed(1));
   syncRangeLabel('prevCardOpacity','prevCardOpacityVal',v=>Math.round(v)+'%');
   syncRangeLabel('prevFadeIn','prevFadeInVal',v=>Math.round(v)+' ms');
-  syncRangeLabel('prevFadeOut','prevFadeOutVal',v=>Math.round(v)+' ms');
+  syncHsrFadeBudget();
   syncRangeLabel('prevSoftEntryScale','prevSoftEntryScaleVal',v=>v.toFixed(1).replace(/\.0$/,'')+'%');
   syncRangeLabel('prevSoftEntryBlur','prevSoftEntryBlurVal',v=>v.toFixed(1));
   syncRangeLabel('prevSoftEntryMs','prevSoftEntryMsVal',v=>Math.round(v)+' ms');
@@ -9507,6 +9558,7 @@ document.getElementById('layoutAuditCancelBtn')?.addEventListener('click',()=>{
 ['prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV','prevFadeIn','prevFadeOut','prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs','prevArchiveHudSize','prevArchiveHudOpacity','prevKaraokeSpeed'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',queueLiveRealPreview);
   document.getElementById(id)?.addEventListener('input',()=>{
+    if(id==='prevFadeIn'&&!enforceHsrFadeBudget(document.getElementById(id)))return;
     previewPreset='custom';
     markSubtitleSettingsDirty();
     invalidateLayoutBatchAudit();
@@ -9541,7 +9593,7 @@ function scheduleCommittedAppearancePreview(){
   document.getElementById(id)?.addEventListener('change',scheduleCommittedAppearancePreview);
 });
 
-['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevAudioAwareFade','prevEnableSoftEntry','prevEnableArchiveHud'].forEach(id=>{
+['prevEnableKinetic','prevEnableKaraoke','prevEnableCard','prevEnableOutline','prevEnableSoftEntry','prevEnableArchiveHud'].forEach(id=>{
   document.getElementById(id)?.addEventListener('change',()=>{
     previewPreset='custom';
     markSubtitleSettingsDirty();

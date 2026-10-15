@@ -22,7 +22,7 @@ from .credentials import (
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv
+from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -32,7 +32,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
 from .human_review import import_review_txt
-from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs
+from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, reserve_project_output_writer
 from .subtitles import get_project_subtitles, parse_time_range_str, refresh_subtitle_artifacts_from_settings, subtitle_render_config, update_project_subtitles, save_subtitle_timing_and_refresh, refresh_derived_subtitle_exports, refresh_ass_only
 from .subtitle_export_status import read_subtitle_export_health
 from .word_alignment import alignment_diagnostics, get_word_alignment, import_word_alignments
@@ -648,19 +648,30 @@ async def api_retry_subtitle_artifacts(project_id: str, request: Request):
         expected_root = str(body.get("expected_project_root") or "").strip()
         if expected_root and expected_root != str(config.root):
             raise ValueError("Subtitle artifact retry project context changed")
-        if body.get("ass_only") is True:
-            refreshed = refresh_ass_only(config, output_dir)
-        else:
-            refreshed = refresh_derived_subtitle_exports(
-                config, output_dir, force_ass=body.get("force_ass") is True
-            )
-        artifact_error = str(refreshed.get("ass_error") or "")
+        if body.get("ass_only") is True and config.delivery_mode == "complete":
+            # Schedule the exact same full-MKV job as the manual generate
+            # action; never acknowledge only a loose ASS as final product.
+            job = queue_ass_regeneration(config, output_dir)
+            return {"ok": True, "job": job.id, "delivery": "complete-mkv"}
+        # Acquire the project's output-writer slot before yielding the ASGI
+        # event loop; ordinary jobs are excluded until the worker completes.
+        with reserve_project_output_writer(config.root):
+            if body.get("ass_only") is True:
+                refreshed = await run_in_threadpool(refresh_ass_only, config, output_dir)
+            else:
+                refreshed = await run_in_threadpool(
+                    refresh_derived_subtitle_exports,
+                    config, output_dir, force_ass=body.get("force_ass") is True,
+                )
+            artifact_error = str(refreshed.get("ass_error") or "")
+            export_status = read_subtitle_export_health(output_dir)
+        # Follow-up mux is submitted only AFTER releasing the output slot.
         auto_job = maybe_queue_complete_mkv(config) if not artifact_error else None
         return {
             "ok": True, "refreshed": refreshed, "auto_bundle_job": auto_job,
             "artifacts_current": not bool(artifact_error),
             "artifact_error": artifact_error,
-            "export_status": read_subtitle_export_health(output_dir),
+            "export_status": export_status,
         }
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
@@ -771,8 +782,8 @@ async def api_subtitle_layout_settings(request: Request):
                 "enable_multi_layer_outline", config.subtitle_enable_multi_layer_outline
             ),
             subtitle_enable_kinetic=as_bool("enable_kinetic", config.subtitle_enable_kinetic),
-            subtitle_fade_in_ms=max(0, min(5000, int(data.get("fade_in_ms", config.subtitle_fade_in_ms)))),
-            subtitle_fade_out_ms=max(0, min(5000, int(data.get("fade_out_ms", config.subtitle_fade_out_ms)))),
+            subtitle_fade_in_ms=max(0, int(data.get("fade_in_ms", config.subtitle_fade_in_ms))),
+            subtitle_fade_out_ms=max(0, int(data.get("fade_in_ms", data.get("fade_out_ms", config.subtitle_fade_in_ms)))),
             subtitle_use_audio_aware_fade=as_bool(
                 "use_audio_aware_fade", config.subtitle_use_audio_aware_fade
             ),
@@ -1852,22 +1863,7 @@ def api_output_ass():
         if not (output / "manifest.json").is_file():
             raise FileNotFoundError("请先完成档案构建")
 
-        def run(report_progress):
-            report_progress("render", "正在生成 ASS 字幕", 0, 1)
-            result = refresh_subtitle_artifacts_from_settings(
-                output,
-                source_language=config.source_text_language or "en",
-                target_language=config.target_language or "zh-CN",
-                generate_ass=True,
-                render_config=subtitle_render_config(config),
-            )
-            report_progress("render", "ASS 字幕已生成", 1, 1)
-            return result
-
-        job = create_job(
-            "ass-export", run, with_progress=True,
-            project_root=config.root, project_name=config.name,
-        )
+        job = queue_ass_regeneration(config, output)
         return {"ok": True, "job": job.id}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)

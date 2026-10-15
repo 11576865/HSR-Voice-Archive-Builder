@@ -92,6 +92,39 @@ class ArchiveBundleExporter:
         )
         return json.loads(p.stdout)
 
+    @staticmethod
+    def _ass_content_signature(content: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
+        """Compare the actual selectable ASS styles and events, not just codec.
+
+        Matroska/FFmpeg may rewrite headers and reorder event packets, but must
+        preserve every style and rendered event, including original text and
+        karaoke/animation override tags.
+        """
+        lines = content.lstrip("\ufeff").splitlines()
+        styles = sorted(line.strip() for line in lines if line.startswith("Style: "))
+        events = sorted(line.strip() for line in lines if line.startswith("Dialogue: "))
+        return tuple(styles), tuple(events)
+
+    def _verify_embedded_ass(self, mkv: Path, source: Path) -> None:
+        expected = self._ass_content_signature(source.read_text(encoding="utf-8-sig"))
+        if not expected[1]:
+            raise ValueError("Cannot certify an MKV with no source ASS Dialogue events")
+        try:
+            probe = subprocess.run(
+                [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
+                 "-i", str(mkv), "-map", "0:s:0", "-c:s", "copy",
+                 "-f", "ass", "-"],
+                capture_output=True, check=True, timeout=180,
+            )
+        except (subprocess.SubprocessError, OSError) as exc:
+            raise RuntimeError("MKV 内嵌 ASS 回读失败；保留上一个成品") from exc
+        actual = self._ass_content_signature(probe.stdout.decode("utf-8-sig"))
+        if actual != expected:
+            raise RuntimeError(
+                "MKV 内的 ASS 字幕文本、时间、样式或特效与最新生成的 ASS 不一致；"
+                "拒绝覆盖旧 MKV"
+            )
+
     def export(
         self, flac: str | Path, ass: str | Path, output: str | Path,
         *, fonts_dir: Path | None = None, include_fonts: bool = True,
@@ -300,6 +333,10 @@ class ArchiveBundleExporter:
                 expected_subtitles=2 if has_srt else 1,
                 expected_audio=1 + len(chapters),
             )
+            if require_current_ass:
+                # A codec/stream-count check cannot detect an old subtitle
+                # track accidentally carried into a new container.
+                self._verify_embedded_ass(temporary, subtitles)
             assert_sources_unchanged()
             # A user may change the authoritative subtitle text during a long
             # mux. Reject the now-stale temporary MKV rather than replacing the
