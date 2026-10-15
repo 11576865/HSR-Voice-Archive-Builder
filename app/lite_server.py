@@ -20,6 +20,7 @@ from .credentials import (
     save_translation_credentials, test_saved_translation_credentials,
 )
 from .black_video_exporter import BlackVideoExporter
+from .archive_audit import audit_archive, verify_archive_source_audio
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
@@ -338,6 +339,13 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/project/active/archive/audit":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("Project output directory is not configured")
+            self._json({"ok": True, "audit": audit_archive(output)})
+            return
         if path == "/api/subtitle-layout/project-fonts":
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
@@ -525,6 +533,23 @@ class Handler(BaseHTTPRequestHandler):
             self._error(exc)
 
     def _handle_api_post(self, path: str, data: dict[str, str]) -> None:
+        if path == "/api/project/active/archive/verify-sources":
+            config = _active_config()
+            assert_project_idle(config.root)
+            output = resolve_project_path(config, config.output_dir)
+            if output is None or not (output / "manifest.json").is_file():
+                raise FileNotFoundError("请先构建档案；尚不存在 manifest.json")
+            job = create_job(
+                "archive-verify",
+                lambda report_progress: verify_archive_source_audio(
+                    config, output, report_progress=report_progress,
+                ),
+                with_progress=True,
+                project_root=str(config.root),
+                project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
+            return
         if path == "/api/translation/credentials":
             save_translation_credentials(
                 data.get("provider", "custom"), data.get("base_url", ""),
