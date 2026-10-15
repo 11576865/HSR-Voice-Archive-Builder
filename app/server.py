@@ -862,7 +862,9 @@ async def api_subtitle_layout_render_preview(request: Request):
         word_alignments = data.get("word_alignments")
         if not isinstance(word_alignments, list):
             word_alignments = None
+        layout_capture: dict[str, object] = {}
         png = render_ass_preview_png(
+            layout_capture=layout_capture,
             english_text=str(data.get("english_text") or ""),
             chinese_text=str(data.get("chinese_text") or ""),
             source_language=str(data.get("source_language") or "en"),
@@ -874,11 +876,15 @@ async def api_subtitle_layout_render_preview(request: Request):
             font_dir=_active_preview_font_dir(),
             use_studio_reference_background=data.get("use_studio_reference_background") is True,
         )
-        return Response(
-            content=png,
-            media_type="image/png",
-            headers={"X-HSR-Preview-Renderer": "ffmpeg-libass"},
-        )
+        headers_out = {"X-HSR-Preview-Renderer": "ffmpeg-libass"}
+        # Bounded, optional provenance; no second render and no change to PNG API.
+        if layout_capture:
+            encoded = base64.b64encode(json.dumps(
+                layout_capture, ensure_ascii=False, separators=(",", ":")
+            ).encode("utf-8")).decode("ascii")
+            if len(encoded) <= 6000:
+                headers_out["X-HSR-Verified-Layout"] = encoded
+        return Response(content=png, media_type="image/png", headers=headers_out)
     except Exception as exc:
         return JSONResponse(
             {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
