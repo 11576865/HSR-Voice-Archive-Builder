@@ -53,8 +53,11 @@ def fade_budget(config: Any) -> dict[str, Any]:
                 source = "actual_minimum_adjacent_pcm"
         except (OSError, ValueError, TypeError, json.JSONDecodeError):
             pass
+    # HSR's current authoring contract has one symmetric Fade duration.
+    # Legacy projects may retain an older unequal fade_out_ms in their JSON,
+    # but preview/ASS use the incoming value on both sides.
     incoming = int(config.subtitle_fade_in_ms)
-    outgoing = int(config.subtitle_fade_out_ms)
+    outgoing = incoming
     ratio = (incoming + outgoing) / gap_ms if gap_ms else (
         float("inf") if incoming + outgoing > 0 else 0.0
     )
@@ -81,7 +84,7 @@ def validate_fade_update(
     incoming = int(fade_in_ms)
     outgoing = int(fade_out_ms)
     proposed = incoming + outgoing
-    old = int(config.subtitle_fade_in_ms) + int(config.subtitle_fade_out_ms)
+    old = int(config.subtitle_fade_in_ms) * 2
     if enable_kinetic and proposed > data["min_gap_ms"] and proposed > old:
         raise ValueError(
             "淡出 + 后淡入不能超过项目最短相邻语音间隔 "
