@@ -3695,7 +3695,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 平滑淡入淡出</label>
-            <label class="check"><input type="checkbox" id="prevAudioAwareFade" checked> 根据相邻语音间隔自动调整 Fade</label>
+            <label class="check"><input type="checkbox" id="prevAudioAwareFade" checked> 按相邻语音间隔自动调整 Fade（启用后覆盖手动时长）</label>
             <div style="display:flex;justify-content:space-between">
               <label for="prevFadeIn" style="margin:0">淡入时长</label>
               <span id="prevFadeInVal" class="small muted">200 ms</span>
@@ -3722,7 +3722,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevSoftEntryMsVal" class="small muted">160 ms</span>
             </div>
             <input type="range" id="prevSoftEntryMs" min="0" max="5000" value="160" step="10">
-            <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：轻微缩放与 Blur 在短时间内回到正常值，不加入弹跳。</div>
+            <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：从所选起始缩放与 Blur 过渡到正常值。高倍率与长时长可能超过字幕区域，最终以真实 ASS 验收为准。</div>
           </section>
             </div>
           </details>
@@ -3784,7 +3784,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </details>
 
           <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
-            <summary><span>档案增强</span><small>Archive HUD</small></summary>
+            <summary><span>档案信息叠加</span><small>可选 HUD</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableArchiveHud"> Archive HUD</label>
@@ -3804,7 +3804,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </details>
         </div>
 <details class="hsr-preview-media-disclosure" data-studio-scope="effects">
-  <summary>预览短视频 <small>可选</small></summary>
+  <summary>动态效果验收视频 <small>可选素材</small></summary>
   <div class="hsr-footage-picker" data-studio-scope="effects" role="group" aria-label="动态预览背景视频或纯色">
   <label for="effectFootageFile">动态预览背景（可选本地视频）</label>
   <input id="effectFootageFile" type="file" accept="video/mp4,video/webm,video/quicktime,video/x-matroska,.mkv,.mov" />
@@ -3812,7 +3812,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除视频，恢复红云参考图</button>
-  <p class="small muted">可选择最多 24 MiB 的短视频，仅用于真实特效预览。未选择视频时使用唯一的红云参考图；最终 MKV 的背景在导出页面另行设置。</p>
+  <p class="small muted">可选择最多 24 MiB 的短视频，仅作 0.5–8 秒 FFmpeg/libass 动画效果验收；背景素材不产生动画，真正效果由上方参数与 ASS 标签决定。未选择视频时使用红云参考图；最终 MKV 背景仍在导出页设置。</p>
 </div>
 
 </details>
