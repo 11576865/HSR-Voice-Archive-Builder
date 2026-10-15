@@ -44,6 +44,29 @@ class ProjectFontTests(unittest.TestCase):
                 font_asset_directory(root) / added["filename"],
             )
 
+    def test_reimport_same_family_replaces_old_asset_and_fontconfig_choice(self):
+        # Different bytes, identical SFNT family: keeping both gives fontsdir
+        # two eligible faces, and libass may select the previous SHA filename.
+        with tempfile.TemporaryDirectory() as td:
+            output = Path(td)
+            original = fake_name_table_font("Replacement Family")
+            revised = original + b"\\x00"  # same internal family, different SHA
+            first = import_project_font(
+                output, "first.ttf", base64.b64encode(original).decode("ascii"))
+            second = import_project_font(
+                output, "second.ttf", base64.b64encode(revised).decode("ascii"))
+            self.assertNotEqual(first["filename"], second["filename"])
+            self.assertEqual(second["replaced_files"], [first["filename"]])
+            self.assertFalse((font_asset_directory(output) / first["filename"]).exists())
+            self.assertEqual(len(list_project_fonts(output)), 1)
+            selected = project_font_for_family(output, "replacement family")
+            self.assertEqual(selected, font_asset_directory(output) / second["filename"])
+            self.assertEqual(selected.read_bytes(), revised)
+            repeated = import_project_font(
+                output, "again.ttf", base64.b64encode(revised).decode("ascii"))
+            self.assertEqual(repeated["replaced_files"], [])
+            self.assertEqual(len(list_project_fonts(output)), 1)
+
     def test_reject_non_fonts_and_invalid_metadata(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
