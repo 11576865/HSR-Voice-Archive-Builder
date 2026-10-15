@@ -171,6 +171,8 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.s
   padding:12px!important;margin:0!important;border-radius:0!important;
   background:var(--v4-bg)!important;
 }
+/* The Timeline remains available in Effects, but is not part of Layout UI. */
+#subtitleLayoutPreviewCard[data-studio-mode="style"] #layoutTimelinePanel{display:none!important}
 #subtitleLayoutPreviewCard .layout-timeline-viewport{overflow-x:hidden;touch-action:pan-y}
 #subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-head{
   position:static!important;top:auto!important;z-index:auto!important;
