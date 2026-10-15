@@ -111,6 +111,19 @@ class TestAdvancedTypography(unittest.TestCase):
         self.assertIn(r"\fscx300\fscy300",ass)
         self.assertIn(r"\blur12\t(0,2500,",ass)
 
+    def test_manual_fade_is_not_secretly_capped_at_quarter_cue(self):
+        from subtitle_layout.kinetic_motion import generate_kinetic_tags
+        self.assertIn(r"\fad(2400,2100)",generate_kinetic_tags(
+            6.0,fade_in_ms=2400,fade_out_ms=2100,
+        ))
+        self.assertIn(r"\fad(1000,1000)",generate_kinetic_tags(
+            2.0,fade_in_ms=1500,fade_out_ms=1500,
+        ))
+        # Audio gap automation is a *different* mode with explicit priority.
+        self.assertIn(r"\fad(80,80)",generate_kinetic_tags(
+            6.0,fade_in_ms=2400,fade_out_ms=2100,voice_gap_seconds=0.1,
+        ))
+
     def test_karaoke_without_word_timing_degrades_to_plain_text(self):
         english = "May this journey lead us starward."
         chinese = "愿此行，终抵群星。"
