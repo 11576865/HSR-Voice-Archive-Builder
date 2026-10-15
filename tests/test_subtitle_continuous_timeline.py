@@ -14,7 +14,7 @@ import unittest
 
 @unittest.skipUnless(shutil.which("node"), "Node is required for timeline interaction tests")
 class SubtitleContinuousTimelineTests(unittest.TestCase):
-    def test_timeline_zoom_navigation_pointer_drag_and_explicit_save(self):
+    def test_read_only_timeline_zoom_and_navigation_without_time_writes(self):
         html=(Path(__file__).resolve().parents[1]/"app/static/index.html").read_text(encoding="utf-8")
         start=html.index("// Shared immutable *complete* subtitle snapshot")
         end=html.index("async function updateLayoutPreview()",start)
@@ -72,34 +72,11 @@ const act=text=>vm.runInContext(text,context);
   assert.match(ruler,/layout-timeline-tick/,'time ruler must be a real viewport');
   assert.match(clips,/data-timeline-cue="11"/);
   assert.match(clips,/data-timeline-cue="12"/);
-  assert.match(clips,/data-timeline-edge="start"/);
+  assert.doesNotMatch(clips,/data-timeline-edge=/,'audio time is not draggable');
   assert.equal(node('layoutTimelinePan').disabled,false,'pan enabled for long archive');
-  assert.equal(node('layoutTimelineScope').textContent.includes('可编辑显示时间'),true);
-  assert.equal(node('layoutCueTimingSaveBtn').disabled,true);
-  const start=act('layoutTimelineWindowStart'),span=act('layoutTimelineWindowSeconds');
-  const pointer={target:{closest:s=>s==='[data-timeline-edge]'?{dataset:{timelineEdge:'end'}}:null},pointerId:21,preventDefault(){}};
-  act('layoutTimelinePointerDown('+ '({target:{closest:s=>s==="[data-timeline-edge]"?{dataset:{timelineEdge:"end"}}:null},pointerId:21,preventDefault(){}})' +')');
-  // The pointer is within the snap threshold of the following subtitle's 10.4s start.
-  const x=(10.37-start)/span*600;
-  context.moveEvent={pointerId:21,clientX:x,preventDefault(){}};
-  act('layoutTimelinePointerMove(moveEvent)');
-  assert.equal(Number(act('layoutTimingState(layoutCueRow(11)).end')),10.4,'snap to neighboring boundary');
-  assert.equal(sourceRows[0].end,10,'drag must not persist or mutate server-backed row yet');
-  assert.equal(node('layoutCueTimingSaveBtn').disabled,false);
-  act('layoutTimelinePointerUp({pointerId:21})');
-  const result=act('saveLayoutCueTiming()');
-  assert.equal(posted.length,1);
-  assert.equal(posted[0].payload.expected_end,10);
-  assert.equal(posted[0].payload.end,10.4);
-  assert.equal(posted[0].payload.expected_project_root,'/project/root');
-  posted.shift().resolve({
-    timing:{id:'11',start:8,end:10.4,timing_modified:true},
-    refreshed:{ass_error:''}
-  });
-  assert.equal(await result,true);
-  assert.equal(sourceRows[0].end,10.4,'only explicit Save updates effective project time');
-  assert.equal(node('layoutCueTimingSaveBtn').disabled,true);
-
+  assert.match(node('layoutTimelineScope').textContent,/可查看|时间轴|字幕/);
+  assert.equal(posted.length,0,'read-only timeline must never write timing');
+  assert.equal(sourceRows[0].end,10,'source audio boundary must stay unchanged');
   act('layoutTimelinePanBy(150)');
   assert.equal(act('layoutTimelineFollowSelected'),false);
   assert.ok(act('layoutTimelineWindowStart')>50);
@@ -111,7 +88,8 @@ const act=text=>vm.runInContext(text,context);
   act('layoutTimelineWindowSeconds=60;layoutTimelineWindowStart=layoutTimelineClampStart('+before+');layoutTimelineRender()');
   assert.ok(node('layoutTimelineRuler').innerHTML.includes('layout-timeline-tick'));
   assert.ok(node('layoutTimelineTracks').innerHTML.length<15000,'rendered DOM remains bounded');
-  process.stdout.write('multi-cue timeline: select, snap, zoom, pan, explicit persisted edit PASS\n');
+  assert.equal(posted.length,0);
+  process.stdout.write('multi-cue read-only timeline: select, zoom and pan PASS\n');
 })().catch(e=>{console.error(e);process.exitCode=1});
 """
         script="const source = "+json.dumps(source,ensure_ascii=False)+";\n"+harness
