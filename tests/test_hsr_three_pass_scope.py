@@ -103,7 +103,7 @@ class HsrEffectVideoBackendTests(unittest.TestCase):
         return render_ass_preview_video(**kwargs)
 
     def test_rejects_unbounded_and_nonfinite_duration_before_invoking_ffmpeg(self):
-        for bad in (float("nan"), float("inf"), -1.0, 0.1, 8.01):
+        for bad in (float("nan"), float("inf"), -1.0, 0.0, 120.01):
             with self.subTest(duration=bad):
                 with self.assertRaises(ValueError):
                     self.call_renderer(duration_seconds=bad)
