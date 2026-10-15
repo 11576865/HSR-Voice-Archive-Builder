@@ -783,9 +783,9 @@ def touch_safety_check(browser, base_url, report):
     # The old preset accordion is intentionally hidden. Exercise a visible
     # category and then a direct numeric edit, never force-click hidden UI.
     style_sections=page.locator('details[name="hsr-style-parameter-groups"]')
-    ensure(style_sections.count()==4,"Style controls unexpectedly lost a section")
-    style_sections.nth(3).locator(":scope > summary").click()
-    ensure(style_sections.nth(3).evaluate("(el)=>el.open"),
+    ensure(style_sections.count()==3,"Layout must expose only font, position and readability sections")
+    style_sections.nth(2).locator(":scope > summary").click()
+    ensure(style_sections.nth(2).evaluate("(el)=>el.open"),
            "Appearance section cannot be expanded")
     # Font size lives under Typography: return to that visible accordion
     # before exercising its numeric input.
@@ -798,6 +798,19 @@ def touch_safety_check(browser, base_url, report):
            "Returning to typography created multiple long expanded sections")
     ensure(page.locator("#prevChsSizeTouchNumber").is_visible(),
            "Numeric editor disappeared after accordion navigation")
+    style_sections.nth(1).locator(":scope > summary").click()
+    ensure(page.locator("#prevPrimaryShare").is_visible(),
+           "60/40 primary/Chinese share is still hidden on touch")
+    ensure(page.locator("#prevPrimaryShareTouchNumber").is_visible(),
+           "60/40 split cannot be entered numerically")
+    share=page.locator("#prevPrimaryShareTouchNumber")
+    share.fill("65")
+    share.dispatch_event("change")
+    ensure(page.locator("#prevPrimaryShare").input_value()=="65",
+           "Touch split input not wired to layout state")
+    page.wait_for_function("""() => document.getElementById('prevPrimaryShareVal')
+      .textContent.trim()==='65% / 35%'""",timeout=12000)
+    style_sections.first.locator(":scope > summary").click()
     stepper=page.locator("#prevChsSizeTouchNumber").locator("xpath=..")
     stepper.get_by_role("button",name="中文基础字号（数值调整） 增加").click()
     ensure(page.locator("#prevChsSize").input_value()=="49",

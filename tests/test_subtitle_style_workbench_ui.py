@@ -63,7 +63,6 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
         for title in (
             "文字与字体",
             "位置与安全区",
-            "预设",
             "外观与可读性",
             "动效",
             "逐词同步",

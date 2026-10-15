@@ -40,7 +40,8 @@ function node(id) {
       classList: {
         add: cls => classes.add(cls),
         remove: cls => classes.delete(cls),
-        contains: cls => classes.has(cls)
+        contains: cls => classes.has(cls),
+        toggle: (cls,force) => { const add=force===undefined?!classes.has(cls):!!force; if(add)classes.add(cls);else classes.delete(cls);return add; }
       },
       setAttribute(name, value) { this.attributes[name] = value; }
     });

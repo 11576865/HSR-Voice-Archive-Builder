@@ -403,7 +403,7 @@ class QuickBuildUiTests(unittest.TestCase):
 
         self.assertIn('class="row preview-copy-fields"', html)
         self.assertIn('class="preview-controls"', html)
-        self.assertEqual(html.count('class="inspector-group"'), 7)
+        self.assertEqual(html.count('class="inspector-group"'), 6)
         self.assertIn('id="prevOutlineWidth"', html)
         self.assertIn('id="prevShadowDepth"', html)
         self.assertIn('id="prevBlurRadius"', html)
