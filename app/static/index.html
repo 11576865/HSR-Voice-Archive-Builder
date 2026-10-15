@@ -9052,7 +9052,7 @@ function setHsrStudioMode(mode){
   const root=document.getElementById('subtitleLayoutPreviewCard');
   if(!root)return;
   const next=mode==='effects'?'effects':'style';
-  setStudioV3Pane(next==='effects'?'cue':'inspector');
+  setStudioV3Pane('inspector');
   // Shared project-cue browser serves both workbenches; no parallel timeline.
   const sharedRail=document.getElementById('layoutCorpusRail');
   if(sharedRail?.contains(document.activeElement))
