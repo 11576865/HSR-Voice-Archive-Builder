@@ -1853,15 +1853,29 @@ def api_output_ass():
             raise FileNotFoundError("请先完成档案构建")
 
         def run(report_progress):
-            report_progress("render", "正在生成 ASS 字幕", 0, 1)
+            # FFmpeg/libass checks each bilingual cue. Expose actual progress
+            # instead of showing 0/1 until the entire archive finishes.
+            totals = {"count": 0}
+
+            def report_ass_progress(current: int, total: int) -> None:
+                totals["count"] = total
+                report_progress(
+                    "render",
+                    f"正在校验真实字幕字形：{current}/{total} 条",
+                    current, total,
+                )
+
+            report_progress("prepare", "正在加载字幕并准备真实字形校验", 0, 0)
             result = refresh_subtitle_artifacts_from_settings(
                 output,
                 source_language=config.source_text_language or "en",
                 target_language=config.target_language or "zh-CN",
                 generate_ass=True,
                 render_config=subtitle_render_config(config),
+                ass_progress=report_ass_progress,
             )
-            report_progress("render", "ASS 字幕已生成", 1, 1)
+            completed = max(totals["count"], 1)
+            report_progress("render", "ASS 字幕已生成", completed, completed)
             return result
 
         job = create_job(
