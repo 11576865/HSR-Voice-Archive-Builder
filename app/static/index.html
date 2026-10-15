@@ -7122,7 +7122,7 @@ function showGeometryPreview(){
   const mode=document.querySelector('.layout-preview-evidence')?.dataset.previewEvidence||'rendering';
   setPreviewEvidence(mode);
   // A diagnostic-only request must not abort or restart the true-ink renderer.
-  if(geometryExplicitlyRequested)void updateLayoutPreview({geometryOnly:true});
+  if(geometryExplicitlyRequested)void refreshDiagnosticGuides();
   const status=document.getElementById('libassPreviewStatus');
   if(status)status.textContent=geometryExplicitlyRequested
     ?'辅助线已叠加于真实帧；安全区使用画布坐标，估算文字框不是 libass 实际字形边界。'
@@ -8610,7 +8610,16 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
   }
 }
 
-async function updateLayoutPreview({geometryOnly=false}={}) {
+async let diagnosticGeometryRefreshPending=false;
+function refreshDiagnosticGuides(){
+  // Consume synchronously at the beginning of the next production update.
+  // Keep updateLayoutPreview()'s signature stable for all cue/editor clients.
+  diagnosticGeometryRefreshPending=true;
+  return updateLayoutPreview();
+}
+async function updateLayoutPreview() {
+  const geometryOnly=diagnosticGeometryRefreshPending;
+  diagnosticGeometryRefreshPending=false;
   syncHsrTouchNumericEditors();
   if(currentProject&&document.body.dataset.workspaceTask==='layout'){
     // Switching corpus row/text invalidates previously decoded pixels even
@@ -9431,7 +9440,7 @@ document.getElementById('prevKaraokeMode')?.addEventListener('change',()=>{
 });
 
 ['prevShowSafeArea','prevShowCentralGap','prevShowBBox'].forEach(id=>{
-  document.getElementById(id)?.addEventListener('change',()=>updateLayoutPreview({geometryOnly:true}));
+  document.getElementById(id)?.addEventListener('change',refreshDiagnosticGuides);
 });
 document.getElementById('prevKaraokePreviewTime')?.addEventListener('input',()=>{
   const label=document.getElementById('prevKaraokePreviewTimeVal');
