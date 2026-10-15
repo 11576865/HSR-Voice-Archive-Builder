@@ -6856,6 +6856,9 @@ async function importCurrentProjectFont(){
   const status=document.getElementById('projectFontImportStatus');
   const button=document.getElementById('projectFontImportBtn');
   const root=currentProject?.root||null;
+  const field=document.getElementById(target);
+  const previousValue=field?.value||'';
+  let fontChoiceSaved=false;
   try{
     if(!root)throw new Error('请先打开项目，再导入字体');
     if(!file)throw new Error('请选择 TTF、OTF 或 TTC 文件');
@@ -6882,11 +6885,13 @@ async function importCurrentProjectFont(){
     const family=String(data.font?.family||'');
     if(!family)throw new Error('服务器没有返回可识别的字体族名');
     invalidateHostFont(family); // Remove previously registered FontFace, not just its cache record.
-    const field=document.getElementById(target);
-    if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
+    // Only mutate authoring state AFTER the browser actually loads the
+    // uploaded face. A failed import may leave an asset on disk, but it must
+    // not replace the previously working font in the current project.
     const resolved=await ensureHostFontLoaded(family,{quiet:true});
     const loaded=hostFontFaces.get(family)?.state==='loaded'&&resolved!==family;
-    if(!loaded)throw new Error('字体已保存，但浏览器加载失败；字体不能被标记为可用，请检查格式');
+    if(!loaded)throw new Error('字体文件已保存，但浏览器未能加载字形；原字体保持不变。请检查 TTF/OTF 格式');
+    if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
     if(status){status.textContent='已导入、加载并应用「'+family+'」作为'+(target==='prevChsFont'?'中文':'原文')+'字体。请使用实际 ASS 渲染核对字形。';status.className='small status-ok';}
     const resolveStatus=document.getElementById('fontResolveStatus');
     if(resolveStatus)resolveStatus.textContent='项目字体已加载：'+family+'。实际 ASS 字形仍需验证。';
@@ -6896,14 +6901,23 @@ async function importCurrentProjectFont(){
     // "Import and apply" must survive reloading the project: the previous
     // implementation only changed an unsaved input. Make the persistence
     // contract explicit, and never report success when the save failed.
-    const persisted=await saveSubtitleLayoutSettings();
-    if(!persisted)throw new Error('字体已保存到项目，但当前字体选择尚未保存。请检查上方保存状态并重试');
+    // FFmpeg confirmation is part of this transaction, not a footnote.
+    // Never report "applied" while ASS is rendering a fallback face.
     await renderLibassPreview();
     if(document.querySelector('.layout-preview-evidence')?.dataset.previewEvidence!=='libass')
-      throw new Error('字体已保存，但 FFmpeg/libass 未确认实际字形，请检查预览错误，不应把回退字体标记为成功');
-    if(status){status.textContent='字体「'+family+'」已导入并保存，FFmpeg/libass 已完成真实渲染验证。';status.className='small status-ok';}
+      throw new Error('实际渲染未采用项目字体；未保存此字体选择，请查看 FFmpeg/libass 的回退诊断');
+    const persisted=await saveSubtitleLayoutSettings();
+    if(!persisted)throw new Error('已渲染，但项目设置保存失败');
+    fontChoiceSaved=true;
+    if(status){status.textContent='字体「'+family+'」已导入、实际渲染验证并保存。';status.className='small status-ok';}
   }catch(error){
-    if(status){status.textContent='字体导入失败：'+shortError(error);status.className='small status-bad';}
+    if(!fontChoiceSaved&&field&&currentProject?.root===root&&field.value!==previousValue){
+      field.value=previousValue;
+      field.dispatchEvent(new Event('input',{bubbles:true}));
+      invalidateLibassPreview();
+      scheduleLayoutPreviewUpdate();
+    }
+    if(status){status.textContent='字体未应用：'+shortError(error);status.className='small status-bad';}
   }finally{
     if(button)button.disabled=false;
   }
