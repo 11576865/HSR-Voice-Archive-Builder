@@ -87,7 +87,7 @@ def load_studio_under_production_csp(page) -> None:
     # obtain a deterministic sample before testing genuine video bytes.
     page.evaluate("() => loadLayoutStressSample({force:true})")
     try:
-        page.locator('[data-timeline-cue]').nth(2).wait_for(state="attached", timeout=20000)
+        page.wait_for_function("layoutCorpusItems.length >= 3", timeout=20000)
     except Exception as exc:
         state = page.evaluate("""() => ({
           project: currentProject?.root,
