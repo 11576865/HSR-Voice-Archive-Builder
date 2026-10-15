@@ -84,18 +84,14 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
     )
 
 
-STUDIO_REFERENCE_BACKGROUND = Path(__file__).resolve().parent / "static" / "assets" / "studio-red-clouds.webp"
+from .archive_bundle_backgrounds import RED_CLOUD_ASSET, load_default_red_cloud_background
+
+STUDIO_REFERENCE_BACKGROUND = RED_CLOUD_ASSET
 
 
 def load_studio_reference_background() -> bytes:
-    """Bundled diagnostic image, never an input to project export."""
-    image = STUDIO_REFERENCE_BACKGROUND
-    if not image.is_file() or image.is_symlink():
-        raise RuntimeError("工作台默认参考背景文件缺失")
-    data = image.read_bytes()
-    if not data or len(data) > 1_048_576 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
-        raise RuntimeError("工作台默认参考背景损坏")
-    return data
+    """Exactly the same bundled red-cloud bytes as the default MKV video."""
+    return load_default_red_cloud_background()
 
 
 def _project_font_config(config: SubtitleRenderConfig, font_dir: Path | None) -> SubtitleRenderConfig:
