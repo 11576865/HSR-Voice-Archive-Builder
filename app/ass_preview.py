@@ -168,7 +168,7 @@ def _assert_project_font_selected(
             continue
         matcher = _find_fc_match()
         if not matcher:
-            raise RuntimeError("无法确认项目字体：当前 HSR 进程找不到 fontconfig 的 fc-match。请在运行 HSR 的 Termux 执行 pkg install -y fontconfig，确认 command -v fc-match 有输出，然后停止旧服务并通过 bash run_termux.sh 重新启动；浏览器刷新或 GitHub 更新无法安装系统依赖。")
+            raise RuntimeError("无法确认项目字体：当前 HSR 进程找不到 fontconfig 的 fc-match。请在运行 HSR 的 Termux 执行 pkg install -y fontconfig-utils（fc-match 属于该包，而非 fontconfig），确认 command -v fc-match 有输出，然后停止旧服务并通过 bash run_termux.sh 重新启动；浏览器刷新或 GitHub 更新无法安装系统依赖。")
         completed = subprocess.run(
             [matcher, "-f", "%{file}\\n", "--", family],
             env=env, capture_output=True, text=True, timeout=8, check=False,
