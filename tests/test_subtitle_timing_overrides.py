@@ -67,10 +67,10 @@ class SubtitleTimingOverlayTests(unittest.TestCase):
         before = legacy.read_bytes()
         self.assertEqual(effective_subtitle_window(self.original["entries"][0],
                                                     read_timing_overrides(self.output)),
-                         (1.25, 3.25))
+                         (1.25, 3.00))
         config = SimpleNamespace(source_text_language="en", reference_language="auto")
         rows = get_project_subtitles(config, self.output)
-        self.assertEqual((rows[0]["start"], rows[0]["end"]), (1.25, 3.25))
+        self.assertEqual((rows[0]["start"], rows[0]["end"]), (1.25, 3.00))
         self.assertFalse(rows[0]["timing_modified"])
         recorded = []
         def fake_ass(entries, path, **kwargs):
@@ -81,10 +81,10 @@ class SubtitleTimingOverlayTests(unittest.TestCase):
                 self.output, generate_ass=True
             )
         self.assertEqual(result["ass_error"], "")
-        self.assertEqual(recorded[0], (1.25, 3.25))
+        self.assertEqual(recorded[0], (1.25, 3.00))
         self.assertEqual(recorded[1], (4.0, 6.0))
         srt = (self.output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
-        self.assertIn("00:00:01,250 --> 00:00:03,250", srt)
+        self.assertIn("00:00:01,250 --> 00:00:03,000", srt)
         self.assertEqual(legacy.read_bytes(), before, "Historical data must not be deleted")
         self.assertEqual(json.loads(self.manifest.read_text(encoding="utf-8"))["entries"][0]["start_seconds"], 1.25)
 
@@ -98,11 +98,11 @@ class SubtitleTimingOverlayTests(unittest.TestCase):
         self.manifest.write_text(json.dumps(data), encoding="utf-8")
         self.assertEqual(effective_subtitle_window(data["entries"][0],
                                                     read_timing_overrides(self.output)),
-                         (1.85, 3.25))
+                         (1.85, 3.00))
         result = refresh_subtitle_artifacts_from_settings(self.output, generate_ass=False)
         self.assertTrue(result["srt_file"])
         srt = (self.output / "HSR_Voice_Archive.srt").read_text(encoding="utf-8-sig")
-        self.assertIn("00:00:01,850 --> 00:00:03,250", srt)
+        self.assertIn("00:00:01,850 --> 00:00:03,000", srt)
         config = SimpleNamespace(source_text_language="en", reference_language="auto")
         self.assertFalse(get_project_subtitles(config, self.output)[0]["timing_conflict"])
 
