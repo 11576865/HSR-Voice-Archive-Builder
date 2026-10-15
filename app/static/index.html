@@ -8794,11 +8794,14 @@ function setHsrStudioMode(mode){
   // Keep explicit user choices while changing subtask; first entry stays discoverable.
   const previous=root.dataset.lastInspectorMode;
   if(previous!==next){
-    let first=true;
+    // Typography and bilingual positioning are both primary Layout tasks.
+    // Show both immediately; a single-open accordion made 60/40 effectively
+    // undiscoverable even though it was implemented and persisted.
+    let visibleIndex=0;
     root.querySelectorAll('.layout-inspector-section[data-studio-scope]').forEach(section=>{
       if(section.dataset.studioScope===next){
-        section.open=first;
-        first=false;
+        section.open=next==='style'?visibleIndex<2:visibleIndex===0;
+        visibleIndex++;
       }else section.open=false;
     });
     root.dataset.lastInspectorMode=next;
