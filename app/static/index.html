@@ -3519,7 +3519,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <strong id="layoutExportHealthTitle">字幕导出状态</strong>
               <p id="layoutExportHealthDetail">尚未载入项目。</p>
             </div>
-            <button id="layoutExportHealthRetryBtn" type="button" hidden>重新生成 ASS/SRT</button>
+            <button id="layoutExportHealthRetryBtn" type="button" hidden>重新生成 ASS</button>
           </div>
           </div>
           <nav class="studio-v3-pane-nav" aria-label="移动端工作台编辑区域" role="tablist">
@@ -3571,36 +3571,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span>终点 <strong id="layoutCueEnd">--:--.-</strong></span>
               <span>时长 <strong id="layoutCueDuration">--</strong></span>
             </div>
-            <details class="hsr-cue-timing-disclosure">
-              <summary>按需调整显示时间 <span>开始／结束 · 最大偏移 5 秒</span></summary>
-            <section class="layout-timing-editor" aria-label="非破坏性字幕显示时间编辑">
-              <div class="layout-timing-head">
-                <strong>字幕显示时间</strong>
-                <span id="layoutCueTimingBadge">原始时间 · 未调整</span>
-              </div>
-              <div class="layout-timing-fields">
-                <label for="layoutCueTimingStart">显示开始（秒）
-                  <input id="layoutCueTimingStart" type="number" inputmode="decimal" step="0.01" min="0" disabled />
-                </label>
-                <label for="layoutCueTimingEnd">显示结束（秒）
-                  <input id="layoutCueTimingEnd" type="number" inputmode="decimal" step="0.01" min="0" disabled />
-                </label>
-              </div>
-              <div class="layout-timing-actions">
-                <button type="button" id="layoutCueTimingStartEarlier" data-timing-nudge="start:-0.1" disabled>开始 −0.1s</button>
-                <button type="button" id="layoutCueTimingStartLater" data-timing-nudge="start:0.1" disabled>开始 +0.1s</button>
-                <button type="button" id="layoutCueTimingEndEarlier" data-timing-nudge="end:-0.1" disabled>结束 −0.1s</button>
-                <button type="button" id="layoutCueTimingEndLater" data-timing-nudge="end:0.1" disabled>结束 +0.1s</button>
-              </div>
-              <div class="layout-timing-commit">
-                <button type="button" id="layoutCueTimingSaveBtn" disabled>保存字幕时间</button>
-                <button type="button" id="layoutCueTimingRevertBtn" disabled>撤销时间草稿</button>
-                <button type="button" id="layoutCueTimingResetBtn" disabled>恢复原始时间</button>
-                <button type="button" id="layoutCueTimingRetryExportBtn" hidden disabled>重试生成 ASS/SRT</button>
-              </div>
-              <p id="layoutCueTimingStatus" role="status" aria-live="polite">调整仅影响导出的字幕显示时间，不移动 WAV 或更改原始音频时间轴。单侧最多偏离 5 秒。</p>
-            </section>
-            </details>
+            <p class="small muted" id="layoutCueClockOrigin">起止时间由音频片段和间隔自动决定，此处仅显示，不允许覆写。</p>
             <div class="layout-cue-grid">
               <div class="layout-cue-source"><span class="layout-cue-field-label">源台词 · 只读</span><p id="layoutCueSourceText">从左侧选取条目后显示原文。</p></div>
               <div class="layout-cue-translation">
@@ -3609,7 +3580,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               </div>
             </div>
             <button type="button" id="layoutOpenProofreadingBtn" class="secondary">在校对中编辑当前字幕与试听原始语音</button>
-<p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只显示当前正文；字幕正文与原始 WAV 的唯一操作入口位于「校对」。字幕显示时间可在「当前字幕」中按需调整。</p>
+<p id="layoutCueSaveStatus" role="status" aria-live="polite" class="layout-cue-save-note">此处只读显示当前正文及音频派生时间；字幕正文与原始 WAV 的唯一操作入口位于「校对」。</p>
           </section>
           </details>
           </div>
@@ -7747,21 +7718,22 @@ function layoutCueApplyExportHealth(health){
 function renderLayoutExportHealthNotice(){
   const outer=document.getElementById('layoutExportHealthNotice');
   if(!outer)return;
-  const active=!!layoutActiveProjectKey()&&layoutCueExportHealthState!=='unknown'&&layoutCueExportHealthState!=='not-built';
+  const active=!!layoutActiveProjectKey()&&layoutCueExportForceAss&&
+    layoutCueExportHealthState!=='unknown'&&layoutCueExportHealthState!=='not-built';
   outer.hidden=!active;
   if(!active)return;
   const label=document.getElementById('layoutExportHealthTitle');
   const detail=document.getElementById('layoutExportHealthDetail');
   const retry=document.getElementById('layoutExportHealthRetryBtn');
   const ok=layoutCueExportHealthState==='current';
-  if(label)label.textContent=ok?'字幕导出已校验':'字幕导出尚未完成 · '+layoutCueExportHealthState;
+  if(label)label.textContent=ok?'ASS 导出已校验':'ASS 尚未完成 · '+layoutCueExportHealthState;
   if(detail)detail.textContent=ok
-    ?'已核对本次字幕正文/时间输入及生成文件摘要；这不是实际视频帧验收。'
-    :'当前 ASS/SRT 不应视为已完成导出：'+(layoutCueExportHealthError||'导出状态缺乏有效证明')+'。可在此重新生成。';
+    ?'已核对字幕成品文件摘要；这不是视频帧或全项目排版验收。'
+    :'ASS 尚未通过导出校验：'+(layoutCueExportHealthError||'没有有效 ASS 验收收据')+'。需要时可单独重建 ASS；SRT 不受影响。';
   if(retry){
     retry.hidden=ok;
     retry.disabled=layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight||!layoutCorpusPersistable;
-    retry.textContent=layoutCueExportRetryInFlight?'正在重新生成…':'重新生成 ASS/SRT';
+    retry.textContent=layoutCueExportRetryInFlight?'正在生成 ASS…':'重新生成 ASS';
   }
 }
 function layoutCueResetProject(projectKey){
@@ -7783,7 +7755,7 @@ function layoutCueResetProject(projectKey){
   renderLayoutExportHealthNotice();
   renderLayoutCueEditor();
   const status=document.getElementById('layoutCueSaveStatus');
-  if(status){status.textContent='选择当前项目字幕后可调整显示时间；中文字幕正文请在「校对」中修改。';status.className='layout-cue-save-note';}
+  if(status){status.textContent='字幕显示时间与原始音频时间轴绑定；中文字幕正文请在「校对」中修改。';status.className='layout-cue-save-note';}
 }
 function layoutCueState(sub){
   if(!sub)return null;
@@ -8000,12 +7972,12 @@ async function layoutCueRetryArtifactExport(){
      layoutCueExportRetryInFlight||layoutCueTimingSaveInFlight)return false;
   layoutCueExportRetryInFlight=true;
   const status=document.getElementById('layoutCueTimingStatus');
-  if(status){status.dataset.committed='true';status.textContent='字幕时间已经保存，正在独立重试导出 ASS/SRT…';}
+  if(status){status.dataset.committed='true';status.textContent='正在单独重新生成 ASS，不修改 SRT 或音频时间…';}
   renderLayoutCueTiming();
   try{
     const response=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/artifacts/refresh',{
       method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({expected_project_root:currentProject.root||null,force_ass:layoutCueExportForceAss})
+      body:JSON.stringify({expected_project_root:currentProject.root||null,ass_only:true})
     });
     if(layoutActiveProjectKey()!==key)return false;
     const error=String(response.artifact_error||response.refreshed?.ass_error||'');
@@ -8014,12 +7986,12 @@ async function layoutCueRetryArtifactExport(){
       artifact_error:error,ass_required:layoutCueExportForceAss,
     });
     if(status){status.textContent=layoutCueExportNeedsRetry
-      ? '字幕时间已保存，但导出重试仍失败：'+(error||'未返回可用导出状态')
-      : '字幕时间原先已保存，本次 ASS/SRT 重新生成成功。';status.dataset.committed='true';}
+      ? 'ASS 重新生成失败：'+(error||'未返回可用导出状态')
+      : 'ASS 已重新生成；SRT 文件未被改写。';status.dataset.committed='true';}
     return !layoutCueExportNeedsRetry;
   }catch(error){
     if(layoutActiveProjectKey()===key&&status){
-      status.textContent='字幕时间已经保存，但导出重试失败：'+shortError(error);
+      status.textContent='ASS 重新生成失败：'+shortError(error);
       layoutCueExportHealthError=shortError(error);
       layoutCueExportHealthState='failed';
       status.dataset.committed='true';
@@ -8196,7 +8168,7 @@ function layoutTimelineRender(){
       '" style="left:'+left.toFixed(4)+'%;width:'+width.toFixed(4)+'%;top:'+(lane*40+5)+'px" title="'+
       escapeHtml(label)+'" aria-label="'+escapeHtml(label)+'">'+
       escapeHtml('#'+String(sub.id)+' '+text.slice(0,34))+'</button>');
-    if(active&&layoutCorpusPersistable&&!sub.timing_conflict){
+    if(false){ // Display-only timeline: no time-edge drag affordances.
       for(const edge of ['start','end']){
         const t=item[edge];
         if(t<start||t>end)continue;
