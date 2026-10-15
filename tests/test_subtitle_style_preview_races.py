@@ -167,7 +167,7 @@ const ctx={
  subtitleSettingsPayload:()=>({chs_font:'Fixture',base_chs_size:Number(node('prevChsSize').value||48)}),
  fetch:()=>new Promise(r=>pending.push(r)),headers:()=>({}),
  shortError:e=>String(e.message||e),setLog:()=>{},
- updateLayoutPreview:()=>Promise.resolve(),
+ updateLayoutPreview:()=>Promise.resolve(),refreshDiagnosticGuides:()=>Promise.resolve(),
  Image:class{decode(){return new Promise((resolve,reject)=>decodes.push({resolve,reject}));}},
  URL:{createObjectURL:()=>{const u='blob:frame-'+(urls.length+1);urls.push(u);return u;},
    revokeObjectURL:u=>revoked.push(u)},
