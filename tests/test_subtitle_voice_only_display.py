@@ -60,15 +60,11 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
         self.assertIn("00:00:05,000 --> 00:00:06,000", srt)
         self.assertNotIn("00:00:04,000", srt)
 
-    def test_ass_kinetic_and_generated_karaoke_never_enter_silent_gap(self):
+    def test_ass_fades_use_silence_without_shortening_voice_or_karaoke(self):
         cfg = SubtitleRenderConfig(
-            enable_karaoke=True,
-            karaoke_mode="k",
-            karaoke_timing="cue",
-            karaoke_unit="character",
-            enable_kinetic=True,
-            use_audio_aware_fade=True,
-            fade_in_ms=200, fade_out_ms=200,
+            enable_karaoke=True, karaoke_mode="kf", karaoke_timing="cue",
+            karaoke_unit="character", enable_kinetic=True,
+            use_audio_aware_fade=True, fade_in_ms=200, fade_out_ms=200,
             verify_libass_layout=False,
         )
         entries = [
@@ -80,19 +76,66 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
                             display_end_seconds=7.0),
         ]
         ass = render_ass(entries, config=cfg)
-        dialogues = [x for x in ass.splitlines() if x.startswith("Dialogue:")]
-        self.assertTrue(dialogues)
-        for line in dialogues:
-            parts = line.split(",", 3)
-            self.assertIn(
-                (parts[1], parts[2]),
-                {("0:00:01.00", "0:00:02.00"),
-                 ("0:00:05.00", "0:00:06.00")},
-            )
-        self.assertFalse(any("0:00:04." in line for line in dialogues))
-        self.assertFalse(any("0:00:07." in line for line in dialogues))
-        english = next(line for line in dialogues if "Hello" in line)
-        self.assertEqual(sum(int(t) for t in re.findall(r"\{\\k(\d+)\}", english)), 100)
+        lines = [line for line in ass.splitlines() if line.startswith("Dialogue:")]
+        self.assertTrue(lines)
+        # 9: onset minus 200ms, voice 1.00-2.00, outgoing until 2.20.
+        # Next onset at 5.00 with its fade starting at 4.80; no last tail.
+        self.assertEqual(
+            {(line.split(",", 3)[1], line.split(",", 3)[2]) for line in lines},
+            {("0:00:00.80", "0:00:02.20"),
+             ("0:00:04.80", "0:00:06.00")},
+        )
+        first = next(line for line in lines if "Hello" in line and ",Primary," in line)
+        last = next(line for line in lines if "Next" in line and ",Primary," in line)
+        self.assertIn(r"\fad(200,200)", first)
+        self.assertIn(r"\fad(200,0)", last)
+        self.assertIn(r"{\kt20}", first)
+        self.assertIn(r"{\kt20}", last)
+        self.assertEqual(
+            sum(int(t) for t in re.findall(r"\{\\kf(\d+)\}", first)),
+            100, "the speech itself still gets its full 100cs karaoke budget",
+        )
+
+    def test_short_gap_shares_transition_time_without_overlaps(self):
+        cfg = SubtitleRenderConfig(enable_kinetic=True, fade_in_ms=200,
+                                   fade_out_ms=200, verify_libass_layout=False)
+        entries = [
+            SimpleNamespace(english="Alpha", chinese="甲",
+                            start_seconds=1.0, audio_end_seconds=2.0,
+                            display_end_seconds=2.09),
+            SimpleNamespace(english="Beta", chinese="乙",
+                            start_seconds=2.1, audio_end_seconds=3.0,
+                            display_end_seconds=3.0),
+        ]
+        ass = render_ass(entries, config=cfg)
+        first = next(l for l in ass.splitlines() if "Alpha" in l and l.startswith("Dialogue:"))
+        second = next(l for l in ass.splitlines() if "Beta" in l and l.startswith("Dialogue:"))
+        self.assertIn("0:00:00.80,0:00:02.05", first)
+        self.assertIn("0:00:02.05,0:00:03.00", second)
+        self.assertIn(r"\fad(200,50)", first)
+        self.assertIn(r"\fad(50,0)", second)
+
+    def test_non_kinetic_ass_and_srt_stay_at_voice_boundaries(self):
+        entries = [
+            SimpleNamespace(english="Just audio", chinese="只有语音",
+                            start_seconds=1.0, audio_end_seconds=2.0,
+                            display_end_seconds=4.0),
+        ]
+        ass = render_ass(entries, config=SubtitleRenderConfig.plain_text_preset())
+        self.assertIn("0:00:01.00,0:00:02.00", ass)
+        self.assertNotIn(r"\fad(", ass)
+        self.assertNotIn("0:00:04.00", ass)
+
+    def test_first_and_last_fades_do_not_run_outside_audio_container(self):
+        cfg = SubtitleRenderConfig(enable_kinetic=True, fade_in_ms=300,
+                                   fade_out_ms=300, verify_libass_layout=False)
+        one = SimpleNamespace(english="Only", chinese="唯一",
+                              start_seconds=0.0, audio_end_seconds=1.0,
+                              display_end_seconds=1.0)
+        ass = render_ass([one], config=cfg)
+        primary = next(l for l in ass.splitlines() if "Only" in l and l.startswith("Dialogue:"))
+        self.assertIn("0:00:00.00,0:00:01.00", primary)
+        self.assertNotIn(r"\fad(", primary)
 
 
 if __name__ == "__main__":
