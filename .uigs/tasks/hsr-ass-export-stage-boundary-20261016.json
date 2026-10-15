@@ -2,8 +2,8 @@
   "schema_version": 1,
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
-  "status": "code_changes_submitted_pending_external_ci",
-  "current_bounded_work_unit": "Decouple layout/effects parameter autosave from expensive ASS/MKV regeneration; invalidate stale ASS/MKV certification without touching outputs.",
+  "status": "agent_execution_complete_pending_external_validation",
+  "current_bounded_work_unit": "Post-merge HSR contract repairs and workbench follow-ups: internal vs external ASS, independent text color, Fade-only, default red-cloud MKV, source-driven dynamic preview.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -49,21 +49,27 @@
       "summary": "Eliminated queueAutoAssRefresh/runAutoAssRefresh after config autosaves, preserving explicit Generate and user-triggered real libass preview. Invalidated only ASS style receipt on effective subtitle_* changes (SRT remains independently valid; existing media bytes unchanged). Added focused regression tests; updated previous auto-rebuild expectation.",
       "commit": "d2cd4dd6229d21670a607bfdf0f5717941e456aa",
       "validation": "New head CI pending. No claim of physical device/playback acceptance."
+    },
+    {
+      "summary": "Explicit ASS inner->MKV and outer->numbered no-overwrite output route in FastAPI and Lite; color style fields, browser geometry preview and real libass; only Fade enabled; default MKV image is exact bundled studio red-cloud file, with legacy custom background preserved.",
+      "commit": "3982659e0f781a2ce02ed766827244534d1d6040",
+      "validation": "Regression fixtures committed. Exact-head CI and actual device proof pending."
     }
   ],
   "next_units": [
-    "Validate PR #186 exact-head CI once; repair newly introduced failures, while distinguishing legacy baseline tests.",
-    "User acceptance: autosave inspector controls never enqueues ASS/MKV; explicit Generate builds and re-muxes a current MKV; old output is flagged stale after settings changes.",
-    "Continue separate seven-contract code-level QA for Fade/Karaoke, archive expiry and actual rendered libass, preserving user-invoked job boundary."
+    "Validate exact-head CI and repair directly attributable new regressions only.",
+    "Prove real selected voice audio+duration and exact 600ms Fade on Termux using current user HSR project.",
+    "Verify first-time red-cloud background MKV video, independently saved user background, and external ASS no-clobber.",
+    "Check true source/Chinese text colors in rendered ASS and source-only Karaoke; do not claim full visual proof from geometric preview."
   ],
   "branch": "fix/hsr-seven-ass-contracts-20261016",
   "pr": 186,
-  "latest_durable_commit": "d2cd4dd6229d21670a607bfdf0f5717941e456aa",
+  "latest_durable_commit": "3982659e0f781a2ce02ed766827244534d1d6040",
   "external_validation": {
     "previous_head": "b32b27e6563aca4000bb3e592e3dd1a03eca4d22",
     "previous_ci": "completed_failure",
     "current_head": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
-    "current_ci": "pending_new_dedicated_seven_contract_ci",
+    "current_ci": "pending",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
     "actual_ffmpeg_temporal_fade": "pending",
