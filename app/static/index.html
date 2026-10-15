@@ -8699,9 +8699,17 @@ async function updateLayoutPreview() {
     if(document.body.dataset.workspaceTask==='layout'&&geometryExplicitlyRequested){
       const resultLayout=res?.layout||{};
       const pct=Number(resultLayout.scale_percent||100);
+      // Do not silently substitute an OS browser fallback for a selected font.
+      // Such a preview cannot be compared with libass even if lines seem to fit.
+      const unloadedFonts=[chsFont,priFont]
+        .filter((name,index,all)=>all.indexOf(name)===index)
+        .filter(name=>hostFontFaces.get(name)?.state!=='loaded');
       const status=document.getElementById('libassPreviewStatus');
       if(status){
-        if(resultLayout.failed){
+        if(unloadedFonts.length){
+          status.textContent='快速预览字体未成功加载：'+unloadedFonts.join('、')+'。当前显示可能是浏览器替代字体；不能据此判断实际 ASS 的字号和断行。';
+          status.className='small status-bad';
+        }else if(resultLayout.failed){
           status.textContent='自动缩放至最低档仍无法容纳字幕：'+(resultLayout.failed_condition||'OVERFLOW')+'。请缩短文本、调整双语比例、安全边距或字号。';
           status.className='small status-bad';
         }else if(pct<100){
@@ -8713,9 +8721,11 @@ async function updateLayoutPreview() {
         }
       }
       setPreviewEvidence('geometry',
-        resultLayout.failed
-          ?'自动缩放仍失败：'+(resultLayout.failed_condition||'OVERFLOW')
-          :pct<100?'已自动缩放至 '+pct+'%（浏览器估算，非真实 ASS）':undefined);
+        unloadedFonts.length
+          ?'部分字体未加载，预览可能使用替代字体：'+unloadedFonts.join('、')
+          :resultLayout.failed
+            ?'自动缩放仍失败：'+(resultLayout.failed_condition||'OVERFLOW')
+            :pct<100?'已自动缩放至 '+pct+'%（浏览器估算，非真实 ASS）':undefined);
     }
     // Browser geometry remains approximate; real ASS is invoked only by its button.
     const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
