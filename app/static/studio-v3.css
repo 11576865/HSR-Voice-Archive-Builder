@@ -174,8 +174,7 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v3-workbench>.s
   width:min(345px,100%)!important;height:100%!important;max-height:100%!important;
   overflow:hidden!important;z-index:12;box-shadow:12px 0 28px #0008;
 }
-#subtitleLayoutPreviewCard .studio-v3-workbench:not(.audit-open)>.layout-corpus-rail,
-#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail{display:none!important}
+#subtitleLayoutPreviewCard .studio-v3-workbench:not(.audit-open)>.layout-corpus-rail{display:none!important}
 #subtitleLayoutPreviewCard .hsr-touch-stepper{display:none}
 @media(pointer:coarse){
   #subtitleLayoutPreviewCard .studio-v3-inspector input[type="range"]{display:none!important}
