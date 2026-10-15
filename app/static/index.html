@@ -4459,6 +4459,12 @@ function showWorkspace(name,{scroll=true,preservePanelPin=false}={}){
   if(visibleWorkspace==='layout'){
     setHsrStudioMode(name==='effects'?'effects':'style');
   }
+  // Task switching within the shared canvas must not strand a stale real frame.
+  // The renderer's own identity guard skips an unchanged frame.
+  if(visibleWorkspace==='layout'&&previousWorkspace==='layout'&&currentProject){
+    liveRealPreviewArmed=true;
+    queueLiveRealPreview();
+  }
   if(visibleWorkspace==='layout'&&previousWorkspace!=='layout'&&typeof updateLayoutPreview==='function'){
     const projectKey=currentProject?.root||currentProject?.name||null;
     const selected=previousWorkspace==='review'&&typeof currentSubtitle==='function'
@@ -6918,14 +6924,17 @@ let liveRealPreviewTimer = null;
 let lastRenderedAssIdentity = null;
 function queueLiveRealPreview(){
   clearTimeout(liveRealPreviewTimer);
+  // Layout and Effects are two tasks on the same layout canvas. Never
+  // accidentally disable the authoritative renderer in Effects mode.
   if(!liveRealPreviewArmed||!currentProject||
      document.body.dataset.workspace!=='layout'||
-     document.body.dataset.workspaceTask!=='layout')return;
+     !['layout','effects'].includes(document.body.dataset.workspaceTask))return;
   // FFmpeg/libass is the visual source of truth. Coalesce fast edits, then
   // render the actual ASS frame instead of treating SVG estimates as final.
   liveRealPreviewTimer=setTimeout(()=>{
     if(liveRealPreviewArmed&&currentProject&&
-       document.body.dataset.workspaceTask==='layout'&&
+       document.body.dataset.workspace==='layout'&&
+       ['layout','effects'].includes(document.body.dataset.workspaceTask)&&
        lastRenderedAssIdentity!==currentLibassPreviewIdentity())
       void renderLibassPreview();
   },850);
@@ -8549,6 +8558,9 @@ async function updateLayoutPreview() {
       invalidateLibassPreview();
     liveRealPreviewArmed=true;
   }
+  // Independent request pipelines: a slow, rejected or cancelled SVG geometry
+  // API must never prevent this cue's real FFmpeg/libass frame being scheduled.
+  queueLiveRealPreview();
   const generation=++geometryPreviewGeneration;
   if(geometryPreviewController)geometryPreviewController.abort();
   const controller=typeof AbortController==='function'?new AbortController():null;
@@ -8630,9 +8642,8 @@ async function updateLayoutPreview() {
 
     if(generation!==geometryPreviewGeneration)return;
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
-    // This provisional estimate is never the editing authority: draw the
-    // real ASS image for the very same current sample as soon as possible.
-    queueLiveRealPreview();
+    // Geometry is informational only; the real render was already queued
+    // before any asynchronous font-loading/geometry work began.
     const corpusStatus=document.getElementById('layoutCorpusCheckStatus');
     if(corpusStatus&&layoutStressSample){
       const layout=res?.layout||{};
@@ -8663,6 +8674,9 @@ function scheduleLayoutPreviewUpdate() {
   invalidateLibassPreview();
   clearTimeout(previewDebounceTimer);
   previewDebounceTimer = setTimeout(updateLayoutPreview, 50);
+  // Start the true-render debounce immediately rather than waiting for the
+  // optional geometry endpoint, which can fail or be repeatedly aborted.
+  queueLiveRealPreview();
 }
 
 function renderPreviewCanvasSvg(data, options) {
