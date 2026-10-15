@@ -1,10 +1,33 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import math
 from typing import Sequence
 
 from .measure import measure_line_height, measure_text_width
 from .safe_area import DEFAULT_SAFE_AREA, SafeArea
+
+
+def central_ink_reserve(
+    outline_width: float = 0.0,
+    shadow_depth: float = 0.0,
+    blur_radius: float = 0.0,
+    multi_layer_outline: bool = False,
+) -> int:
+    """Reserve the visible ink extension outside the two ASS anchor lines.
+
+    The user's central gap is a *minimum visible-ink separation*, not merely
+    a gap between ASS positioning anchors. Fixed-width border and shadow do
+    not shrink with the text, so shrinking fonts cannot fix this collision.
+    """
+    outline = max(0.0, float(outline_width))
+    shadow = max(0.0, float(shadow_depth))
+    blur = max(0.0, float(blur_radius))
+    if multi_layer_outline:
+        outline = max(outline + 3.0, outline * 1.8)
+        shadow = max(shadow, 3.0)
+        blur = max(blur, 0.6)
+    return int(math.ceil(2.0 * outline + shadow + 2.0 * blur + 4.0))
 
 
 @dataclass
