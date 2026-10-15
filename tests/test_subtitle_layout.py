@@ -67,14 +67,11 @@ class SubtitleLayoutTests(unittest.TestCase):
         self.assertEqual(layout["layout"]["primary_lines"][0]["y"], 618)
         self.assertEqual(layout["layout"]["chs_lines"][0]["y"], 650)
 
-    def test_kinetic_tags_duration_capping(self) -> None:
-        # Long duration line (2.0s = 2000ms): base 200ms entry and 200ms exit applied
-        tags_long = generate_kinetic_tags(2.0)
-        self.assertIn(r"\fad(200,200)", tags_long)
-
-        # Only the available cue duration caps the total; preserve the in/out ratio.
-        tags_short = generate_kinetic_tags(0.3)
-        self.assertIn(r"\fad(150,150)", tags_short)
+    def test_kinetic_tags_preserve_author_fade_duration(self) -> None:
+        # Fade margins are allocated outside actual PCM speech; an arbitrary
+        # source cue duration must not silently shorten the requested fade.
+        self.assertIn(r"\fad(200,200)", generate_kinetic_tags(2.0))
+        self.assertIn(r"\fad(200,200)", generate_kinetic_tags(0.3))
         self.assertIn(r"\fad(2000,1000)", generate_kinetic_tags(
             4.0, fade_in_ms=2000, fade_out_ms=1000
         ))
@@ -117,7 +114,7 @@ class SubtitleLayoutTests(unittest.TestCase):
                 2.0, fade_in_ms=640, fade_out_ms=430,
                 voice_gap_seconds=gap,
             )
-            self.assertIn(r"\\fad(640,430)", tags)
+            self.assertIn(r"\fad(640,430)", tags)
 
     def test_audio_aware_fade_uses_silence_outside_pcm_voice(self) -> None:
         entry1 = SimpleNamespace(
@@ -157,8 +154,9 @@ class SubtitleLayoutTests(unittest.TestCase):
             voice_gap_seconds=2.0,
         )
         ass_output = render_ass([entry_compact, entry_spacious], enable_kinetic=True)
-        self.assertIn(r"\fad(80,80)", ass_output)
-        self.assertIn(r"\fad(300,300)", ass_output)
+        self.assertIn(r"\fad(200,200)", ass_output)
+        self.assertNotIn(r"\fad(80,80)", ass_output)
+        self.assertNotIn(r"\fad(300,300)", ass_output)
 
     def test_protected_phrases_line_breaking(self) -> None:
         text = "Please let alone this matter and do it as soon as possible in order to succeed even though right now at least kind of a lot of work remains."
