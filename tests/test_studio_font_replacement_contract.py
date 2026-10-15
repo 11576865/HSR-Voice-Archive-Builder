@@ -31,6 +31,13 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertNotIn("renderCanvasSubtitleOverlay(data);", s)
         self.assertIn("if(!stillCurrent())return;", s)
 
+    def test_appearance_edits_commit_real_libass_preview_not_just_svg(self):
+        s = self.html
+        self.assertIn("function scheduleCommittedAppearancePreview()", s)
+        self.assertIn("liveRealPreviewArmed=true;", s)
+        self.assertIn("['prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevEnableCard',", s)
+        self.assertIn("document.getElementById(id)?.addEventListener('change',scheduleCommittedAppearancePreview)", s)
+
     def test_project_font_replacement_has_single_fontconfig_candidate(self):
         s = self.fonts
         self.assertIn("for previous in list_project_fonts(output)", s)
