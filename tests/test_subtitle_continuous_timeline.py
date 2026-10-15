@@ -74,7 +74,7 @@ const act=text=>vm.runInContext(text,context);
   assert.match(clips,/data-timeline-cue="12"/);
   assert.doesNotMatch(clips,/data-timeline-edge=/,'audio time is not draggable');
   assert.equal(node('layoutTimelinePan').disabled,false,'pan enabled for long archive');
-  assert.match(node('layoutTimelineScope').textContent,/可查看|时间轴|字幕/);
+  assert.match(node('layoutTimelineScope').textContent,/音频派生 · 只读/);
   assert.equal(posted.length,0,'read-only timeline must never write timing');
   assert.equal(sourceRows[0].end,10,'source audio boundary must stay unchanged');
   act('layoutTimelinePanBy(150)');
