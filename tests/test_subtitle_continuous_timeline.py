@@ -25,7 +25,7 @@ class SubtitleCueBrowserOwnershipTests(unittest.TestCase):
                      "layoutCorpusNextPageBtn","layoutCorpusPageStatus",
                      "layoutCueClockOrigin"):
             self.assertEqual(html.count(f'id="{name}"'),1,name)
-        self.assertIn("setStudioV3Pane(next==='effects'?'cue':'inspector')",html)
+        self.assertIn("setStudioV3Pane('inspector')",html)
         self.assertIn("function renderLayoutCorpusRail()",html)
         self.assertIn("function selectLayoutCorpusByIndex(index)",html)
         self.assertIn("loadLayoutStressSample({force:true,selectId:sub.id})",html)
