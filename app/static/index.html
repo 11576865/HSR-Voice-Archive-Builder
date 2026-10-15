@@ -8714,7 +8714,8 @@ async function updateLayoutPreview() {
 
     if(generation!==geometryPreviewGeneration)return;
     const verified=lastVerifiedAssLayout;
-    if(verified?.identity===currentLibassPreviewIdentity()&&
+    if(document.body.dataset.workspaceTask==='layout'&&
+       verified?.identity===currentLibassPreviewIdentity()&&
        verified.layout?.evidence==='libass-validated-ass-plan'){
       res.layout={...res.layout,...verified.layout};
       const primary=verified.layout.primary_lines||[];
