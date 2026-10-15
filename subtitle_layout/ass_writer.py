@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from .config import SubtitleRenderConfig
+from .config import SubtitleRenderConfig, ass_bgr_color
 from .fonts import resolve_font_path, validate_ass_font_name
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
@@ -474,6 +474,8 @@ def render_ass(
     kinetic_options: dict[str, Any] | None = None,
 ) -> str:
     cfg = config or SubtitleRenderConfig()
+    chs_text_color = ass_bgr_color(cfg.chs_color)
+    primary_text_color = ass_bgr_color(cfg.primary_color)
     chs_font = validate_ass_font_name(cfg.chs_font)
     primary_font = validate_ass_font_name(cfg.primary_font)
     chs_font_path = cfg.chs_font_path or resolve_font_path(chs_font)
@@ -490,8 +492,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
-Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
+Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00{chs_text_color},&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
+Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00{primary_text_color},&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
 Style: Card,{primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 Style: Archive,{primary_font},{int(cfg.archive_hud_font_size)},&H{_ass_alpha_for_opacity(cfg.archive_hud_opacity)}FFFFFF,&HFFFFFFFF,&H80000000,&HFF000000,0,0,0,0,100,100,0,0,1,1,0,7,{margin_h},{margin_h},{margin_v},1
 
@@ -759,17 +761,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     y=pos0.y,
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
-                    entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
+                    entry_y_offset=0,
                     voice_gap_seconds=(
                         voice_gap_sec if transition is None and cfg.use_audio_aware_fade else None
                     ),
-                    **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
+                    
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{pri_motion_tags}"
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
-            soft_entry_tags = _soft_entry_tags(cfg, duration_sec)
+            soft_entry_tags = ""  # only opacity fade animation is enabled in this phase
             base_blur_tag = (
                 f"\\blur{_fmt_num(cfg.blur_radius)}"
                 if float(cfg.blur_radius) > 0 and not soft_entry_tags
@@ -839,17 +841,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     y=pos0.y,
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
-                    entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
+                    entry_y_offset=0,
                     voice_gap_seconds=(
                         voice_gap_sec if transition is None and cfg.use_audio_aware_fade else None
                     ),
-                    **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
+                    
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{chs_motion_tags}"
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
-            soft_entry_tags = _soft_entry_tags(cfg, duration_sec)
+            soft_entry_tags = ""  # only opacity fade animation is enabled in this phase
             base_blur_tag = (
                 f"\\blur{_fmt_num(cfg.blur_radius)}"
                 if float(cfg.blur_radius) > 0 and not soft_entry_tags
