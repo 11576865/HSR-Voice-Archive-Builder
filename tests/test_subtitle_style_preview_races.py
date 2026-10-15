@@ -49,6 +49,7 @@ const state = {
   lastRenderedAssIdentity: null,
   liveRealPreviewArmed: true,
   liveRealPreviewTimer: null,
+  fontImportTransactionActive: false,
   document: {body: {dataset: {workspace: 'layout', workspaceTask: 'layout'}}},
   currentLibassPreviewIdentity: () => 'cue-1',
   renderLibassPreview: () => {invocationCount++; return Promise.resolve();},

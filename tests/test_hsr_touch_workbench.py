@@ -55,16 +55,15 @@ class TouchWorkbenchTests(unittest.TestCase):
 
     def test_geometry_appearance_is_feedback_not_evidence(self):
         html=self.html
-        self.assertIn("const appearanceGeometryPreviewSpec=()=>",html)
-        self.assertIn("const appearance=appearanceGeometryPreviewSpec()",html)
-        self.assertIn("geometryStyledText(line",html)
-        self.assertIn("if(appearance.card)elements.push(geometryCard(bbox))",html)
-        self.assertIn("hsr-geometry-style-blur",html)
+        self.assertNotIn("const appearanceGeometryPreviewSpec=()=>",html)
+        self.assertNotIn("elements.push(geometryStyledText(",html)
+        self.assertIn("辅助边界图（无文字渲染）",html)
+        self.assertIn("Always show estimated line rectangles",html)
         # Assert the non-authoritative visual contract, not a legacy
         # literal sentence that was intentionally rewritten in PR #179.
-        self.assertIn("geometry:['辅助几何图（非排版成品）'",html)
+        self.assertIn("geometry:['辅助边界图（无文字渲染）'",html)
         self.assertIn("未经真实验证",html)
-        self.assertIn("不要依据此图定稿；等待自动真实渲染",html)
+        self.assertIn("字号、断行和占位以实际 ASS 为准",html)
         # Real frame failures must not suggest a geometrically fake glyph
         # substitute. Assert the fail-closed evidence state rather than old copy.
         self.assertIn("真实渲染失败 · 不可定稿",html)

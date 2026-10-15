@@ -3487,7 +3487,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="仅检查粗略布局辅助线；字体与断行可能与真实 ASS 不同，不可据此定稿">辅助几何（非成品）</button>
+                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="仅显示估算边界和安全线，不会渲染另一套字幕文字">辅助边界（非字幕）</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
 <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
@@ -6675,6 +6675,7 @@ document.getElementById('subReferenceIntensity').onchange=saveReferenceAnnotatio
 
 /* Subtitle Layout Real-Time Preview Workspace JS Logic */
 let fontBrowserTargetId=null;
+let fontImportTransactionActive=false;
 let fontBrowserTimer=null;
 let previewBackgroundObjectUrl=null;
 const hostFontFaces=new Map();
@@ -6813,6 +6814,10 @@ async function loadFontBrowser(query=''){
 }
 
 async function importCurrentProjectFont(){
+  if(fontImportTransactionActive)return;
+  fontImportTransactionActive=true;
+  clearTimeout(liveRealPreviewTimer);
+  clearTimeout(previewDebounceTimer);
   const file=document.getElementById('projectFontFile')?.files?.[0];
   const target=document.getElementById('projectFontTarget')?.value||'prevChsFont';
   const status=document.getElementById('projectFontImportStatus');
@@ -6853,33 +6858,33 @@ async function importCurrentProjectFont(){
     const resolved=await ensureHostFontLoaded(family,{quiet:true});
     const loaded=hostFontFaces.get(family)?.state==='loaded'&&resolved!==family;
     if(!loaded)throw new Error('字体文件已保存，但浏览器未能加载字形；原字体保持不变。请检查 TTF/OTF 格式');
-    if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
-    if(status){status.textContent='已导入、加载并应用「'+family+'」作为'+(target==='prevChsFont'?'中文':'原文')+'字体。请使用实际 ASS 渲染核对字形。';status.className='small status-ok';}
+    // Do not dispatch input: it schedules a competing preview and aborts proof.
+    if(field)field.value=family;
+    if(status){status.textContent='字体「'+family+'」已加载，正在实际 ASS 核验，尚未应用。';status.className='small muted';}
     const resolveStatus=document.getElementById('fontResolveStatus');
-    if(resolveStatus)resolveStatus.textContent='项目字体已加载：'+family+'。实际 ASS 字形仍需验证。';
+    if(resolveStatus)resolveStatus.textContent='项目字体已加载，待实际 ASS 核验：'+family+'。';
     invalidateLibassPreview();
-    scheduleLayoutPreviewUpdate();
     // "Import and apply" must survive reloading the project: the previous
     // implementation only changed an unsaved input. Make the persistence
     // contract explicit, and never report success when the save failed.
     // FFmpeg confirmation is part of this transaction, not a footnote.
     // Never report "applied" while ASS is rendering a fallback face.
-    await renderLibassPreview();
-    if(document.querySelector('.layout-preview-evidence')?.dataset.previewEvidence!=='libass')
-      throw new Error('实际渲染未采用项目字体；未保存此字体选择，请查看 FFmpeg/libass 的回退诊断');
+    const verified=await renderLibassPreview();
+    if(!verified||lastRenderedAssIdentity!==currentLibassPreviewIdentity())
+      throw new Error('实际 ASS 字体验证未通过或被取消'+(lastLibassPreviewError?'：'+lastLibassPreviewError:'；本次字体选择未保存，请重试'));
     const persisted=await saveSubtitleLayoutSettings();
     if(!persisted)throw new Error('已渲染，但项目设置保存失败');
     fontChoiceSaved=true;
+    if(resolveStatus)resolveStatus.textContent='已保存并通过当前字幕的真实 ASS 验证：'+family+'。';
     if(status){status.textContent='字体「'+family+'」已导入、实际渲染验证并保存。';status.className='small status-ok';}
   }catch(error){
     if(!fontChoiceSaved&&field&&currentProject?.root===root&&field.value!==previousValue){
       field.value=previousValue;
-      field.dispatchEvent(new Event('input',{bubbles:true}));
       invalidateLibassPreview();
-      scheduleLayoutPreviewUpdate();
     }
     if(status){status.textContent='字体未应用：'+shortError(error);status.className='small status-bad';}
   }finally{
+    fontImportTransactionActive=false;
     if(button)button.disabled=false;
   }
 }
@@ -6922,9 +6927,11 @@ let liveRealPreviewTimer = null;
 // A decoded frame is authoritative only for the exact current sample+settings.
 // Rapid sample changes must never leave an old bitmap mistaken for a fresh one.
 let lastRenderedAssIdentity = null;
+let lastLibassPreviewError=null;
 // SVG glyphs are available only through explicit auxiliary inspection.
 let geometryExplicitlyRequested = false;
 function queueLiveRealPreview(){
+  if(fontImportTransactionActive)return;
   clearTimeout(liveRealPreviewTimer);
   // Layout and Effects are two tasks on the same layout canvas. Never
   // accidentally disable the authoritative renderer in Effects mode.
@@ -7012,7 +7019,7 @@ function setPreviewEvidence(mode, detail = '') {
   const meta=document.getElementById('previewEvidenceMeta');
   const modeLabel=document.getElementById('previewModeLabel');
   const states={
-    geometry:['辅助几何图（非排版成品）','字体、断行、行高和视觉占位均可能与 FFmpeg/libass 不同。不要依据此图定稿；等待自动真实渲染。','未经真实验证','辅助几何 · 不可据此定稿'],
+    geometry:['辅助边界图（无文字渲染）','仅显示安全线和估算框，不另行绘制字幕文字；字号、断行和占位以实际 ASS 为准。','未经真实验证','辅助边界 · 不可据此定稿'],
     rendering:['实际 ASS 渲染中','正在生成当前字幕的 FFmpeg/libass 字形；不使用 SVG 字形冒充成品。','尚未验证','真实画面生成中 · 尚未定稿'],
     libass:['FFmpeg/libass 实际渲染','本条字幕的真实字形、断行与样式；并非整部档案逐条验收，且不代表已保存/导出。','当前字幕真实帧','实际 ASS · 当前字幕'],
     video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时纯色视频。','可播放视频 · 非正式导出','真实动态特效 · 纯色背景'],
@@ -7071,7 +7078,7 @@ function showGeometryPreview(){
   clearTimeout(liveRealPreviewTimer);
   setPreviewEvidence('geometry');
   const status=document.getElementById('libassPreviewStatus');
-  if(status){status.textContent='已手动切换辅助几何视图。字体、断行和尺寸不代表最终 ASS；下一次编辑会自动重新生成真实画面。';status.className='small status-warn';}
+  if(status){status.textContent='已手动切换辅助边界视图：这里没有字幕字形，不能用于分句定稿。下一次编辑将重新生成真实 ASS。';status.className='small status-warn';}
 }
 
 function libassPreviewPayload(){
@@ -7095,6 +7102,7 @@ function currentLibassPreviewIdentity(){
 }
 
 async function renderLibassPreview(){
+  lastLibassPreviewError=null;
   geometryExplicitlyRequested=false;
   clearVideoPreview();
   const button=document.getElementById('previewLibassBtn');
@@ -7174,8 +7182,10 @@ async function renderLibassPreview(){
       status.textContent='当前画面由 FFmpeg/libass 使用当前试调值实际渲染'+timingNote+'；修改参数或时间点后会自动标记过期。';
       status.className='small status-ok';
     }
+    return true;
   }catch(err){
-    if(!stillCurrent())return;
+    if(!stillCurrent())return false;
+    lastLibassPreviewError=shortError(err);
     const img=document.getElementById('libassPreviewImage');
     if(img)img.classList.add('hidden');
     if(libassPreviewObjectUrl){URL.revokeObjectURL(libassPreviewObjectUrl);libassPreviewObjectUrl=null;}
@@ -7184,6 +7194,7 @@ async function renderLibassPreview(){
     liveRealPreviewArmed=false;
     if(status){status.textContent='实际 ASS 预览失败：'+shortError(err)+'。请勿依据辅助几何图定稿。';status.className='small status-bad';}
     setLog(String(err));
+    return false;
   }finally{
     if(libassPreviewController===controller)libassPreviewController=null;
     if(button&&generation===libassPreviewGeneration)button.disabled=false;
@@ -8678,6 +8689,7 @@ async function updateLayoutPreview() {
 }
 
 function scheduleLayoutPreviewUpdate() {
+  if(fontImportTransactionActive)return;
   geometryExplicitlyRequested=false;
   geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
   if(geometryPreviewController){geometryPreviewController.abort();geometryPreviewController=null;}
@@ -8724,40 +8736,7 @@ function renderPreviewCanvasSvg(data, options) {
   }
 
   let elements = [];
-  // Browser-only approximation: never claim this is FFmpeg/libass evidence.
-  const appearanceGeometryPreviewSpec=()=>{
-    const value=(id,fallback)=>Number(document.getElementById(id)?.value??fallback);
-    return {
-      outline:Math.max(0,Math.min(12,value('prevOutlineWidth',3))),
-      shadow:Math.max(0,Math.min(12,value('prevShadowDepth',2))),
-      blur:Math.max(0,Math.min(5,value('prevBlurRadius',0))),
-      multi:!!document.getElementById('prevEnableOutline')?.checked,
-      card:!!document.getElementById('prevEnableCard')?.checked,
-      opacity:Math.max(0,Math.min(1,value('prevCardOpacity',62)/100))
-    };
-  };
-  const appearance=appearanceGeometryPreviewSpec();
-  elements.push('<defs><filter id="hsr-geometry-style-blur" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="'+appearance.blur+'"/></filter></defs>');
-  const geometryCard=(bbox)=>{
-    if(!appearance.card)return '';
-    const pad=16;
-    return `<rect x="${bbox.x_min-pad}" y="${bbox.y_min-pad}" width="${bbox.x_max-bbox.x_min+2*pad}" height="${bbox.y_max-bbox.y_min+2*pad}" rx="12" fill="#09101b" opacity="${appearance.opacity}"/>`;
-  };
-  const geometryStyledText=(line,fontName)=>{
-    // Real ASS styles declare Bold=0; SVG weight 600 exaggerated the false preview.
-    // SVG remains explicitly non-authoritative because browser shaping still differs.
-    const attrs=`x="${line.x}" y="${line.bbox.y_min+line.font_size*0.82}" font-size="${line.font_size}" text-anchor="middle" font-family="${escapeHtml(browserPreviewFontName(fontName))}, sans-serif" font-weight="400"`;
-    const glyph=escapeHtml(line.text);
-    const outer=Math.max(appearance.outline+3,appearance.outline*1.8);
-    let out='';
-    if(appearance.shadow>0)
-      out+=`<text ${attrs} transform="translate(${appearance.shadow},${appearance.shadow})" fill="#080808" stroke="#080808" stroke-width="${2*appearance.outline}" paint-order="stroke fill" opacity="0.7">${glyph}</text>`;
-    if(appearance.multi)
-      out+=`<text ${attrs} fill="none" stroke="#080808" stroke-opacity="0.72" stroke-width="${2*outer}">${glyph}</text>`;
-    if(appearance.blur>0)
-      out+=`<text ${attrs} fill="#111111" stroke="#0a0a0a" stroke-width="${2*Math.max(appearance.outline,0.5)}" opacity="0.85" filter="url(#hsr-geometry-style-blur)">${glyph}</text>`;
-    return out+`<text ${attrs} fill="#ffffff" stroke="#101010" stroke-width="${2*appearance.outline}" paint-order="stroke fill">${glyph}</text>`;
-  };
+  // Diagnostic rectangles only: avoid a second, incompatible font rasterizer.
 
   // Center Y reference line
   elements.push('<line x1="0" y1="540" x2="1920" y2="540" stroke="#303846" stroke-width="1" stroke-dasharray="4 4" />');
@@ -8799,14 +8778,12 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#5d9cec';
 
-    if(appearance.card)elements.push(geometryCard(bbox));
-    if (options.showBBox) {
+    { // Always show estimated line rectangles
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(93,156,236,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
     }
 
-    elements.push(geometryStyledText(line,document.getElementById('prevPriFont')?.value||'Noto Sans'));
   });
 
   // Chinese Subtitles (Bottom block, growing downward)
@@ -8814,14 +8791,12 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#b78cff';
 
-    if(appearance.card)elements.push(geometryCard(bbox));
-    if (options.showBBox) {
+    { // Always show estimated line rectangles
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(183,140,255,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
     }
 
-    elements.push(geometryStyledText(line,document.getElementById('prevChsFont')?.value||'Microsoft YaHei'));
   });
 
   svg.innerHTML = elements.join('');
