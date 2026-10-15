@@ -28,7 +28,7 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertIn("lastLibassPreviewError",fn)
         self.assertIn("if(fontImportTransactionActive)return;\n  clearTimeout(liveRealPreviewTimer)",s)
 
-    def test_geometry_is_boxes_not_a_second_caption(self):
+    def test_quick_svg_caption_has_one_glyph_owner(self):
         s=self.html
         start=s.index("function renderPreviewCanvasSvg(")
         end=s.index("svg.innerHTML = elements.join('');",start)
@@ -36,7 +36,10 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertNotIn("geometryStyledText(",block)
         self.assertNotIn("escapeHtml(line.text)",block)
         self.assertIn("const boxW = bbox.x_max - bbox.x_min",block)
-        self.assertIn("辅助边界图（无文字渲染）",s)
+        self.assertIn("字幕渲染前快速预览",s)
+        self.assertIn("const drawQuickSubtitleLine=",s)
+        self.assertIn("svg.appendChild(el)",s)
+        self.assertNotIn("renderCanvasSubtitleOverlay(data);",s)
 
     def test_real_import_twice_without_duplicate_validation_or_false_failure(self):
         """Run the production browser handler: first + repeat + real failure."""
