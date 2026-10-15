@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import csv
 import json
+import os
+import tempfile
 from dataclasses import dataclass, replace
 from pathlib import Path
 from typing import Any, Callable
@@ -514,6 +516,60 @@ def parse_time_range_str(time_range_str: str) -> tuple[float | None, float | Non
     e_time = time_to_seconds(parts[1])
     return s_time, e_time
 
+
+
+
+def export_independent_ass(
+    config: ProjectConfig, output_dir: Path,
+    *, ass_progress: Callable[[int, int], None] | None = None,
+) -> dict[str, Any]:
+    """Render a new independent ASS without mutating any existing artifact.
+
+    Explicit external export never rewrites the active ASS, SRT, manifest, MKV
+    or certified receipts. A source snapshot is assembled purely in memory.
+    The final name is installed through an exclusive hard link; collisions
+    advance to the next numbered name instead of overwriting existing exports.
+    """
+    with subtitle_edit_lock(output_dir):
+        manifest_path = output_dir / "manifest.json"
+        if not manifest_path.is_file():
+            raise FileNotFoundError("请先构建项目，再导出独立 ASS")
+        manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+        entries = manifest.get("entries")
+        if not isinstance(entries, list) or not entries:
+            raise ValueError("项目中没有可导出的字幕")
+        _apply_derived_subtitle_fields(entries, load_subtitle_overrides(output_dir))
+        apply_cached_word_alignments(entries, output_dir)
+        adapters = _subtitle_adapters(entries, {})
+        export_dir = output_dir / "exports"
+        if export_dir.is_symlink():
+            raise ValueError("不允许向符号链接的导出目录写入 ASS")
+        export_dir.mkdir(parents=True, exist_ok=True)
+        if not export_dir.is_dir():
+            raise ValueError("ASS 导出目录不可用")
+        with tempfile.TemporaryDirectory(prefix=".ass-external-", dir=export_dir) as td:
+            temporary = Path(td) / "new.ass"
+            write_ass(
+                adapters, temporary,
+                source_language=config.source_text_language or "en",
+                target_language=config.target_language or "zh-CN",
+                config=_ass_artifact_render_config(subtitle_render_config(config)),
+                **({"progress_callback": ass_progress} if ass_progress else {}),
+            )
+            name = "HSR_Voice_Archive"
+            for index in range(1, 100000):
+                candidate = export_dir / f"{name}_{index:04d}.ass"
+                try:
+                    os.link(temporary, candidate, follow_symlinks=False)
+                    return {
+                        "ass_file": str(candidate),
+                        "delivery": "external-ass",
+                        "existing_ass_preserved": True,
+                        "mkv_untouched": True,
+                    }
+                except FileExistsError:
+                    continue
+            raise RuntimeError("独立 ASS 导出文件名编号已耗尽")
 
 
 def refresh_ass_only(
