@@ -83,7 +83,8 @@ class TouchWorkbenchTests(unittest.TestCase):
     def test_karaoke_input_is_explained_without_invented_alignment(self):
         self.assertIn('id="hsrAlignmentHelp"', self.html)
         self.assertIn('id="hsrWordAlignmentExample"', self.html)
-        self.assertIn("本地生成缺失时间", self.html)
+        self.assertIn("固定速度", self.html)
+        self.assertIn("真实词级时间", self.html)
         self.assertIn("WhisperX", self.html)
         self.assertIn("不能直接导入任意项目", self.html)
 
