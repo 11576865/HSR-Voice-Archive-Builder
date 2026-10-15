@@ -6671,6 +6671,17 @@ let fontBrowserTargetId=null;
 let fontBrowserTimer=null;
 let previewBackgroundObjectUrl=null;
 const hostFontFaces=new Map();
+const hostFontEpochs=new Map();
+function invalidateHostFont(family){
+  const key=String(family||'').trim();
+  const old=hostFontFaces.get(key);
+  // Removing only Map state leaves a previous FontFace registered under the
+  // same CSS family alias. That leads to old and new glyphs being composed.
+  if(old?.face&&document.fonts?.delete)document.fonts.delete(old.face);
+  hostFontFaces.delete(key);
+  hostFontEpochs.set(key,(hostFontEpochs.get(key)||0)+1);
+}
+
 
 function hostFontAlias(family){
   const text=String(family||'').trim();
@@ -6680,6 +6691,10 @@ function hostFontAlias(family){
     hash=Math.imul(hash,16777619);
   }
   return 'HSRHostFont_'+(hash>>>0).toString(16);
+}
+
+function invalidateAllHostFonts(){
+  for(const family of [...hostFontFaces.keys()])invalidateHostFont(family);
 }
 
 function browserPreviewFontName(family){
@@ -6703,6 +6718,8 @@ async function ensureHostFontLoaded(family,{quiet=false}={}){
   }
 
   const alias=hostFontAlias(key);
+  const epoch=hostFontEpochs.get(key)||0;
+  const isCurrent=()=>epoch===(hostFontEpochs.get(key)||0);
   const promise=(async()=>{
     try{
       const response=await fetch('/api/subtitle-layout/font-file?family='+encodeURIComponent(key),{
@@ -6719,6 +6736,7 @@ async function ensureHostFontLoaded(family,{quiet=false}={}){
       if(!bytes.byteLength)throw new Error('字体文件为空');
       const face=new FontFace(alias,bytes);
       await face.load();
+      if(!isCurrent())return key; // An imported replacement superseded this fetch.
       document.fonts.add(face);
       hostFontFaces.set(key,{state:'loaded',alias,face,promise:null});
       if(!quiet){
@@ -6727,6 +6745,7 @@ async function ensureHostFontLoaded(family,{quiet=false}={}){
       }
       return alias;
     }catch(error){
+      if(!isCurrent())return key;
       hostFontFaces.set(key,{state:'failed',alias,error:String(error),promise:null});
       if(!quiet){
         const status=document.getElementById('fontResolveStatus');
@@ -6854,7 +6873,7 @@ async function importCurrentProjectFont(){
     if(currentProject?.root!==root)return;
     const family=String(data.font?.family||'');
     if(!family)throw new Error('服务器没有返回可识别的字体族名');
-    hostFontFaces.delete(family); // A prior browser fallback is no longer authoritative.
+    invalidateHostFont(family); // Remove previously registered FontFace, not just its cache record.
     const field=document.getElementById(target);
     if(field){field.value=family;field.dispatchEvent(new Event('input',{bubbles:true}));}
     const resolved=await ensureHostFontLoaded(family,{quiet:true});
