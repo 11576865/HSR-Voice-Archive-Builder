@@ -80,6 +80,14 @@ class TestAdvancedTypography(unittest.TestCase):
                 timing="fixed",unit="pixel",speed_ms=500,mode="kf",
             )
         self.assertEqual(pixel,r"{\kf60}W{\kf10}i")
+        with patch("subtitle_layout.ass_writer.measure_text_width",
+                   side_effect=lambda text,size,path: {"W":120,"i":20}[text]):
+            normalized=format_generated_karaoke(
+                [SimpleNamespace(text="Wi",font_size=42)],2.0,
+                timing="cue",unit="pixel",speed_ms=500,mode="kf",
+            )
+        self.assertEqual(normalized,r"{\kf171}W{\kf29}i")
+
         cfg=SubtitleRenderConfig(
             enable_karaoke=True,karaoke_timing="fixed",karaoke_unit="character",
             karaoke_speed_ms=300,karaoke_mode="kf",enable_kinetic=False
