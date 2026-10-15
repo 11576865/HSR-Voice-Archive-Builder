@@ -67,8 +67,8 @@ class TouchWorkbenchTests(unittest.TestCase):
         # Real frame failures must not suggest a geometrically fake glyph
         # substitute. Assert the fail-closed evidence state rather than old copy.
         self.assertIn("真实渲染失败 · 不可定稿",html)
-        self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
-        self.assertIn("geometryExplicitlyRequested=true;",html)
+        self.assertIn("const overlayVisible=geometryExplicitlyRequested",html)
+        self.assertIn("geometryExplicitlyRequested=!geometryExplicitlyRequested;",html)
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
