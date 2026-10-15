@@ -6929,6 +6929,7 @@ let lastRenderedAssIdentity = null;
 let lastLibassPreviewError=null;
 // SVG glyphs are available only through explicit auxiliary inspection.
 let geometryExplicitlyRequested = false;
+let lastVerifiedAssLayout = null; // exact payload identity + libass-validated line plan
 function queueLiveRealPreview(){
   // No task, including Effects, may launch FFmpeg/libass still rendering
   // merely from settings changes. Real ASS is a user-invoked operation.
@@ -7064,6 +7065,9 @@ function showGeometryPreview(){
   setPreviewEvidence('geometry');
   const status=document.getElementById('libassPreviewStatus');
   if(status){status.textContent='已切换浏览器字幕快速预览；修改参数只更新近似预览，不会自动执行实际 ASS 渲染。';status.className='small status-warn';}
+  // Reproject the already-verified plan for this exact snapshot, if present.
+  // This fetch is the cheap geometry API, never another FFmpeg invocation.
+  void updateLayoutPreview();
 }
 
 function libassPreviewPayload(){
@@ -7117,6 +7121,17 @@ async function renderLibassPreview(){
       try{const body=await response.json();detail=body.error||detail}catch(e){try{detail=await response.text()}catch(_){}}
       throw new Error(detail);
     }
+    let verifiedLayout=null;
+    try{
+      const encoded=response.headers?.get('X-HSR-Verified-Layout');
+      if(encoded&&encoded.length<=6000&&typeof atob==='function'&&typeof TextDecoder==='function'){
+        const bytes=Uint8Array.from(atob(encoded),c=>c.charCodeAt(0));
+        const parsed=JSON.parse(new TextDecoder().decode(bytes));
+        if(parsed?.evidence==='libass-validated-ass-plan'&&
+           Array.isArray(parsed.primary_lines)&&Array.isArray(parsed.chs_lines))
+          verifiedLayout=parsed;
+      }
+    }catch(_){/* Optional metadata must never hide a decoded real frame. */}
     const blob=await response.blob();
     if(!stillCurrent())return;
     if(!blob.size)throw new Error('实际 ASS 预览返回空图像');
@@ -7158,6 +7173,9 @@ async function renderLibassPreview(){
     }
     img.classList.remove('hidden');
     lastRenderedAssIdentity=identity;
+    // The real ASS image remains authoritative; cache its *actual* wrap and
+    // scale only for a subsequent fast/real toggle with identical parameters.
+    lastVerifiedAssLayout=verifiedLayout?{identity,layout:verifiedLayout}:null;
     setPreviewEvidence('libass');
     liveRealPreviewArmed=document.body.dataset.workspaceTask==='effects';
     if(status){
@@ -8695,10 +8713,26 @@ async function updateLayoutPreview() {
     });
 
     if(generation!==geometryPreviewGeneration)return;
+    const verified=lastVerifiedAssLayout;
+    if(verified?.identity===currentLibassPreviewIdentity()&&
+       verified.layout?.evidence==='libass-validated-ass-plan'){
+      res.layout={...res.layout,...verified.layout};
+      const primary=verified.layout.primary_lines||[];
+      const chs=verified.layout.chs_lines||[];
+      const priHeight=primary.reduce((n,line)=>n+Number(line.line_height||0),0);
+      const chsHeight=chs.reduce((n,line)=>n+Number(line.line_height||0),0);
+      res.parallax={
+        ...res.parallax,
+        primary_offset:priHeight,chs_offset:chsHeight,
+        y_primary_peak:primary[0]?.bbox?.y_min??res.parallax?.y_primary_peak,
+        y_chs_peak:chs[chs.length-1]?.bbox?.y_max??res.parallax?.y_chs_peak
+      };
+    }
     renderPreviewCanvasSvg(res, { showSafeArea, showCentralGap, showBBox });
     if(document.body.dataset.workspaceTask==='layout'&&geometryExplicitlyRequested){
       const resultLayout=res?.layout||{};
       const pct=Number(resultLayout.scale_percent||100);
+      const verifiedForThisSnapshot=lastVerifiedAssLayout?.identity===currentLibassPreviewIdentity();
       // Do not silently substitute an OS browser fallback for a selected font.
       // Such a preview cannot be compared with libass even if lines seem to fit.
       const unloadedFonts=[chsFont,priFont]
@@ -8712,6 +8746,9 @@ async function updateLayoutPreview() {
         }else if(resultLayout.failed){
           status.textContent='自动缩放至最低档仍无法容纳字幕：'+(resultLayout.failed_condition||'OVERFLOW')+'。请缩短文本、调整双语比例、安全边距或字号。';
           status.className='small status-bad';
+        }else if(verifiedForThisSnapshot){
+          status.textContent='快速预览已复用本次实际 ASS 验证过的换行和缩放（'+pct+'%）；字体轮廓及特效仍以真实帧为准。';
+          status.className='small status-ok';
         }else if(pct<100){
           status.textContent='排版已自动缩小至 '+pct+'%（快速预览估算）；点击「实际 ASS 渲染」验证 libass 真实效果。';
           status.className='small status-warn';
@@ -8762,6 +8799,8 @@ function scheduleLayoutPreviewUpdate() {
   geometryPreviewGeneration++; // A queued edit also invalidates pending geometry responses.
   if(geometryPreviewController){geometryPreviewController.abort();geometryPreviewController=null;}
   invalidateLibassPreview();
+  if(lastVerifiedAssLayout?.identity!==currentLibassPreviewIdentity())
+    lastVerifiedAssLayout=null;
   if(document.body.dataset.workspaceTask==='layout')
     setPreviewEvidence('geometry','参数已修改，正在更新浏览器近似字幕；实际 ASS 不会自动渲染。');
   clearTimeout(previewDebounceTimer);
