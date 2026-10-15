@@ -3665,7 +3665,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <select id="projectFontTarget"><option value="prevChsFont">中文字体</option><option value="prevPriFont">原文字体</option></select>
               <button id="projectFontImportBtn" class="secondary" type="button" disabled>导入并保存字体</button>
               <button id="projectFontRefreshBtn" class="secondary" type="button" hidden>刷新字体缓存</button>
-              <div id="projectFontList" class="hsr-project-font-list" aria-label="当前项目的已导入字体"></div>
+              <div id="projectFontList" class="hsr-project-font-list" hidden inert aria-hidden="true"></div>
               <p id="projectFontImportStatus" role="status" aria-live="polite" class="small muted">字体保存在当前项目；不会安装到系统。</p>
             </details>
             <div style="display:flex;justify-content:space-between;margin-top:8px">
@@ -3834,7 +3834,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <div id="wordAlignmentStatus" class="small muted layout-corpus-status">打开项目后检查词级时间数据。</div>
             <div class="actions" style="margin-top:6px">
               <button type="button" class="small secondary" id="refreshWordAlignmentBtn">刷新状态</button>
-              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本地生成缺失时间</button>
+              <button type="button" class="small secondary" id="generateWordAlignmentBtn">本机生成（需 WhisperX）</button>
               <button type="button" class="small secondary" id="importWordAlignmentBtn">导入词级时间 JSON</button>
               <input type="file" id="wordAlignmentFile" class="hidden" accept="application/json,.json">
             </div>
@@ -7183,18 +7183,18 @@ async function loadWordAlignmentDiagnostics(){
     const generateButton=document.getElementById('generateWordAlignmentBtn');
     if(providerStatus){
       if(provider.available){
-        providerStatus.textContent='本地对齐器：WhisperX 可用'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；推理在处理主机执行。';
+        providerStatus.textContent='已安装 WhisperX / PyTorch'+(provider.whisperx_version?' · '+provider.whisperx_version:'')+'；模型加载和对齐仍须实际验证。';
         providerStatus.className='small status-ok';
       }else{
         const missingPackages=Array.isArray(provider.missing_packages)?provider.missing_packages.join(', '):'WhisperX';
-        providerStatus.textContent='此设备当前不能本地生成词级时间：缺少 '+missingPackages+'。可以在支持 WhisperX/PyTorch 的处理主机生成后，导入与本项目匹配的 JSON。';
+        providerStatus.textContent='本机不能生成词级时间：缺少 '+missingPackages+'。请在支持 WhisperX/PyTorch 的电脑上生成本项目匹配的 JSON，再在此导入；不会伪造时间。';
         providerStatus.className='small muted';
       }
     }
     if(generateButton){
       generateButton.disabled=!provider.available;
-      generateButton.hidden=!provider.available;
-      generateButton.title=provider.available?'为当前缺失或无效的条目生成逐词时间':'此设备无法运行 WhisperX/PyTorch，请导入匹配的词级时间 JSON';
+      generateButton.hidden=false;
+      generateButton.title=provider.available?'尝试真实本地 WhisperX 对齐，仍需模型和音频可用':'本机缺少 WhisperX/PyTorch，禁用生成；可导入对齐 JSON';
     }
     const total=Number(d.total||0),usable=Number(d.usable||0),missing=Number(d.missing||0),invalid=Number(d.invalid||0);
     const enabled=!!document.getElementById('prevEnableKaraoke')?.checked;
@@ -7204,7 +7204,7 @@ async function loadWordAlignmentDiagnostics(){
       status.className='small muted layout-corpus-status';
     }else if(usable<=0){
       setHsrKaraokeReadiness('0 / '+total+' 条具备有效逐词时间。'+(provider.available
-        ?'可以直接点击「本地生成缺失时间」。'
+        ?'可尝试本机 WhisperX 对齐，模型和音频仍需验证。'
         :'当前处理环境没有可运行的本地词级对齐器；请从其他支持的环境生成匹配 JSON 后导入。'),'warning');
       status.textContent='词级时间不可用：0 / '+total+'；缺失 '+missing+'，无效 '+invalid+'。高级 Karaoke 将保持普通整句。';
       status.className='small '+(enabled?'status-warn':'muted')+' layout-corpus-status';
