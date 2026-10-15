@@ -3476,7 +3476,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <video id="libassVideoPreview" class="hidden" controls playsinline loop preload="none" aria-label="FFmpeg/libass 动态字幕预览（黑底或用户本地视频片段）" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:5;background:#000"></video>
 <img id="libassPreviewImage" class="hidden" alt="FFmpeg/libass 实际 ASS 渲染预览" style="position:absolute;inset:0;width:100%;height:100%;object-fit:contain;z-index:4;background:#000">
           <div id="previewModeOverlay" style="position:absolute;top:10px;left:12px;display:flex;align-items:center;gap:8px;pointer-events:none">
-            <span id="previewModeLabel" class="layout-canvas-mode-label">几何求解 · 非真实渲染</span>
+            <span id="previewModeLabel" class="layout-canvas-mode-label">等待实际 ASS 字形</span>
             <span style="background:rgba(0,0,0,0.6);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;font-weight:600">1920×1080</span>
           </div>
           <div id="previewCollisionBanner" class="hidden" style="position:absolute;top:10px;right:12px;background:rgba(239,107,115,0.92);color:#fff;padding:6px 12px;border-radius:6px;font-size:12px;font-weight:700;box-shadow:0 2px 8px rgba(0,0,0,0.4);display:flex;align-items:center;gap:6px">
@@ -3487,7 +3487,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="studio-v3-command-bar" aria-label="预览、保存和生成操作">
             <div class="preview-actions">
                   <div class="actions" style="margin:0">
-                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true" title="仅检查粗略布局辅助线；字体与断行可能与真实 ASS 不同，不可据此定稿">辅助几何（非成品）</button>
+                    <button type="button" class="secondary" id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false" title="仅检查粗略布局辅助线；字体与断行可能与真实 ASS 不同，不可据此定稿">辅助几何（非成品）</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
                     <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
 <button type="button" class="secondary" id="saveSubtitleLayoutBtn">保存当前设置</button>
@@ -3510,7 +3510,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <div class="layout-preview-evidence" role="status" aria-live="polite" aria-atomic="true" data-preview-evidence="geometry">
             <div class="layout-preview-evidence-main">
               <span class="layout-evidence-dot" aria-hidden="true"></span>
-              <div><strong id="previewEvidenceTitle">几何预览</strong><p id="previewEvidenceDetail">非真实渲染</p></div>
+              <div><strong id="previewEvidenceTitle">等待实际 ASS 渲染</strong><p id="previewEvidenceDetail">当前字幕在真实帧解码前不可定稿</p></div>
             </div>
             <span id="previewEvidenceMeta" class="layout-evidence-meta">未进行真实渲染</span>
           </div>

@@ -213,7 +213,7 @@ function complete() {
   await old;
   assert.equal(madeUrls.length, 0, 'obsolete response must not allocate a new image URL');
   assert.equal(node('libassPreviewImage').classList.contains('hidden'), true);
-  assert.equal(node('evidence-root').dataset.previewEvidence, 'geometry');
+  assert.equal(node('evidence-root').dataset.previewEvidence, 'rendering');
 
   // Request 2: transport success is not yet decoded-image success.
   const current = vm.runInContext('renderLibassPreview()', sandbox);

@@ -119,14 +119,15 @@ class SubtitleStyleWorkbenchUiTests(unittest.TestCase):
 
     def test_real_render_and_geometry_actions_report_distinct_evidence(self) -> None:
         html = self.html
-        self.assertIn('id="previewGeometryBtn" data-studio-scope="style" aria-pressed="true"', html)
+        self.assertIn('id="previewGeometryBtn" data-studio-scope="style" aria-pressed="false"', html)
         self.assertIn('id="previewLibassBtn" aria-pressed="false"', html)
         for state in ("geometry", "rendering", "libass", "stale", "failed"):
             self.assertIn(f"{state}:[", html)
         self.assertIn("setPreviewEvidence('libass')", html)
         self.assertIn("setPreviewEvidence('rendering')", html)
         self.assertIn("setPreviewEvidence('failed'", html)
-        self.assertIn("setPreviewEvidence(hadResult?'stale':'geometry')", html)
+        self.assertIn("setPreviewEvidence(hadResult?'stale':'rendering')", html)
+        self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
         self.assertIn("真实渲染不会保存设置", html)
 
     def test_out_of_order_preview_results_cannot_replace_current_state(self) -> None:
