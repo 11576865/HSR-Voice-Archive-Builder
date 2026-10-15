@@ -125,6 +125,12 @@ def _get_candidate_split_points(text: str) -> list[int]:
     for i in range(1, n):
         c_prev = text[i - 1]
         c_curr = text[i]
+        # Never split an English contraction or possessive immediately
+        # after the apostrophe (That's -> That' / s). Both straight and
+        # typographic apostrophes occur in user subtitles.
+        if (c_prev in "'’" and i >= 2 and text[i - 2].isalpha()
+                and c_curr.isalpha()):
+            continue
         # Candidate split right after space or at space boundary
         if c_prev.isspace() or c_curr.isspace():
             candidates.add(i)

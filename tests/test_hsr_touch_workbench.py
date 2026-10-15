@@ -60,7 +60,11 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("geometryStyledText(line",html)
         self.assertIn("if(appearance.card)elements.push(geometryCard(bbox))",html)
         self.assertIn("hsr-geometry-style-blur",html)
-        self.assertIn("SVG 近似反馈，不能验证 libass 字形",html)
+        # Assert the non-authoritative visual contract, not a legacy
+        # literal sentence that was intentionally rewritten in PR #179.
+        self.assertIn("geometry:['辅助几何图（非排版成品）'",html)
+        self.assertIn("未经真实验证",html)
+        self.assertIn("不要依据此图定稿；等待自动真实渲染",html)
         self.assertIn("浏览器近似 · 渲染失败",html)
 
     def test_task_switch_does_not_reopen_every_long_accordion(self):
