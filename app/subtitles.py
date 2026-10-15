@@ -277,6 +277,9 @@ def subtitle_render_config(config: ProjectConfig) -> SubtitleRenderConfig:
             if str(config.subtitle_karaoke_mode or "k").lower() in {"k", "kf", "clip"}
             else "k"
         ),
+        karaoke_timing=config.subtitle_karaoke_timing if config.subtitle_karaoke_timing in {"aligned","fixed","cue"} else "aligned",
+        karaoke_unit=config.subtitle_karaoke_unit if config.subtitle_karaoke_unit in {"character","word"} else "character",
+        karaoke_speed_ms=max(10,min(2000,int(config.subtitle_karaoke_speed_ms))),
         enable_frosted_glass=bool(config.subtitle_enable_translucent_card),
         enable_multi_layer_outline=bool(config.subtitle_enable_multi_layer_outline),
         enable_kinetic=bool(config.subtitle_enable_kinetic),
