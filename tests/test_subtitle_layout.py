@@ -72,9 +72,12 @@ class SubtitleLayoutTests(unittest.TestCase):
         tags_long = generate_kinetic_tags(2.0)
         self.assertIn(r"\fad(200,200)", tags_long)
 
-        # Short duration line (0.3s = 300ms): entry/exit capped to 25% (75ms)
+        # Only the available cue duration caps the total; preserve the in/out ratio.
         tags_short = generate_kinetic_tags(0.3)
-        self.assertIn(r"\fad(75,75)", tags_short)
+        self.assertIn(r"\fad(150,150)", tags_short)
+        self.assertIn(r"\fad(2000,1000)", generate_kinetic_tags(
+            4.0, fade_in_ms=2000, fade_out_ms=1000
+        ))
 
     def test_kinetic_tags_position_and_displacement(self) -> None:
         # Static pos tagging
