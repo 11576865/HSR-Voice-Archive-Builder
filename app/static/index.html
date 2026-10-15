@@ -7638,6 +7638,8 @@ function renderLayoutExportHealthNotice(){
 }
 function layoutCueResetProject(projectKey){
   if(projectKey===layoutCueProjectKey)return;
+  // A different project's identically named family may refer to different bytes.
+  invalidateAllHostFonts();
   layoutCueProjectKey=projectKey;
   const note=document.getElementById('layoutCueTimingStatus');
   if(note)note.dataset.committed='';
