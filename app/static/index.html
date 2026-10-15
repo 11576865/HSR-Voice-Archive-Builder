@@ -3726,17 +3726,17 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <label for="prevOutlineWidth" style="margin:0">描边宽度</label>
               <span id="prevOutlineWidthVal" class="small muted">3.0</span>
             </div>
-            <input type="range" id="prevOutlineWidth" min="0" max="8" value="3" step="0.25">
+            <input type="range" id="prevOutlineWidth" min="0" max="12" value="3" step="0.25">
             <div style="display:flex;justify-content:space-between">
               <label for="prevShadowDepth" style="margin:0">阴影强度</label>
               <span id="prevShadowDepthVal" class="small muted">2.0</span>
             </div>
-            <input type="range" id="prevShadowDepth" min="0" max="8" value="2" step="0.25">
+            <input type="range" id="prevShadowDepth" min="0" max="12" value="2" step="0.25">
             <div style="display:flex;justify-content:space-between">
               <label for="prevBlurRadius" style="margin:0">柔化描边 / Blur</label>
               <span id="prevBlurRadiusVal" class="small muted">0.0</span>
             </div>
-            <input type="range" id="prevBlurRadius" min="0" max="2.5" value="0" step="0.1">
+            <input type="range" id="prevBlurRadius" min="0" max="5" value="0" step="0.1">
             <label class="check"><input type="checkbox" id="prevEnableOutline"> 多层柔和轮廓</label>
             <label class="check"><input type="checkbox" id="prevEnableCard"> 半透明底板</label>
             <div style="display:flex;justify-content:space-between">
@@ -3744,7 +3744,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevCardOpacityVal" class="small muted">62%</span>
             </div>
             <input type="range" id="prevCardOpacity" min="0" max="100" value="62" step="1">
-            <div class="small muted inspector-help">描边、阴影、柔化、底板和动态效果以「实际 ASS 渲染」为准；快速几何画布只用于核对字幕位置和换行，不模拟这些字形特效。</div>
+            <div class="small muted inspector-help">按住 ＋ / − 可连续调整；快速预览仅近似显示描边、阴影、Blur 与底板，不是实际 libass 渲染。描边 0–12 px、阴影 0–12 px、Blur 0–5 为本项目当前渲染安全范围，并非 ASS 格式上限；超出时提示，不会静默截断。</div>
           </section>
             </div>
           </details>
@@ -6989,14 +6989,14 @@ function setPreviewEvidence(mode, detail = '') {
   const meta=document.getElementById('previewEvidenceMeta');
   const modeLabel=document.getElementById('previewModeLabel');
   const states={
-    geometry:['浏览器几何预览','显示排版求解器的布局与安全区；不是实际 ASS 字形渲染。','尚未进行真实渲染','几何求解 · 非真实渲染'],
+    geometry:['浏览器近似预览','位置由求解器计算；外观仅 SVG 近似反馈，不能验证 libass 字形和成品。','尚未进行真实渲染','浏览器近似 · 非真实 ASS'],
     rendering:['实际 ASS 渲染中','正在请求 FFmpeg/libass；画布暂时显示浏览器几何结果。','正在验证','几何求解 · 渲染进行中'],
     libass:['FFmpeg/libass 实际渲染','当前可见帧由真实渲染路径根据本次试调值生成；尚不代表已保存或完成导出。','真实渲染帧','实际 ASS 渲染'],
     video:['FFmpeg/libass 动态视频','当前播放的是 FFmpeg/libass 真实合成的短时纯色视频。','可播放视频 · 非正式导出','真实动态特效 · 纯色背景'],
     'video-image':['FFmpeg/libass 图片背景合成','真实解码本地图片作为连续视频帧，再由 libass 渲染动态字幕；不保存图片到项目。','图片帧 + 动态 ASS · 非正式导出','真实动态特效 · 图片背景'],
     'video-footage':['FFmpeg/libass 视频合成','真实读取本次选择的本地视频画面并叠加 ASS 字幕；源音频取决于本次音轨选项，不保存原素材。','源素材叠加 · 非正式导出','真实动态特效 · 本地素材'],
     stale:['真实渲染结果已过期','参数、字幕样本或时间点变化；当前已退回浏览器几何预览。','请重新渲染','几何求解 · 结果已过期'],
-    failed:['真实渲染失败','真实渲染未完成；画布只显示浏览器几何结果。','渲染未验证','几何求解 · 渲染失败']
+    failed:['真实渲染失败','真实渲染未完成；画布仅显示浏览器近似外观，不代表 libass。','渲染未验证','浏览器近似 · 渲染失败']
   };
   const current=states[mode]||states.geometry;
   if(root)root.dataset.previewEvidence=mode;
@@ -8669,6 +8669,38 @@ function renderPreviewCanvasSvg(data, options) {
   }
 
   let elements = [];
+  // Browser-only approximation: never claim this is FFmpeg/libass evidence.
+  const appearanceGeometryPreviewSpec=()=>{
+    const value=(id,fallback)=>Number(document.getElementById(id)?.value??fallback);
+    return {
+      outline:Math.max(0,Math.min(12,value('prevOutlineWidth',3))),
+      shadow:Math.max(0,Math.min(12,value('prevShadowDepth',2))),
+      blur:Math.max(0,Math.min(5,value('prevBlurRadius',0))),
+      multi:!!document.getElementById('prevEnableOutline')?.checked,
+      card:!!document.getElementById('prevEnableCard')?.checked,
+      opacity:Math.max(0,Math.min(1,value('prevCardOpacity',62)/100))
+    };
+  };
+  const appearance=appearanceGeometryPreviewSpec();
+  elements.push('<defs><filter id="hsr-geometry-style-blur" x="-80%" y="-80%" width="260%" height="260%"><feGaussianBlur stdDeviation="'+appearance.blur+'"/></filter></defs>');
+  const geometryCard=(bbox)=>{
+    if(!appearance.card)return '';
+    const pad=16;
+    return `<rect x="${bbox.x_min-pad}" y="${bbox.y_min-pad}" width="${bbox.x_max-bbox.x_min+2*pad}" height="${bbox.y_max-bbox.y_min+2*pad}" rx="12" fill="#09101b" opacity="${appearance.opacity}"/>`;
+  };
+  const geometryStyledText=(line,fontName)=>{
+    const attrs=`x="${line.x}" y="${line.bbox.y_min+line.font_size*0.82}" font-size="${line.font_size}" text-anchor="middle" font-family="${escapeHtml(browserPreviewFontName(fontName))}, sans-serif" font-weight="600"`;
+    const glyph=escapeHtml(line.text);
+    const outer=Math.max(appearance.outline+3,appearance.outline*1.8);
+    let out='';
+    if(appearance.shadow>0)
+      out+=`<text ${attrs} transform="translate(${appearance.shadow},${appearance.shadow})" fill="#080808" stroke="#080808" stroke-width="${2*appearance.outline}" paint-order="stroke fill" opacity="0.7">${glyph}</text>`;
+    if(appearance.multi)
+      out+=`<text ${attrs} fill="none" stroke="#080808" stroke-opacity="0.72" stroke-width="${2*outer}">${glyph}</text>`;
+    if(appearance.blur>0)
+      out+=`<text ${attrs} fill="#111111" stroke="#0a0a0a" stroke-width="${2*Math.max(appearance.outline,0.5)}" opacity="0.85" filter="url(#hsr-geometry-style-blur)">${glyph}</text>`;
+    return out+`<text ${attrs} fill="#ffffff" stroke="#101010" stroke-width="${2*appearance.outline}" paint-order="stroke fill">${glyph}</text>`;
+  };
 
   // Center Y reference line
   elements.push('<line x1="0" y1="540" x2="1920" y2="540" stroke="#303846" stroke-width="1" stroke-dasharray="4 4" />');
@@ -8710,14 +8742,14 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#5d9cec';
 
+    if(appearance.card)elements.push(geometryCard(bbox));
     if (options.showBBox) {
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(93,156,236,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
     }
 
-    const textY = bbox.y_min + line.font_size * 0.82;
-    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="${escapeHtml(browserPreviewFontName(document.getElementById('prevPriFont')?.value || 'Noto Sans'))}, Arial, sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
+    elements.push(geometryStyledText(line,document.getElementById('prevPriFont')?.value||'Noto Sans'));
   });
 
   // Chinese Subtitles (Bottom block, growing downward)
@@ -8725,14 +8757,14 @@ function renderPreviewCanvasSvg(data, options) {
     const bbox = line.bbox;
     const boxColor = layout.failed ? '#ef6b73' : '#b78cff';
 
+    if(appearance.card)elements.push(geometryCard(bbox));
     if (options.showBBox) {
       const boxW = bbox.x_max - bbox.x_min;
       const boxH = bbox.y_max - bbox.y_min;
       elements.push(`<rect x="${bbox.x_min}" y="${bbox.y_min}" width="${boxW}" height="${boxH}" fill="rgba(183,140,255,0.12)" stroke="${boxColor}" stroke-width="1.5" stroke-dasharray="4 3" />`);
     }
 
-    const textY = bbox.y_min + line.font_size * 0.82;
-    elements.push(`<text x="${line.x}" y="${textY}" font-size="${line.font_size}" text-anchor="middle" fill="#ffffff" stroke="#101010" stroke-width="${Math.max(2, line.font_size * 0.08)}" paint-order="stroke fill" font-family="${escapeHtml(browserPreviewFontName(document.getElementById('prevChsFont')?.value || 'Microsoft YaHei'))}, 'Microsoft YaHei', sans-serif" font-weight="600">${escapeHtml(line.text)}</text>`);
+    elements.push(geometryStyledText(line,document.getElementById('prevChsFont')?.value||'Microsoft YaHei'));
   });
 
   svg.innerHTML = elements.join('');
@@ -8936,20 +8968,56 @@ function initHsrTouchNumericEditors(){
       const proposed=Number(editor.value);
       if(editor.value.trim()===''||!Number.isFinite(proposed)){editor.value=range.value;return;}
       const min=Number(range.min),max=Number(range.max);
-      const bounded=Math.min(max,Math.max(min,proposed));
-      range.value=String(bounded);
+      if(proposed<min||proposed>max){
+        editor.setCustomValidity('允许范围 '+min+'–'+max+'；超出当前渲染安全范围。');
+        editor.reportValidity();
+        editor.value=range.value;
+        editor.setCustomValidity('');
+        return;
+      }
+      range.value=String(proposed);
       range.dispatchEvent(new Event('input',{bubbles:true}));
       range.dispatchEvent(new Event('change',{bubbles:true}));
       editor.value=range.value;
       sync();
     });
+    // Pointer press-and-hold repeats; one tap or keyboard click remains one step.
     for(const [button,direction] of [[minus,-1],[plus,1]]){
-      button.addEventListener('click',()=>{
-        if(range.disabled)return;
+      let dwellTimer=null,repeatTimer=null,suppressClick=false;
+      const stopRepeat=()=>{
+        if(dwellTimer!==null)clearTimeout(dwellTimer);
+        if(repeatTimer!==null)clearInterval(repeatTimer);
+        dwellTimer=null;repeatTimer=null;
+      };
+      const stepOnce=()=>{
+        if(range.disabled||button.disabled){stopRepeat();return;}
         const step=Number(range.step)||1;
         const precision=(String(range.step).split('.')[1]||'').length;
         editor.value=String(Number((Number(range.value)+direction*step).toFixed(Math.min(6,precision))));
         editor.dispatchEvent(new Event('change',{bubbles:true}));
+        if(button.disabled)stopRepeat();
+      };
+      button.addEventListener('click',()=>{
+        if(suppressClick){suppressClick=false;return;}
+        stepOnce();
+      });
+      button.addEventListener('pointerdown',event=>{
+        if(event.button!==0||range.disabled||button.disabled)return;
+        stopRepeat();
+        suppressClick=false;
+        dwellTimer=setTimeout(()=>{
+          dwellTimer=null;
+          suppressClick=true;
+          stepOnce();
+          if(!button.disabled)repeatTimer=setInterval(stepOnce,90);
+        },360);
+      });
+      for(const type of ['pointerup','pointercancel','pointerleave','lostpointercapture'])
+        button.addEventListener(type,stopRepeat);
+      button.addEventListener('contextmenu',event=>event.preventDefault());
+      window.addEventListener('blur',stopRepeat);
+      document.addEventListener('visibilitychange',()=>{
+        if(document.hidden)stopRepeat();
       });
     }
     range.addEventListener('input',sync);

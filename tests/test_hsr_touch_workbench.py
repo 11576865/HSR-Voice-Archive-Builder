@@ -38,6 +38,31 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("display:none!important;",css)
         self.assertIn('@media(pointer:coarse)',css)
 
+    def test_long_press_and_bounds_have_explicit_contracts(self):
+        html=self.html
+        self.assertIn("dwellTimer=setTimeout(()=>{",html)
+        self.assertIn("repeatTimer=setInterval(stepOnce,90)",html)
+        self.assertIn("if(suppressClick){suppressClick=false;return;}",html)
+        self.assertIn("'pointerup','pointercancel','pointerleave','lostpointercapture'",html)
+        self.assertIn("window.addEventListener('blur',stopRepeat)",html)
+        self.assertIn("if(button.disabled)stopRepeat()",html)
+        for field, maximum in (
+            ("prevOutlineWidth","12"), ("prevShadowDepth","12"),
+            ("prevBlurRadius","5")):
+            self.assertIn(f'id="{field}" min="0" max="{maximum}"',html)
+        self.assertIn("editor.reportValidity()",html)
+        self.assertIn("并非 ASS 格式上限",html)
+
+    def test_geometry_appearance_is_feedback_not_evidence(self):
+        html=self.html
+        self.assertIn("const appearanceGeometryPreviewSpec=()=>",html)
+        self.assertIn("const appearance=appearanceGeometryPreviewSpec()",html)
+        self.assertIn("geometryStyledText(line",html)
+        self.assertIn("if(appearance.card)elements.push(geometryCard(bbox))",html)
+        self.assertIn("hsr-geometry-style-blur",html)
+        self.assertIn("SVG 近似反馈，不能验证 libass 字形",html)
+        self.assertIn("浏览器近似 · 渲染失败",html)
+
     def test_task_switch_does_not_reopen_every_long_accordion(self):
         self.assertIn("const previous=root.dataset.lastInspectorMode;", self.html)
         self.assertIn("section.open=next==='style'?visibleIndex<2:visibleIndex===0", self.html)

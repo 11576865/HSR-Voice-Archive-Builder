@@ -125,6 +125,12 @@ def dependency_status() -> dict[str, Any]:
         )
 
     ffmpeg = shutil.which("ffmpeg") or ""
+    fontconfig = shutil.which("fc-match") or ""
+    if termux and not fontconfig:
+        warnings.append(
+            "Imported-font ASS verification unavailable: fc-match missing. "
+            "Run 'pkg install -y fontconfig', then restart HSR via 'bash run_termux.sh'."
+        )
     if not ffmpeg:
         warnings.append("FFmpeg not found: FLAC building is unavailable until it is installed.")
 
@@ -135,6 +141,8 @@ def dependency_status() -> dict[str, Any]:
         "issues": issues,
         "warnings": warnings,
         "ffmpeg": ffmpeg,
+        "fontconfig_fc_match": fontconfig,
+        "real_ass_imported_font_check_ready": bool(ffmpeg and fontconfig),
         "seven_zip": seven_zip,
         "translation_rest": True,
         "translation_provider": translation["provider"],

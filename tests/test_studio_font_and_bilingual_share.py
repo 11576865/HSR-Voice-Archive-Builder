@@ -8,7 +8,7 @@ from unittest.mock import patch
 
 from subtitle_layout.layout_solver import solve_subtitle_layout
 from subtitle_layout.config import SubtitleRenderConfig
-from app.ass_preview import _project_font_config, _assert_project_font_selected
+from app.ass_preview import _project_font_config, _assert_project_font_selected, _find_fc_match
 
 ROOT=Path(__file__).resolve().parents[1]
 
@@ -72,6 +72,19 @@ class StudioFontAndRegionTests(unittest.TestCase):
                     with self.assertRaisesRegex(RuntimeError,"被回退"):
                         _assert_project_font_selected(selected_log,resolved,fonts,
                                                       english="",chinese="汉字")
+
+    def test_fc_match_absolute_termux_prefix_fallback(self):
+        with tempfile.TemporaryDirectory() as td:
+            path=Path(td)/"bin"/"fc-match"
+            path.parent.mkdir()
+            path.write_text("#!/bin/sh\n",encoding="utf-8")
+            path.chmod(0o755)
+            with patch("app.ass_preview.shutil.which",return_value=None), patch.dict(
+                "app.ass_preview.os.environ",{"PREFIX":str(Path(td))}
+            ):
+                self.assertEqual(_find_fc_match(),str(path))
+                path.chmod(0o644)
+                self.assertIsNone(_find_fc_match())
 
     def test_html_has_single_geometry_glyph_layer_and_region_control(self):
         html=(ROOT/"app/static/index.html").read_text("utf-8")
