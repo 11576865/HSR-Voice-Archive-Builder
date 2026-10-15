@@ -247,6 +247,12 @@ def load_project(root_or_file: Path) -> ProjectConfig:
 
 def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
     allowed = set(ProjectConfig.__dataclass_fields__)
+    # ASS-specific settings are persisted independently of the generated
+    # artifact. Track effective changes so no-op/autosave retries do not
+    # invalidate a previously verified MKV.
+    old_style = {
+        key: getattr(config, key) for key in allowed if key.startswith("subtitle_")
+    }
     old_source_paths = {
         "wav_source": str(resolve_project_path(config, config.wav_source) or ""),
         "chs_source": str(resolve_project_path(config, config.chs_source) or ""),
@@ -320,6 +326,16 @@ def update_project(config: ProjectConfig, **changes: Any) -> ProjectConfig:
         # those inputs must not silently keep the old materialized mapping.
         config.reference_text_embedded = False
     save_project(config)
+    if (config.delivery_mode == "complete" and any(
+        getattr(config, key) != value for key, value in old_style.items()
+    )):
+        # Saving the layout is not an ASS generation action. Invalidate only
+        # the certificate that claimed the previous ASS was current; preserve
+        # SRT, ASS, FLAC, MKV and all user-authored text untouched.
+        output = resolve_project_path(config, config.output_dir)
+        if output is not None and (output / "manifest.json").is_file():
+            from .subtitle_export_status import mark_ass_style_stale
+            mark_ass_style_stale(output)
     return config
 
 
