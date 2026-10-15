@@ -6930,27 +6930,10 @@ let lastLibassPreviewError=null;
 // SVG glyphs are available only through explicit auxiliary inspection.
 let geometryExplicitlyRequested = false;
 function queueLiveRealPreview(){
-  if(fontImportTransactionActive)return;
+  // No task, including Effects, may launch FFmpeg/libass still rendering
+  // merely from settings changes. Real ASS is a user-invoked operation.
   clearTimeout(liveRealPreviewTimer);
-  // Layout's FFmpeg/libass still preview is strictly click-to-render.
-  // Keep existing Effects scheduling separate.
-  if(document.body.dataset.workspaceTask==='layout')return;
-  // Layout and Effects are two tasks on the same layout canvas. Never
-  // accidentally disable the authoritative renderer in Effects mode.
-  if(typeof videoPreviewController!=='undefined'&&videoPreviewController)return;
-  if(!liveRealPreviewArmed||!currentProject||
-     document.body.dataset.workspace!=='layout'||
-     !['layout','effects'].includes(document.body.dataset.workspaceTask))return;
-  // FFmpeg/libass is the visual source of truth. Coalesce fast edits, then
-  // render the actual ASS frame instead of treating SVG estimates as final.
-  liveRealPreviewTimer=setTimeout(()=>{
-    if(liveRealPreviewArmed&&currentProject&&
-       !videoPreviewController&&
-       document.body.dataset.workspace==='layout'&&
-       ['layout','effects'].includes(document.body.dataset.workspaceTask)&&
-       lastRenderedAssIdentity!==currentLibassPreviewIdentity())
-      void renderLibassPreview();
-  },850);
+  return;
 }
 let geometryPreviewGeneration = 0;
 let libassPreviewController = null;
