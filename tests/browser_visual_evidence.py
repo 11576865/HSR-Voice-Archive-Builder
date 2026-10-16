@@ -499,8 +499,16 @@ def desktop_check(browser, base_url, output, report):
     page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutTimelinePanel").count()==0,
            "Removed selection-only timeline still exists")
-    ensure(page.locator("#layoutCueEditorPanel").is_visible(),
-           "Layout must retain the current subtitle editor")
+    # The current subtitle is intentionally a collapsed, discoverable
+    # read-only audio-clock panel, not an always-visible second editor.
+    # Require its tab/summary to remain usable and its content to exist;
+    # the test below opens it and checks actual audio-clock contents.
+    ensure(page.locator("#studioV4Timing > summary").is_visible(),
+           "Layout lost its current-subtitle disclosure control")
+    ensure(page.locator("#layoutCueEditorPanel").count() == 1,
+           "Layout lost its current subtitle/audio-clock content")
+    ensure(not page.locator("#studioV4Timing").evaluate("(node)=>node.open"),
+           "Returning to Layout unexpectedly expanded subtitle details")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
