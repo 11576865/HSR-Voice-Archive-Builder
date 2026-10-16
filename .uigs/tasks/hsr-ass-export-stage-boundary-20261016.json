@@ -3,7 +3,7 @@
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "Make voice-backed FFmpeg preview fail closed on actual container duration mismatch and give audible autoplay an actionable user-gesture fallback.",
+  "current_bounded_work_unit": "Reconcile stronger audible Effects preview browser fixture with selected-voice audio/duration contract; repair preview race test's browser mock and obsolete auto-preview assumption.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -69,21 +69,26 @@
       "summary": "Preview: FFprobe audio + output-duration equivalence required (reject 8s video for 9.5s PCM-selected voice); browser audible autoplay rejection surfaced with native manual-play prompt, not swallowed. Added regression fixtures.",
       "commit": "d0148b2f2c58aef788f7339a36efcbaa80530c19",
       "validation": "New exact-head CI pending; physical playback and source audio fidelity user acceptance pending."
+    },
+    {
+      "summary": "Replaced silent 1.5s Chromium mocked video with FFprobe-audio-verified 3.5s WebM and required audio/duration/source headers plus selected real cue assertion; fixed Node preview harness missing document.body and obsolete auto-preview expectations.",
+      "commit": "d82c28af3a373bf61d89ac9be8e78b2b2fd9757f",
+      "validation": "Pending new exact-head Chromium and focused unit CI; field audio/time synchronization not proven."
     }
   ],
   "next_units": [
-    "User: verify actual Effects clip voice sound/duration and explicit manual Play on browser with autoplay restrictions.",
-    "Verify real settings autosave does not create file-generation job or modify ASS/MKV, then manually invoke export.",
-    "Address standalone real-ink assertion and legacy UI contract tests separately without weakening actual rendered proof.",
-    "Do not merge PR #186 until explicit authorization or agreed review/validation boundary."
+    "Review one exact-head CI status and stop if running, per AGENTS.md.",
+    "If Chromium still fails, inspect actual noProjectVoice selection vs fixture and visible status; retain real audio/decoded frame contract.",
+    "Investigate independent real-libass collision regression without relaxing renderer safety checks.",
+    "User field-check audible selected PCM voice timing, video duration, and no auto ASS/MKV after settings edits."
   ],
   "branch": "fix/hsr-seven-ass-contracts-20261016",
   "pr": 186,
-  "latest_durable_commit": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
+  "latest_durable_commit": "d82c28af3a373bf61d89ac9be8e78b2b2fd9757f",
   "external_validation": {
     "previous_head": "e99a616bcbd1ed26662be2993229f0e1fb8f9dba",
-    "previous_ci": "HSR seven ASS requirements: success; MKV libass artifact: success; broad tests and Chromium UI: failure (largely outdated UI snapshot expectations; one real ink collision mismatch pending)",
-    "current_head": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
+    "previous_ci": "seven-ass-contracts success; tests failure (19 failures, 1 error, many stale UI expectations) and chromium fixture timeout; real ink collision assertion failure",
+    "current_head": "d82c28af3a373bf61d89ac9be8e78b2b2fd9757f",
     "current_ci": "pending",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
@@ -95,10 +100,9 @@
     "effects_actual_voice_playback": "pending_user"
   },
   "blockers": [
-    "New head exact CI pending; prior dedicated seven-item workflow success did not cover this follow-up change.",
-    "Physical voice preview and Android/Termux audio playback cannot be attested by source tests alone.",
-    "Broad mainline tests/Chromium visual evidence still red; distinguish stale expectations from actual behavioral breakage.",
-    "PR #186 is open and not merged."
+    "No new exact-head Chromium/Node proof yet for repaired test environment.",
+    "Real libass central gap test failure and multiple older UI structural tests remain.",
+    "Real project/Termux audio synchronization and formal output not field accepted; PR #186 unmerged."
   ],
   "updated_at": "2026-10-16",
   "pr_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/186"
