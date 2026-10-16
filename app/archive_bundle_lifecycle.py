@@ -32,6 +32,42 @@ def _signature(path: Path) -> dict[str, int] | None:
     return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
 
 
+def _artifact_sha256(path: Path) -> str:
+    """Stream the published MKV bytes rather than trusting modification time."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Unsafe or missing MKV artifact")
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+def _bundle_artifact_matches(path: Path, receipt: dict[str, Any] | None) -> bool:
+    """Fast stat match; content-hash recovery only when new receipts prove bytes.
+
+    Older receipts with no content digest deliberately keep their strict stat
+    fence. A timestamp change alone cannot authenticate legacy media.
+    """
+    if not isinstance(receipt, dict):
+        return False
+    observed = _signature(path)
+    expected = receipt.get("artifact")
+    if observed is None or not isinstance(expected, dict):
+        return False
+    if observed == expected:
+        return True
+    digest = receipt.get("artifact_sha256")
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest)
+            or observed["size"] != expected.get("size")):
+        return False
+    try:
+        return _artifact_sha256(path) == digest and _signature(path) == observed
+    except (OSError, ValueError):
+        return False
+
+
 def _voice_timeline_identity(output: Path) -> str | None:
     """Fingerprint *audio clocks only*, not mutable subtitle/layout content.
 
@@ -251,7 +287,7 @@ def bundle_audio_source_status(
     if prefer_sealed and not bundle.is_symlink() and bundle.is_file():
         receipt = _read_receipt(output)
         if (receipt and receipt.get("sealed") is True
-                and _signature(bundle) == receipt.get("artifact")):
+                and _bundle_artifact_matches(bundle, receipt)):
             return {"available": True, "source": "sealed-mkv", "reason": ""}
     flac_sig = _signature(output / "continuous.flac")
     if flac_sig is not None and flac_sig["size"] > 0:
@@ -270,7 +306,7 @@ def bundle_audio_source_status(
         elif receipt.get("sealed") is not True:
             reason = ("发现已有 MKV 及发布回执，但尚未封存验证；"
                       "不能将它当作已校验的音频来源。请先恢复档案构建")
-        elif _signature(bundle) != receipt.get("artifact"):
+        elif not _bundle_artifact_matches(bundle, receipt):
             reason = ("发现已有 MKV，但其文件身份与封存回执不一致；"
                       "为防止替换错误音轨，拒绝复用。请检查是否移动或修改了旧成品")
         else:
@@ -291,7 +327,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     # This is only a cheap dashboard preflight, not an FFprobe codec guarantee.
     receipt = _read_receipt(output)
     sealed = bool(receipt and receipt.get("sealed") is True)
-    bundle_intact = bool(receipt and _signature(target) == receipt.get("artifact"))
+    bundle_intact = bool(receipt and _bundle_artifact_matches(target, receipt))
     flac_sig = _signature(output / "continuous.flac")
     ass_sig = _signature(output / "HSR_Voice_Archive.ass")
     srt_sig = _signature(output / "HSR_Voice_Archive.srt")
@@ -367,7 +403,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
             raise ValueError("MKV 生成前提不满足：" + "；".join(blockers))
         if (output / ".build_in_progress").exists():
             raise ValueError("项目构建进行中，旧 MKV 不代表最新结果")
-        if _signature(target) != receipt["artifact"]:
+        if not _bundle_artifact_matches(target, receipt):
             raise ValueError("MKV 文件已被修改或替换")
         if sealed:
             current = _sources(output, receipt["attach_project_fonts"],
@@ -456,6 +492,7 @@ def record_bundle_publication(
     receipt = {
         "schema_version": 1,
         "artifact": _signature(artifact if artifact is not None else output / OUTPUT),
+        "artifact_sha256": _artifact_sha256(artifact if artifact is not None else output / OUTPUT),
         "voice_timeline_sha256": _voice_timeline_identity(output),
         "sources": _sources(output, include_fonts, include_chapter_flac),
         "include_chapter_flac": bool(include_chapter_flac),
