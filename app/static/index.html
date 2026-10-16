@@ -9298,10 +9298,12 @@ async function renderHsrEffectVideo(){
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
   const payload=libassPreviewPayload();
   const noProjectVoice=layoutSampleSource!=='sample'||layoutStressSample?.id===undefined||layoutStressSample?.id===null;
-  payload.project_voice_entry_id=layoutStressSample.id;
+  // Do not access an absent sample before the user-facing error handler.
+  // Preview duration is an advisory value; the server resolves PCM clocks
+  // from the authoritative project manifest (never a fixed 8-second cap).
+  payload.project_voice_entry_id=noProjectVoice?null:layoutStressSample.id;
   payload.expected_project_root=currentProject?.root||null;
-  // The server resolves the exact PCM clock and fade margins; no fixed 8s.
-  payload.preview_duration_seconds=Math.max(0.01,Number(layoutStressSample.duration_seconds));
+  payload.preview_duration_seconds=noProjectVoice?null:Number(layoutStressSample.duration_seconds);
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
   const backgroundImage=effectBackgroundImageFile;
