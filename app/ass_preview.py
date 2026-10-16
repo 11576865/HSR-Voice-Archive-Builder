@@ -490,10 +490,14 @@ def render_ass_preview_video(
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("Dynamic ASS preview requires FFmpeg")
-    if audio_source_path is not None:
-        if (not audio_source_path.is_file() or audio_source_path.is_symlink()
-                or voice_duration_seconds is None):
-            raise ValueError("The selected project voice source is unavailable")
+    if audio_source_path is not None and (
+        not audio_source_path.is_file() or audio_source_path.is_symlink()
+        or voice_duration_seconds is None
+    ):
+        raise ValueError("The selected project voice source is unavailable")
+    if voice_duration_seconds is not None:
+        # The same ASS envelope is valid for explicitly silent visual review.
+        # Do not fabricate an audio track when the sealed MKV is unverifiable.
         if (not all(math.isfinite(float(x)) for x in (
                 audio_source_start_seconds, voice_start_offset_seconds, voice_duration_seconds))
                 or audio_source_start_seconds < 0 or voice_start_offset_seconds < 0
@@ -503,11 +507,11 @@ def render_ass_preview_video(
     entry = PreviewEntry(
         english=str(english_text or ""),
         chinese=str(chinese_text or ""),
-        start_seconds=voice_start_offset_seconds if audio_source_path is not None else 0.0,
+        start_seconds=voice_start_offset_seconds if voice_duration_seconds is not None else 0.0,
         display_end_seconds=duration,
         audio_end_seconds=(voice_start_offset_seconds + voice_duration_seconds)
-        if audio_source_path is not None else None,
-        preview_end_margin_ms=preview_after_fade_ms if audio_source_path is not None else 0,
+        if voice_duration_seconds is not None else None,
+        preview_end_margin_ms=preview_after_fade_ms if voice_duration_seconds is not None else 0,
         word_alignments=word_alignments,
     )
     config = _project_font_config(config, font_dir)
