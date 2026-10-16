@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +44,14 @@ def _artifact_sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+@lru_cache(maxsize=8)
+def _cached_artifact_sha256(
+    path: str, dev: int, ino: int, size: int, mtime_ns: int, ctime_ns: int,
+) -> str:
+    """Cache only while inode, size and both change timestamps stay fixed."""
+    return _artifact_sha256(Path(path))
+
+
 def _bundle_artifact_matches(path: Path, receipt: dict[str, Any] | None) -> bool:
     """Fast stat match; content-hash recovery only when new receipts prove bytes.
 
@@ -55,15 +64,25 @@ def _bundle_artifact_matches(path: Path, receipt: dict[str, Any] | None) -> bool
     expected = receipt.get("artifact")
     if observed is None or not isinstance(expected, dict):
         return False
-    if observed == expected:
-        return True
     digest = receipt.get("artifact_sha256")
+    if digest is None:
+        # Legacy receipts contain only size/mtime. Never reinterpret a changed
+        # legacy file as sealed without a pre-existing content digest.
+        return observed == expected
     if (not isinstance(digest, str) or len(digest) != 64
             or any(ch not in "0123456789abcdef" for ch in digest)
             or observed["size"] != expected.get("size")):
         return False
     try:
-        return _artifact_sha256(path) == digest and _signature(path) == observed
+        st = path.stat()
+        matched = _cached_artifact_sha256(
+            str(path), st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns,
+            st.st_ctime_ns) == digest
+        after = path.stat()
+        return matched and (st.st_dev, st.st_ino, st.st_size,
+                            st.st_mtime_ns, st.st_ctime_ns) == (
+                            after.st_dev, after.st_ino, after.st_size,
+                            after.st_mtime_ns, after.st_ctime_ns)
     except (OSError, ValueError):
         return False
 
