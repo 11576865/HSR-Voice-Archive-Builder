@@ -71,7 +71,9 @@ def resolve_effect_voice(config: ProjectConfig, entry_id: object, *,
         raise ValueError("当前语音超过 120 秒的单条特效预览安全预算；不会静默截短，需选择较短语音")
     if duration < 0.01:
         raise ValueError("真实语音时长过短，无法生成可播放预览")
-    source = bundle_audio_source_status(output)
+    # The archive's sealed primary audio is the canonical voice for a
+    # post-build preview, even if a transient/partial FLAC remains on disk.
+    source = bundle_audio_source_status(output, prefer_sealed=True)
     if not source["available"]:
         # Share precisely the same audio-provenance decision as inner ASS
         # export; a layout/style-only change cannot revoke a sealed MKV

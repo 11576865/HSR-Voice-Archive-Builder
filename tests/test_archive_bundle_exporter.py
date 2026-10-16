@@ -200,6 +200,10 @@ class BundleRealFFmpegTests(unittest.TestCase):
             self.assertTrue(target.is_file())
             self.assertTrue(mark_ass_style_stale(root))
             self.assertEqual(bundle_export_status(root)["state"], "stale")
+            # Even an abandoned, nonempty working FLAC cannot replace the
+            # sealed archive's primary voice for cue preview.
+            audio.write_bytes(b"abandoned-unparseable-flac")
+            self.assertTrue(audio.exists())
 
             project = ProjectConfig(
                 schema_version=1, name="source-deleted-fixture",
