@@ -16,7 +16,7 @@ from .project import ProjectConfig, resolve_project_path
 
 
 def resolve_effect_voice(config: ProjectConfig, entry_id: object, *,
-                         fade_ms: int) -> dict[str, object]:
+                         fade_ms: int, allow_visual_only: bool = False) -> dict[str, object]:
     output = resolve_project_path(config, config.output_dir)
     if output is None:
         raise ValueError("No project output directory is configured")
@@ -77,18 +77,22 @@ def resolve_effect_voice(config: ProjectConfig, entry_id: object, *,
     # The archive's sealed primary audio is the canonical voice for a
     # post-build preview, even if a transient/partial FLAC remains on disk.
     source = bundle_audio_source_status(output, prefer_sealed=True)
-    if not source["available"]:
-        # Share precisely the same audio-provenance decision as inner ASS
-        # export; a layout/style-only change cannot revoke a sealed MKV
-        # whose exact artifact identity remains intact.
+    if not source["available"] and not allow_visual_only:
+        # Preserve the strict contract for all callers requesting actual voice.
         raise ValueError(
             "所选项目语音暂不可用于动态预览：" + str(source["reason"])
             + "（当前项目输出目录：" + str(output) + "）"
         )
-    audio = (output / "continuous.flac" if source["source"] == "independent-flac"
-             else output / OUTPUT)
+    # A visual-only preview is explicitly labeled and contains no audio
+    # track. PCM clocks still come from the bound project manifest, while the
+    # untrusted MKV is never opened or relabeled as verified.
+    audio = (
+        output / "continuous.flac" if source["source"] == "independent-flac"
+        else output / OUTPUT
+    ) if source["available"] else None
     return {
         "audio_source_path": audio,
+        "visual_only": not source["available"],
         "audio_source_start_seconds": voice_start - before,
         "duration_seconds": duration,
         "voice_start_offset_seconds": before,

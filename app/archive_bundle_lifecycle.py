@@ -9,6 +9,7 @@ import hashlib
 import json
 import math
 import os
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
@@ -30,6 +31,60 @@ def _signature(path: Path) -> dict[str, int] | None:
         return None
     st = path.stat()
     return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+
+
+def _artifact_sha256(path: Path) -> str:
+    """Stream the published MKV bytes rather than trusting modification time."""
+    if path.is_symlink() or not path.is_file():
+        raise ValueError("Unsafe or missing MKV artifact")
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for chunk in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+@lru_cache(maxsize=8)
+def _cached_artifact_sha256(
+    path: str, dev: int, ino: int, size: int, mtime_ns: int, ctime_ns: int,
+) -> str:
+    """Cache only while inode, size and both change timestamps stay fixed."""
+    return _artifact_sha256(Path(path))
+
+
+def _bundle_artifact_matches(path: Path, receipt: dict[str, Any] | None) -> bool:
+    """Fast stat match; content-hash recovery only when new receipts prove bytes.
+
+    Older receipts with no content digest deliberately keep their strict stat
+    fence. A timestamp change alone cannot authenticate legacy media.
+    """
+    if not isinstance(receipt, dict):
+        return False
+    observed = _signature(path)
+    expected = receipt.get("artifact")
+    if observed is None or not isinstance(expected, dict):
+        return False
+    digest = receipt.get("artifact_sha256")
+    if digest is None:
+        # Legacy receipts contain only size/mtime. Never reinterpret a changed
+        # legacy file as sealed without a pre-existing content digest.
+        return observed == expected
+    if (not isinstance(digest, str) or len(digest) != 64
+            or any(ch not in "0123456789abcdef" for ch in digest)
+            or observed["size"] != expected.get("size")):
+        return False
+    try:
+        st = path.stat()
+        matched = _cached_artifact_sha256(
+            str(path), st.st_dev, st.st_ino, st.st_size, st.st_mtime_ns,
+            st.st_ctime_ns) == digest
+        after = path.stat()
+        return matched and (st.st_dev, st.st_ino, st.st_size,
+                            st.st_mtime_ns, st.st_ctime_ns) == (
+                            after.st_dev, after.st_ino, after.st_size,
+                            after.st_mtime_ns, after.st_ctime_ns)
+    except (OSError, ValueError):
+        return False
 
 
 def _voice_timeline_identity(output: Path) -> str | None:
@@ -251,11 +306,22 @@ def bundle_audio_source_status(
     if prefer_sealed and not bundle.is_symlink() and bundle.is_file():
         receipt = _read_receipt(output)
         if (receipt and receipt.get("sealed") is True
-                and _signature(bundle) == receipt.get("artifact")):
+                and _bundle_artifact_matches(bundle, receipt)):
             return {"available": True, "source": "sealed-mkv", "reason": ""}
     flac_sig = _signature(output / "continuous.flac")
     if flac_sig is not None and flac_sig["size"] > 0:
-        return {"available": True, "source": "independent-flac", "reason": ""}
+        # A changed sealed MKV cannot authorize a stray work FLAC. Only the
+        # exact FLAC that was recorded as the sealed publication input may
+        # recover voice preview; do not promote arbitrary partial audio.
+        receipt = _read_receipt(output)
+        sealed_bundle_changed = (
+            prefer_sealed and bundle.is_file()
+            and receipt is not None and receipt.get("sealed") is True
+            and not _bundle_artifact_matches(bundle, receipt)
+        )
+        if (not sealed_bundle_changed or
+                flac_sig == receipt.get("sources", {}).get("flac")):
+            return {"available": True, "source": "independent-flac", "reason": ""}
     if bundle.is_symlink():
         reason = ("旧 MKV 是符号链接，无法作为可信音频来源；"
                   "请恢复原始项目音频再完成档案构建")
@@ -270,12 +336,84 @@ def bundle_audio_source_status(
         elif receipt.get("sealed") is not True:
             reason = ("发现已有 MKV 及发布回执，但尚未封存验证；"
                       "不能将它当作已校验的音频来源。请先恢复档案构建")
-        elif _signature(bundle) != receipt.get("artifact"):
+        elif not _bundle_artifact_matches(bundle, receipt):
             reason = ("发现已有 MKV，但其文件身份与封存回执不一致；"
                       "为防止替换错误音轨，拒绝复用。请检查是否移动或修改了旧成品")
         else:
             return {"available": True, "source": "sealed-mkv", "reason": ""}
     return {"available": False, "source": "none", "reason": reason}
+
+
+def diagnose_bundle_audio_source(output: Path) -> dict[str, Any]:
+    """Read-only provenance triage shared by previews and internal ASS export.
+
+    The sealed receipt can certify content only when the stored digest is
+    authentic. A legacy stat-only receipt is not silently migrated to SHA.
+    No media, manifest, receipt, or project settings are modified here.
+    """
+    bundle = output / OUTPUT
+    receipt = _read_receipt(output)
+    expected = receipt.get("artifact") if receipt else None
+    actual = _signature(bundle)
+    sealed = bool(receipt and receipt.get("sealed") is True)
+    digest_bound = bool(receipt and receipt.get("artifact_sha256"))
+    matched = sealed and _bundle_artifact_matches(bundle, receipt)
+    working_flac = _signature(output / "continuous.flac")
+    manifest = output / "manifest.json"
+    try:
+        require_bound_voice_timeline(output)
+    except ValueError as exc:
+        clock_error = str(exc)
+    else:
+        clock_error = ""
+    if clock_error:
+        code = "voice_timeline_mismatch"
+        detail = "项目语音时间轴与已封存成品不匹配，不能按选中条目的时间读取原音轨。"
+    elif matched:
+        code = "verified_sealed_mkv"
+        detail = "封存 MKV 已通过来源身份校验；更换字幕或样式不会令原音轨失效。"
+    elif bundle.is_symlink():
+        code = "unsafe_mkv_symlink"
+        detail = "成品是符号链接，拒绝复用该音轨。"
+    elif actual is None:
+        code = "mkv_missing"
+        detail = "未发现可复用的完整 MKV。"
+    elif receipt is None:
+        code = "missing_receipt"
+        detail = "MKV 存在，但缺少有效封存回执，无法证明其语音来源。"
+    elif not sealed:
+        code = "not_sealed"
+        detail = "发布回执尚未完成封存验证。"
+    elif not digest_bound:
+        code = "legacy_stat_mismatch"
+        detail = ("旧版封存回执没有 MKV 内容哈希，文件时间或大小与回执不一致；"
+                  "无法判断是元数据变化还是内容被替换。")
+    else:
+        code = "artifact_content_mismatch"
+        detail = "新式内容校验未通过；不能将文件存在或相同文件名当作正确音轨。"
+    # Source presence is merely diagnostic. A loose FLAC still requires an
+    # independent codec probe and may not match the current PCM timeline.
+    return {
+        "code": code,
+        "detail": detail,
+        "sealed": sealed,
+        "digest_bound": digest_bound,
+        "receipt_metadata_match": bool(actual is not None and actual == expected),
+        "artifact_verified": bool(matched),
+        "voice_timeline_match": not bool(clock_error),
+        "working_flac_present": bool(working_flac and working_flac["size"] > 0),
+        "manifest_present": manifest.is_file() and not manifest.is_symlink(),
+        "external_ass_possible": manifest.is_file() and not manifest.is_symlink(),
+        "recommended_action": (
+            "verified" if matched and not clock_error else
+            "rebuild_from_original_sources"
+        ),
+        "recovery_help": (
+            "内封 ASS 必须先有可信的 FLAC/MKV。请先保存现有成品，"
+            "然后在「档案」工作区核查原始索引与语音包，明确点击「开始构建」重建；"
+            "不要删除 MKV 或封存回执。独立 ASS 可先使用「生成 ASS（外）」。"
+        ),
+    }
 
 
 def bundle_export_status(output: Path) -> dict[str, Any]:
@@ -291,7 +429,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     # This is only a cheap dashboard preflight, not an FFprobe codec guarantee.
     receipt = _read_receipt(output)
     sealed = bool(receipt and receipt.get("sealed") is True)
-    bundle_intact = bool(receipt and _signature(target) == receipt.get("artifact"))
+    bundle_intact = bool(receipt and _bundle_artifact_matches(target, receipt))
     flac_sig = _signature(output / "continuous.flac")
     ass_sig = _signature(output / "HSR_Voice_Archive.ass")
     srt_sig = _signature(output / "HSR_Voice_Archive.srt")
@@ -367,7 +505,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
             raise ValueError("MKV 生成前提不满足：" + "；".join(blockers))
         if (output / ".build_in_progress").exists():
             raise ValueError("项目构建进行中，旧 MKV 不代表最新结果")
-        if _signature(target) != receipt["artifact"]:
+        if not _bundle_artifact_matches(target, receipt):
             raise ValueError("MKV 文件已被修改或替换")
         if sealed:
             current = _sources(output, receipt["attach_project_fonts"],
@@ -456,6 +594,7 @@ def record_bundle_publication(
     receipt = {
         "schema_version": 1,
         "artifact": _signature(artifact if artifact is not None else output / OUTPUT),
+        "artifact_sha256": _artifact_sha256(artifact if artifact is not None else output / OUTPUT),
         "voice_timeline_sha256": _voice_timeline_identity(output),
         "sources": _sources(output, include_fonts, include_chapter_flac),
         "include_chapter_flac": bool(include_chapter_flac),

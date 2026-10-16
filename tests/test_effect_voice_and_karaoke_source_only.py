@@ -201,6 +201,71 @@ class EffectVoicePreviewTests(unittest.TestCase):
             self.config, 101, fade_ms=200)["audio_source_path"],
             self.output / OUTPUT)
 
+    def test_unverified_mkv_yields_only_explicit_silent_fade_video(self):
+        for name, data in (
+            ("HSR_Voice_Archive.ass", "[Events]\\n"),
+            ("HSR_Voice_Archive.srt", "1\\n"),
+        ):
+            (self.output / name).write_text(data, encoding="utf-8")
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        (self.output / OUTPUT).write_bytes(b"published-original-mkv")
+        record_bundle_publication(
+            self.output, background_color="#112233", background_image=None,
+            image_extension=None, include_fonts=False,
+            background_spec={"mode": "color"})
+        seal_complete_delivery(self.output)
+        (self.output / OUTPUT).write_bytes(b"modified-container-bytes")
+        self.assertFalse(bundle_audio_source_status(self.output, prefer_sealed=True)["available"])
+        with self.assertRaisesRegex(ValueError, "文件身份与封存回执不一致"):
+            resolve_effect_voice(self.config, 102, fade_ms=600)
+        preview = resolve_effect_voice(
+            self.config, 102, fade_ms=600, allow_visual_only=True)
+        self.assertIsNone(preview["audio_source_path"])
+        self.assertTrue(preview["visual_only"])
+        self.assertAlmostEqual(preview["duration_seconds"], 3.7)
+        self.assertEqual(preview["preview_after_fade_ms"], 600)
+        # Both edges are generated from the same writer as formal ASS export,
+        # even though no untrusted audio bytes are consumed.
+        entry = SimpleNamespace(
+            english="Selected", chinese="选中",
+            start_seconds=preview["voice_start_offset_seconds"],
+            audio_end_seconds=(preview["voice_start_offset_seconds"] +
+                               preview["voice_duration_seconds"]),
+            display_end_seconds=preview["duration_seconds"],
+            preview_end_margin_ms=preview["preview_after_fade_ms"])
+        subtitle = render_ass(
+            [entry], config=SubtitleRenderConfig(
+                enable_kinetic=True, fade_in_ms=600, fade_out_ms=600))
+        self.assertIn(r"\fad(600,600)", subtitle)
+        self.assertIn("0:00:00.00,0:00:03.70", subtitle)
+
+    def test_visual_only_renderer_retains_ass_fade_timing_without_fake_audio(self):
+        commands = []
+        captured = {}
+        def fake_run(cmd, **kwargs):
+            commands.append(cmd)
+            Path(cmd[-1]).write_bytes(b"silent-preview")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        def capture_writer(entries, *args, **kwargs):
+            captured["entry"] = entries[0]
+        with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
+             patch("app.ass_preview.write_ass", side_effect=capture_writer), \
+             patch("app.ass_preview.subprocess.run", side_effect=fake_run):
+            data = render_ass_preview_video(
+                english_text="Speech", chinese_text="中文",
+                source_language="en", target_language="zh-CN",
+                config=SubtitleRenderConfig(enable_kinetic=True, fade_in_ms=600),
+                duration_seconds=3.7, audio_source_path=None,
+                voice_start_offset_seconds=0.6,
+                voice_duration_seconds=2.5, preview_after_fade_ms=600)
+        self.assertEqual(data, b"silent-preview")
+        self.assertEqual(len(commands), 1)
+        self.assertIn("-an", commands[0])
+        self.assertNotIn("1:a:0", commands[0])
+        self.assertAlmostEqual(captured["entry"].start_seconds, 0.6)
+        self.assertAlmostEqual(captured["entry"].audio_end_seconds, 3.1)
+        self.assertEqual(captured["entry"].preview_end_margin_ms, 600)
+
     def test_sealed_mkv_cue_preview_rejects_rewritten_pcm_time_without_audio_read(self):
         for name, data in (
             ("HSR_Voice_Archive.ass", "[Events]\\n"),
@@ -298,7 +363,51 @@ class LiveEffectPreviewRouteTests(unittest.TestCase):
         self.assertEqual(captured["audio_source_path"], selected["audio_source_path"])
         self.assertEqual(result.headers["x-hsr-preview-audio"], "project")
         self.assertEqual(result.headers["x-hsr-preview-duration"], "12.400")
-        resolver.assert_called_once_with(project, 101, fade_ms=200)
+        resolver.assert_called_once_with(project, 101, fade_ms=200, allow_visual_only=True)
+
+    def test_fastapi_visual_only_preview_never_claims_project_audio(self):
+        import asyncio
+        from app import server
+
+        project = SimpleNamespace(
+            root="/fixture/project", output_dir="output",
+            subtitle_fade_in_ms=600)
+        selected = {
+            "audio_source_path": None,
+            "visual_only": True,
+            "audio_source_start_seconds": 4.8,
+            "voice_start_offset_seconds": 0.6,
+            "voice_duration_seconds": 2.5,
+            "preview_after_fade_ms": 600,
+            "duration_seconds": 3.7,
+        }
+        class RequestFixture:
+            headers = {}
+            async def stream(self):
+                yield json.dumps({
+                    "english_text": "Real cue, visuals only",
+                    "chinese_text": "只验证动画",
+                    "project_voice_entry_id": 101,
+                    "expected_project_root": str(project.root),
+                    "fade_in_ms": 600,
+                    "include_source_audio": True,
+                }).encode("utf-8")
+
+        kwargs = {}
+        async def execute(renderer, **options):
+            kwargs.update(options)
+            return b"silenced-but-animated-video"
+        with patch.object(server, "_active_config", return_value=project), \
+             patch.object(server, "resolve_effect_voice", return_value=selected), \
+             patch.object(server, "run_in_threadpool", side_effect=execute):
+            result = asyncio.run(
+                server.api_subtitle_layout_render_preview_video(RequestFixture()))
+        self.assertEqual(result.status_code, 200, result.body)
+        self.assertEqual(result.headers["x-hsr-preview-audio"], "visual-only")
+        self.assertEqual(result.headers["x-hsr-preview-duration"], "3.700")
+        self.assertFalse(kwargs["include_source_audio"])
+        self.assertIsNone(kwargs["audio_source_path"])
+        self.assertAlmostEqual(kwargs["voice_start_offset_seconds"], 0.6)
 
     def test_effect_preview_missing_selection_is_guarded_before_sample_id_access(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")

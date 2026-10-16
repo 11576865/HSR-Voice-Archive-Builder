@@ -16,7 +16,7 @@ from pathlib import Path
 from typing import Literal
 
 from .archive_bundle_lifecycle import (
-    OUTPUT, RECEIPT, _read_receipt, _signature, bundle_export_status,
+    OUTPUT, RECEIPT, _read_receipt, _signature, _bundle_artifact_matches, bundle_export_status,
 )
 from .builder import atomic_write_text
 
@@ -105,7 +105,7 @@ def extract_flac_from_mkv(output: Path, *, target: Path | None = None) -> Path:
     """Stream-copy default primary FLAC; chapter tracks remain independently selectable."""
     mkv = output / OUTPUT
     receipt = _read_receipt(output)
-    if (not receipt or _signature(mkv) != receipt.get("artifact")
+    if (not receipt or not _bundle_artifact_matches(mkv, receipt)
             or not receipt.get("sealed")):
         raise ValueError("No verified sealed MKV is available for FLAC extraction")
     from .archive_bundle_lifecycle import require_bound_voice_timeline
@@ -133,7 +133,7 @@ def prepare_complete_sources(output: Path, *, source_language: str = "en",
         return
     receipt = _read_receipt(output)
     if (not receipt or not receipt.get("sealed")
-            or _signature(output / OUTPUT) != receipt.get("artifact")):
+            or not _bundle_artifact_matches(output / OUTPUT, receipt)):
         raise ValueError("Cannot restore sources from an unverified MKV")
     if missing_audio:
         extract_flac_from_mkv(output)
@@ -251,7 +251,7 @@ def recover_previous_audio_report(state_dir: Path, current_inputs: dict,
         # the former audio stage was successfully muxed and validated.
         receipt = _read_receipt(output)
         sealed = bool(receipt and receipt.get("sealed")
-                      and _signature(output / OUTPUT) == receipt.get("artifact"))
+                      and _bundle_artifact_matches(output / OUTPUT, receipt))
         if sealed:
             return b["payload"]["report"]
         # A FLAC-only archive can reuse its formerly certified exact bytes.
@@ -281,7 +281,7 @@ def export_optional_track(output: Path, kind: Literal["flac", "srt", "ass"]) -> 
     if kind == "flac" and audio.is_file() and not (output / OUTPUT).is_file():
         return audio
     receipt = _read_receipt(output)
-    if (not receipt or _signature(output / OUTPUT) != receipt.get("artifact")):
+    if (not receipt or not _bundle_artifact_matches(output / OUTPUT, receipt)):
         raise ValueError("Only a verified MKV can supply an independent export")
     tracks = _probe(output / OUTPUT)
     track_info = {

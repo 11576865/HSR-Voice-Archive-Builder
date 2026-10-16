@@ -25,7 +25,7 @@ from .effect_voice_preview import resolve_effect_voice
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration, queue_external_ass_export
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
-from .archive_bundle_lifecycle import load_previous_bundle_image
+from .archive_bundle_lifecycle import diagnose_bundle_audio_source, load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
@@ -949,6 +949,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             voice = resolve_effect_voice(
                 project, data["project_voice_entry_id"],
                 fade_ms=int(data.get("fade_in_ms", project.subtitle_fade_in_ms)),
+                allow_visual_only=True,
             )
         video = await run_in_threadpool(
             render_ass_preview_video,
@@ -962,7 +963,8 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             container_format=fmt,
             source_video_bytes=source_bytes,
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
-            include_source_audio=data.get("include_source_audio", True) is True,
+            include_source_audio=(data.get("include_source_audio", True) is True
+                                  and not voice.get("visual_only", False)),
             audio_source_path=voice.get("audio_source_path"),
             audio_source_start_seconds=float(voice.get("audio_source_start_seconds", 0)),
             voice_start_offset_seconds=float(voice.get("voice_start_offset_seconds", 0)),
@@ -975,7 +977,9 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
-                     "X-HSR-Preview-Audio": "project" if voice else ("footage" if source_bytes is not None else "none"),
+                     "X-HSR-Preview-Audio": ("visual-only" if voice.get("visual_only") else
+                                              "project" if voice else
+                                              "footage" if source_bytes is not None else "none"),
                      "X-HSR-Preview-Duration": f'{float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)):.3f}',
                      "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
         )
@@ -984,6 +988,19 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
             status_code=400,
         )
+
+
+@app.get("/api/project/active/audio-integrity")
+def api_active_audio_integrity():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None:
+            raise ValueError("No configured project output directory")
+        return {"ok": True, **diagnose_bundle_audio_source(output)}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.get("/api/status")

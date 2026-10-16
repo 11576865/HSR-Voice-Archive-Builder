@@ -5,6 +5,7 @@ a loose/unknown MKV is not provenance. Refuse before rewriting ASS/SRT/receipt.
 """
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -13,6 +14,7 @@ from unittest.mock import patch
 
 from app.archive_bundle_lifecycle import (
     OUTPUT, RECEIPT, bundle_audio_source_status, bundle_export_status,
+    diagnose_bundle_audio_source,
     record_bundle_publication, require_bound_voice_timeline,
 )
 from app.auto_delivery import queue_ass_regeneration
@@ -182,6 +184,108 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         record.pop("voice_timeline_sha256", None)
         receipt.write_text(json.dumps(record), encoding="utf-8")
         require_bound_voice_timeline(self.output)
+
+    def test_published_sha_accepts_only_byte_identical_mkv_after_mtime_change(self):
+        (self.output / "continuous.flac").write_bytes(b"working-flac")
+        (self.output / OUTPUT).write_bytes(b"authentic-media-contents")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        mkv = self.output / OUTPUT
+        initial = mkv.stat()
+        os.utime(mkv, ns=(initial.st_atime_ns, initial.st_mtime_ns + 1_000_000_000))
+        self.assertTrue(bundle_audio_source_status(self.output, prefer_sealed=True)["available"])
+        self.assertEqual(bundle_audio_source_status(self.output, prefer_sealed=True)["source"],
+                         "sealed-mkv")
+        # Keep size and even restore the original mtime: changed bytes cannot
+        # pass the content digest recorded at publication.
+        mkv.write_bytes(b"tamperedxxmedia-contents")
+        os.utime(mkv, ns=(initial.st_atime_ns, initial.st_mtime_ns))
+        status = bundle_audio_source_status(self.output, prefer_sealed=True)
+        self.assertFalse(status["available"])
+        self.assertIn("文件身份与封存回执不一致", status["reason"])
+
+    def test_legacy_receipt_mtime_mismatch_remains_unverified(self):
+        import json
+        (self.output / "continuous.flac").write_bytes(b"working-flac")
+        (self.output / OUTPUT).write_bytes(b"legacy-media")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        receipt_file = self.output / RECEIPT
+        record = json.loads(receipt_file.read_text(encoding="utf-8"))
+        record.pop("artifact_sha256")
+        receipt_file.write_text(json.dumps(record), encoding="utf-8")
+        mkv = self.output / OUTPUT
+        original = mkv.stat()
+        os.utime(mkv, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
+        status = bundle_audio_source_status(self.output, prefer_sealed=True)
+        self.assertFalse(status["available"])
+
+    def test_invalid_sealed_mkv_blocks_internal_but_preserves_external_ass(self):
+        import json
+        from app.subtitles import export_independent_ass
+
+        (self.output / "manifest.json").write_text(json.dumps({"entries": [
+            {"index": 17, "english": "One archived line", "chinese": "一句译文",
+             "start_seconds": 1.0, "audio_end_seconds": 2.0,
+             "display_end_seconds": 2.0},
+        ]}), encoding="utf-8")
+        (self.output / "continuous.flac").write_bytes(b"flac-fixture")
+        # The manifest changed after setUp's export receipt; re-certify the
+        # exact test source before sealing, as the real pipeline does.
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        (self.output / OUTPUT).write_bytes(b"verified-old-media")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        (self.output / OUTPUT).write_bytes(b"replaced-old-media")
+        original = (self.output / OUTPUT).read_bytes()
+        self.assertFalse(bundle_audio_source_status(self.output)["available"])
+        with self.assertRaisesRegex(ValueError, "文件身份与封存回执"):
+            verify_internal_ass_audio_source(self.output)
+        def mock_ass(_adapters, target, **_kwargs):
+            target.write_text("[Events]\\n", encoding="utf-8")
+        from subtitle_layout.config import SubtitleRenderConfig
+        with patch("app.subtitles.write_ass", side_effect=mock_ass), \
+             patch("app.subtitles.subtitle_render_config",
+                   return_value=SubtitleRenderConfig()):
+            external = export_independent_ass(self.config, self.output)
+        self.assertTrue(Path(external["ass_file"]).is_file())
+        self.assertTrue(external["mkv_untouched"])
+        self.assertEqual((self.output / OUTPUT).read_bytes(), original)
+        self.assertFalse((self.output / "continuous.flac").exists())
+
+    def test_audio_integrity_report_separates_legacy_and_content_mismatch(self):
+        (self.output / "continuous.flac").write_bytes(b"original-audio")
+        (self.output / OUTPUT).write_bytes(b"verified-archive")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        status = diagnose_bundle_audio_source(self.output)
+        self.assertEqual(status["code"], "verified_sealed_mkv")
+        self.assertTrue(status["digest_bound"])
+        self.assertTrue(status["artifact_verified"])
+        (self.output / OUTPUT).write_bytes(b"modified-archive")
+        changed = diagnose_bundle_audio_source(self.output)
+        self.assertEqual(changed["code"], "artifact_content_mismatch")
+        self.assertFalse(changed["artifact_verified"])
+        self.assertTrue(changed["external_ass_possible"])
+        self.assertEqual(changed["recommended_action"], "rebuild_from_original_sources")
+        import json
+        receipt_file = self.output / RECEIPT
+        data = json.loads(receipt_file.read_text("utf-8"))
+        data.pop("artifact_sha256")
+        receipt_file.write_text(json.dumps(data), encoding="utf-8")
+        legacy = diagnose_bundle_audio_source(self.output)
+        self.assertEqual(legacy["code"], "legacy_stat_mismatch")
+        self.assertFalse(legacy["digest_bound"])
+        self.assertIn("无法判断", legacy["detail"])
+        self.assertEqual((self.output / OUTPUT).read_bytes(), b"modified-archive")
 
     def test_modified_sealed_mkv_never_becomes_audio_source(self):
         (self.output / "continuous.flac").write_bytes(b"old-flac")

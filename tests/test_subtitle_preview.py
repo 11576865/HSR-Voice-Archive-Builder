@@ -21,6 +21,29 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.client = TestClient(fastapi_app, base_url="http://127.0.0.1:8765")
         self.headers = {"X-HSR-Token": self.token}
 
+    def test_audio_integrity_diagnosis_requires_token_and_same_active_project(self):
+        from types import SimpleNamespace
+        import app.server as active_server
+
+        fake = SimpleNamespace(root="/tmp/verified-active-project", output_dir="output")
+        verdict = {
+            "code": "legacy_stat_mismatch", "digest_bound": False,
+            "artifact_verified": False, "voice_timeline_match": True,
+            "recovery_help": "从原始语音包重新构建",
+        }
+        with patch.object(active_server, "_active_config", return_value=fake), \
+             patch.object(active_server, "diagnose_bundle_audio_source",
+                          return_value=verdict) as inspect:
+            denied = self.client.get("/api/project/active/audio-integrity")
+            self.assertEqual(denied.status_code, 401)
+            inspect.assert_not_called()
+            allowed = self.client.get("/api/project/active/audio-integrity",
+                                      headers=self.headers)
+            self.assertEqual(allowed.status_code, 200)
+            self.assertTrue(allowed.json()["ok"])
+            self.assertEqual(allowed.json()["code"], "legacy_stat_mismatch")
+            inspect.assert_called_once_with(Path(fake.root) / fake.output_dir)
+
     def test_default_layout_preview(self):
         res = preview_subtitle_layout(
             english_text="May this journey lead us starward.",

@@ -5800,6 +5800,21 @@ async function startAssExport(mode='internal'){
   const status=document.getElementById('optionalOutputStatus');
   try{
     if(button)button.disabled=true;
+    if(!external){
+      // The inner route must have a trustworthy source BEFORE the job writes
+      // any derived ASS/SRT. A failed source check cannot be cured by changing
+      // the selected cue or retrying the same encode request.
+      const integrity=await api('/api/project/active/audio-integrity');
+      if(!integrity.voice_timeline_match ||
+         (!integrity.artifact_verified&&!integrity.working_flac_present)){
+        const message='生成 ASS（内）需要可信的 FLAC/MKV 音轨；'+
+          String(integrity.detail||'来源不明')+'。请先保留旧成品并从原始语音包重新构建；'+
+          '仅需字幕文件时选择「生成 ASS（外）」。';
+        if(status)status.textContent=message;
+        showHsrAudioRecoveryActions(true);
+        throw new Error(message);
+      }
+    }
     if(status)status.textContent=external?'正在另存独立 ASS（不修改 MKV）…':'正在更新 MKV 内 ASS…';
     const job=await api(external?'/api/output/ass/external':'/api/output/ass',{method:'POST'});
     watchJob(job.job);
@@ -7005,6 +7020,36 @@ function clearVideoPreview(){
   if(button){button.disabled=false;button.setAttribute('aria-pressed','false');}
 }
 if(typeof window!=='undefined')window.addEventListener('beforeunload',clearVideoPreview);
+
+function showHsrAudioRecoveryActions(visible){
+  const status=document.getElementById('videoPreviewStatus');
+  if(!status||!status.parentElement)return;
+  let region=document.getElementById('hsrAudioRecoveryActions');
+  if(!region){
+    region=document.createElement('div');
+    region.id='hsrAudioRecoveryActions';
+    region.className='actions';
+    region.style.marginTop='8px';
+    const independent=document.createElement('button');
+    independent.type='button';
+    independent.className='small secondary';
+    independent.textContent='生成 ASS（外）：不依赖 MKV 音轨';
+    independent.addEventListener('click',()=>document.getElementById('generateSubtitleExternalAssBtn')?.click());
+    const rebuild=document.createElement('button');
+    rebuild.type='button';
+    rebuild.className='small secondary';
+    rebuild.textContent='检查原始语音包并重新构建';
+    rebuild.addEventListener('click',()=>{
+      showWorkspace('project');
+      document.getElementById('buildBtn')?.scrollIntoView({block:'center',behavior:'smooth'});
+      // A full media build is expensive and may require the original source.
+      // Never launch it without a second explicit button press.
+    });
+    region.append(independent,rebuild);
+    status.insertAdjacentElement('afterend',region);
+  }
+  region.hidden=!visible;
+}
 
 function setHsrEffectOperation(phase, detail=''){
   const root=document.getElementById('hsrEffectOperationStatus');
@@ -9305,6 +9350,7 @@ async function renderHsrEffectVideo(){
   const button=document.getElementById('previewVideoBtn');
   const status=document.getElementById('videoPreviewStatus');
   clearVideoPreview();
+  showHsrAudioRecoveryActions(false);
   setHsrEffectOperation('preparing','正在核对字幕、背景与输出格式；真实视频生成后将显示在画布。');
   // A new video request takes presentation ownership from stale still frames.
   libassPreviewGeneration++;
@@ -9374,7 +9420,8 @@ async function renderHsrEffectVideo(){
     if(!Number.isFinite(actualDuration)||actualDuration<=0)
       throw new Error('服务器没有返回已核准的真实语音预览时长');
     const previewAudio=response.headers.get('X-HSR-Preview-Audio');
-    if(previewAudio!=='project')
+    const visualOnly=previewAudio==='visual-only';
+    if(previewAudio!=='project'&&!visualOnly)
       throw new Error('预览中没有选中语音的真实音轨，拒绝以静音视频冒充');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
     if(actualBackground && actualBackground!==(footage?'local-footage':(backgroundImage||usesReference)?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
@@ -9382,6 +9429,8 @@ async function renderHsrEffectVideo(){
     }
     const video=document.getElementById('libassVideoPreview');
     if(!video)throw new Error('动态视频播放控件不存在');
+    // The fallback is deliberately silent, never mislabeled as the project voice.
+    video.muted=visualOnly;
     videoPreviewObjectUrl=URL.createObjectURL(blob);
     // loadeddata means the browser decoded a usable frame, not just HTTP success.
     await new Promise((resolve,reject)=>{
@@ -9398,13 +9447,24 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent())return;
     video.classList.remove('hidden');
     setPreviewEvidence(footage?'video-footage':(backgroundImage||usesReference)?'video-image':'video');
-    setHsrEffectOperation('ready','视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
+    setHsrEffectOperation('ready',visualOnly
+      ?'ASS 淡入淡出动画已生成（无声）；原 MKV 或语音来源仍未通过封存校验，不能视为真实有声预览。'
+      :'视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
     // The render trigger lives in the Inspector, but playback lives on stage.
     // Reveal the successful result so the action is not perceived as inert.
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
+    if(status){
+      status.textContent=visualOnly
+        ?'无声视觉预览 · '+actualDuration.toFixed(2)+' 秒 · 包含 ASS 淡入、显示和淡出；原 MKV/语音来源未获验证，未使用音轨。要检查真实语音同步，需从原始资料重新构建并封存档案。'
+        :'真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
+      status.className=visualOnly?'small status-warn':'small status-ok';
+    }
+    showHsrAudioRecoveryActions(visualOnly);
+    if(visualOnly&&!document.getElementById('prevEnableKinetic')?.checked && status){
+      status.textContent+=' 注意：当前「平滑淡入淡出」未启用，请勾选后再播放。';
+    }
     // Most browsers can reject autoplay *because this clip has real audio*.
     // Never swallow that rejection: the native video controls remain the
     // intentional user-gesture playback path, with sound enabled.
@@ -9414,14 +9474,18 @@ async function renderHsrEffectVideo(){
         if(playback&&typeof playback.catch==='function'){
           playback.catch(()=>{
             if(stillCurrent()&&status){
-              status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；浏览器阻止了自动有声播放，请点击画布上的视频播放按钮开启声音。';
+              status.textContent=visualOnly
+                ?'无声 ASS 淡入淡出动画已生成；请点击画布上的视频播放按钮检查。原项目语音仍未验证。'
+                :'有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；浏览器阻止了自动有声播放，请点击画布上的视频播放按钮开启声音。';
               status.className='small status-warn';
             }
           });
         }
       }catch(_){
         if(stillCurrent()&&status){
-          status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；请点击画布上的播放按钮手动播放。';
+          status.textContent=visualOnly
+            ?'无声 ASS 动画已生成；请点击画布上的播放按钮手动播放。'
+            :'有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；请点击画布上的播放按钮手动播放。';
           status.className='small status-warn';
         }
       }
@@ -9434,6 +9498,20 @@ async function renderHsrEffectVideo(){
     if(status){
       status.textContent='动态视频预览失败：'+String(error.message||error)+'。请检查处理主机 FFmpeg、源素材编码与已安装字体；如启用 Karaoke，还需有效词级时间。';
       status.className='small status-bad';
+    }
+    // Provenance is independent of cue selection. Inspect it on demand when
+    // audio or receipt validation fails; never auto-rebuild or sign the MKV.
+    if(/封存|MKV|FLAC|音轨|语音时间轴|voice source/i.test(String(error?.message||error))){
+      showHsrAudioRecoveryActions(true);
+      try{
+        const diagnosis=await api('/api/project/active/audio-integrity');
+        if(status&&identity===currentLibassPreviewIdentity()){
+          status.textContent+=' 来源检查：'+String(diagnosis.detail||'来源状态不明')+
+            '。'+String(diagnosis.recovery_help||'');
+        }
+      }catch(_){
+        if(status)status.textContent+=' 可先尝试「生成 ASS（外）」，再检查原始语音包并重新构建。';
+      }
     }
   }finally{
     if(stillCurrent()){
