@@ -146,19 +146,39 @@ class BundleRealFFmpegTests(unittest.TestCase):
     def test_sealed_mkv_survives_style_edit_and_real_effect_preview_has_fade_tail(self):
         """Production pipeline: sealed MKV -> remove FLAC -> style edit -> new cue preview.
 
-        This decodes the actual Matroska FLAC through FFmpeg and checks the
+        The original external WAV package is deleted *after* MKV sealing. This
+        decodes the actual Matroska FLAC through FFmpeg and checks the
         generated video duration and audible samples. Subtitle edit staleness
         must not erase the media's immutable audio provenance.
         """
-        from types import SimpleNamespace
+        from app.project import ProjectConfig
         from app.effect_voice_preview import resolve_effect_voice
         from app.ass_preview import render_ass_preview_video
         from app.subtitle_export_status import mark_ass_style_stale
         from subtitle_layout.config import SubtitleRenderConfig
 
-        with tempfile.TemporaryDirectory() as td:
+        with tempfile.TemporaryDirectory() as td, \
+             tempfile.TemporaryDirectory() as source_dir:
             root = Path(td)
-            audio, ass = self._audio(root), self._ass(root)
+            # Build the continuous lossless master from a genuine WAV file
+            # outside the project, not from a fabricated existing MKV.
+            original_package = Path(source_dir) / "external_original_voice_package"
+            original_package.mkdir()
+            raw_wav = original_package / "line.wav"
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-f", "lavfi",
+                "-i", "sine=frequency=440:sample_rate=44100:duration=1.6",
+                "-c:a", "pcm_s16le", str(raw_wav),
+            ], check=True, capture_output=True, timeout=30)
+            (original_package / "index.csv").write_text(
+                "index,filename\n2,line.wav\n", encoding="utf-8",
+            )
+            audio = root / "continuous.flac"
+            subprocess.run([
+                "ffmpeg", "-y", "-loglevel", "error", "-i", str(raw_wav),
+                "-c:a", "flac", str(audio),
+            ], check=True, capture_output=True, timeout=30)
+            ass = self._ass(root)
             self._certify(root)
             (root / "manifest.json").write_text(json.dumps({"entries": [
                 {"index": 1, "start_seconds": 0.25, "audio_end_seconds": 0.65},
@@ -171,16 +191,25 @@ class BundleRealFFmpegTests(unittest.TestCase):
                 include_fonts=False, background_spec={"mode": "color"},
             )
             seal_complete_delivery(root)
+            # The user deletes the original external voice package after
+            # complete MKV delivery. Neither the project voice resolver nor
+            # the actual preview renderer may reopen that original path.
+            shutil.rmtree(original_package)
+            self.assertFalse(original_package.exists())
             self.assertFalse(audio.exists(), "Complete delivery should not leave a redundant FLAC")
             self.assertTrue(target.is_file())
             self.assertTrue(mark_ass_style_stale(root))
             self.assertEqual(bundle_export_status(root)["state"], "stale")
 
-            selected = resolve_effect_voice(
-                SimpleNamespace(root=str(root), output_dir=".",
-                                subtitle_enable_kinetic=True),
-                2, fade_ms=100,
+            project = ProjectConfig(
+                schema_version=1, name="source-deleted-fixture",
+                root=str(root), output_dir=".",
+                index_csv=str(original_package / "index.csv"),
+                wav_source=str(original_package),
+                subtitle_enable_kinetic=True,
             )
+            self.assertFalse(Path(project.wav_source).exists())
+            selected = resolve_effect_voice(project, 2, fade_ms=100)
             self.assertEqual(selected["audio_source_path"], target)
             self.assertAlmostEqual(selected["voice_start_offset_seconds"], 0.1)
             self.assertEqual(selected["preview_after_fade_ms"], 100)
