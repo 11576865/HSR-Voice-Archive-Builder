@@ -291,7 +291,18 @@ def bundle_audio_source_status(
             return {"available": True, "source": "sealed-mkv", "reason": ""}
     flac_sig = _signature(output / "continuous.flac")
     if flac_sig is not None and flac_sig["size"] > 0:
-        return {"available": True, "source": "independent-flac", "reason": ""}
+        # A changed sealed MKV cannot authorize a stray work FLAC. Only the
+        # exact FLAC that was recorded as the sealed publication input may
+        # recover voice preview; do not promote arbitrary partial audio.
+        receipt = _read_receipt(output)
+        sealed_bundle_changed = (
+            prefer_sealed and bundle.is_file()
+            and receipt is not None and receipt.get("sealed") is True
+            and not _bundle_artifact_matches(bundle, receipt)
+        )
+        if (not sealed_bundle_changed or
+                flac_sig == receipt.get("sources", {}).get("flac")):
+            return {"available": True, "source": "independent-flac", "reason": ""}
     if bundle.is_symlink():
         reason = ("旧 MKV 是符号链接，无法作为可信音频来源；"
                   "请恢复原始项目音频再完成档案构建")
