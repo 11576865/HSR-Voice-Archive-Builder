@@ -186,6 +186,9 @@ const sandbox = {
   headers: () => ({}),
   shortError: e => String(e.message || e),
   setLog: () => {},
+  // The geometry button explicitly repaints its own safe preview; this is
+  // not an asynchronous FFmpeg/libass renderer call.
+  updateLayoutPreview: () => Promise.resolve(),
   URL: {
     createObjectURL: () => { const url = 'blob:fixture-' + (madeUrls.length + 1); madeUrls.push(url); return url; },
     revokeObjectURL: () => {}
