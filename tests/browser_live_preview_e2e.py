@@ -22,7 +22,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import uvicorn
 from playwright.sync_api import sync_playwright
 
-from app.server import app
+from app.server import app, _set_active, _clear_active
+from app.project import ProjectConfig, save_project
 from tests.browser_visual_evidence import (
     SUBTITLES, ensure, make_router, screenshot,
 )
@@ -70,34 +71,18 @@ def wait_for_live_state(page, evaluate_fn: str, label: str,
     raise AssertionError("Timed out waiting for " + label)
 
 
-def load_studio_under_production_csp(page) -> None:
-    wait_for_live_state(
-        page, "() => typeof showWorkspace === 'function' && typeof loadLayoutStressSample === 'function'",
-        "workbench boot",
-    )
-    page.evaluate("""() => {
-        currentProject = {name:'visual-fixture',root:'/qa/fixture',config:{
-            source_text_language:'en',target_language:'zh-CN',
-            subtitle_chs_font:'Arial',subtitle_primary_font:'Arial'
-        }};
-        showWorkspace('layout',{scroll:false});
-    }""")
-    # The real browser may have queued the initial requestAnimationFrame before
-    # fixture project setup; explicitly await the production corpus loader to
-    # obtain a deterministic sample before testing genuine video bytes.
-    page.evaluate("() => loadLayoutStressSample({force:true})")
-    try:
-        page.wait_for_function("layoutCorpusItems.length >= 3", timeout=20000)
-    except Exception as exc:
-        state = page.evaluate("""() => ({
-          project: currentProject?.root,
-          studio: document.body.dataset.workspaceTask,
-          rows: layoutCorpusItems?.length,
-          selected: layoutCorpusSelectedId,
-          status: document.getElementById('layoutCorpusCheckStatus')?.textContent
-        })""")
-        raise AssertionError(f"Production corpus did not initialize: {state}") from exc
-    # The primary workspace navigation is the only Layout/Effects switch.
+def load_studio_under_production_csp(page, project_root: str) -> None:
+    # The real preview server and mocked metadata must share a project identity.
+    wait_for_live_state(page,
+        "() => typeof showWorkspace === 'function' && "
+        "typeof loadLayoutStressSample === 'function' && "
+        "currentProject?.root === " + json.dumps(project_root),
+        "hydrated matching project")
+    page.evaluate("() => showWorkspace('layout',{scroll:false})")
+    page.evaluate("() => loadLayoutStressSample({force:true,selectId:11})")
+    wait_for_live_state(page,
+        "() => layoutCorpusItems.length >= 3 && String(layoutCueActiveId) === '11'",
+        "source-bound project subtitle selection")
     page.locator("#studioEffectsTab").click()
     ensure(page.locator("#previewVideoBtn").is_visible(), "Effect preview hidden")
 
@@ -110,6 +95,25 @@ def run(output: Path) -> None:
     with tempfile.TemporaryDirectory(prefix="hsr-live-preview-") as td:
         root = Path(td)
         fixture = make_source(ffmpeg, root / "source.webm")
+        output_dir = root / "output"
+        output_dir.mkdir()
+        # The real FastAPI renderer requires a persisted project, timeline
+        # manifest and decodable FLAC, not a transient JavaScript mock.
+        subprocess.run([
+            ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+            "-f", "lavfi", "-i", "sine=frequency=660:sample_rate=48000:duration=5",
+            "-c:a", "flac", str(output_dir / "continuous.flac"),
+        ], capture_output=True, timeout=30, check=True)
+        (output_dir / "manifest.json").write_text(json.dumps({"entries": [
+            {"index": 11, "start_seconds": 0.5, "audio_end_seconds": 3.5},
+        ]}), encoding="utf-8")
+        project = ProjectConfig(
+            schema_version=1, name="visual-fixture", root=str(root),
+            index_csv="index.csv", wav_source="wav", output_dir="output",
+            delivery_mode="complete",
+        )
+        save_project(project)
+        _set_active(project)
         with socket.socket() as sock:
             sock.bind(("127.0.0.1", 0))
             port = sock.getsockname()[1]
@@ -134,7 +138,8 @@ def run(output: Path) -> None:
                                             device_scale_factor=1)
                     errors = []
                     page.on("pageerror", lambda err: errors.append(str(err)))
-                    mock = make_router([dict(row) for row in SUBTITLES], [])
+                    mock = make_router([dict(row) for row in SUBTITLES], [],
+                                       project_root=str(root))
                     seen_real = []
                     captured_media = []
                     def route_api(route):
@@ -158,7 +163,7 @@ def run(output: Path) -> None:
                             mock(route)
                     page.route("**/api/**", route_api)
                     page.goto(f"http://127.0.0.1:{port}/", wait_until="domcontentloaded")
-                    load_studio_under_production_csp(page)
+                    load_studio_under_production_csp(page, str(root))
                     # WU-02 keeps optional footage inputs collapsed. This
                     # browser acceptance follows the actual UI disclosure
                     # rather than editing an invisible input via automation.
@@ -188,6 +193,8 @@ def run(output: Path) -> None:
                         )
                     ensure(response.headers.get("x-hsr-preview-background") == "local-footage",
                            "Actual API did not confirm local source input")
+                    ensure(response.headers.get("x-hsr-preview-audio") == "project",
+                           "Renderer did not use manifest-backed project FLAC")
                     ensure(seen_real and seen_real[0].get("include_source_audio") is True,
                            "Browser failed to submit requested source audio")
                     ensure("source_video_base64" in seen_real[0],
@@ -264,6 +271,7 @@ def run(output: Path) -> None:
         finally:
             server.should_exit = True
             thread.join(timeout=20)
+            _clear_active()
 
 
 def main():

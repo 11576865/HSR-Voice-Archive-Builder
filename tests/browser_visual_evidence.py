@@ -148,7 +148,8 @@ def real_browser_video_fixture() -> bytes:
         return path.read_bytes()
 
 
-def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None = None):
+def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None = None,
+                *, project_root: str = "/qa/fixture"):
     def handler(route):
         request = route.request
         url = request.url
@@ -186,7 +187,7 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
         if path.endswith("/api/status"):
             payload = {
                 "ok": True, "version": "visual-fixture", "project": {
-                    "root": "/qa/fixture", "name": "visual-fixture",
+                    "root": project_root, "name": "visual-fixture",
                     "config": {
                         "source_text_language": "en", "target_language": "zh-CN",
                         "subtitle_chs_font": "Arial", "subtitle_primary_font": "Arial",
@@ -202,11 +203,11 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             # Mirror production's project-scoped save receipt. A generic
             # {"ok":true} clears currentProject in the actual JS autosaver.
             assert request.method == "POST", "Settings must not be written via GET"
-            assert body.get("expected_project_root") == "/qa/fixture", (
+            assert body.get("expected_project_root") == project_root, (
                 "Settings must be bound to the active project"
             )
             payload = {"ok": True, "project": {
-                "root": "/qa/fixture", "name": "visual-fixture",
+                "root": project_root, "name": "visual-fixture",
                 "config": {
                     "source_text_language": "en", "target_language": "zh-CN",
                     "subtitle_chs_font": body.get("chs_font") or "Arial",
@@ -241,7 +242,7 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             cue_id = path.split("/subtitles/")[1].split("/timing")[0]
             match = next((x for x in rows if str(x["id"]) == cue_id), None)
             assert match is not None, f"unknown cue {cue_id}"
-            assert body.get("expected_project_root") == "/qa/fixture", "project guard missing"
+            assert body.get("expected_project_root") == project_root, "project guard missing"
             if (body.get("expected_start"), body.get("expected_end")) != (match["start"], match["end"]):
                 route.fulfill(status=409, content_type="application/json", body=json.dumps({
                     "ok": False, "error": "Stale cue timing"
