@@ -900,7 +900,7 @@ def touch_safety_check(browser, base_url, report):
     page.locator("#layoutNextSampleBtn").click()
     page.wait_for_function("""() => String(layoutCueActiveId)===
       String(layoutCorpusVisibleRows()[1]?.id)""",timeout=12000)
-    ensure(page.evaluate("currentProject?.root")==="/qa/fixture",
+    ensure(page.evaluate("currentProject?.root")=="/qa/fixture",
            "Cue navigation unexpectedly invalidated the open project")
     page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#hsrTouchSliderToggle").count()==0,
