@@ -32,8 +32,8 @@ class EffectVoicePreviewTests(unittest.TestCase):
         (self.output / "manifest.json").write_text(json.dumps({"entries": [
             {"index": 101, "group": "A", "start_seconds": 2.0,
              "audio_end_seconds": 11.0},
-            {"index": 102, "group": "A", "start_seconds": 12.0,
-             "audio_end_seconds": 14.5},
+            {"index": 102, "group": "A", "start_seconds": 13.5,
+             "audio_end_seconds": 16.0},
         ]}), encoding="utf-8")
         (self.output / "continuous.flac").write_bytes(b"test-fixture-media")
 
@@ -151,7 +151,7 @@ class EffectVoicePreviewTests(unittest.TestCase):
         self.assertAlmostEqual(info["voice_start_offset_seconds"], 0.6)
         self.assertAlmostEqual(info["duration_seconds"], 3.7)
         self.assertEqual(info["preview_after_fade_ms"], 600)
-        self.assertAlmostEqual(info["audio_source_start_seconds"], 11.4)
+        self.assertAlmostEqual(info["audio_source_start_seconds"], 12.9)
 
     def test_style_only_invalidation_keeps_other_cue_preview_audio_from_sealed_mkv(self):
         # Complete delivery deliberately discards loose FLAC/ASS/SRT. A
