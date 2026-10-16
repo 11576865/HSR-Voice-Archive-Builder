@@ -885,9 +885,24 @@ def touch_safety_check(browser, base_url, report):
            "Intentional +1 button failed to update the authoritative range")
     ensure(not page.locator("#layoutTimelinePan").is_visible(),
            "Timeline range still captures touch scrolling in Effects")
-    ensure(page.locator("#layoutTimelineEarlierBtn").count()==1 and
-           page.locator("#layoutTimelineLaterBtn").count()==1,
-           "Timeline navigation lost its intentional arrow controls")
+    # The retired editable timeline controls are no longer the navigation
+    # contract. Shared project-cue browser arrows remain accessible on touch.
+    ensure(page.locator("#layoutPreviousSampleBtn").count()==1 and
+           page.locator("#layoutNextSampleBtn").count()==1,
+           "Shared subtitle browser lost previous/next navigation")
+    page.locator("#layoutAuditDrawerToggle").click()
+    ensure(page.locator("#layoutPreviousSampleBtn").is_visible() and
+           page.locator("#layoutNextSampleBtn").is_visible(),
+           "Touch cue navigation is inaccessible in the opened browser")
+    page.locator(".layout-corpus-item").first.click()
+    page.wait_for_function("""() => String(layoutCueActiveId)===
+      String(layoutCorpusVisibleRows()[0]?.id)""",timeout=12000)
+    page.locator("#layoutNextSampleBtn").click()
+    page.wait_for_function("""() => String(layoutCueActiveId)===
+      String(layoutCorpusVisibleRows()[1]?.id)""",timeout=12000)
+    ensure(page.evaluate("currentProject?.root")==="/qa/fixture",
+           "Cue navigation unexpectedly invalidated the open project")
+    page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#hsrTouchSliderToggle").count()==0,
            "Global slider locking control has returned")
     report["touch_numeric"]={"before":before,"after":page.locator("#prevChsSize").input_value()}
