@@ -14,6 +14,7 @@ from unittest.mock import patch
 
 from app.archive_bundle_lifecycle import (
     OUTPUT, RECEIPT, bundle_audio_source_status, bundle_export_status,
+    diagnose_bundle_audio_source,
     record_bundle_publication, require_bound_voice_timeline,
 )
 from app.auto_delivery import queue_ass_regeneration
@@ -222,6 +223,34 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         os.utime(mkv, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
         status = bundle_audio_source_status(self.output, prefer_sealed=True)
         self.assertFalse(status["available"])
+
+    def test_audio_integrity_report_separates_legacy_and_content_mismatch(self):
+        (self.output / "continuous.flac").write_bytes(b"original-audio")
+        (self.output / OUTPUT).write_bytes(b"verified-archive")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        status = diagnose_bundle_audio_source(self.output)
+        self.assertEqual(status["code"], "verified_sealed_mkv")
+        self.assertTrue(status["digest_bound"])
+        self.assertTrue(status["artifact_verified"])
+        (self.output / OUTPUT).write_bytes(b"modified-archive")
+        changed = diagnose_bundle_audio_source(self.output)
+        self.assertEqual(changed["code"], "artifact_content_mismatch")
+        self.assertFalse(changed["artifact_verified"])
+        self.assertTrue(changed["external_ass_possible"])
+        self.assertEqual(changed["recommended_action"], "rebuild_from_original_sources")
+        import json
+        receipt_file = self.output / RECEIPT
+        data = json.loads(receipt_file.read_text("utf-8"))
+        data.pop("artifact_sha256")
+        receipt_file.write_text(json.dumps(data), encoding="utf-8")
+        legacy = diagnose_bundle_audio_source(self.output)
+        self.assertEqual(legacy["code"], "legacy_stat_mismatch")
+        self.assertFalse(legacy["digest_bound"])
+        self.assertIn("无法判断", legacy["detail"])
+        self.assertEqual((self.output / OUTPUT).read_bytes(), b"modified-archive")
 
     def test_modified_sealed_mkv_never_becomes_audio_source(self):
         (self.output / "continuous.flac").write_bytes(b"old-flac")
