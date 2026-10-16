@@ -176,6 +176,31 @@ class EffectVoicePreviewTests(unittest.TestCase):
         self.assertEqual(preview["audio_source_path"], self.output / OUTPUT)
         self.assertAlmostEqual(preview["duration_seconds"], 3.7)
 
+    def test_corrupt_leftover_flac_does_not_override_sealed_archive_preview(self):
+        # A new/aborted audio build may leave a nonempty working file.
+        # The selected archive voice must still come from the verified MKV.
+        for name, data in (
+            ("HSR_Voice_Archive.ass", "[Events]\\n"),
+            ("HSR_Voice_Archive.srt", "1\\n"),
+        ):
+            (self.output / name).write_text(data, encoding="utf-8")
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        (self.output / OUTPUT).write_bytes(b"verified-archive-placeholder")
+        record_bundle_publication(
+            self.output, background_color="#112233",
+            background_image=None, image_extension=None, include_fonts=False,
+            background_spec={"mode": "color"},
+        )
+        seal_complete_delivery(self.output)
+        (self.output / "continuous.flac").write_bytes(b"truncated-flac-not-audio")
+        self.assertEqual(bundle_audio_source_status(self.output)["source"],
+                         "independent-flac")
+        self.assertEqual(bundle_audio_source_status(
+            self.output, prefer_sealed=True)["source"], "sealed-mkv")
+        self.assertEqual(resolve_effect_voice(
+            self.config, 101, fade_ms=200)["audio_source_path"],
+            self.output / OUTPUT)
+
     def test_single_cue_ass_end_and_both_fades_match_encoded_preview_envelope(self):
         from types import SimpleNamespace
         entry = SimpleNamespace(

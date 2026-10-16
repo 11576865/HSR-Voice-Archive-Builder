@@ -176,17 +176,30 @@ def load_previous_bundle_image(output: Path) -> bytes:
     return image.read_bytes()
 
 
-def bundle_audio_source_status(output: Path) -> dict[str, Any]:
-    """Identify a reusable archive audio source without conflating MKV stale/missing.
+def bundle_audio_source_status(
+    output: Path, *, prefer_sealed: bool = False,
+) -> dict[str, Any]:
+    """Identify a reusable audio source; previews prefer sealed archive audio.
+
+    For an existing completed archive, a leftover non-empty continuous.flac
+    may be partial, damaged, or from a different build. Only the already
+    sealed, identity-matched MKV is authoritative for archive *preview*.
+    Explicit source-generation consumers keep their historical independent
+    FLAC preference unless they opt into prefer_sealed.
 
     This is a cheap, provenance-based prerequisite check; the actual exporter
     additionally validates stream codecs with FFprobe before publication.
     Never certify a loose legacy MKV from its filename alone.
     """
+    bundle = output / OUTPUT
+    if prefer_sealed and not bundle.is_symlink() and bundle.is_file():
+        receipt = _read_receipt(output)
+        if (receipt and receipt.get("sealed") is True
+                and _signature(bundle) == receipt.get("artifact")):
+            return {"available": True, "source": "sealed-mkv", "reason": ""}
     flac_sig = _signature(output / "continuous.flac")
     if flac_sig is not None and flac_sig["size"] > 0:
         return {"available": True, "source": "independent-flac", "reason": ""}
-    bundle = output / OUTPUT
     if bundle.is_symlink():
         reason = ("旧 MKV 是符号链接，无法作为可信音频来源；"
                   "请恢复原始项目音频再完成档案构建")
