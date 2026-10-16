@@ -18,6 +18,7 @@ from subtitle_layout import (
 )
 from subtitle_layout.measure import clear_measure_cache
 from subtitle_layout.breaker import _get_candidate_split_points
+from subtitle_layout.font_scale import SCALE_FACTORS
 
 
 class SubtitleLayoutTests(unittest.TestCase):
@@ -249,7 +250,10 @@ class SubtitleLayoutTests(unittest.TestCase):
         ])
         layout = solve_subtitle_layout(english, chinese)
         self.assertLess(layout.scale_factor, 1.0)
-        self.assertIn(layout.scale_factor, (0.95, 0.90, 0.85))
+        # The solver now searches the whole 25-100% budget; 85% is not
+        # a format ceiling and a 65% valid result is not a regression.
+        self.assertIn(layout.scale_factor, SCALE_FACTORS)
+        self.assertGreaterEqual(layout.scale_factor, 0.25)
 
     def test_split_chinese_semantic_punctuation_and_pos(self) -> None:
         text = "这是一个非常漫长的主字幕文本，用来触发自动换行算法并验证语义切分"

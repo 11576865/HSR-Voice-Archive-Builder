@@ -47,8 +47,8 @@ class TouchWorkbenchTests(unittest.TestCase):
         self.assertIn("window.addEventListener('blur',stopRepeat)",html)
         self.assertIn("if(button.disabled)stopRepeat()",html)
         for field, maximum in (
-            ("prevOutlineWidth","12"), ("prevShadowDepth","12"),
-            ("prevBlurRadius","5")):
+            ("prevOutlineWidth","24"), ("prevShadowDepth","24"),
+            ("prevBlurRadius","12")):
             self.assertIn(f'id="{field}" min="0" max="{maximum}"',html)
         self.assertIn("editor.reportValidity()",html)
         self.assertIn("并非 ASS 格式上限",html)

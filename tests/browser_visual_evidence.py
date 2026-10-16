@@ -148,7 +148,8 @@ def real_browser_video_fixture() -> bytes:
         return path.read_bytes()
 
 
-def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None = None):
+def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None = None,
+                *, project_root: str = "/qa/fixture"):
     def handler(route):
         request = route.request
         url = request.url
@@ -185,12 +186,39 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             return
         if path.endswith("/api/status"):
             payload = {
-                "ok": True, "version": "visual-fixture", "project": None,
+                "ok": True, "version": "visual-fixture", "project": {
+                    "root": project_root, "name": "visual-fixture",
+                    "config": {
+                        "source_text_language": "en", "target_language": "zh-CN",
+                        "subtitle_chs_font": "Arial", "subtitle_primary_font": "Arial",
+                        "delivery_mode": "complete",
+                    }, "report": {}, "outputs": {},
+                },
                 "runtime": {"ffmpeg": False, "warnings": []},
                 "recent_projects": [], "jobs": [],
             }
         elif path.endswith("/api/quick/candidates"):
             payload = {"ok": True, "candidates": []}
+        elif path.endswith("/api/subtitle-layout/settings"):
+            # Mirror production's project-scoped save receipt. A generic
+            # {"ok":true} clears currentProject in the actual JS autosaver.
+            assert request.method == "POST", "Settings must not be written via GET"
+            assert body.get("expected_project_root") == project_root, (
+                "Settings must be bound to the active project"
+            )
+            payload = {"ok": True, "project": {
+                "root": project_root, "name": "visual-fixture",
+                "config": {
+                    "source_text_language": "en", "target_language": "zh-CN",
+                    "subtitle_chs_font": body.get("chs_font") or "Arial",
+                    "subtitle_primary_font": body.get("primary_font") or "Arial",
+                    "subtitle_chs_size": body.get("base_chs_size", 48),
+                    "subtitle_primary_size": body.get("base_primary_size", 42),
+                    "subtitle_primary_color": body.get("primary_color", "#DCEBFF"),
+                    "subtitle_chs_color": body.get("chs_color", "#FFFFFF"),
+                    "delivery_mode": "complete",
+                }, "report": {}, "outputs": {},
+            }}
         elif "/subtitles?" in url or path.endswith("/subtitles"):
             payload = {
                 "ok": True, "subtitles": rows, "persistable": True,
@@ -214,7 +242,7 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             cue_id = path.split("/subtitles/")[1].split("/timing")[0]
             match = next((x for x in rows if str(x["id"]) == cue_id), None)
             assert match is not None, f"unknown cue {cue_id}"
-            assert body.get("expected_project_root") == "/qa/fixture", "project guard missing"
+            assert body.get("expected_project_root") == project_root, "project guard missing"
             if (body.get("expected_start"), body.get("expected_end")) != (match["start"], match["end"]):
                 route.fulfill(status=409, content_type="application/json", body=json.dumps({
                     "ok": False, "error": "Stale cue timing"
@@ -253,13 +281,10 @@ def rect(page, selector: str):
 
 def load_studio(page):
     page.wait_for_function("typeof showWorkspace === 'function' && typeof loadLayoutStressSample === 'function'")
-    page.evaluate("""() => {
-        currentProject = {name:'visual-fixture',root:'/qa/fixture',config:{
-            source_text_language:'en',target_language:'zh-CN',subtitle_chs_font:'Arial',
-            subtitle_primary_font:'Arial'
-        }};
-        showWorkspace('layout',{scroll:false});
-    }""")
+    # /api/status, not a manual global assignment, must own the same project
+    # identity. Otherwise a late refresh() clears the selected cue mid-test.
+    page.wait_for_function("currentProject?.root === '/qa/fixture'", timeout=12000)
+    page.evaluate("() => showWorkspace('layout',{scroll:false})")
     page.wait_for_function("layoutCorpusItems.length >= 3", timeout=12000)
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
     # A separate effects workbench owns timing, Karaoke and playable preview.
@@ -545,6 +570,11 @@ def desktop_check(browser, base_url, output, report):
     }""")
     ensure(selected["ready"] and str(selected["actual"])==str(selected["expected"]),
            "Project cue selection did not finish: "+json.dumps(selected,ensure_ascii=False))
+    # Autosave may finish while a cue is selected; neither a generic mock nor
+    # a late project receipt may erase the selected project's identity.
+    page.wait_for_timeout(850)
+    ensure(page.evaluate("currentProject?.root") == "/qa/fixture",
+           "Autosave unexpectedly cleared the active project")
     page.locator("#layoutAuditDrawerToggle").click()
     page.locator("#studioV4Timing > summary").click()
     ensure(page.locator("#layoutCueClockOrigin").is_visible(),
@@ -591,10 +621,23 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     load_studio(page)
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            f"{label}: duplicate explorer appears by default")
+    ensure(page.evaluate("currentProject?.root") == "/qa/fixture",
+           f"{label}: project identity lost after fixture hydration")
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
            f"{label}: Effects not selected as top-level workspace")
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
            f"{label}: shared subtitle browser unavailable in Effects")
+    # Mobile controls remain directly operable without sacrificing the 16:9
+    # media stage; the selector and explicit preview are not 31px desktop taps.
+    if width <= 600:
+        taps = page.evaluate("""() => {
+          const height=id=>document.getElementById(id).getBoundingClientRect().height;
+          return {select:height('layoutAuditDrawerToggle'),
+                  preview:height('previewVideoBtn'),
+                  save:height('saveSubtitleLayoutBtn')};
+        }""")
+        ensure(min(taps.values()) >= 42,
+               f"{label}: touch targets undersized: {taps}")
     screenshot(page, output, f"{label}_clean_studio")
     page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
@@ -682,18 +725,24 @@ def shared_corpus_request_check(browser, base_url, report):
 
     page.route("**/api/**", route_corpus)
     page.goto(base_url, wait_until="domcontentloaded")
-    page.wait_for_function("typeof fetchSubtitles === 'function'", timeout=15000)
+    # Await real status hydration. Injecting currentProject here races the
+    # production refresh() callback, invalidating an in-flight shared snapshot.
+    page.wait_for_function("""() => typeof fetchSubtitles === 'function' &&
+      currentProject?.root === '/qa/fixture'""", timeout=15000)
+    # fillProject automatically fetches the Review list on hydration. Let
+    # that app startup fetch finish, then measure only this explicit workflow.
+    page.wait_for_function("loadedSubtitles.length === 4",timeout=15000)
+    requests.clear()
     page.evaluate("""() => {
-      currentProject={name:'fixture-project',root:'/qa/fixture',
-                      config:{source_text_language:'en',target_language:'zh-CN'}};
       document.getElementById('subSelector').value='all';
       document.getElementById('subSearchQuery').value='';
       document.getElementById('subTimeRange').value='';
       showWorkspace('review',{scroll:false});
     }""")
     page.evaluate("() => fetchSubtitles()")
+    page.wait_for_function("loadedSubtitles.length === 4",timeout=15000)
     ensure(len(requests) == 1 and "selector=all" in requests[0],
-           "Clean unfiltered Review should issue exactly one full-list request")
+           f"Clean unfiltered Review should issue exactly one full-list request: {requests}")
     page.evaluate("() => showWorkspace('layout',{scroll:false})")
     page.wait_for_function("""() =>
       layoutCorpusItems.length===4 && layoutCorpusSelectedId!==null
@@ -843,9 +892,24 @@ def touch_safety_check(browser, base_url, report):
            "Intentional +1 button failed to update the authoritative range")
     ensure(not page.locator("#layoutTimelinePan").is_visible(),
            "Timeline range still captures touch scrolling in Effects")
-    ensure(page.locator("#layoutTimelineEarlierBtn").count()==1 and
-           page.locator("#layoutTimelineLaterBtn").count()==1,
-           "Timeline navigation lost its intentional arrow controls")
+    # The retired editable timeline controls are no longer the navigation
+    # contract. Shared project-cue browser arrows remain accessible on touch.
+    ensure(page.locator("#layoutPreviousSampleBtn").count()==1 and
+           page.locator("#layoutNextSampleBtn").count()==1,
+           "Shared subtitle browser lost previous/next navigation")
+    page.locator("#layoutAuditDrawerToggle").click()
+    ensure(page.locator("#layoutPreviousSampleBtn").is_visible() and
+           page.locator("#layoutNextSampleBtn").is_visible(),
+           "Touch cue navigation is inaccessible in the opened browser")
+    page.locator(".layout-corpus-item").first.click()
+    page.wait_for_function("""() => String(layoutCueActiveId)===
+      String(layoutCorpusVisibleRows()[0]?.id)""",timeout=12000)
+    page.locator("#layoutNextSampleBtn").click()
+    page.wait_for_function("""() => String(layoutCueActiveId)===
+      String(layoutCorpusVisibleRows()[1]?.id)""",timeout=12000)
+    ensure(page.evaluate("currentProject?.root")=="/qa/fixture",
+           "Cue navigation unexpectedly invalidated the open project")
+    page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#hsrTouchSliderToggle").count()==0,
            "Global slider locking control has returned")
     report["touch_numeric"]={"before":before,"after":page.locator("#prevChsSize").input_value()}
@@ -894,7 +958,10 @@ def gradient_background_check(browser, base_url, output, report):
               background_spec:{mode:'linear',first:'#e25a6b',second:'#112941',
                 third:'#313f73',direction:'horizontal',resolution:'1080p',quality:'high'}
             }
-          });
+          }, true);
+          // The fixture intentionally replaces a loaded project's saved
+          // background: pass the explicit force flag rather than relying on
+          // a fictitious root change to bypass draft-preservation semantics.
           showWorkspace('export',{scroll:false});
           // This deterministic browser fixture has no built project summary:
           // reveal the normal Export result container explicitly, rather

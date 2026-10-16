@@ -300,3 +300,81 @@ body[data-workspace="layout"] #subtitleLayoutPreviewCard .studio-v4-workbench>.s
 #subtitleLayoutPreviewCard .studio-region-actions + .small {
   font-size:11px;line-height:1.4;
 }
+
+/* Compact phone Effects/Layout: preserve the full 16:9 stage but make the
+   explicit actions, project cue selector and failure receipts touch-sized.
+   The page remains the only vertical scroller (no nested inspector scroll). */
+@media(max-width:600px){
+  body[data-workspace="layout"] #subtitleLayoutPreviewCard>.hsr-studio-toolbar{
+    justify-content:stretch!important;padding:7px 9px!important;
+  }
+  #subtitleLayoutPreviewCard #layoutAuditDrawerToggle{
+    flex:1 1 100%!important;width:100%!important;min-height:44px!important;
+    font-size:13px!important;text-align:center!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions{
+    align-items:stretch!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .preview-actions>.actions{
+    display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr))!important;
+    gap:8px!important;flex:1 1 100%!important;width:100%!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar #previewLibassBtn,
+  #subtitleLayoutPreviewCard .studio-v3-command-bar #previewVideoBtn{
+    grid-column:auto!important;min-height:46px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar #saveSubtitleLayoutBtn{
+    grid-column:1/-1!important;min-height:44px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .hsr-export-advanced{
+    grid-column:1/-1!important;display:block!important;
+    width:100%!important;min-width:0!important;margin:0!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .hsr-export-advanced>summary{
+    display:block!important;min-height:43px!important;
+    font-size:13px!important;padding:9px 12px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar .hsr-export-advanced[open]>.actions{
+    display:grid!important;grid-template-columns:repeat(2,minmax(0,1fr));
+    gap:8px!important;margin:8px 0 0!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-command-bar button{
+    font-size:13px!important;min-height:44px!important;
+    line-height:1.3!important;white-space:normal!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-visual #libassPreviewStatus,
+  #subtitleLayoutPreviewCard .studio-v3-visual #videoPreviewStatus{
+    font-size:12px!important;line-height:1.5!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-visual .layout-export-health{
+    display:flex!important;flex-wrap:wrap!important;gap:8px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-visual .layout-export-health[hidden]{
+    display:none!important;
+  }
+  #subtitleLayoutPreviewCard .layout-export-health p{
+    max-height:none!important;overflow:visible!important;
+  }
+  #subtitleLayoutPreviewCard .layout-export-health button{
+    min-height:44px!important;font-size:12px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v4-timing>summary{
+    font-size:14px!important;min-height:46px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section>summary{
+    font-size:14px!important;min-height:46px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-inspector .layout-inspector-section-body{
+    padding:10px 13px 18px!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-inspector label{
+    font-size:13px!important;line-height:1.45!important;
+  }
+  #subtitleLayoutPreviewCard .studio-v3-inspector input[type="number"],
+  #subtitleLayoutPreviewCard .studio-v3-inspector select{
+    min-height:44px!important;font-size:16px!important;
+  }
+  #subtitleLayoutPreviewCard #prevFadeIn{
+    min-height:48px!important;font-variant-numeric:tabular-nums;
+  }
+}

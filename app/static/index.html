@@ -7729,6 +7729,12 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
       // This response belongs to the previous workspace; it cannot publish into a new project.
       return false;
     }
+    // A successful HTTP status without a matching project is not a valid
+    // persistence receipt. Never destroy the active project or certify a
+    // settings save from a partial/stale API response.
+    if(!j?.project||!j.project.root||j.project.root!==currentProject.root){
+      throw new Error('字幕参数保存响应缺少匹配的项目身份；原设置与预览状态保持不变，请重试。');
+    }
     const newerDraft=JSON.stringify(subtitleSettingsPayload())!==submittedIdentity;
     if(newerDraft||autosave){
       // Autosave must not reset the focused slider, workbench scroll or undo history.

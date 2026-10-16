@@ -96,7 +96,7 @@ class StudioFontAndRegionTests(unittest.TestCase):
         self.assertIn("const realFrame=!(mode==='geometry'&&geometryExplicitlyRequested)",html)
         self.assertIn("document.getElementById('previewSvg')?.classList.toggle('hidden',realFrame)",html)
         self.assertIn("queueLiveRealPreview()",html)
-        self.assertIn("await renderLibassPreview()",html)
+        self.assertIn("document.getElementById('previewLibassBtn')?.addEventListener('click',renderLibassPreview);",html)
         self.assertIn("studio-region-share + #prevPrimaryShare",css)
         self.assertEqual(html.count('id="studioRegionPercent"'),0)
         self.assertIn('data-share-percent="60"',html)

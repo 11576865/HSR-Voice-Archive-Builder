@@ -117,19 +117,22 @@ class SubtitlePreviewUnitTests(unittest.TestCase):
         self.assertEqual(response.status_code, 401)
 
     def test_collision_detection_in_preview(self):
-        # Oversized text and extreme central gap forcing collision
-        res = preview_subtitle_layout(
-            english_text="This is an extremely long primary sentence with oversized font size that causes top overflow." * 3,
-            chinese_text="这是一句极长且字号巨大的中文字幕，第一行第二行第三行不断向下堆叠增长直到碰撞。" * 3,
-            base_chs_size=64,
-            base_primary_size=54,
-            margin_left_percent=0.25,
-            margin_top_percent=0.20,
-            min_central_gap=150.0,
-        )
+        # Test the rejection path deterministically: an extreme paragraph can
+        # fit after additional scaling, so cannot be used as proof of failure.
+        with patch("subtitle_layout.layout_solver.check_bilingual_collision_with_reason",
+                   return_value=(True, "FORCED_INK_COLLISION")):
+            res = preview_subtitle_layout(
+                english_text="This is a long subtitle requiring collision checking." * 3,
+                chinese_text="长字幕必须验证碰撞检查链路。" * 3,
+                base_chs_size=64,
+                base_primary_size=54,
+                margin_left_percent=0.25,
+                margin_top_percent=0.20,
+                min_central_gap=150.0,
+            )
         self.assertTrue(res["ok"])
         self.assertTrue(res["layout"]["failed"])
-        self.assertIsNotNone(res["layout"]["failed_condition"])
+        self.assertEqual(res["layout"]["failed_condition"], "FORCED_INK_COLLISION")
         self.assertTrue(res["layout"]["primary_lines"] or res["layout"]["chs_lines"])
 
     @patch("app.server.list_font_families", return_value=["Inter", "Noto Sans"])

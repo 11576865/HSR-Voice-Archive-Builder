@@ -153,6 +153,22 @@ const act=x=>vm.runInContext(x,context);
   assert.equal(fillCount,1);
   assert.equal(node('saveSubtitleLayoutBtn').disabled,false);
   assert.equal(node('generateSubtitleAssBtn').disabled,false);
+  // Missing or foreign project receipts are failures, not permission to
+  // replace currentProject with undefined and clear a selected subtitle.
+  size=56;
+  const invalid=act('saveSubtitleLayoutSettings({autosave:true})');
+  assert.equal(requests.length,1);
+  requests.shift().resolve({ok:true});
+  assert.equal(await invalid,false);
+  assert.equal(act("currentProject.root"),project.root);
+  assert.match(node('previewSaveStatus').textContent,/项目身份/);
+  assert.equal(node('generateSubtitleAssBtn').disabled,false);
+  size=57;
+  const foreign=act('saveSubtitleLayoutSettings({autosave:true})');
+  assert.equal(requests.length,1);
+  requests.shift().resolve({ok:true,project:{root:'/projects/other',name:'alien'}});
+  assert.equal(await foreign,false);
+  assert.equal(act("currentProject.root"),project.root);
   process.stdout.write('save transaction: OK\n');
 })().catch(e=>{console.error(e);process.exitCode=1});
 """
