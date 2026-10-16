@@ -3,7 +3,7 @@
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "Repair FastAPI real-voice Effects preview configuration shadowing and absent-sample UI crash; prove Layout/Effects settings autosave does not enqueue ASS/MKV rebuilding.",
+  "current_bounded_work_unit": "Make voice-backed FFmpeg preview fail closed on actual container duration mismatch and give audible autoplay an actionable user-gesture fallback.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -64,22 +64,27 @@
       "summary": "Preserve separate SubtitleRenderConfig vs ProjectConfig in FastAPI selected-voice video preview; guard null project sample in Effects UI; add tests for true PCM audio/duration and no-auto-export source preservation.",
       "commit": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
       "validation": "Exact-head CI queued/in-progress; physical audio/video preview remains user acceptance."
+    },
+    {
+      "summary": "Preview: FFprobe audio + output-duration equivalence required (reject 8s video for 9.5s PCM-selected voice); browser audible autoplay rejection surfaced with native manual-play prompt, not swallowed. Added regression fixtures.",
+      "commit": "d0148b2f2c58aef788f7339a36efcbaa80530c19",
+      "validation": "New exact-head CI pending; physical playback and source audio fidelity user acceptance pending."
     }
   ],
   "next_units": [
-    "Review exact-head CI when resumed; only bounded direct regressions first.",
-    "Verify Effects preview plays PCM project voice with actual clip length (e.g. >8s) on real workstation and Termux, including fades and non-8s duration.",
-    "Verify autosave layout/effects settings only changes project configuration and ASS freshness, without automatic output job, on real application.",
-    "Continue remaining seven-contract CI verification and distinct user end-to-end acceptance before merge."
+    "User: verify actual Effects clip voice sound/duration and explicit manual Play on browser with autoplay restrictions.",
+    "Verify real settings autosave does not create file-generation job or modify ASS/MKV, then manually invoke export.",
+    "Address standalone real-ink assertion and legacy UI contract tests separately without weakening actual rendered proof.",
+    "Do not merge PR #186 until explicit authorization or agreed review/validation boundary."
   ],
   "branch": "fix/hsr-seven-ass-contracts-20261016",
   "pr": 186,
   "latest_durable_commit": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
   "external_validation": {
-    "previous_head": "1a2c341c05f2eba7583637645571e1165c245913",
-    "previous_ci": "failure; direct new test failures and obsolete historical UI expectations observed",
+    "previous_head": "e99a616bcbd1ed26662be2993229f0e1fb8f9dba",
+    "previous_ci": "HSR seven ASS requirements: success; MKV libass artifact: success; broad tests and Chromium UI: failure (largely outdated UI snapshot expectations; one real ink collision mismatch pending)",
     "current_head": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
-    "current_ci": "pending; tests and dedicated seven-contract job in progress, browser evidence pending",
+    "current_ci": "pending",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
     "actual_ffmpeg_temporal_fade": "pending",
@@ -90,9 +95,10 @@
     "effects_actual_voice_playback": "pending_user"
   },
   "blockers": [
-    "Exact-head CI still running; no successful complete verdict yet.",
-    "Real device and real HSR archive spoken preview/synchronization unverified.",
-    "PR #186 remains unmerged; earlier baseline CI failures may be unrelated to current work."
+    "New head exact CI pending; prior dedicated seven-item workflow success did not cover this follow-up change.",
+    "Physical voice preview and Android/Termux audio playback cannot be attested by source tests alone.",
+    "Broad mainline tests/Chromium visual evidence still red; distinguish stale expectations from actual behavioral breakage.",
+    "PR #186 is open and not merged."
   ],
   "updated_at": "2026-10-16",
   "pr_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/186"
