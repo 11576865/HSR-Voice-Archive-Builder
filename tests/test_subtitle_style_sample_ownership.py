@@ -103,7 +103,7 @@ async function settle(){await Promise.resolve();await Promise.resolve();}
         run_node(source, harness)
 
     def test_save_reentry_is_blocked_and_newer_trial_is_preserved(self) -> None:
-        start = self.html.index("async function saveSubtitleLayoutSettings(){")
+        start = self.html.index("async function saveSubtitleLayoutSettings({autosave=false}={}){")
         end = self.html.index("let layoutStressSample=null;", start)
         source = self.html[start:end]
         harness = r"""
@@ -125,34 +125,33 @@ const context={
   api:(path,request)=>new Promise(resolve=>requests.push({path,request,resolve})),
   fillProject:()=>{fillCount++;size=48;},
   markSubtitleSettingsDirty:()=>{},
+  queueSubtitleSettingsAutosave:()=>{},
   shortError:e=>String(e),
   setLog:()=>{},
   console
 };
 vm.createContext(context);
-vm.runInContext('let subtitleSettingsSavePending=false;let savedSubtitleSettings=null;',context);
+vm.runInContext('let subtitleSettingsSavePending=false;let savedSubtitleSettings=null;let subtitleSettingsSaveWaiters=[];',context);
 vm.runInContext(source,context);
 const act=x=>vm.runInContext(x,context);
 (async()=>{
   const first=act('saveSubtitleLayoutSettings()');
-  const duplicate=await act('saveSubtitleLayoutSettings()');
-  assert.equal(duplicate,false);
-  assert.equal(requests.length,1,'one owned save at a time');
+  const duplicate=act('saveSubtitleLayoutSettings()');
+  assert.equal(requests.length,1,'a second save waits for the active transaction');
   assert.equal(node('saveSubtitleLayoutBtn').disabled,true);
   size=54;
   requests.shift().resolve({project:{...project,config:{}}});
   assert.equal(await first,false,'new unsaved draft prevents export');
-  assert.equal(size,54,'late save response must not reset newer input');
-  assert.equal(fillCount,0,'live draft was preserved');
-  assert.equal(node('saveSubtitleLayoutBtn').disabled,false);
-
-  const current=act('saveSubtitleLayoutSettings()');
+  assert.equal(size,54,'late response must not reset newer input');
+  assert.equal(fillCount,0,'newer draft was preserved');
+  // The serialized second save is now allowed to persist the newer draft.
+  await Promise.resolve();
   assert.equal(requests.length,1);
-  const submitted=JSON.parse(requests[0].request.body);
-  assert.equal(submitted.base_chs_size,54);
+  assert.equal(JSON.parse(requests[0].request.body).base_chs_size,54);
   requests.shift().resolve({project:{...project,config:{}}});
-  assert.equal(await current,true);
+  assert.equal(await duplicate,true);
   assert.equal(fillCount,1);
+  assert.equal(node('saveSubtitleLayoutBtn').disabled,false);
   assert.equal(node('generateSubtitleAssBtn').disabled,false);
   process.stdout.write('save transaction: OK\n');
 })().catch(e=>{console.error(e);process.exitCode=1});
