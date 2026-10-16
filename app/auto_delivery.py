@@ -17,8 +17,8 @@ from .archive_bundle_backgrounds import RESOLUTIONS
 from .archive_bundle_exporter import ArchiveBundleExporter
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery
 from .archive_bundle_lifecycle import (
-    _read_receipt, _sources, bundle_export_status, load_previous_bundle_image,
-    previous_bundle_settings,
+    _read_receipt, _sources, bundle_export_status, bundle_audio_source_status,
+    load_previous_bundle_image, previous_bundle_settings,
 )
 from .jobs import create_job, get_job
 from .project import ProjectConfig, resolve_project_path
@@ -125,6 +125,19 @@ def queue_ass_regeneration(config: ProjectConfig, output: Path):
                 "render", f"正在生成 ASS 字幕：{current}/{total} 条", current, total,
             )
 
+        # Check the lossless audio source before writing a pending receipt or
+        # regenerated ASS/SRT. Previously this failed after subtitle mutation,
+        # leaving an avoidable stale intermediate when the archive had never
+        # produced a verifiable FLAC/MKV source.
+        if config.delivery_mode == "complete":
+            audio_source = bundle_audio_source_status(output)
+            if not audio_source["available"]:
+                raise ValueError(
+                    "生成 ASS（内）被阻止："
+                    + audio_source["reason"]
+                    + "；旧 ASS/SRT/MKV 均未因本次失败而改写。"
+                    + "仅需独立字幕时可使用「生成 ASS（外）」。"
+                )
         report_progress("prepare", "正在读取字幕并准备 ASS", 0, 0)
         result = refresh_subtitle_artifacts_from_settings(
             output,
