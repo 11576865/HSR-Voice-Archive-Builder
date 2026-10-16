@@ -224,6 +224,35 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         status = bundle_audio_source_status(self.output, prefer_sealed=True)
         self.assertFalse(status["available"])
 
+    def test_invalid_sealed_mkv_blocks_internal_but_preserves_external_ass(self):
+        import json
+        from app.subtitles import export_independent_ass
+
+        (self.output / "manifest.json").write_text(json.dumps({"entries": [
+            {"index": 17, "english": "One archived line", "chinese": "一句译文",
+             "start_seconds": 1.0, "audio_end_seconds": 2.0,
+             "display_end_seconds": 2.0},
+        ]}), encoding="utf-8")
+        (self.output / "continuous.flac").write_bytes(b"flac-fixture")
+        (self.output / OUTPUT).write_bytes(b"verified-old-media")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        (self.output / OUTPUT).write_bytes(b"replaced-old-media")
+        original = (self.output / OUTPUT).read_bytes()
+        self.assertFalse(bundle_audio_source_status(self.output)["available"])
+        with self.assertRaisesRegex(ValueError, "文件身份与封存回执"):
+            verify_internal_ass_audio_source(self.output)
+        def mock_ass(_adapters, target, **_kwargs):
+            target.write_text("[Events]\\n", encoding="utf-8")
+        with patch("app.subtitles.write_ass", side_effect=mock_ass):
+            external = export_independent_ass(self.config, self.output)
+        self.assertTrue(Path(external["ass_file"]).is_file())
+        self.assertTrue(external["mkv_untouched"])
+        self.assertEqual((self.output / OUTPUT).read_bytes(), original)
+        self.assertFalse((self.output / "continuous.flac").exists())
+
     def test_audio_integrity_report_separates_legacy_and_content_mismatch(self):
         (self.output / "continuous.flac").write_bytes(b"original-audio")
         (self.output / OUTPUT).write_bytes(b"verified-archive")
