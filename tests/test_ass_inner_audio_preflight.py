@@ -234,6 +234,9 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
              "display_end_seconds": 2.0},
         ]}), encoding="utf-8")
         (self.output / "continuous.flac").write_bytes(b"flac-fixture")
+        # The manifest changed after setUp's export receipt; re-certify the
+        # exact test source before sealing, as the real pipeline does.
+        record_subtitle_export(self.output, state="current", ass_required=True)
         (self.output / OUTPUT).write_bytes(b"verified-old-media")
         record_bundle_publication(
             self.output, background_color="#000000", background_image=None,
