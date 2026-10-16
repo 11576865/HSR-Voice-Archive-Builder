@@ -365,6 +365,50 @@ class LiveEffectPreviewRouteTests(unittest.TestCase):
         self.assertEqual(result.headers["x-hsr-preview-duration"], "12.400")
         resolver.assert_called_once_with(project, 101, fade_ms=200, allow_visual_only=True)
 
+    def test_fastapi_visual_only_preview_never_claims_project_audio(self):
+        import asyncio
+        from app import server
+
+        project = SimpleNamespace(
+            root="/fixture/project", output_dir="output",
+            subtitle_fade_in_ms=600)
+        selected = {
+            "audio_source_path": None,
+            "visual_only": True,
+            "audio_source_start_seconds": 4.8,
+            "voice_start_offset_seconds": 0.6,
+            "voice_duration_seconds": 2.5,
+            "preview_after_fade_ms": 600,
+            "duration_seconds": 3.7,
+        }
+        class RequestFixture:
+            headers = {}
+            async def stream(self):
+                yield json.dumps({
+                    "english_text": "Real cue, visuals only",
+                    "chinese_text": "只验证动画",
+                    "project_voice_entry_id": 101,
+                    "expected_project_root": str(project.root),
+                    "fade_in_ms": 600,
+                    "include_source_audio": True,
+                }).encode("utf-8")
+
+        kwargs = {}
+        async def execute(renderer, **options):
+            kwargs.update(options)
+            return b"silenced-but-animated-video"
+        with patch.object(server, "_active_config", return_value=project), \
+             patch.object(server, "resolve_effect_voice", return_value=selected), \
+             patch.object(server, "run_in_threadpool", side_effect=execute):
+            result = asyncio.run(
+                server.api_subtitle_layout_render_preview_video(RequestFixture()))
+        self.assertEqual(result.status_code, 200, result.body)
+        self.assertEqual(result.headers["x-hsr-preview-audio"], "visual-only")
+        self.assertEqual(result.headers["x-hsr-preview-duration"], "3.700")
+        self.assertFalse(kwargs["include_source_audio"])
+        self.assertIsNone(kwargs["audio_source_path"])
+        self.assertAlmostEqual(kwargs["voice_start_offset_seconds"], 0.6)
+
     def test_effect_preview_missing_selection_is_guarded_before_sample_id_access(self):
         html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
         preview = html[html.index("async function renderHsrEffectVideo(){"):
