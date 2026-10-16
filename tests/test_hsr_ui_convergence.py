@@ -94,7 +94,8 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertNotIn("data-hsr-focus-task", doc)
         self.assertIn("setHsrAuditDrawer(false);", doc)
         self.assertIn("root.dataset.studioMode=next;", doc)
-        self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.shared)
+        self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] #layoutAuditBtn', self.shared)
+        self.assertIn('#subtitleLayoutPreviewCard .preview-workbench:not(.audit-open) .layout-corpus-rail', self.shared)
         for task in ("review", "layout", "effects", "export", "update"):
             self.assertIn(f'.workspace-nav button[data-workspace-target="{task}"]', doc)
         self.assertNotIn(".workspace-nav button:nth-child", doc)

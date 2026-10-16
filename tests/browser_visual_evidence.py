@@ -198,6 +198,26 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             }
         elif path.endswith("/api/quick/candidates"):
             payload = {"ok": True, "candidates": []}
+        elif path.endswith("/api/subtitle-layout/settings"):
+            # Mirror production's project-scoped save receipt. A generic
+            # {"ok":true} clears currentProject in the actual JS autosaver.
+            assert request.method == "POST", "Settings must not be written via GET"
+            assert body.get("expected_project_root") == "/qa/fixture", (
+                "Settings must be bound to the active project"
+            )
+            payload = {"ok": True, "project": {
+                "root": "/qa/fixture", "name": "visual-fixture",
+                "config": {
+                    "source_text_language": "en", "target_language": "zh-CN",
+                    "subtitle_chs_font": body.get("chs_font") or "Arial",
+                    "subtitle_primary_font": body.get("primary_font") or "Arial",
+                    "subtitle_chs_size": body.get("base_chs_size", 48),
+                    "subtitle_primary_size": body.get("base_primary_size", 42),
+                    "subtitle_primary_color": body.get("primary_color", "#DCEBFF"),
+                    "subtitle_chs_color": body.get("chs_color", "#FFFFFF"),
+                    "delivery_mode": "complete",
+                }, "report": {}, "outputs": {},
+            }}
         elif "/subtitles?" in url or path.endswith("/subtitles"):
             payload = {
                 "ok": True, "subtitles": rows, "persistable": True,
@@ -549,6 +569,11 @@ def desktop_check(browser, base_url, output, report):
     }""")
     ensure(selected["ready"] and str(selected["actual"])==str(selected["expected"]),
            "Project cue selection did not finish: "+json.dumps(selected,ensure_ascii=False))
+    # Autosave may finish while a cue is selected; neither a generic mock nor
+    # a late project receipt may erase the selected project's identity.
+    page.wait_for_timeout(850)
+    ensure(page.evaluate("currentProject?.root") == "/qa/fixture",
+           "Autosave unexpectedly cleared the active project")
     page.locator("#layoutAuditDrawerToggle").click()
     page.locator("#studioV4Timing > summary").click()
     ensure(page.locator("#layoutCueClockOrigin").is_visible(),
@@ -595,6 +620,8 @@ def mobile_check(browser, base_url, output, report, width, height, label):
     load_studio(page)
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            f"{label}: duplicate explorer appears by default")
+    ensure(page.evaluate("currentProject?.root") == "/qa/fixture",
+           f"{label}: project identity lost after fixture hydration")
     ensure(page.locator("#studioEffectsTab").get_attribute("aria-current") == "page",
            f"{label}: Effects not selected as top-level workspace")
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
