@@ -616,6 +616,18 @@ def render_ass_preview_video(
                 raise RuntimeError("动态预览音轨元数据无效") from exc
             if not audio_present:
                 raise RuntimeError("动态预览没有真实音轨，拒绝返回静音视频")
+            # A track inventory alone does not prove the audio/video timeline
+            # survived export. Reject a silently truncated 8s render when the
+            # selected PCM voice (and its fade margins) is actually longer.
+            try:
+                encoded_duration = float(metadata.get("format", {}).get("duration"))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise RuntimeError("无法验证动态预览的实际封装时长") from exc
+            if not math.isfinite(encoded_duration) or abs(encoded_duration - duration) > 0.5:
+                raise RuntimeError(
+                    f"动态预览实际时长 {encoded_duration:.3f}s 与选中语音 "
+                    f"{duration:.3f}s 不一致；拒绝返回截断视频"
+                )
         if result_path.stat().st_size > 16 * 1024 * 1024:
             raise RuntimeError("Dynamic preview exceeds 16 MiB output limit")
         return result_path.read_bytes()
