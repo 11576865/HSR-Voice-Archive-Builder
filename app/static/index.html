@@ -9374,7 +9374,8 @@ async function renderHsrEffectVideo(){
     if(!Number.isFinite(actualDuration)||actualDuration<=0)
       throw new Error('服务器没有返回已核准的真实语音预览时长');
     const previewAudio=response.headers.get('X-HSR-Preview-Audio');
-    if(previewAudio!=='project')
+    const visualOnly=previewAudio==='visual-only';
+    if(previewAudio!=='project'&&!visualOnly)
       throw new Error('预览中没有选中语音的真实音轨，拒绝以静音视频冒充');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
     if(actualBackground && actualBackground!==(footage?'local-footage':(backgroundImage||usesReference)?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
@@ -9382,6 +9383,8 @@ async function renderHsrEffectVideo(){
     }
     const video=document.getElementById('libassVideoPreview');
     if(!video)throw new Error('动态视频播放控件不存在');
+    // The fallback is deliberately silent, never mislabeled as the project voice.
+    video.muted=visualOnly;
     videoPreviewObjectUrl=URL.createObjectURL(blob);
     // loadeddata means the browser decoded a usable frame, not just HTTP success.
     await new Promise((resolve,reject)=>{
@@ -9398,13 +9401,20 @@ async function renderHsrEffectVideo(){
     if(!stillCurrent())return;
     video.classList.remove('hidden');
     setPreviewEvidence(footage?'video-footage':(backgroundImage||usesReference)?'video-image':'video');
-    setHsrEffectOperation('ready','视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
+    setHsrEffectOperation('ready',visualOnly
+      ?'ASS 淡入淡出动画已生成（无声）；原 MKV 或语音来源仍未通过封存校验，不能视为真实有声预览。'
+      :'视频已经解码，可在画布中播放和拖动；这是预览，不是正式导出。');
     // The render trigger lives in the Inspector, but playback lives on stage.
     // Reveal the successful result so the action is not perceived as inert.
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
+    if(status){
+      status.textContent=visualOnly
+        ?'无声视觉预览 · '+actualDuration.toFixed(2)+' 秒 · 包含 ASS 淡入、显示和淡出；原 MKV/语音来源未获验证，未使用音轨。要检查真实语音同步，需从原始资料重新构建并封存档案。'
+        :'真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
+      if(visualOnly)status.className='small status-warn';
+    }
     // Most browsers can reject autoplay *because this clip has real audio*.
     // Never swallow that rejection: the native video controls remain the
     // intentional user-gesture playback path, with sound enabled.
@@ -9414,14 +9424,18 @@ async function renderHsrEffectVideo(){
         if(playback&&typeof playback.catch==='function'){
           playback.catch(()=>{
             if(stillCurrent()&&status){
-              status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；浏览器阻止了自动有声播放，请点击画布上的视频播放按钮开启声音。';
+              status.textContent=visualOnly
+                ?'无声 ASS 淡入淡出动画已生成；请点击画布上的视频播放按钮检查。原项目语音仍未验证。'
+                :'有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；浏览器阻止了自动有声播放，请点击画布上的视频播放按钮开启声音。';
               status.className='small status-warn';
             }
           });
         }
       }catch(_){
         if(stillCurrent()&&status){
-          status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；请点击画布上的播放按钮手动播放。';
+          status.textContent=visualOnly
+            ?'无声 ASS 动画已生成；请点击画布上的播放按钮手动播放。'
+            :'有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；请点击画布上的播放按钮手动播放。';
           status.className='small status-warn';
         }
       }
