@@ -106,6 +106,33 @@ class EffectVoicePreviewTests(unittest.TestCase):
                     voice_duration_seconds=9,
                 )
 
+    def test_truncated_audio_video_preview_is_rejected_despite_audio_track(self):
+        # Regression: returning a stream-count-valid fixed 8-second clip for
+        # a 9.5-second PCM-selected preview is not acceptable.
+        def fake_run(cmd, **kwargs):
+            if cmd[0] == "ffprobe":
+                return subprocess.CompletedProcess(
+                    cmd, 0,
+                    json.dumps({"streams": [{"codec_type": "video"},
+                                              {"codec_type": "audio"}],
+                                "format": {"duration": 8.0}}), "",
+                )
+            Path(cmd[-1]).write_bytes(b"old-eight-second-video")
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
+             patch("app.ass_preview.write_ass"), \
+             patch("app.ass_preview.subprocess.run", side_effect=fake_run):
+            with self.assertRaisesRegex(RuntimeError, "不一致"):
+                render_ass_preview_video(
+                    english_text="Actual long voice", chinese_text="真正的长语音",
+                    source_language="en", target_language="zh-CN",
+                    config=SubtitleRenderConfig(), duration_seconds=9.5,
+                    audio_source_path=self.output / "continuous.flac",
+                    audio_source_start_seconds=1.75,
+                    voice_start_offset_seconds=.25,
+                    voice_duration_seconds=9,
+                )
+
     def test_selected_source_is_bound_by_project_manifest(self):
         with self.assertRaisesRegex(ValueError, "不在"):
             resolve_effect_voice(self.config, 0, fade_ms=100)
@@ -177,6 +204,9 @@ class LiveEffectPreviewRouteTests(unittest.TestCase):
         self.assertNotIn("Math.min(8", preview)
         self.assertIn("X-HSR-Preview-Audio", preview)
         self.assertIn("X-HSR-Preview-Duration", preview)
+        self.assertIn("playback.catch", preview)
+        self.assertIn("浏览器阻止了自动有声播放", preview)
+        self.assertNotIn("video.play().catch(()=>{})", preview)
 
 
 class LayoutSettingPersistenceTests(unittest.TestCase):
