@@ -5800,6 +5800,21 @@ async function startAssExport(mode='internal'){
   const status=document.getElementById('optionalOutputStatus');
   try{
     if(button)button.disabled=true;
+    if(!external){
+      // The inner route must have a trustworthy source BEFORE the job writes
+      // any derived ASS/SRT. A failed source check cannot be cured by changing
+      // the selected cue or retrying the same encode request.
+      const integrity=await api('/api/project/active/audio-integrity');
+      if(!integrity.voice_timeline_match ||
+         (!integrity.artifact_verified&&!integrity.working_flac_present)){
+        const message='生成 ASS（内）需要可信的 FLAC/MKV 音轨；'+
+          String(integrity.detail||'来源不明')+'。请先保留旧成品并从原始语音包重新构建；'+
+          '仅需字幕文件时选择「生成 ASS（外）」。';
+        if(status)status.textContent=message;
+        showHsrAudioRecoveryActions(true);
+        throw new Error(message);
+      }
+    }
     if(status)status.textContent=external?'正在另存独立 ASS（不修改 MKV）…':'正在更新 MKV 内 ASS…';
     const job=await api(external?'/api/output/ass/external':'/api/output/ass',{method:'POST'});
     watchJob(job.job);
