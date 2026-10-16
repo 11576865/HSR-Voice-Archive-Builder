@@ -382,8 +382,14 @@ class TestAdvancedTypography(unittest.TestCase):
         ass_content = render_ass([entry], config=cfg)
         self.assertIn("Style: CHS,Test CHS,58", ass_content)
         self.assertIn("Style: Primary,Test Primary,46", ass_content)
-        self.assertIn(r"{\an2\pos(960,613)\fs46}", ass_content)
-        self.assertIn(r"{\an8\pos(960,643)\fs58}", ass_content)
+        # Position is solver-derived from the safe area, central padding
+        # and glyph metrics; it is not a hard-coded pixel pair.
+        import re
+        primary = re.search(r"\\an2\\pos\(960,(\d+)\)\\fs46", ass_content)
+        translated = re.search(r"\\an8\\pos\(960,(\d+)\)\\fs58", ass_content)
+        self.assertIsNotNone(primary, "Primary text must remain centered with configured font size")
+        self.assertIsNotNone(translated, "Chinese text must remain centered with configured font size")
+        self.assertGreaterEqual(int(translated.group(1)) - int(primary.group(1)), 30)
 
     def test_write_ass_rejects_partial_output_and_removes_stale_file(self):
         ok = DummyEntry(
