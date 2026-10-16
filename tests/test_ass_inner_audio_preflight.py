@@ -64,7 +64,7 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
                     for name in tracked}
         with patch("app.auto_delivery.create_job",
                    side_effect=lambda _kind, runner, **kwargs:
-                       runner(lambda *args: None)), \\
+                       runner(lambda *args: None)), \
              patch("app.subtitles.refresh_subtitle_artifacts_from_settings") as render:
             with self.assertRaisesRegex(ValueError, "FFprobe"):
                 queue_ass_regeneration(self.config, self.output)
