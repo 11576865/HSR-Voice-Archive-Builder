@@ -728,6 +728,10 @@ def shared_corpus_request_check(browser, base_url, report):
     # production refresh() callback, invalidating an in-flight shared snapshot.
     page.wait_for_function("""() => typeof fetchSubtitles === 'function' &&
       currentProject?.root === '/qa/fixture'""", timeout=15000)
+    # fillProject automatically fetches the Review list on hydration. Let
+    # that app startup fetch finish, then measure only this explicit workflow.
+    page.wait_for_function("loadedSubtitles.length === 4",timeout=15000)
+    requests.clear()
     page.evaluate("""() => {
       document.getElementById('subSelector').value='all';
       document.getElementById('subSearchQuery').value='';
