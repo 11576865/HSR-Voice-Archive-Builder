@@ -121,16 +121,30 @@ def geometry(payload: dict) -> dict:
 
 
 def real_browser_video_fixture() -> bytes:
-    """Real decodable WebM bytes, kept separate from backend libass proof."""
+    """Real browser-decodable WebM with audible audio, not a silent stub.
+
+    Browser evidence checks interactive playback. Actual project PCM source
+    and exact voice duration are independently tested by the FFmpeg pipeline.
+    """
     with tempfile.TemporaryDirectory(prefix="hsr-browser-video-") as td:
         path = Path(td) / "motion.webm"
         subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-             "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=1.5",
-              "-an", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
-             "-pix_fmt", "yuv420p", str(path)],
-            capture_output=True, text=True, timeout=40, check=True,
+             "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=3.5",
+             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3.5",
+             "-map", "0:v:0", "-map", "1:a:0",
+             "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
+             "-pix_fmt", "yuv420p", "-c:a", "libopus", "-b:a", "96k",
+             "-t", "3.5", str(path)],
+            capture_output=True, text=True, timeout=50, check=True,
         )
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=15, check=True,
+        )
+        kinds = {row.get("codec_type") for row in json.loads(probe.stdout)["streams"]}
+        assert {"video", "audio"} <= kinds, "Browser fixture must carry audible audio"
         return path.read_bytes()
 
 
@@ -156,10 +170,18 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
                     b"\x89PNG\r\n\x1a\n")
             # Browser test proves decoded playback and UI provenance; separate
             # real-FFmpeg test proves the output pixels include actual ASS.
+            assert body.get("project_voice_entry_id") is not None, (
+                "Effects preview must select a project cue, not an arbitrary silent sample"
+            )
             route.fulfill(status=200, content_type="video/webm", body=video_bytes,
-                          headers={"X-HSR-Preview-Background":
-                                   "local-footage" if has_source else
-                                   "background-image" if has_image or has_reference else "black"})
+                          headers={
+                              "X-HSR-Preview-Audio": "project",
+                              "X-HSR-Preview-Duration": "3.500",
+                              "X-HSR-Preview-Renderer": "ffmpeg-libass-webm",
+                              "X-HSR-Preview-Background":
+                              "local-footage" if has_source else
+                              "background-image" if has_image or has_reference else "black",
+                          })
             return
         if path.endswith("/api/status"):
             payload = {
@@ -477,8 +499,16 @@ def desktop_check(browser, base_url, output, report):
     page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutTimelinePanel").count()==0,
            "Removed selection-only timeline still exists")
-    ensure(page.locator("#layoutCueEditorPanel").is_visible(),
-           "Layout must retain the current subtitle editor")
+    # The current subtitle is intentionally a collapsed, discoverable
+    # read-only audio-clock panel, not an always-visible second editor.
+    # Require its tab/summary to remain usable and its content to exist;
+    # the test below opens it and checks actual audio-clock contents.
+    ensure(page.locator("#studioV4Timing > summary").is_visible(),
+           "Layout lost its current-subtitle disclosure control")
+    ensure(page.locator("#layoutCueEditorPanel").count() == 1,
+           "Layout lost its current subtitle/audio-clock content")
+    ensure(not page.locator("#studioV4Timing").evaluate("(node)=>node.open"),
+           "Returning to Layout unexpectedly expanded subtitle details")
     ensure(page.locator("#layoutCorpusRail").is_hidden(),
            "Old Layout QA drawer unexpectedly reopened on return")
     page.locator("#layoutAuditDrawerToggle").click()
@@ -506,8 +536,15 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#layoutCorpusList").is_visible(),
            "Effects should reuse Layout's project subtitle browser")
-    page.evaluate("() => selectLayoutCorpusByIndex(0)")
-    page.wait_for_function("layoutCueActiveId!==null")
+    selected=page.evaluate("""async () => {
+      const first=layoutCorpusItems[0];
+      const ready=await selectLayoutCorpusByIndex(0);
+      return {ready,expected:first?.id??null,actual:layoutCueActiveId,
+        project:currentProject?.root??null,corpus:layoutCorpusItems.length,
+        error:document.getElementById('layoutCorpusCheckStatus')?.textContent??''};
+    }""")
+    ensure(selected["ready"] and str(selected["actual"])==str(selected["expected"]),
+           "Project cue selection did not finish: "+json.dumps(selected,ensure_ascii=False))
     page.locator("#layoutAuditDrawerToggle").click()
     page.locator("#studioV4Timing > summary").click()
     ensure(page.locator("#layoutCueClockOrigin").is_visible(),
@@ -530,13 +567,14 @@ def desktop_check(browser, base_url, output, report):
     screenshot(page, output, "desktop_studio_failed_export_notice")
     page.locator("#layoutExportHealthRetryBtn").click()
     page.wait_for_function("layoutCueExportHealthState === 'current'")
-    ensure(len(writes) == 1, "Export retry erroneously repeated the cue-timing write")
+    ensure(not writes, "Export retry must not write subtitle timing")
     ensure(page.locator("#layoutExportHealthRetryBtn").is_hidden(),
            "Successful retry must clear old failure affordance")
     report["desktop"] = {
         "resolution": "1600x900", "panel_rectangles": {"rail": rail, "stage": stage, "inspector": inspector},
-        "timeline_width": timeline["width"], "stage_aspect_ratio": round(canvas["width"] / canvas["height"], 3),
-        "dragged_end": end_draft, "write_count": len(writes), "page_errors": errors,
+        "selected_cue_id": selected["actual"],
+        "stage_aspect_ratio": round(canvas["width"] / canvas["height"], 3),
+        "subtitle_timing_writes": len(writes), "page_errors": errors,
     }
     ensure(not errors, "Browser page errors: " + " | ".join(errors))
     page.close()

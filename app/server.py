@@ -21,8 +21,9 @@ from .credentials import (
 )
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
+from .effect_voice_preview import resolve_effect_voice
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
+from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration, queue_external_ass_export
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -72,6 +73,7 @@ from .remote_index import exclude_applied_updates, exclude_indexed_updates, remo
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
+from subtitle_layout.config import normalize_subtitle_color
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -755,6 +757,8 @@ async def api_subtitle_layout_settings(request: Request):
             config,
             subtitle_preset=preset,
             subtitle_chs_font=validate_ass_font_name(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑"),
+            subtitle_primary_color=normalize_subtitle_color(data.get("primary_color", config.subtitle_primary_color)),
+            subtitle_chs_color=normalize_subtitle_color(data.get("chs_color", config.subtitle_chs_color)),
             subtitle_primary_font=validate_ass_font_name(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans"),
             subtitle_chs_size=max(12, min(240, int(data.get("base_chs_size", config.subtitle_chs_size)))),
             subtitle_primary_size=max(12, min(240, int(data.get("base_primary_size", config.subtitle_primary_size)))),
@@ -799,9 +803,7 @@ async def api_subtitle_layout_settings(request: Request):
             subtitle_card_opacity=max(
                 0.0, min(1.0, float(data.get("card_opacity", config.subtitle_card_opacity)))
             ),
-            subtitle_enable_soft_entry=as_bool(
-                "enable_soft_entry", config.subtitle_enable_soft_entry
-            ),
+            subtitle_enable_soft_entry=False,  # only Fade is available in current effects phase
             subtitle_soft_entry_scale_percent=max(
                 25.0,
                 min(
@@ -928,7 +930,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         data = json.loads(body)
         if not isinstance(data, dict):
             raise ValueError("Subtitle preview payload must be an object")
-        config = preview_config_from_payload(data)
+        preview_config = preview_config_from_payload(data)
         words = data.get("word_alignments")
         if not isinstance(words, list):
             words = None
@@ -938,19 +940,34 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         if data.get("use_studio_reference_background") is True and not source_bytes and background_image is None:
             background_image = load_studio_reference_background()
         background_color = normalize_preview_background_color(data.get("preview_background_color"))
+        voice = {}
+        if data.get("project_voice_entry_id") is not None:
+            project = _active_config()
+            expected = str(data.get("expected_project_root") or "").strip()
+            if expected and expected != str(project.root):
+                raise ValueError("The preview belongs to a different project; reload the selected cue")
+            voice = resolve_effect_voice(
+                project, data["project_voice_entry_id"],
+                fade_ms=int(data.get("fade_in_ms", project.subtitle_fade_in_ms)),
+            )
         video = await run_in_threadpool(
             render_ass_preview_video,
             english_text=str(data.get("english_text") or ""),
             chinese_text=str(data.get("chinese_text") or ""),
             source_language=str(data.get("source_language") or "en"),
             target_language=str(data.get("target_language") or "zh-CN"),
-            config=config,
+            config=preview_config,
             word_alignments=words,
-            duration_seconds=float(data.get("preview_duration_seconds") or 3.0),
+            duration_seconds=float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)),
             container_format=fmt,
             source_video_bytes=source_bytes,
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
             include_source_audio=data.get("include_source_audio", True) is True,
+            audio_source_path=voice.get("audio_source_path"),
+            audio_source_start_seconds=float(voice.get("audio_source_start_seconds", 0)),
+            voice_start_offset_seconds=float(voice.get("voice_start_offset_seconds", 0)),
+            voice_duration_seconds=voice.get("voice_duration_seconds"),
+            preview_after_fade_ms=int(voice.get("preview_after_fade_ms", 0)),
             background_color=background_color,
             background_image_bytes=background_image,
             font_dir=_active_preview_font_dir(),
@@ -958,6 +975,8 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
+                     "X-HSR-Preview-Audio": "project" if voice else ("footage" if source_bytes is not None else "none"),
+                     "X-HSR-Preview-Duration": f'{float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)):.3f}',
                      "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
         )
     except Exception as exc:
@@ -1865,6 +1884,18 @@ def api_output_ass():
 
         job = queue_ass_regeneration(config, output)
         return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+@app.post("/api/output/ass/external")
+def api_output_ass_external():
+    try:
+        config = _active_config()
+        output = resolve_project_path(config, config.output_dir)
+        if output is None or not (output / "manifest.json").is_file():
+            raise ValueError("请先完成项目构建")
+        job = queue_external_ass_export(config, output)
+        return {"ok": True, "job": job.id, "delivery": "external-ass"}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 

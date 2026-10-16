@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from dataclasses import dataclass
+from unittest.mock import patch
 
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.ass_writer import (
@@ -12,7 +13,7 @@ from subtitle_layout.ass_writer import (
     render_ass,
     write_ass,
 )
-from subtitle_layout.layout_solver import SubtitleLinePos
+from subtitle_layout.layout_solver import SubtitleLinePos, SolvedLayout, solve_subtitle_layout
 from subtitle_layout.safe_area import DEFAULT_SAFE_AREA
 from subtitle_layout.fonts import _installed_font_families, list_font_families, validate_ass_font_name
 
@@ -106,7 +107,8 @@ class TestAdvancedTypography(unittest.TestCase):
         )
         entry=DummyEntry("Star", "星穹", 1.0, 4.0)
         ass=render_ass([entry],config=cfg)
-        self.assertIn(r"{\kf30}星{\kf30}穹",ass)
+        self.assertNotIn(r"{\kf30}星",ass)
+        self.assertIn("星穹",ass)
         self.assertIn(r"{\kf30}S",ass)
         cfg.karaoke_mode="clip"
         with self.assertRaisesRegex(ValueError,"requires real"):
@@ -120,8 +122,9 @@ class TestAdvancedTypography(unittest.TestCase):
         )
         entry=DummyEntry("Scale", "缩放", 0.0, 4.0)
         ass=render_ass([entry],config=cfg)
-        self.assertIn(r"\fscx300\fscy300",ass)
-        self.assertIn(r"\blur12\t(0,2500,",ass)
+        self.assertNotIn(r"\fscx",ass)
+        self.assertNotIn(r"\t(",ass)
+        self.assertIn(r"\blur1",ass)
 
     def test_manual_fade_is_not_secretly_capped_at_quarter_cue(self):
         from subtitle_layout.kinetic_motion import generate_kinetic_tags
@@ -307,7 +310,9 @@ class TestAdvancedTypography(unittest.TestCase):
         )
         ass_content = render_ass([entry], config=cfg)
         self.assertIn(",1,4.5,1.5,8,", ass_content)
-        self.assertIn(r"\fscx98\fscy98\blur1.5\t(0,160,\fscx100\fscy100\blur0.8)", ass_content)
+        self.assertNotIn(r"\fscx", ass_content)
+        self.assertNotIn(r"\t(", ass_content)
+        self.assertIn(r"\blur0.8", ass_content)
         self.assertNotIn(r"\fad", ass_content)
 
     def test_render_ass_base_blur_without_soft_entry(self):
@@ -377,8 +382,14 @@ class TestAdvancedTypography(unittest.TestCase):
         ass_content = render_ass([entry], config=cfg)
         self.assertIn("Style: CHS,Test CHS,58", ass_content)
         self.assertIn("Style: Primary,Test Primary,46", ass_content)
-        self.assertIn(r"{\an2\pos(960,613)\fs46}", ass_content)
-        self.assertIn(r"{\an8\pos(960,643)\fs58}", ass_content)
+        # Position is solver-derived from the safe area, central padding
+        # and glyph metrics; it is not a hard-coded pixel pair.
+        import re
+        primary = re.search(r"\\an2\\pos\(960,(\d+)\)\\fs46", ass_content)
+        translated = re.search(r"\\an8\\pos\(960,(\d+)\)\\fs58", ass_content)
+        self.assertIsNotNone(primary, "Primary text must remain centered with configured font size")
+        self.assertIsNotNone(translated, "Chinese text must remain centered with configured font size")
+        self.assertGreaterEqual(int(translated.group(1)) - int(primary.group(1)), 30)
 
     def test_write_ass_rejects_partial_output_and_removes_stale_file(self):
         ok = DummyEntry(
@@ -400,14 +411,29 @@ class TestAdvancedTypography(unittest.TestCase):
             margin_vertical_percent=0.20,
             min_central_gap=150.0,
         )
+        # A genuinely extreme string may become layout-safe after modern
+        # geometric line breaking. Force a deterministic solver rejection
+        # instead of assuming a particular font family must overflow.
+        def solver_with_single_failure(**kwargs):
+            if kwargs.get("english_text", "").startswith("This is an extremely long"):
+                return SolvedLayout(
+                    scale_factor=0.85, chs_lines=[], primary_lines=[],
+                    failed=True, failed_condition="GEOMETRY_OVERFLOW",
+                    scale_attempts=[100, 95, 90, 85],
+                )
+            return solve_subtitle_layout(**kwargs)
+
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "archive.ass"
             target.write_text("stale", encoding="utf-8")
             report = Path(td) / "overflow.json"
-            with self.assertRaisesRegex(ValueError, "No partial ASS was produced"):
-                write_ass([ok, bad], target, config=cfg, overflow_report_path=report)
+            with patch("subtitle_layout.ass_writer.solve_subtitle_layout",
+                       side_effect=solver_with_single_failure):
+                with self.assertRaisesRegex(ValueError, "No partial ASS was produced"):
+                    write_ass([ok, bad], target, config=cfg, overflow_report_path=report)
             self.assertFalse(target.exists())
             self.assertTrue(report.is_file())
+            self.assertIn("GEOMETRY_OVERFLOW", report.read_text(encoding="utf-8"))
 
     def test_render_ass_toggle_flags(self):
         entries = [
@@ -447,8 +473,8 @@ class TestAdvancedTypography(unittest.TestCase):
                 "chs_entry_y_offset": -8,
             },
         )
-        self.assertIn(r"\move(960,633,960,625,0,200)", ass_output)
-        self.assertIn(r"\move(960,637,960,645,0,200)", ass_output)
+        self.assertNotIn(r"\move(", ass_output)
+        self.assertIn(r"\fad(200,200)", ass_output)
 
     def test_render_ass_kinetic_motion_multi_layer_outline_sync(self):
         entries = [

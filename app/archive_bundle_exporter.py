@@ -93,6 +93,28 @@ class ArchiveBundleExporter:
         return json.loads(p.stdout)
 
     @staticmethod
+    def _last_ass_event_end(source: Path) -> float:
+        """Last ASS event boundary, including an intentional post-voice fade."""
+        last = 0.0
+        for line in source.read_text(encoding="utf-8-sig").splitlines():
+            if not line.startswith("Dialogue:"):
+                continue
+            fields = line.split(",", 3)
+            if len(fields) < 4:
+                raise ValueError("ASS Dialogue has no valid timestamp fields")
+            clock = fields[2].strip().split(":")
+            if len(clock) != 3:
+                raise ValueError("ASS Dialogue end time is invalid")
+            try:
+                end = int(clock[0]) * 3600 + int(clock[1]) * 60 + float(clock[2])
+            except ValueError as exc:
+                raise ValueError("ASS Dialogue end time is invalid") from exc
+            if not math.isfinite(end) or end < 0:
+                raise ValueError("ASS Dialogue end time must be finite")
+            last = max(last, end)
+        return last
+
+    @staticmethod
     def _ass_content_signature(content: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
         """Compare the actual selectable ASS styles and events, not just codec.
 
@@ -166,6 +188,12 @@ class ArchiveBundleExporter:
         duration = float(audio_probe.get("format", {}).get("duration") or 0)
         if not math.isfinite(duration) or duration <= 0:
             raise ValueError("无法验证连续 FLAC 时长")
+        # The last sentence has no following PCM clip. The selectable ASS
+        # may intentionally fade out in silence AFTER the FLAC finishes;
+        # preserve that tail by extending only the still-image video stream.
+        # FLAC remains stream-copied and is never padded or re-encoded.
+        ass_end = self._last_ass_event_end(subtitles) if require_current_ass else duration
+        playback_duration = max(duration, ass_end)
         if not any(s.get("codec_type") == "audio" and s.get("codec_name") == "flac"
                    for s in audio_probe.get("streams", [])):
             raise ValueError("continuous.flac 不是有效的 FLAC 音轨")
@@ -207,7 +235,7 @@ class ArchiveBundleExporter:
                     )
 
         target.parent.mkdir(parents=True, exist_ok=True)
-        total_ms = max(1, round(duration * 1000))
+        total_ms = max(1, round(playback_duration * 1000))
         with tempfile.TemporaryDirectory(prefix=".hsr-mkv-bundle-", dir=target.parent) as tmp:
             root = Path(tmp)
             temporary = root / "bundle.mkv"
@@ -295,7 +323,7 @@ class ArchiveBundleExporter:
                 cmd += ["-attach", str(font),
                         f"-metadata:s:t:{index}", f"mimetype={mime}",
                         f"-metadata:s:t:{index}", f"filename={font.name}"]
-            cmd += ["-t", f"{duration:.3f}", "-progress", "pipe:1", "-nostats", str(temporary)]
+            cmd += ["-t", f"{playback_duration:.3f}", "-progress", "pipe:1", "-nostats", str(temporary)]
             if progress:
                 progress(0, total_ms, "正在封装连续 FLAC、可开关 ASS 字幕与字体附件")
             # Read FFmpeg progress on stdout. Its stderr must NOT be a pipe
@@ -328,7 +356,7 @@ class ArchiveBundleExporter:
                         proc.terminate()
                     raise
             self.validate(
-                temporary, expected_fonts=len(fonts), expected_duration=duration,
+                temporary, expected_fonts=len(fonts), expected_duration=playback_duration,
                 expected_font_names={font.name for font, _ in fonts},
                 expected_subtitles=2 if has_srt else 1,
                 expected_audio=1 + len(chapters),
@@ -377,7 +405,7 @@ class ArchiveBundleExporter:
             progress(total_ms, total_ms, "完整 MKV 已通过音频／视频／软字幕／字体附件验收")
         return {
             "output": str(target), "size_bytes": target.stat().st_size,
-            "duration_seconds": duration,
+            "duration_seconds": duration, "playback_duration_seconds": playback_duration,
             "audio_codec": "flac", "audio_track_count": 1 + len(chapters),
             "chapter_audio_track_count": len(chapters), "subtitles_embedded": True,
             "subtitle_codecs": ["ass", "subrip"] if has_srt else ["ass"],

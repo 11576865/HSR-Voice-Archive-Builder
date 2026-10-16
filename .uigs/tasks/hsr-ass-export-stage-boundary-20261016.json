@@ -1,9 +1,9 @@
 {
   "schema_version": 1,
   "task_id": "hsr-ass-export-stage-boundary-20261016",
-  "goal": "Ship HSR edited ASS export reliability, complete MKV subtitle replacement, voice-anchored Karaoke and fade transition envelopes with source-aware gap budgets.",
+  "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "Symmetric Fade plus complete-MKV correctness: unify manual/auto/Termux ASS jobs and verify staged MKV embedded ASS Style/Dialogue content before atomic publication.",
+  "current_bounded_work_unit": "Repair CI red on PR #186: make asynchronous corpus selection observable in real browser; correct obsolete visual evidence referencing removed mutable timeline; preserve deterministic atomic ASS failure coverage and solver-safe geometry assertions.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -39,30 +39,86 @@
       "summary": "Added embedded ASS demux-and-semantic-compare publication gate, full FFmpeg regression fixture, unified manual/style auto regeneration with verified MKV and observable job status, across both servers.",
       "commit": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
       "validation": "Exact-head CI pending. Existing static/baseline CI failures not all attributable to this PR."
+    },
+    {
+      "summary": "Added explicit no-hidden Fade clip policy and last-event tail preservation, verified via a new real FFmpeg mux assertion; corrected stale legacy timing test fixtures, symmetric budgets, per-cue progress test ownership and geometry-only evidence marker.",
+      "commit": "f9378470f0124d65c73ec3bc1c12a67d51d163ee",
+      "validation": "New dedicated seven-ASS GitHub Actions run 38790099410 in_progress; original tests and browser CI also queued/running."
+    },
+    {
+      "summary": "Eliminated queueAutoAssRefresh/runAutoAssRefresh after config autosaves, preserving explicit Generate and user-triggered real libass preview. Invalidated only ASS style receipt on effective subtitle_* changes (SRT remains independently valid; existing media bytes unchanged). Added focused regression tests; updated previous auto-rebuild expectation.",
+      "commit": "d2cd4dd6229d21670a607bfdf0f5717941e456aa",
+      "validation": "New head CI pending. No claim of physical device/playback acceptance."
+    },
+    {
+      "summary": "Explicit ASS inner->MKV and outer->numbered no-overwrite output route in FastAPI and Lite; color style fields, browser geometry preview and real libass; only Fade enabled; default MKV image is exact bundled studio red-cloud file, with legacy custom background preserved.",
+      "commit": "3982659e0f781a2ce02ed766827244534d1d6040",
+      "validation": "Regression fixtures committed. Exact-head CI and actual device proof pending."
+    },
+    {
+      "summary": "Adjusted source-only karaoke, Fade-only, explicit inner/external destination, 120sec dynamic preview, 600ms final fade tail, and red-cloud background legacy tests without removing real FFmpeg/libass checks.",
+      "commit": "98de3a9e380012ec5658d02b07a811bdf65dbcd5",
+      "validation": "Follow-up CI pending after bounded repair; stale independent baseline UI assertions and true-ink collision remain pending."
+    },
+    {
+      "summary": "Preserve separate SubtitleRenderConfig vs ProjectConfig in FastAPI selected-voice video preview; guard null project sample in Effects UI; add tests for true PCM audio/duration and no-auto-export source preservation.",
+      "commit": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
+      "validation": "Exact-head CI queued/in-progress; physical audio/video preview remains user acceptance."
+    },
+    {
+      "summary": "Preview: FFprobe audio + output-duration equivalence required (reject 8s video for 9.5s PCM-selected voice); browser audible autoplay rejection surfaced with native manual-play prompt, not swallowed. Added regression fixtures.",
+      "commit": "d0148b2f2c58aef788f7339a36efcbaa80530c19",
+      "validation": "New exact-head CI pending; physical playback and source audio fidelity user acceptance pending."
+    },
+    {
+      "summary": "Replaced silent 1.5s Chromium mocked video with FFprobe-audio-verified 3.5s WebM and required audio/duration/source headers plus selected real cue assertion; fixed Node preview harness missing document.body and obsolete auto-preview expectations.",
+      "commit": "d82c28af3a373bf61d89ac9be8e78b2b2fd9757f",
+      "validation": "Pending new exact-head Chromium and focused unit CI; field audio/time synchronization not proven."
+    },
+    {
+      "summary": "Updated Chromium to verify collapsed current-cue disclosure instead of insisting its child be visible, retaining later real open/timing assertions; made source-backed FFmpeg libass precondition conditional on measured ink rather than assumed collision; corrected asynchronous-save and geometry-render harnesses.",
+      "commit": "7a3bee7b894f2490222ca2d7e7847f0ec8a65574",
+      "validation": "Current exact-head CI pending; browser runner, libass, Node fixtures to be rerun."
+    },
+    {
+      "summary": "Latest CI head d55697a: seven-ass-contracts, real-libass-ink-evidence, Termux lite surface and libass-artifact succeeded. General unit red (17 old/static assertions), Chromium timed out selecting cue. Browser fixture now awaits actual async selection and validates read-only cue/no timing writes, removing deleted timeline references. Legacy ASS atomics tested with deterministic injected failure, geometry with semantic coordinates.",
+      "commit": "1fd6a3d3c73a952cf9015e2d292c06a117b6b201",
+      "validation": "New exact-head CI pending."
     }
   ],
   "next_units": [
-    "Check exact new-head CI once when resumed; separate introduced defects from known baseline stale tests and visual assertions.",
-    "Verify actual latest embedded ASS payload on long HSR MKV in Termux, plus preservation on injected stream mismatch and failover.",
-    "Measure time to regenerate long bundle: FFmpeg demux readback costs and unchanged audio/background stream behavior.",
-    "Run physical device plus rendered libass verification of symmetric fades and Karaoke onset before merge."
+    "Review fresh exact-head CI once on user continuation; if Chromium cue selection still fails, use new diagnostic to repair real JS async request/state race.",
+    "Assess remaining legacy general unit assertions against currently authorized design; repair actual behavior where broken, update old contracts only when obsolete, never make tests green by disabling checks.",
+    "Perform user's Termux real spoken voice preview/autosave and ASS to embedded MKV field acceptance."
   ],
-  "branch": "fix/ass-export-progress-20261016",
-  "pr": 185,
-  "latest_durable_commit": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
+  "branch": "fix/hsr-seven-ass-contracts-20261016",
+  "pr": 186,
+  "latest_durable_commit": "1fd6a3d3c73a952cf9015e2d292c06a117b6b201",
   "external_validation": {
-    "previous_head": "b32b27e6563aca4000bb3e592e3dd1a03eca4d22",
-    "previous_ci": "completed_failure",
-    "current_head": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
-    "current_ci": "pending",
+    "previous_head": "e99a616bcbd1ed26662be2993229f0e1fb8f9dba",
+    "previous_ci": "head 34f531d: seven-ass-contracts success, libass-artifact success, Termux Lite surface success; full tests failure (18 failures / 1 error) and Chromium failure due obsolete collapsed cue visibility; real libass baseline expected old collision",
+    "current_head": "1fd6a3d3c73a952cf9015e2d292c06a117b6b201",
+    "current_ci": "pending; prior head d55697a seven contracts, ink, Termux, MKV succeeded, general units and Chromium failed",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
-    "actual_ffmpeg_temporal_fade": "pending"
+    "actual_ffmpeg_temporal_fade": "pending",
+    "seven_contract_run_id": 38790099410,
+    "original_test_run_id": 38790099127,
+    "browser_run_id": 38790098931,
+    "user_real_project": "pending_user",
+    "effects_actual_voice_playback": "pending_user",
+    "prior_ci_details": {
+      "head": "d55697a14870f95397dcd814b05f1385c6b536ee",
+      "general_unit": "17 failures (mostly stale UI contracts; layout geometry and partial ASS assumptions)",
+      "chromium": "timeout waiting for layoutCueActiveId after async selection",
+      "targeted": "seven-contracts/ink/Termux/MKV green"
+    }
   },
   "blockers": [
-    "Latest exact-head CI pending; prior head failed in multiple UI/baseline assertions and at least one added test.",
-    "No actual device/Termux edited-ASS to MKV end-to-end timing or player acceptance yet.",
-    "Embedded ASS semantic check compares Style/Dialogue rows, not byte-for-byte MKV or actual libass visual proof."
+    "New CI not yet confirmed; previous main general CI has multiple older contract expectation mismatches.",
+    "Chromium selection after real Effects/Layout navigation unconfirmed on new code; no user-device proof.",
+    "Actual Termux/voice and full ASS/MKV acceptance pending."
   ],
-  "updated_at": "2026-10-16"
+  "updated_at": "2026-10-16",
+  "pr_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/186"
 }

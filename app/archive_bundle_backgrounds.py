@@ -7,6 +7,7 @@ hex colors. Never interpolate untrusted filtergraph instructions.
 from __future__ import annotations
 
 import re
+from pathlib import Path
 from typing import Any
 
 COLOR = re.compile(r"^#[0-9a-fA-F]{6}$")
@@ -16,6 +17,22 @@ RESOLUTIONS = {"720p": (1280, 720), "1080p": (1920, 1080)}
 QUALITIES = {"standard": 28, "high": 19}
 
 DEFAULT_COLORS = ("#243350", "#0d1729", "#3e4269")
+
+# Same packaged asset used by the Layout/Effects workbench. Do not ship a
+# separately re-encoded copy as the default finished MKV video background.
+RED_CLOUD_ASSET = Path(__file__).resolve().parent / "static" / "assets" / "studio-red-clouds.webp"
+
+
+def load_default_red_cloud_background() -> bytes:
+    if RED_CLOUD_ASSET.is_symlink() or not RED_CLOUD_ASSET.is_file():
+        raise RuntimeError("缺少默认 MKV 红云背景图片")
+    content = RED_CLOUD_ASSET.read_bytes()
+    if not 0 < len(content) <= 1_048_576 or not (
+        content[:4] == b"RIFF" and content[8:12] == b"WEBP"
+    ):
+        raise RuntimeError("默认 MKV 红云背景资产损坏")
+    return content
+
 
 # Shared limits for MKV export, saved image reuse, and subtitle/image previews.
 # A 64 MiB Base64 image can use ~85.34 MiB in JSON; leave bounded headroom.

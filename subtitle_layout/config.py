@@ -1,13 +1,31 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import re
 from typing import Any
+
+
+_COLOR = re.compile(r"^#[0-9A-Fa-f]{6}$")
+
+
+def normalize_subtitle_color(value: object) -> str:
+    if not isinstance(value, str) or not _COLOR.fullmatch(value):
+        raise ValueError("字幕字体颜色必须是 #RRGGBB")
+    return value.upper()
+
+
+def ass_bgr_color(value: str) -> str:
+    color = normalize_subtitle_color(value)
+    return color[5:7] + color[3:5] + color[1:3]
 
 
 @dataclass
 class SubtitleRenderConfig:
     """Consolidated configuration for subtitle rendering pipeline and visual styles."""
 
+    # Distinct source and translated text colors, shared by preview and export.
+    primary_color: str = "#DCEBFF"
+    chs_color: str = "#FFFFFF"
     enable_karaoke: bool = False
     karaoke_mode: str = "k"
     karaoke_timing: str = "aligned"

@@ -21,8 +21,9 @@ from .credentials import (
 )
 from .black_video_exporter import BlackVideoExporter
 from .archive_audit import audit_archive, verify_archive_source_audio
+from .effect_voice_preview import resolve_effect_voice
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
-from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration
+from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration, queue_external_ass_export
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
 from .archive_bundle_lifecycle import load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
@@ -73,6 +74,7 @@ from .remote_index import exclude_applied_updates, exclude_indexed_updates, remo
 from .provider_index import fetch_provider_index
 from .security import api_token, host_allowed, lan_mode, token_matches
 from subtitle_layout.fonts import list_font_families, resolve_browser_font_file, validate_ass_font_name
+from subtitle_layout.config import normalize_subtitle_color
 from subtitle_layout.preview import preview_subtitle_layout
 
 BASE = Path(__file__).resolve().parent
@@ -687,6 +689,8 @@ class Handler(BaseHTTPRequestHandler):
                 config,
                 subtitle_preset=preset,
                 subtitle_chs_font=validate_ass_font_name(data.get("chs_font", config.subtitle_chs_font) or "汉仪旗黑"),
+                subtitle_primary_color=normalize_subtitle_color(data.get("primary_color", config.subtitle_primary_color)),
+                subtitle_chs_color=normalize_subtitle_color(data.get("chs_color", config.subtitle_chs_color)),
                 subtitle_primary_font=validate_ass_font_name(data.get("primary_font", config.subtitle_primary_font) or "Noto Sans"),
                 subtitle_chs_size=max(12, min(240, _int(data.get("base_chs_size"), config.subtitle_chs_size))),
                 subtitle_primary_size=max(12, min(240, _int(data.get("base_primary_size"), config.subtitle_primary_size))),
@@ -717,7 +721,7 @@ class Handler(BaseHTTPRequestHandler):
                 subtitle_shadow_depth=max(0.0, min(24.0, _float(data.get("shadow_depth"), config.subtitle_shadow_depth))),
                 subtitle_blur_radius=max(0.0, min(12.0, _float(data.get("blur_radius"), config.subtitle_blur_radius))),
                 subtitle_card_opacity=max(0.0, min(1.0, _float(data.get("card_opacity"), config.subtitle_card_opacity))),
-                subtitle_enable_soft_entry=_bool(data.get("enable_soft_entry", str(config.subtitle_enable_soft_entry))),
+                subtitle_enable_soft_entry=False,  # only Fade is available in current effects phase
                 subtitle_soft_entry_scale_percent=max(25.0, min(300.0, _float(data.get("soft_entry_scale_percent"), config.subtitle_soft_entry_scale_percent))),
                 subtitle_soft_entry_blur=max(0.0, min(12.0, _float(data.get("soft_entry_blur"), config.subtitle_soft_entry_blur))),
                 subtitle_soft_entry_ms=max(0, min(5000, _int(data.get("soft_entry_ms"), config.subtitle_soft_entry_ms))),
@@ -827,6 +831,16 @@ class Handler(BaseHTTPRequestHandler):
             if _bool(data.get("use_studio_reference_background")) and source_bytes is None and background_image is None:
                 background_image = load_studio_reference_background()
             background_color = normalize_preview_background_color(data.get("preview_background_color"))
+            voice = {}
+            if data.get("project_voice_entry_id") is not None:
+                project = _active_config()
+                expected = str(data.get("expected_project_root") or "").strip()
+                if expected and expected != str(project.root):
+                    raise ValueError("The preview belongs to a different project; reload the selected cue")
+                voice = resolve_effect_voice(
+                    project, data["project_voice_entry_id"],
+                    fade_ms=_int(data.get("fade_in_ms"), project.subtitle_fade_in_ms),
+                )
             video = render_ass_preview_video(
                 english_text=data.get("english_text", ""),
                 chinese_text=data.get("chinese_text", ""),
@@ -834,11 +848,16 @@ class Handler(BaseHTTPRequestHandler):
                 target_language=data.get("target_language", "zh-CN") or "zh-CN",
                 config=config,
                 word_alignments=words,
-                duration_seconds=_float(data.get("preview_duration_seconds"), 3.0),
+                duration_seconds=float(voice.get("duration_seconds", _float(data.get("preview_duration_seconds"), 3.0))),
                 container_format=fmt,
                 source_video_bytes=source_bytes,
                 source_start_seconds=_float(data.get("source_start_seconds"), 0.0),
                 include_source_audio=_bool(data.get("include_source_audio", "true")),
+                audio_source_path=voice.get("audio_source_path"),
+                audio_source_start_seconds=float(voice.get("audio_source_start_seconds", 0)),
+                voice_start_offset_seconds=float(voice.get("voice_start_offset_seconds", 0)),
+                voice_duration_seconds=voice.get("voice_duration_seconds"),
+                preview_after_fade_ms=int(voice.get("preview_after_fade_ms", 0)),
                 background_color=background_color,
                 background_image_bytes=background_image,
                 font_dir=_active_project_font_dir(),
@@ -846,6 +865,8 @@ class Handler(BaseHTTPRequestHandler):
             self._send_bytes(
                 200, video, "video/webm" if fmt == "webm" else "video/mp4",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
+                               "X-HSR-Preview-Audio": "project" if voice else ("footage" if source_bytes is not None else "none"),
+                               "X-HSR-Preview-Duration": f'{float(voice.get("duration_seconds", _float(data.get("preview_duration_seconds"), 3.0))):.3f}',
                                "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
             )
             return
@@ -1550,6 +1571,15 @@ class Handler(BaseHTTPRequestHandler):
 
             job = queue_ass_regeneration(config, output)
             self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/output/ass/external":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None or not (output / "manifest.json").is_file():
+                raise ValueError("请先完成项目构建")
+            job = queue_external_ass_export(config, output)
+            self._json({"ok": True, "job": job.id, "delivery": "external-ass"})
             return
 
         if path == "/api/output/archive-bundle/background-preview":

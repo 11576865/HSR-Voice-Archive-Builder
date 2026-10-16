@@ -39,6 +39,18 @@ class AssExportPhaseBoundaryTests(unittest.TestCase):
         oracle.assert_not_called()
         self.assertIn("Dialogue:", ass)
 
+    def test_export_evidence_must_not_claim_libass_validation(self):
+        cfg = _ass_artifact_render_config(self.cfg)
+        entry = SimpleNamespace(
+            english="Geometry is not pixel evidence", chinese="几何检查不等于像素验证",
+            start_seconds=1.0, display_end_seconds=2.0,
+        )
+        capture = {}
+        with patch("subtitle_layout.ass_writer.validate_real_ink",
+                   side_effect=AssertionError("no corpus raster proof")):
+            render_ass([entry], config=cfg, layout_capture=capture)
+        self.assertEqual(capture.get("evidence"), "geometry-only-ass-plan")
+
     def test_full_subtitle_artifact_refresh_does_not_raster_probe(self):
         with tempfile.TemporaryDirectory() as tmp:
             output = Path(tmp)

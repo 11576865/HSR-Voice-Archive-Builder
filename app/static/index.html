@@ -3334,7 +3334,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         <div id="optionalOutputStatus" class="small muted artifact-status" role="status" aria-live="polite"></div>
         <details id="archiveBundlePanel" class="hsr-archive-bundle">
           <summary>默认完整 MKV · 自定义背景 + 主／章节 FLAC 音轨 + SRT／ASS 双字幕轨</summary>
-          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认黑色背景，可自定义背景；复制主连续 FLAC（默认音轨）；启用章节 FLAC 时也封入每个章节的独立可切换音轨，并封入 SRT 和 ASS 两条字幕轨及可选字体。原始 FLAC、SRT、ASS 独立保留；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
+          <p class="small muted">完整模式随档案构建自动生成并更新 MKV：默认与工作台相同的红云图片，可自定义背景；复制主连续 FLAC（默认音轨）；启用章节 FLAC 时也封入每个章节的独立可切换音轨，并封入 SRT 和 ASS 两条字幕轨及可选字体。工作中间 FLAC／SRT／ASS 封装验证后会清理，按需可独立导出；替换前必须逐轨验证。仅 FLAC 模式不会新生成字幕或 MKV。</p>
           <p id="bundleFreshnessStatus" role="status" aria-live="polite" class="small muted">打开项目后检查当前 MKV 的来源一致性与生成前提。</p>
           <div class="hsr-bundle-options">
             <label for="bundleBackgroundMode">背景类型
@@ -3368,7 +3368,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               </select>
             </label>
             <label for="bundleBackgroundImage">选择项目背景图片（PNG/JPEG/WebP，最多 64 MiB；导入后由 FFmpeg 验证）<input id="bundleBackgroundImage" type="file" accept="image/png,image/jpeg,image/webp,.png,.jpg,.jpeg,.webp" /></label>
-            <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用上次成功封装并校验的项目图片（首次使用请先选择上方图片）</label>
+            <label class="check"><input id="bundleReuseBackground" type="checkbox" /> 沿用已经保存的图片／首次生成时的默认红云背景</label>
             <label class="check"><input id="bundleIncludeFonts" type="checkbox" checked /> 将当前项目已导入的 TTF/OTF/TTC 附入 MKV（仅限有再分发许可的字体）</label>
           </div>
           <div class="box" style="max-width:640px">
@@ -3489,9 +3489,13 @@ body[data-workspace="project"] #archiveCard{display:none!important}
                   <div class="actions" style="margin:0">
                     <button type="button" class="secondary" id="previewQuickBtn" data-studio-scope="style" aria-pressed="false" title="浏览器近似预览当前字幕文字；字体和断行以 FFmpeg/libass 为准">字幕渲染前预览</button>
                     <button type="button" class="secondary" id="previewLibassBtn" aria-pressed="false" title="根据当前试调值请求 FFmpeg/libass 渲染">实际 ASS 渲染</button>
-                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="FFmpeg/libass 生成最长 8 秒真实视频；无自选素材时使用红云参考背景">播放动态特效</button>
+                    <button type="button" class="secondary" id="previewVideoBtn" data-studio-scope="effects" aria-pressed="false" title="选取项目字幕后，按真实语音时长与静音淡入淡出生成带原声的动态预览；无自选素材时使用红云参考背景">播放动态特效</button>
                     <button type="button" class="secondary" id="saveSubtitleLayoutBtn" data-studio-scope="effects">保存当前设置</button>
-                    <details class="hsr-export-advanced"><summary>生成文件</summary><button type="button" id="generateSubtitleAssBtn">保存并生成 ASS</button></details>
+                    <details class="hsr-export-advanced"><summary>生成文件</summary>
+                      <div class="actions">
+                        <button type="button" id="generateSubtitleAssBtn" title="更新 MKV 内的 ASS 字幕轨道">生成 ASS（内）</button>
+                        <button type="button" class="secondary" id="generateSubtitleExternalAssBtn" title="新建独立 ASS，不覆盖已有 ASS 与 MKV">生成 ASS（外）</button>
+                      </div></details>
                   </div>
                   <div class="layout-style-history-actions" role="group" aria-label="样式编辑历史">
                     <button type="button" id="layoutStyleUndoBtn" disabled title="撤销一次样式参数修改，不撤销字幕文本或已保存的项目文件">↶ 撤销样式</button>
@@ -3577,7 +3581,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   </details>
 
                 
-<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色，不影响最终 MKV。</div>
+<div id="videoPreviewStatus" class="small muted" data-studio-scope="effects" role="status" aria-live="polite">按「播放动态特效」后在上方画布播放真实视频。无自定义素材时默认使用红云参考图；选择纯黑可使用纯色；首次 MKV 也默认使用同一红云资产，可在成品设置中另选背景。</div>
 
 
         <div class="preview-controls" id="previewControls">
@@ -3663,6 +3667,10 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <summary><span>外观与可读性</span><small>Readability</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
+            <div class="row" role="group" aria-label="双语字幕独立字体颜色">
+              <label for="prevPrimaryColor">原文字体颜色 <input type="color" id="prevPrimaryColor" value="#dcebff"></label>
+              <label for="prevChsColor">中文字幕颜色 <input type="color" id="prevChsColor" value="#ffffff"></label>
+            </div>
             <div style="display:flex;justify-content:space-between">
               <label for="prevOutlineWidth" style="margin:0">描边宽度</label>
               <span id="prevOutlineWidthVal" class="small muted">3.0</span>
@@ -3691,7 +3699,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           </details>
 
           <details class="layout-inspector-section layout-section-advanced" data-studio-scope="effects">
-            <summary><span>动效</span><small>Motion</small></summary>
+            <summary><span>动效</span><small>仅淡入淡出</small></summary>
             <div class="layout-inspector-section-body">
               <section class="inspector-group">
             <label class="check"><input type="checkbox" id="prevEnableKinetic" checked> 平滑淡入淡出</label>
@@ -3702,8 +3710,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
             <input type="number" id="prevFadeIn" min="0" value="200" step="10" inputmode="numeric">
             <input type="hidden" id="prevFadeOut" value="200">
             <div id="hsrFadeBudgetStatus" class="small muted" role="status" aria-live="polite">淡出 + 后淡入不得超过最短相邻语音间隔；超过 60% 将提示警告。</div>
-            <label class="check"><input type="checkbox" id="prevEnableSoftEntry"> 柔和进入动画</label>
-            <div style="display:flex;justify-content:space-between">
+            <fieldset hidden disabled style="display:none">
+            <label class="check"><input type="checkbox" id="prevEnableSoftEntry" disabled> 柔和进入动画（暂不开放）</label>
+            <div style="display:none">
               <label for="prevSoftEntryScale" style="margin:0">起始缩放</label>
               <span id="prevSoftEntryScaleVal" class="small muted">98%</span>
             </div>
@@ -3718,7 +3727,8 @@ body[data-workspace="project"] #archiveCard{display:none!important}
               <span id="prevSoftEntryMsVal" class="small muted">160 ms</span>
             </div>
             <input type="range" id="prevSoftEntryMs" min="0" max="5000" value="160" step="10">
-            <div class="small muted inspector-help">柔和进入使用 <code>\t()</code>：从所选起始缩放与 Blur 过渡到正常值。高倍率与长时长可能超过字幕区域，最终以真实 ASS 验收为准。</div>
+            <div class="small muted inspector-help">暂时关闭非 Fade 变换动画。</div>
+            </fieldset>
           </section>
             </div>
           </details>
@@ -3809,7 +3819,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
   <input id="effectFootageStart" type="number" min="0" max="600" step="0.1" value="0" />
   <label for="effectFootageAudio"><input id="effectFootageAudio" type="checkbox" checked /> 保留源视频音轨（若存在）</label>
   <button type="button" id="effectFootageClearBtn" class="small secondary" disabled>清除视频，恢复红云参考图</button>
-  <p class="small muted">可选择最多 24 MiB 的短视频，仅作 0.5–8 秒 FFmpeg/libass 动画效果验收；背景素材不产生动画，真正效果由上方参数与 ASS 标签决定。未选择视频时使用红云参考图；最终 MKV 背景仍在导出页设置。</p>
+  <p class="small muted">可选择最多 24 MiB 的短视频，仅作选中语音的真实时长 FFmpeg/libass 动画效果验收（含语音与可用静音过渡）；不再固定 8 秒。默认使用项目 FLAC／已验证 MKV 音轨，背景素材不产生动画；最终 MKV 背景仍在导出页设置。</p>
 </div>
 
 </details>
@@ -4886,7 +4896,7 @@ function syncArchiveBundleProjectState(project,force=false){
     const preview=document.getElementById('bundleBackgroundPreview');
     if(preview){preview.src='';preview.style.display='none'}
     const status=document.getElementById('bundlePreviewStatus');
-    if(status)status.textContent='点击真实 FFmpeg 预览，确认渐变效果与颜色。';
+    if(status)status.textContent='首次完整 MKV 默认使用工作台红云图片；其他背景按已保存的选择。';
   }
   syncBundleBackgroundControls();
   if(reuse){
@@ -5399,6 +5409,7 @@ function setRunReport(title,body,open=true){
 function completedReport(job){
   const r=job?.result||{};
   if(job?.kind==='remote-update-apply')return '已取得 '+n(r.downloaded_or_existing)+' 条英文音频；同步取得 '+n(r.chinese_reference_downloaded)+' 条中文对照语音，'+n(r.unreferenced_api_translation)+' 条将不带中文语音参考交给 AI 翻译；无法定位 '+n((r.unresolved||[]).length)+' 条。\n项目来源已更新，请重新构建成品。';
+  if(job?.kind==='ass-external')return '新 ASS 已独立另存且未覆盖现有 MKV/ASS：'+(r.ass_file||'');
   if(job?.kind==='ass-export')return r.delivery==='complete-mkv'
     ? '新 ASS 已替换完整 MKV 内的旧字幕轨道，逐轨校验与封存已通过：'+(r.output||'HSR_Voice_Archive_Bundle.mkv')
     : '独立 ASS 字幕已生成：'+(r.ass_file||'HSR_Voice_Archive.ass');
@@ -5561,6 +5572,10 @@ async function watchJob(id){
             const r=x.job.result||{};
             setRunReport('增量更新已应用',completedReport(x.job),false);
             setLog(r);
+          }else if(x.job.kind==='ass-external'){
+            const status=document.getElementById('optionalOutputStatus');
+            if(status)status.textContent='独立 ASS 已另存，旧 ASS／MKV 未覆盖：'+(x.job.result?.ass_file||'');
+            setRunReport('外部 ASS 已生成',completedReport(x.job),false);
           }else if(x.job.kind==='ass-export'){
             const status=document.getElementById('optionalOutputStatus');
             const isBundle=x.job.result?.delivery==='complete-mkv';
@@ -5598,7 +5613,7 @@ async function watchJob(id){
         }else if(x.job.state==='failed'){
           terminal=true;
           setLog(x.job.error||x.job);
-          if(['ass-export','black-video-export','archive-bundle-export'].includes(x.job.kind)){
+          if(['ass-export','ass-external','black-video-export','archive-bundle-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
           }
@@ -5780,7 +5795,19 @@ document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();awa
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
-async function startAssExport(){const button=document.getElementById('assOutputBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成 ASS 字幕…';const j=await api('/api/output/ass',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='ASS 生成失败：'+shortError(x);setLog(String(x))}}
+async function startAssExport(mode='internal'){
+  const external=mode==='external',button=document.getElementById(external?'generateSubtitleExternalAssBtn':'generateSubtitleAssBtn');
+  const status=document.getElementById('optionalOutputStatus');
+  try{
+    if(button)button.disabled=true;
+    if(status)status.textContent=external?'正在另存独立 ASS（不修改 MKV）…':'正在更新 MKV 内 ASS…';
+    const job=await api(external?'/api/output/ass/external':'/api/output/ass',{method:'POST'});
+    watchJob(job.job);
+  }catch(error){
+    if(status)status.textContent='ASS 生成失败：'+shortError(error);
+    setLog(String(error));
+  }finally{if(button)button.disabled=false}
+}
 async function startBlackVideo(){const button=document.getElementById('blackVideoBtn'),status=document.getElementById('optionalOutputStatus');try{if(button)button.disabled=true;if(status)status.textContent='正在生成黑屏 MKV…';const j=await api('/api/output/black-video',{method:'POST'});watchJob(j.job)}catch(x){if(button)button.disabled=false;if(status)status.textContent='黑屏 MKV 生成失败：'+shortError(x);setLog(String(x))}}
 const bundleControls=['bundleBackgroundMode','bundleBackgroundColor','bundleGradientFirst',
   'bundleGradientSecond','bundleGradientThird','bundleGradientDirection',
@@ -7064,7 +7091,7 @@ function showGeometryPreview(){
 
 function libassPreviewPayload(){
   const previewPercent=Math.max(5,Math.min(95,parseFloat(document.getElementById('prevKaraokePreviewTime')?.value||'50')))/100;
-  const previewDuration=Math.max(0.25,Number(layoutStressSample?.duration_seconds||3));
+  const previewDuration=Math.max(0.01,Number(layoutStressSample?.duration_seconds||3));
   return {
     ...subtitleSettingsPayload(),
     english_text:document.getElementById('prevPriText')?.value||'',
@@ -7386,7 +7413,7 @@ async function importWordAlignmentFile(file){
 
 const layoutStyleControlIds=[
   'prevChsFont','prevPriFont','prevChsSize','prevPriSize','prevCentralGap','prevPrimaryShare','prevMarginH','prevMarginV',
-  'prevEnableKaraoke','prevKaraokeMode','prevKaraokeTiming','prevKaraokeUnit','prevKaraokeSpeed','prevEnableCard','prevEnableOutline',
+  'prevEnableKaraoke','prevKaraokeMode','prevKaraokeTiming','prevKaraokeUnit','prevKaraokeSpeed','prevEnableCard','prevEnableOutline','prevPrimaryColor','prevChsColor',
   'prevEnableKinetic','prevFadeIn',
   'prevOutlineWidth','prevShadowDepth','prevBlurRadius','prevCardOpacity',
   'prevEnableSoftEntry','prevSoftEntryScale','prevSoftEntryBlur','prevSoftEntryMs',
@@ -7536,6 +7563,8 @@ function enforceHsrFadeBudget(input){
 function subtitleSettingsPayload(){
   return {
     preset: previewPreset,
+    primary_color: document.getElementById('prevPrimaryColor')?.value || '#dcebff',
+    chs_color: document.getElementById('prevChsColor')?.value || '#ffffff',
     chs_font: document.getElementById('prevChsFont')?.value?.trim() || '汉仪旗黑',
     primary_font: document.getElementById('prevPriFont')?.value?.trim() || 'Noto Sans',
     base_chs_size: parseInt(document.getElementById('prevChsSize')?.value || '48',10),
@@ -7559,7 +7588,7 @@ function subtitleSettingsPayload(){
     shadow_depth: parseFloat(document.getElementById('prevShadowDepth')?.value || '2'),
     blur_radius: parseFloat(document.getElementById('prevBlurRadius')?.value || '0'),
     card_opacity: parseFloat(document.getElementById('prevCardOpacity')?.value || '62') / 100,
-    enable_soft_entry: !!document.getElementById('prevEnableSoftEntry')?.checked,
+    enable_soft_entry: false,
     soft_entry_scale_percent: parseFloat(document.getElementById('prevSoftEntryScale')?.value || '98'),
     soft_entry_blur: parseFloat(document.getElementById('prevSoftEntryBlur')?.value || '1.5'),
     soft_entry_ms: parseInt(document.getElementById('prevSoftEntryMs')?.value || '160',10),
@@ -7580,6 +7609,8 @@ function loadSubtitleLayoutSettings(config){
   const set=(id,value)=>{const el=document.getElementById(id);if(el&&value!==undefined&&value!==null)el.value=value;};
   const check=(id,value)=>{const el=document.getElementById(id);if(el)el.checked=!!value;};
   previewPreset=config.subtitle_preset||'standard';
+  set('prevPrimaryColor',config.subtitle_primary_color||'#dcebff');
+  set('prevChsColor',config.subtitle_chs_color||'#ffffff');
   set('prevChsFont',config.subtitle_chs_font||'汉仪旗黑');
   set('prevPriFont',config.subtitle_primary_font||'Noto Sans');
   Promise.allSettled([
@@ -7611,7 +7642,7 @@ function loadSubtitleLayoutSettings(config){
   set('prevShadowDepth',config.subtitle_shadow_depth??2);
   set('prevBlurRadius',config.subtitle_blur_radius??0);
   set('prevCardOpacity',Number(config.subtitle_card_opacity??0.62)*100);
-  check('prevEnableSoftEntry',config.subtitle_enable_soft_entry);
+  check('prevEnableSoftEntry',false);
   set('prevSoftEntryScale',config.subtitle_soft_entry_scale_percent??98);
   set('prevSoftEntryBlur',config.subtitle_soft_entry_blur??1.5);
   set('prevSoftEntryMs',config.subtitle_soft_entry_ms??160);
@@ -7639,71 +7670,21 @@ function markSubtitleSettingsDirty(){
     return;
   }
   const dirty=JSON.stringify(subtitleSettingsPayload())!==savedSubtitleSettings;
-  status.textContent=(dirty?'参数变更正在自动保存；ASS 导出会等待保存完成。':'当前设置已自动保存，将用于 ASS 导出。')
+  status.textContent=(dirty
+      ?'参数变更正在自动保存；不会自动生成 ASS 或重新封装 MKV。'
+      :'字幕设置已保存；正式 ASS／MKV 需点击「生成 ASS 字幕」才会更新。')
     +(lastRenderedAssIdentity===currentLibassPreviewIdentity()
-      ?' 当前样本已有真实 ASS 帧（不代表全项目通过）。'
-      :' 当前样本尚无匹配的真实 ASS 帧；不可依据几何图定稿。');
+      ?' 当前样本已有手动生成的真实 ASS 帧（不代表全项目通过）。'
+      :' 当前样本未生成匹配的真实 ASS 帧；可手动预览。');
   status.className='small '+(dirty?'status-warn':'status-ok');
   if(dirty)queueSubtitleSettingsAutosave();
 }
 
 let subtitleSettingsAutosaveTimer=null;
 let subtitleSettingsSaveWaiters=[];
-let assAutoRefreshTimer=null;
-let assAutoRefreshInFlight=false;
-let assAutoRefreshGeneration=0;
-function queueAutoAssRefresh(){
-  if(!currentProject?.root||!layoutCorpusPersistable)return;
-  const generation=++assAutoRefreshGeneration;
-  clearTimeout(assAutoRefreshTimer);
-  assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(generation),1800);
-}
-async function runAutoAssRefresh(generation){
-  if(generation!==assAutoRefreshGeneration)return;
-  if(assAutoRefreshInFlight||subtitleSettingsSavePending){
-    clearTimeout(assAutoRefreshTimer);
-    assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(generation),600);
-    return;
-  }
-  const project=currentProject?.root;
-  if(!project||!layoutCorpusPersistable)return;
-  assAutoRefreshInFlight=true;
-  const status=document.getElementById('previewSaveStatus');
-  if(status){status.textContent='参数已保存；正在后台仅生成 ASS（不会更新 SRT 或自动渲染视频帧）…';status.className='small muted';}
-  try{
-    const result=await api('/api/project/'+encodeURIComponent(currentProject.name||'active')+'/subtitles/artifacts/refresh',{
-      method:'POST',headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({expected_project_root:project,ass_only:true})
-    });
-    if(currentProject?.root!==project||generation!==assAutoRefreshGeneration)return;
-    if(result.job){
-      // In complete MKV mode the server owns ASS + container publication in
-      // one progress-visible job. A loose ASS is not a completed product.
-      if(status){status.textContent='样式已保存，正在后台将新 ASS 封入 MKV 并验证旧字幕已替换…';status.className='small muted';}
-      void watchJob(result.job);
-      return;
-    }
-    if(result.export_status)layoutCueApplyExportHealth(result.export_status);
-    const problem=String(result.artifact_error||result.refreshed?.ass_error||'');
-    if(status){
-      status.textContent=problem
-        ?'样式已保存，但 ASS 自动生成失败：'+problem+'。SRT 未改写。'
-        :'样式已自动保存，ASS 已按最新设置重新生成；SRT 未改写。';
-      status.className='small '+(problem?'status-bad':'status-ok');
-    }
-  }catch(err){
-    if(currentProject?.root===project&&generation===assAutoRefreshGeneration&&status){
-      status.textContent='样式设置已保存，但 ASS 自动生成尚未完成：'+shortError(err)+'；SRT 未改写。';
-      status.className='small status-warn';
-    }
-  }finally{
-    assAutoRefreshInFlight=false;
-    if(currentProject?.root===project&&generation!==assAutoRefreshGeneration){
-      clearTimeout(assAutoRefreshTimer);
-      assAutoRefreshTimer=setTimeout(()=>void runAutoAssRefresh(assAutoRefreshGeneration),1800);
-    }
-  }
-}
+// Settings autosave commits configuration only. Derived ASS and MKV remain
+// untouched until the user explicitly requests generation/export.
+// Real FFmpeg/libass preview is also an explicit action.
 function queueSubtitleSettingsAutosave(delay=650){
   if(!currentProject||fontImportTransactionActive)return;
   clearTimeout(subtitleSettingsAutosaveTimer);
@@ -7730,8 +7711,10 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
   subtitleSettingsSavePending=true;
   const saveButton=document.getElementById('saveSubtitleLayoutBtn');
   const exportButton=document.getElementById('generateSubtitleAssBtn');
+  const externalExportButton=document.getElementById('generateSubtitleExternalAssBtn');
   if(saveButton)saveButton.disabled=true;
   if(exportButton)exportButton.disabled=true;
+  if(externalExportButton)externalExportButton.disabled=true;
   try{
     if(status){status.textContent='正在保存字幕设置…';status.className='small muted';}
     const submittedProject=currentProject.root||currentProject.name;
@@ -7760,7 +7743,6 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
       queueSubtitleSettingsAutosave(150);
       return false; // Do not export an older settings snapshot.
     }
-    if(autosave)queueAutoAssRefresh();
     return true;
   }catch(err){
     if(status){status.textContent='保存失败：'+shortError(err);status.className='small status-bad';}
@@ -7770,6 +7752,7 @@ async function saveSubtitleLayoutSettings({autosave=false}={}){
     subtitleSettingsSavePending=false;
     if(saveButton)saveButton.disabled=false;
     if(exportButton)exportButton.disabled=false;
+    if(externalExportButton)externalExportButton.disabled=false;
     for(const resolve of subtitleSettingsSaveWaiters.splice(0))resolve();
   }
 }
@@ -8472,10 +8455,18 @@ function renderLayoutCorpusRail(){
 }
 function selectLayoutCorpusByIndex(index){
   const sub=layoutCorpusItems[index];
-  if(!sub)return;
+  if(!sub)return Promise.resolve(false);
   const position=layoutCorpusVisibleRows().findIndex(row=>String(row.id)===String(sub.id));
   if(position>=0)layoutCorpusPage=Math.floor(position/layoutCorpusPageSize);
-  loadLayoutStressSample({force:true,selectId:sub.id}).catch(e=>setLog(String(e)));
+  // Expose completion to real browser tests and accessibility callers.
+  // Selection is asynchronous because the selected cue may need fresh
+  // server-side timing data; never mark it selected before it loads.
+  return loadLayoutStressSample({force:true,selectId:sub.id}).then(
+    ()=>String(layoutCueActiveId)===String(sub.id)
+  ).catch(e=>{
+    setLog(String(e));
+    return false;
+  });
 }
 function moveLayoutCorpusSelection(offset){
   const rows=layoutCorpusVisibleRows();
@@ -8673,7 +8664,8 @@ async function loadLayoutStressSample({force=false,selectId=null,refresh=false,r
     layoutStressSample={
       id:selected.id,
       score:bestScore,
-      duration_seconds:Number(alignment?.duration_seconds||Math.max(0.25,Number(selected.end||0)-Number(selected.start||0))||3),
+      duration_seconds:Math.max(0.01,
+        Number(selected.source_end??selected.end??0)-Number(selected.source_start??selected.start??0)),
       word_alignments:alignment?.valid&&Array.isArray(alignment.words)?alignment.words:null
     };
     layoutSampleSource='sample';
@@ -9002,7 +8994,7 @@ function renderPreviewCanvasSvg(data, options) {
   // measurements. Without an explicit textLength the SVG remeasures each
   // wrapped line independently and renders a different visual width.
   // Shared, testable mapping: no second wrapping, scaling or baseline solver.
-  const drawQuickSubtitleLine=(line,family)=>{
+  const drawQuickSubtitleLine=(line,family,color)=>{
     const size=Number(line.font_size);
     const box=line.bbox||{};
     const height=Number(line.line_height)||size*1.25;
@@ -9026,12 +9018,12 @@ function renderPreviewCanvasSvg(data, options) {
     el.setAttribute('stroke','#101010');
     el.setAttribute('stroke-width',String(Math.max(0,Number(document.getElementById('prevOutlineWidth')?.value||0)*2)));
     el.setAttribute('stroke-linejoin','round');
-    el.setAttribute('fill','#fff');
+    el.setAttribute('fill',color);
     el.textContent=String(line.text||'');
     svg.appendChild(el);
   };
-  (layout.primary_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevPriFont')?.value||'Noto Sans'));
-  (layout.chs_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevChsFont')?.value||'汉仪旗黑'));
+  (layout.primary_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevPriFont')?.value||'Noto Sans',document.getElementById('prevPrimaryColor')?.value||'#dcebff'));
+  (layout.chs_lines||[]).forEach(line=>drawQuickSubtitleLine(line,document.getElementById('prevChsFont')?.value||'汉仪旗黑',document.getElementById('prevChsColor')?.value||'#ffffff'));
 
   // Exactly one browser geometry text renderer: SVG. The legacy Canvas
   // renderer painted the very same lines a second time (different metrics),
@@ -9313,9 +9305,13 @@ async function renderHsrEffectVideo(){
   if(libassPreviewController){libassPreviewController.abort();libassPreviewController=null;}
   document.getElementById('libassPreviewImage')?.classList.add('hidden');
   const payload=libassPreviewPayload();
-  const originalDuration=Number(payload.preview_duration_seconds||3);
-  payload.preview_duration_seconds=Math.min(8,Math.max(0.5,originalDuration));
-  if(originalDuration>8)payload.word_alignments=null; // do not misapply out-of-clip timing
+  const noProjectVoice=layoutSampleSource!=='sample'||layoutStressSample?.id===undefined||layoutStressSample?.id===null;
+  // Do not access an absent sample before the user-facing error handler.
+  // Preview duration is an advisory value; the server resolves PCM clocks
+  // from the authoritative project manifest (never a fixed 8-second cap).
+  payload.project_voice_entry_id=noProjectVoice?null:layoutStressSample.id;
+  payload.expected_project_root=currentProject?.root||null;
+  payload.preview_duration_seconds=noProjectVoice?null:Number(layoutStressSample.duration_seconds);
   const identity=currentLibassPreviewIdentity();
   const footage=effectFootageFile;
   const backgroundImage=effectBackgroundImageFile;
@@ -9332,6 +9328,7 @@ async function renderHsrEffectVideo(){
     backgroundColor===(document.getElementById('effectPreviewBackgroundColor')?.value||'#000000')&&
     document.getElementById('subtitleLayoutPreviewCard')?.dataset.studioMode==='effects';
   try{
+    if(noProjectVoice)throw new Error('请先选择一条有真实语音的项目字幕；自定义测试文本没有可同步的项目音频。');
     if(button)button.disabled=true;
     setPreviewEvidence('rendering',footage?'正在把当前 ASS 效果叠加到选定的真实本地视频…':'正在渲染真实连续视频；单帧图片不作为本操作的成功结果。');
     if(status)status.textContent=footage?'正在读取本地视频并使用 FFmpeg/libass 合成…':
@@ -9339,7 +9336,7 @@ async function renderHsrEffectVideo(){
     const player=document.getElementById('libassVideoPreview');
     payload.preview_format=player?.canPlayType?.('video/webm; codecs="vp8"')?'webm':'mp4';
     payload.source_start_seconds=effectFootageOffset();
-    payload.include_source_audio=!!footage&&footageAudio;
+    payload.include_source_audio=!!footage&&footageAudio; // project voice takes precedence
     payload.preview_background_color=backgroundColor;
     payload.use_studio_reference_background=usesReference;
     if(footage)payload.source_video_base64=await effectFootageAsBase64(footage);
@@ -9367,6 +9364,12 @@ async function renderHsrEffectVideo(){
     const expectedType=payload.preview_format==='webm'?'video/webm':'video/mp4';
     if(!blob.size||blob.type!==expectedType)throw new Error('服务器没有返回选定格式的可播放视频');
     setHsrEffectOperation('decoding','处理主机已返回视频，正在等待浏览器解码第一帧。');
+    const actualDuration=Number(response.headers.get('X-HSR-Preview-Duration'));
+    if(!Number.isFinite(actualDuration)||actualDuration<=0)
+      throw new Error('服务器没有返回已核准的真实语音预览时长');
+    const previewAudio=response.headers.get('X-HSR-Preview-Audio');
+    if(previewAudio!=='project')
+      throw new Error('预览中没有选中语音的真实音轨，拒绝以静音视频冒充');
     const actualBackground=response.headers.get('X-HSR-Preview-Background');
     if(actualBackground && actualBackground!==(footage?'local-footage':(backgroundImage||usesReference)?'background-image':backgroundColor==='#000000'?'black':'solid-color')){
       throw new Error('服务器响应的背景来源与当前选择不一致');
@@ -9395,8 +9398,28 @@ async function renderHsrEffectVideo(){
     if(typeof video.scrollIntoView==='function'){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
-    if(status)status.textContent='真实动态特效视频已就绪 · '+payload.preview_duration_seconds.toFixed(2)+' 秒 · '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · '+(footageAudio&&footage?'若源视频有音轨则同步截取':'静音')+' · 可播放和拖动检查。';
-    if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
+    if(status)status.textContent='真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
+    // Most browsers can reject autoplay *because this clip has real audio*.
+    // Never swallow that rejection: the native video controls remain the
+    // intentional user-gesture playback path, with sound enabled.
+    if(typeof video.play==='function'){
+      try{
+        const playback=video.play();
+        if(playback&&typeof playback.catch==='function'){
+          playback.catch(()=>{
+            if(stillCurrent()&&status){
+              status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；浏览器阻止了自动有声播放，请点击画布上的视频播放按钮开启声音。';
+              status.className='small status-warn';
+            }
+          });
+        }
+      }catch(_){
+        if(stillCurrent()&&status){
+          status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；请点击画布上的播放按钮手动播放。';
+          status.className='small status-warn';
+        }
+      }
+    }
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
     clearVideoPreview();
@@ -9701,7 +9724,10 @@ document.getElementById('effectFootageClearBtn')?.addEventListener('click',()=>{
 });
 document.getElementById('saveSubtitleLayoutBtn')?.addEventListener('click',saveSubtitleLayoutSettings);
 document.getElementById('generateSubtitleAssBtn')?.addEventListener('click',async()=>{
-  if(await saveSubtitleLayoutSettings())await startAssExport();
+  if(await saveSubtitleLayoutSettings())await startAssExport('internal');
+});
+document.getElementById('generateSubtitleExternalAssBtn')?.addEventListener('click',async()=>{
+  if(await saveSubtitleLayoutSettings())await startAssExport('external');
 });
 
 updateLayoutPreview();

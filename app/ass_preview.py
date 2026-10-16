@@ -14,7 +14,7 @@ from pathlib import Path
 from xml.sax.saxutils import escape as escape_xml
 
 from subtitle_layout.ass_writer import write_ass
-from subtitle_layout.config import SubtitleRenderConfig
+from subtitle_layout.config import SubtitleRenderConfig, normalize_subtitle_color
 from subtitle_layout.fonts import validate_ass_font_name
 from .archive_bundle_exporter import image_extension, MAX_BACKGROUND_BYTES
 from .project_fonts import project_font_for_family, project_font_face_names
@@ -26,6 +26,8 @@ class PreviewEntry:
     chinese: str
     start_seconds: float = 0.0
     display_end_seconds: float = 3.0
+    audio_end_seconds: float | None = None
+    preview_end_margin_ms: int = 0
     word_alignments: list[object] | None = None
 
 
@@ -42,6 +44,8 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         return str(value).strip().lower() in {"1", "true", "yes", "on"}
 
     return SubtitleRenderConfig(
+        primary_color=normalize_subtitle_color(data.get("primary_color", "#DCEBFF")),
+        chs_color=normalize_subtitle_color(data.get("chs_color", "#FFFFFF")),
         enable_karaoke=as_bool("enable_karaoke", False),
         karaoke_mode=(str(data.get("karaoke_mode", "k") or "k").lower() if str(data.get("karaoke_mode", "k") or "k").lower() in {"k", "kf", "clip"} else "k"),
         karaoke_timing=(str(data.get("karaoke_timing", "aligned") or "aligned").lower() if str(data.get("karaoke_timing","aligned") or "aligned").lower() in {"aligned","fixed","cue"} else "aligned"),
@@ -57,7 +61,7 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
         shadow_depth=max(0.0, min(24.0, float(data.get("shadow_depth", 2.0)))),
         blur_radius=max(0.0, min(12.0, float(data.get("blur_radius", 0.0)))),
         card_opacity=max(0.0, min(1.0, float(data.get("card_opacity", 0.62)))),
-        enable_soft_entry=as_bool("enable_soft_entry", False),
+        enable_soft_entry=False,  # hidden non-Fade motion disabled
         soft_entry_scale_percent=max(
             25.0, min(300.0, float(data.get("soft_entry_scale_percent", 98.0)))
         ),
@@ -82,18 +86,14 @@ def preview_config_from_payload(data: dict[str, object]) -> SubtitleRenderConfig
     )
 
 
-STUDIO_REFERENCE_BACKGROUND = Path(__file__).resolve().parent / "static" / "assets" / "studio-red-clouds.webp"
+from .archive_bundle_backgrounds import RED_CLOUD_ASSET, load_default_red_cloud_background
+
+STUDIO_REFERENCE_BACKGROUND = RED_CLOUD_ASSET
 
 
 def load_studio_reference_background() -> bytes:
-    """Bundled diagnostic image, never an input to project export."""
-    image = STUDIO_REFERENCE_BACKGROUND
-    if not image.is_file() or image.is_symlink():
-        raise RuntimeError("工作台默认参考背景文件缺失")
-    data = image.read_bytes()
-    if not data or len(data) > 1_048_576 or data[:4] != b"RIFF" or data[8:12] != b"WEBP":
-        raise RuntimeError("工作台默认参考背景损坏")
-    return data
+    """Exactly the same bundled red-cloud bytes as the default MKV video."""
+    return load_default_red_cloud_background()
 
 
 def _project_font_config(config: SubtitleRenderConfig, font_dir: Path | None) -> SubtitleRenderConfig:
@@ -449,6 +449,11 @@ def render_ass_preview_video(
     source_video_bytes: bytes | None = None,
     source_start_seconds: float = 0.0,
     include_source_audio: bool = True,
+    audio_source_path: Path | None = None,
+    audio_source_start_seconds: float = 0.0,
+    voice_start_offset_seconds: float = 0.0,
+    voice_duration_seconds: float | None = None,
+    preview_after_fade_ms: int = 0,
     background_color: str = "#000000",
     background_image_bytes: bytes | None = None,
     font_dir: Path | None = None,
@@ -462,8 +467,8 @@ def render_ass_preview_video(
     background_color = normalize_preview_background_color(background_color)
     ffmpeg_color = "0x" + background_color[1:]
     duration = float(duration_seconds)
-    if not math.isfinite(duration) or not 0.5 <= duration <= 8.0:
-        raise ValueError("Dynamic preview duration must be between 0.5 and 8 seconds")
+    if not math.isfinite(duration) or not 0.01 < duration <= 120.0:
+        raise ValueError("Dynamic preview duration must be between 0.01 and 120 seconds")
     start = float(source_start_seconds)
     if not math.isfinite(start) or not 0 <= start <= 600:
         raise ValueError("Preview source offset must be between 0 and 600 seconds")
@@ -485,10 +490,24 @@ def render_ass_preview_video(
     ffmpeg = shutil.which("ffmpeg")
     if not ffmpeg:
         raise RuntimeError("Dynamic ASS preview requires FFmpeg")
+    if audio_source_path is not None:
+        if (not audio_source_path.is_file() or audio_source_path.is_symlink()
+                or voice_duration_seconds is None):
+            raise ValueError("The selected project voice source is unavailable")
+        if (not all(math.isfinite(float(x)) for x in (
+                audio_source_start_seconds, voice_start_offset_seconds, voice_duration_seconds))
+                or audio_source_start_seconds < 0 or voice_start_offset_seconds < 0
+                or voice_duration_seconds <= 0 or
+                voice_start_offset_seconds + voice_duration_seconds > duration + 0.02):
+            raise ValueError("Project PCM voice clip has invalid timing")
     entry = PreviewEntry(
         english=str(english_text or ""),
         chinese=str(chinese_text or ""),
+        start_seconds=voice_start_offset_seconds if audio_source_path is not None else 0.0,
         display_end_seconds=duration,
+        audio_end_seconds=(voice_start_offset_seconds + voice_duration_seconds)
+        if audio_source_path is not None else None,
+        preview_end_margin_ms=preview_after_fade_ms if audio_source_path is not None else 0,
         word_alignments=word_alignments,
     )
     config = _project_font_config(config, font_dir)
@@ -529,37 +548,41 @@ def render_ass_preview_video(
                 f"color=c={ffmpeg_color}:s=960x540:r=24:d={duration:.3f}",
             ]
             video_filters = ""
+        audio_args = (
+            ["-ss", f"{audio_source_start_seconds:.3f}", "-i", str(audio_source_path)]
+            if audio_source_path is not None else []
+        )
         command = [
             ffmpeg, "-y", "-hide_banner", "-loglevel", "info",
-            *source_args, "-vf",
+            *source_args, *audio_args, "-vf",
             video_filters + f"subtitles='{escaped_ass}':original_size=1920x1080" +
             (f":fontsdir='{_escape_subtitles_filter_path(font_dir)}'" if font_dir and font_dir.is_dir() else "") +
             ",format=yuv420p",
         ]
-        if source_video_bytes is not None:
-            # Explicit stream map prevents attached pictures/subtitles or a
-            # second source audio from leaking into the preview.
-            command += ["-map", "0:v:0"]
-            if include_source_audio:
-                command += ["-map", "0:a:0?"]
-            else:
-                command += ["-an"]
+        # Input 0 supplies visual background; input 1, when present, is
+        # the actual project voice (continuous FLAC or verified bundle).
+        command += ["-map", "0:v:0"]
+        if audio_source_path is not None:
+            command += ["-map", "1:a:0"]
+        elif source_video_bytes is not None and include_source_audio:
+            command += ["-map", "0:a:0?"]
         else:
             command += ["-an"]
         if fmt == "webm":
             command += ["-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
                         "-b:v", "1200k"]
-            if source_video_bytes is not None and include_source_audio:
+            if audio_source_path is not None or (source_video_bytes is not None and include_source_audio):
                 command += ["-c:a", "libopus", "-b:a", "96k"]
         else:
             command += ["-c:v", "libx264", "-preset", "ultrafast",
                         "-crf", "22", "-movflags", "+faststart"]
-            if source_video_bytes is not None and include_source_audio:
+            if audio_source_path is not None or (source_video_bytes is not None and include_source_audio):
                 command += ["-c:a", "aac", "-b:a", "128k"]
         command += ["-t", f"{duration:.3f}", str(result_path)]
         try:
             completed = subprocess.run(
-                command, capture_output=True, text=True, timeout=50, check=False,
+                command, capture_output=True, text=True,
+                timeout=max(50, duration * 4 + 15), check=False,
                 env=font_env
             )
         except subprocess.TimeoutExpired as exc:
@@ -571,6 +594,40 @@ def render_ass_preview_video(
         _assert_project_font_selected(completed.stderr, config, font_dir,
                                       english=english_text, chinese=chinese_text,
                                       env=font_env)
+        if audio_source_path is not None:
+            ffprobe = shutil.which("ffprobe")
+            if not ffprobe:
+                raise RuntimeError("不能验证有声特效预览：FFprobe 不可用")
+            probe = subprocess.run(
+                [ffprobe, "-v", "error", "-show_entries",
+                 "stream=codec_type:format=duration", "-of", "json",
+                 str(result_path)],
+                capture_output=True, text=True, timeout=20, check=False,
+            )
+            if probe.returncode != 0:
+                raise RuntimeError("无法回读动态预览音轨，拒绝将静音视频标记为有声")
+            try:
+                metadata = json.loads(probe.stdout)
+                audio_present = any(
+                    item.get("codec_type") == "audio"
+                    for item in metadata.get("streams", [])
+                )
+            except (ValueError, AttributeError, TypeError) as exc:
+                raise RuntimeError("动态预览音轨元数据无效") from exc
+            if not audio_present:
+                raise RuntimeError("动态预览没有真实音轨，拒绝返回静音视频")
+            # A track inventory alone does not prove the audio/video timeline
+            # survived export. Reject a silently truncated 8s render when the
+            # selected PCM voice (and its fade margins) is actually longer.
+            try:
+                encoded_duration = float(metadata.get("format", {}).get("duration"))
+            except (TypeError, ValueError, AttributeError) as exc:
+                raise RuntimeError("无法验证动态预览的实际封装时长") from exc
+            if not math.isfinite(encoded_duration) or abs(encoded_duration - duration) > 0.5:
+                raise RuntimeError(
+                    f"动态预览实际时长 {encoded_duration:.3f}s 与选中语音 "
+                    f"{duration:.3f}s 不一致；拒绝返回截断视频"
+                )
         if result_path.stat().st_size > 16 * 1024 * 1024:
             raise RuntimeError("Dynamic preview exceeds 16 MiB output limit")
         return result_path.read_bytes()

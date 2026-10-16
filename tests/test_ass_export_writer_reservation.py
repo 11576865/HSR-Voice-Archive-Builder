@@ -62,7 +62,11 @@ class ProjectOutputReservationTests(unittest.TestCase):
             route = backend.split('"/subtitles/artifacts/refresh"', 1)
             # Dynamic project paths are checked via path.endswith(), not a literal route.
             self.assertIn("reserve_project_output_writer(config.root)", backend)
-            self.assertIn("ass_progress=report_ass_progress", backend)
+            self.assertIn("queue_ass_regeneration(config, output)", backend)
+        # The progress callback now has one implementation in the shared job,
+        # not a duplicated copy in each HTTP backend.
+        worker = (source / "app/auto_delivery.py").read_text(encoding="utf-8")
+        self.assertIn("ass_progress=on_cue", worker)
         self.assertIn("await run_in_threadpool(refresh_ass_only", fastapi)
 
 

@@ -83,14 +83,14 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
         self.assertEqual(
             {(line.split(",", 3)[1], line.split(",", 3)[2]) for line in lines},
             {("0:00:00.80", "0:00:02.20"),
-             ("0:00:04.80", "0:00:06.00")},
+             ("0:00:04.80", "0:00:06.20")},
         )
         first = next(line for line in lines if ",Primary," in line
                      and "0:00:00.80," in line)
         last = next(line for line in lines if ",Primary," in line
                     and "0:00:04.80," in line)
         self.assertIn(r"\fad(200,200)", first)
-        self.assertIn(r"\fad(200,0)", last)
+        self.assertIn(r"\fad(200,200)", last)
         self.assertIn(r"{\kt20}", first)
         self.assertIn(r"{\kt20}", last)
         self.assertEqual(
@@ -98,7 +98,7 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
             100, "the speech itself still gets its full 100cs karaoke budget",
         )
 
-    def test_short_gap_shares_transition_time_without_overlaps(self):
+    def test_short_gap_rejects_configured_fade_without_silent_clamping(self):
         cfg = SubtitleRenderConfig(enable_kinetic=True, fade_in_ms=200,
                                    fade_out_ms=200, verify_libass_layout=False)
         entries = [
@@ -109,13 +109,18 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
                             start_seconds=2.1, audio_end_seconds=3.0,
                             display_end_seconds=3.0),
         ]
+        with self.assertRaisesRegex(ValueError, "请减小 Fade 时长"):
+            render_ass(entries, config=cfg)
+        # Setting a valid 50ms symmetric fade occupies exactly 100ms.
+        cfg.fade_in_ms = 50
+        cfg.fade_out_ms = 50
         ass = render_ass(entries, config=cfg)
         first = next(l for l in ass.splitlines() if "Alpha" in l and l.startswith("Dialogue:"))
         second = next(l for l in ass.splitlines() if "Beta" in l and l.startswith("Dialogue:"))
-        self.assertIn("0:00:00.80,0:00:02.05", first)
-        self.assertIn("0:00:02.05,0:00:03.00", second)
-        self.assertIn(r"\fad(200,50)", first)
-        self.assertIn(r"\fad(50,0)", second)
+        self.assertIn("0:00:00.95,0:00:02.05", first)
+        self.assertIn("0:00:02.05,0:00:03.05", second)
+        self.assertIn(r"\fad(50,50)", first)
+        self.assertIn(r"\fad(50,50)", second)
 
     def test_non_kinetic_ass_and_srt_stay_at_voice_boundaries(self):
         entries = [
@@ -128,7 +133,7 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
         self.assertNotIn(r"\fad(", ass)
         self.assertNotIn("0:00:04.00", ass)
 
-    def test_first_and_last_fades_do_not_run_outside_audio_container(self):
+    def test_first_fade_honors_audio_zero_and_last_fade_extends_into_tail(self):
         cfg = SubtitleRenderConfig(enable_kinetic=True, fade_in_ms=300,
                                    fade_out_ms=300, verify_libass_layout=False)
         one = SimpleNamespace(english="Only", chinese="唯一",
@@ -136,8 +141,8 @@ class VoiceOnlySubtitleWindowTests(unittest.TestCase):
                               display_end_seconds=1.0)
         ass = render_ass([one], config=cfg)
         primary = next(l for l in ass.splitlines() if "Only" in l and l.startswith("Dialogue:"))
-        self.assertIn("0:00:00.00,0:00:01.00", primary)
-        self.assertNotIn(r"\fad(", primary)
+        self.assertIn("0:00:00.00,0:00:01.30", primary)
+        self.assertIn(r"\fad(0,300)", primary)
 
 
 if __name__ == "__main__":

@@ -248,6 +248,34 @@ class BundleRealFFmpegTests(unittest.TestCase):
                 exporter._ass_content_signature(ass.read_text(encoding="utf-8")),
             )
 
+    def test_mkv_video_tail_covers_last_ass_fade_without_reencoding_flac(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            # The spoken FLAC is 1.6s. ASS must remain playable through 2.3s
+            # so its final post-voice fade is not cut off by the video stream.
+            ass.write_text(
+                ass.read_text(encoding="utf-8").replace(
+                    "0:00:01.50,Default,,0,0,0,,Test",
+                    "0:00:02.30,Default,,0,0,0,,{\\\\fad(0,700)}Test",
+                ),
+                encoding="utf-8",
+            )
+            self._certify(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            result = exporter.export(
+                audio, ass, root / "HSR_Voice_Archive_Bundle.mkv",
+                require_current_ass=True,
+            )
+            self.assertAlmostEqual(result["duration_seconds"], 1.6, delta=0.04)
+            self.assertGreaterEqual(result["playback_duration_seconds"], 2.3)
+            probe = exporter._probe(root / "HSR_Voice_Archive_Bundle.mkv")
+            self.assertGreaterEqual(float(probe["format"]["duration"]), 2.29)
+            self.assertEqual(
+                [x["codec_name"] for x in probe["streams"]
+                 if x["codec_type"] == "audio"], ["flac"],
+            )
+
     def test_stale_ass_blocks_new_mkv_and_preserves_previous_valid_archive(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
@@ -257,7 +285,7 @@ class BundleRealFFmpegTests(unittest.TestCase):
             exporter = ArchiveBundleExporter(width=320, height=180)
             exporter.export(audio, ass, output, require_current_ass=True)
             previous = output.read_bytes()
-            (root / "subtitle_timing_overrides.json").write_text(
+            (root / "subtitles_overrides.json").write_text(
                 '{"modified":true}', encoding="utf-8"
             )
             with self.assertRaisesRegex(ValueError, "ASS 字幕未通过"):

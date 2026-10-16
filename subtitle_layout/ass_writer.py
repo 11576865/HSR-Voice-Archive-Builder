@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 from typing import Any, Callable, Iterable
 
-from .config import SubtitleRenderConfig
+from .config import SubtitleRenderConfig, ass_bgr_color
 from .fonts import resolve_font_path, validate_ass_font_name
 from .kinetic_motion import generate_kinetic_tags
 from .layout_solver import solve_subtitle_layout
@@ -414,9 +414,10 @@ def _voice_fade_windows(
 
     Durations are in whole centiseconds (ASS precision). The previous cue's
     outgoing fade and next cue's incoming fade share only real inter-voice
-    silence. If the sum exceeds the available gap, divide proportionally;
-    never borrow a millisecond from either utterance. The first fade may use
-    the intro silence; the last fade has no known trailing audio and is zero.
+    silence. If a requested pair exceeds the available gap, fail explicitly
+    instead of silently overriding author-selected fade durations. The first
+    fade can only use available intro silence; a final fade may extend after
+    the last PCM sample when the container video tail is preserved.
     Synthetic preview entries without audio_end_seconds keep legacy in-cue
     fade semantics and do not participate in voice-aware allocation.
     """
@@ -431,21 +432,29 @@ def _voice_fade_windows(
     if windows[0] is not None:
         begin = max(0, round(float(entries[0].start_seconds) * 100))
         windows[0] = (min(incoming, begin), 0)
+    # Preview-only: the selected last/only cue may have a known, bounded
+    # silent tail. The full archive still has no speculative last-cue tail.
+    last_margin = getattr(entries[-1], "preview_end_margin_ms", 0)
+    if windows[-1] is not None and last_margin:
+        windows[-1] = (windows[-1][0],
+                       min(outgoing, max(0, round(int(last_margin) / 10))))
     for index in range(len(entries) - 1):
         if windows[index] is None or windows[index + 1] is None:
             continue
         end = round(float(entries[index].audio_end_seconds) * 100)
         start = round(float(entries[index + 1].start_seconds) * 100)
         available = max(0, start - end)
-        if incoming + outgoing <= available:
-            out_cs, in_cs = outgoing, incoming
-        elif incoming + outgoing:
-            out_cs = round(available * outgoing / (incoming + outgoing))
-            in_cs = available - out_cs
-        else:
-            out_cs = in_cs = 0
-        windows[index] = (windows[index][0], out_cs)
-        windows[index + 1] = (in_cs, windows[index + 1][1])
+        if incoming + outgoing > available:
+            raise ValueError(
+                "ASS 淡出+淡入超出实际语音静音间隔："
+                f"第 {index + 1} 与 {index + 2} 条之间只有 {available * 10} ms，"
+                f"需要 {(incoming + outgoing) * 10} ms。"
+                "请减小 Fade 时长，不会悄悄压缩动画。"
+            )
+        windows[index] = (windows[index][0], outgoing)
+        windows[index + 1] = (incoming, windows[index + 1][1])
+    if windows[-1] is not None:
+        windows[-1] = (windows[-1][0], outgoing)
     return windows
 
 
@@ -465,6 +474,8 @@ def render_ass(
     kinetic_options: dict[str, Any] | None = None,
 ) -> str:
     cfg = config or SubtitleRenderConfig()
+    chs_text_color = ass_bgr_color(cfg.chs_color)
+    primary_text_color = ass_bgr_color(cfg.primary_color)
     chs_font = validate_ass_font_name(cfg.chs_font)
     primary_font = validate_ass_font_name(cfg.primary_font)
     chs_font_path = cfg.chs_font_path or resolve_font_path(chs_font)
@@ -481,8 +492,8 @@ ScaledBorderAndShadow: yes
 
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
-Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
-Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00FFFFFF,&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
+Style: CHS,{chs_font},{int(cfg.base_chs_size)},&H00{chs_text_color},&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
+Style: Primary,{primary_font},{int(cfg.base_primary_size)},&H00{primary_text_color},&H00A0A0A0,&H00101010,&H80000000,0,0,0,0,100,100,0,0,1,{_fmt_num(cfg.outline_width)},{_fmt_num(cfg.shadow_depth)},8,0,0,0,1
 Style: Card,{primary_font},10,&H00FFFFFF,&H00FFFFFF,&H00000000,&H00000000,0,0,0,0,100,100,0,0,1,0,0,7,0,0,0,1
 Style: Archive,{primary_font},{int(cfg.archive_hud_font_size)},&H{_ass_alpha_for_opacity(cfg.archive_hud_opacity)}FFFFFF,&HFFFFFFFF,&H80000000,&HFF000000,0,0,0,0,100,100,0,0,1,1,0,7,{margin_h},{margin_h},{margin_v},1
 
@@ -662,7 +673,10 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                 "failed": False,
                 "primary_lines": capture_lines(layout.primary_lines, primary_font_path, True),
                 "chs_lines": capture_lines(layout.chs_lines, chs_font_path, False),
-                "evidence": "libass-validated-ass-plan",
+                "evidence": (
+                    "libass-validated-ass-plan" if cfg.verify_libass_layout
+                    else "geometry-only-ass-plan"
+                ),
             })
 
         # Keep voice timing authoritative: fades occupy *neighboring silence*,
@@ -747,17 +761,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     y=pos0.y,
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
-                    entry_y_offset=k_opts.get("primary_entry_y_offset", 0),
+                    entry_y_offset=0,
                     voice_gap_seconds=(
                         voice_gap_sec if transition is None and cfg.use_audio_aware_fade else None
                     ),
-                    **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
+                    
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{pri_motion_tags}"
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
-            soft_entry_tags = _soft_entry_tags(cfg, duration_sec)
+            soft_entry_tags = ""  # only opacity fade animation is enabled in this phase
             base_blur_tag = (
                 f"\\blur{_fmt_num(cfg.blur_radius)}"
                 if float(cfg.blur_radius) > 0 and not soft_entry_tags
@@ -827,17 +841,17 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     y=pos0.y,
                     fade_in_ms=fade_in_ms,
                     fade_out_ms=fade_out_ms,
-                    entry_y_offset=k_opts.get("chs_entry_y_offset", 0),
+                    entry_y_offset=0,
                     voice_gap_seconds=(
                         voice_gap_sec if transition is None and cfg.use_audio_aware_fade else None
                     ),
-                    **{k: v for k, v in k_opts.items() if k not in ("primary_entry_y_offset", "chs_entry_y_offset")},
+                    
                 )
                 pos_prefix = f"{{\\an{pos0.alignment}{chs_motion_tags}"
             else:
                 pos_prefix = f"{{\\an{pos0.alignment}\\pos({pos0.x},{pos0.y})"
 
-            soft_entry_tags = _soft_entry_tags(cfg, duration_sec)
+            soft_entry_tags = ""  # only opacity fade animation is enabled in this phase
             base_blur_tag = (
                 f"\\blur{_fmt_num(cfg.blur_radius)}"
                 if float(cfg.blur_radius) > 0 and not soft_entry_tags
@@ -858,44 +872,15 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
                     f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{out_text}"
                 )
 
-            chs_alignments = word_alignments if source_language.startswith("zh") else None
-            if use_karaoke and karaoke_mode in {"k", "kf"}:
-                chs_text = format_multiline_karaoke(
-                    layout.chs_lines,
-                    karaoke_duration_sec if karaoke_timing == "cue" else duration_sec,
-                    word_alignments=chs_alignments,
-                    is_cjk=True,
-                    mode=karaoke_mode,
-                    timing=karaoke_timing,
-                    unit=karaoke_unit,
-                    speed_ms=karaoke_speed_ms,
-                    font_path=chs_font_path,
-                )
-                if karaoke_offset_cs and re.search(r"\{\\k(?:f)?\d+", chs_text):
-                    chs_text = f"{{\\kt{karaoke_offset_cs}}}" + chs_text
-            else:
-                chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
+            # Karaoke progression belongs exclusively to the spoken source
+            # (Primary) line. Translated Chinese must stay legible and static,
+            # independent of k/kf/clip/aligned/fixed/cue modes. Motion and
+            # fade envelopes still apply to the complete bilingual composition.
+            chs_text = "\\N".join(pos.text for pos in layout.chs_lines)
             dialogue_text = f"{pos_prefix}\\fs{pos0.font_size}{soft_entry_tags}{base_blur_tag}}}{chs_text}"
             dialogues.append(
                 f"Dialogue: 1,{start_time},{end_time},CHS,,0,0,0,,{dialogue_text}"
             )
-            if use_karaoke and karaoke_mode == "clip" and len(layout.chs_lines) == 1:
-                clip_tags = generate_clip_karaoke_overlay(
-                    layout.chs_lines[0],
-                    duration_sec,
-                    chs_alignments,
-                    font_path=chs_font_path,
-                    time_offset_ms=karaoke_offset_cs * 10,
-                )
-                if clip_tags:
-                    clip_text = getattr(layout.chs_lines[0], "text", str(layout.chs_lines[0]))
-                    overlay = (
-                        f"{pos_prefix}\\fs{pos0.font_size}\\1c&H00E8FF&"
-                        f"\\bord0\\shad0{clip_tags}}}{clip_text}"
-                    )
-                    dialogues.append(
-                        f"Dialogue: 4,{start_time},{end_time},CHS,,0,0,0,,{overlay}"
-                    )
 
     if overflow_report_path is not None:
         _atomic_write(

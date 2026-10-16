@@ -1,0 +1,42 @@
+name: HSR seven ASS requirements
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  seven-ass-contracts:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install real libass, FFmpeg and fonts
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          python -m pip install -r requirements-test.txt
+          ffmpeg -hide_banner -filters | grep -E ' subtitles | ass '
+      - name: Compile production and regression code
+        run: |
+          python -m compileall -q app subtitle_layout tests
+          python -c "import app.server; import app.lite_server"
+      - name: Verify seven ASS delivery contracts with actual MKV mux/demux
+        run: |
+          python -m unittest -v \
+            tests.test_ass_export_progress \
+            tests.test_ass_export_phase_boundary \
+            tests.test_ass_export_writer_reservation \
+            tests.test_ass_to_mkv_regeneration_contract \
+            tests.test_subtitle_voice_only_display \
+            tests.test_subtitle_fade_budget \
+            tests.test_subtitle_timing_overrides \
+            tests.test_archive_bundle_lifecycle \
+            tests.test_archive_bundle_exporter

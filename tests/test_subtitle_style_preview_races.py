@@ -130,8 +130,11 @@ process.stdout.write('Only manual geometry may show non-authoritative glyphs: OK
                         block.index("clearVideoPreview()"))
         scheduler=html[html.index("function queueLiveRealPreview(){"):
                        html.index("let geometryPreviewGeneration = 0;")]
-        self.assertIn("if(typeof videoPreviewController!=='undefined'&&videoPreviewController)return;",scheduler)
-        self.assertIn("!videoPreviewController&&",scheduler)
+        # The old delayed still timer was removed entirely: changing style
+        # parameters cannot launch any competing libass render.
+        self.assertIn("clearTimeout(liveRealPreviewTimer);",scheduler)
+        self.assertIn("  return;",scheduler)
+        self.assertNotIn("renderLibassPreview(",scheduler)
 
     def test_stale_libass_responses_and_manual_geometry_choice(self) -> None:
         html = (Path(__file__).resolve().parents[1] / "app/static" / "index.html").read_text(
@@ -172,6 +175,7 @@ const madeUrls = [];
 const decodes = [];
 const sandbox = {
   document: {
+    body: {dataset: {workspaceTask: 'effects'}},
     getElementById: node,
     querySelector: () => node('evidence-root')
   },
@@ -182,6 +186,9 @@ const sandbox = {
   headers: () => ({}),
   shortError: e => String(e.message || e),
   setLog: () => {},
+  // The geometry button explicitly repaints its own safe preview; this is
+  // not an asynchronous FFmpeg/libass renderer call.
+  updateLayoutPreview: () => Promise.resolve(),
   URL: {
     createObjectURL: () => { const url = 'blob:fixture-' + (madeUrls.length + 1); madeUrls.push(url); return url; },
     revokeObjectURL: () => {}

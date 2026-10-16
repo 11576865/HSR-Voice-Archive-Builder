@@ -33,7 +33,7 @@ class ReferenceBackgroundTests(unittest.TestCase):
             stream = json.loads(probe.stdout)["streams"][0]
             self.assertEqual((stream["width"], stream["height"]), (640, 360))
 
-    def test_workbench_uses_reference_by_default_but_archive_export_does_not(self):
+    def test_workbench_and_new_mkv_share_the_reference_asset_by_default(self):
         html = (ROOT / "app/static/index.html").read_text("utf-8")
         css = (ROOT / "app/static/studio-v4.css").read_text("utf-8")
         self.assertIn('id="previewBackgroundImage" src="/static/assets/studio-red-clouds.webp"', html)
@@ -47,7 +47,9 @@ class ReferenceBackgroundTests(unittest.TestCase):
         self.assertIn("position:relative!important", css)
         self.assertNotIn("position:sticky!important;top:0!important;z-index:9", css)
         self.assertIn(".studio-v4-timing", css)
-        self.assertIn('<summary>按需调整显示时间', html)
+        self.assertIn('id="layoutCueTimingStart"', html)
+        self.assertIn("load_default_red_cloud_background", (ROOT / "app/archive_bundle_lifecycle.py").read_text("utf-8"))
+        self.assertIn("默认与工作台相同的红云图片", html)
         self.assertNotIn("studio-red-clouds.webp", (ROOT / "app/archive_bundle_exporter.py").read_text("utf-8"))
         server = (ROOT / "app/server.py").read_text("utf-8")
         lite = (ROOT / "app/lite_server.py").read_text("utf-8")

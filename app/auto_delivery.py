@@ -157,6 +157,25 @@ def queue_ass_regeneration(config: ProjectConfig, output: Path):
     )
 
 
+
+def queue_external_ass_export(config: ProjectConfig, output: Path):
+    """Explicit *standalone* export; never publishes or invalidates MKV."""
+    from .subtitles import export_independent_ass
+
+    def run(report_progress):
+        report_progress("prepare", "正在准备独立 ASS 副本", 0, 0)
+        def progress(current: int, total: int) -> None:
+            report_progress("render", f"正在生成外部 ASS：{current}/{total} 条", current, total)
+        result = export_independent_ass(config, output, ass_progress=progress)
+        report_progress("complete", "独立 ASS 已另存；原 ASS 和 MKV 未改变", 1, 1)
+        return result
+
+    return create_job(
+        "ass-external", run, with_progress=True,
+        project_root=config.root, project_name=config.name,
+    )
+
+
 def maybe_queue_complete_mkv(config: ProjectConfig) -> str | None:
     """Enqueue at most once for each changed certified source generation.
 

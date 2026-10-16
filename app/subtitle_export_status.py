@@ -56,6 +56,7 @@ def record_subtitle_export(
         "schema_version": 1,
         "state": state,
         "ass_required": bool(ass_required),
+        "ass_style_stale": False,
         "artifact_error": str(artifact_error or ""),
         "written_at": datetime.now(timezone.utc).isoformat(),
         "inputs": _inputs(output_dir),
@@ -69,6 +70,37 @@ def record_subtitle_export(
         json.dumps(record, ensure_ascii=False, indent=2),
     )
     return record
+
+
+
+def mark_ass_style_stale(output_dir: Path) -> bool:
+    """Invalidate the ASS *claim*, not SRT or output bytes, on settings save.
+
+    This does NOT generate ASS, start a background job or re-mux MKV. The user
+    must explicitly request regeneration. A missing/failed/unverified receipt
+    already cannot attest a current ASS; never turn it into a success record.
+    """
+    file = output_dir / EXPORT_RECEIPT_NAME
+    if file.is_symlink() or not file.is_file():
+        return False
+    try:
+        record = json.loads(file.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError):
+        return False
+    if not isinstance(record, dict) or record.get("schema_version") != 1:
+        return False
+    if record.get("state") != "current" or not record.get("ass_required"):
+        return False
+    if record.get("ass_style_stale") is True:
+        return False
+    record["ass_style_stale"] = True
+    record["artifact_error"] = (
+        "字幕样式设置已保存；正式 ASS/MKV 尚未重新生成，请点击生成 ASS 字幕。"
+    )
+    atomic_write_text(
+        file, json.dumps(record, ensure_ascii=False, indent=2),
+    )
+    return True
 
 
 def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
@@ -92,6 +124,7 @@ def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
                 or not isinstance(record.get("outputs"), dict)):
             raise ValueError("Invalid subtitle artifact receipt schema")
         ass_required = bool(record.get("ass_required"))
+        style_stale = bool(record.get("ass_style_stale"))
         state = str(record["state"])
         error = str(record.get("artifact_error") or "")
         # Independent SRT and ASS may be valid in different combinations.
@@ -105,11 +138,14 @@ def read_subtitle_export_health(output_dir: Path | None) -> dict[str, Any]:
         srt_current = bool(srt_hash and outputs.get(SRT_NAME) == srt_hash)
         # Each exported file has its own provenance. A damaged SRT must not
         # invalidate a separately unchanged ASS, and conversely.
-        ass_current = bool(ass_required and ass_hash
+        ass_current = bool(ass_required and ass_hash and not style_stale
                            and outputs.get(ASS_NAME) == ass_hash)
         if not inputs_current:
             state = "stale"
             error = "Subtitle source or human text/time overrides changed after the last export"
+        elif state == "current" and style_stale and ass_required:
+            state = "stale"
+            error = error or "Saved subtitle layout requires manual ASS/MKV regeneration"
         elif state == "current" and not (srt_current and (not ass_required or ass_current)):
             state = "stale"
             error = "A previously validated subtitle export is missing or changed"
