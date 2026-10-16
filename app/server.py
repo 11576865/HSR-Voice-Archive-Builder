@@ -930,7 +930,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         data = json.loads(body)
         if not isinstance(data, dict):
             raise ValueError("Subtitle preview payload must be an object")
-        config = preview_config_from_payload(data)
+        preview_config = preview_config_from_payload(data)
         words = data.get("word_alignments")
         if not isinstance(words, list):
             words = None
@@ -942,13 +942,13 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         background_color = normalize_preview_background_color(data.get("preview_background_color"))
         voice = {}
         if data.get("project_voice_entry_id") is not None:
-            config = _active_config()
+            project = _active_config()
             expected = str(data.get("expected_project_root") or "").strip()
-            if expected and expected != str(config.root):
+            if expected and expected != str(project.root):
                 raise ValueError("The preview belongs to a different project; reload the selected cue")
             voice = resolve_effect_voice(
-                config, data["project_voice_entry_id"],
-                fade_ms=int(data.get("fade_in_ms", config.subtitle_fade_in_ms)),
+                project, data["project_voice_entry_id"],
+                fade_ms=int(data.get("fade_in_ms", project.subtitle_fade_in_ms)),
             )
         video = await run_in_threadpool(
             render_ass_preview_video,
@@ -956,7 +956,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             chinese_text=str(data.get("chinese_text") or ""),
             source_language=str(data.get("source_language") or "en"),
             target_language=str(data.get("target_language") or "zh-CN"),
-            config=config,
+            config=preview_config,
             word_alignments=words,
             duration_seconds=float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)),
             container_format=fmt,
