@@ -199,7 +199,7 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
                          "sealed-mkv")
         # Keep size and even restore the original mtime: changed bytes cannot
         # pass the content digest recorded at publication.
-        mkv.write_bytes(b"tamperedxmedia-contents")
+        mkv.write_bytes(b"tamperedxxmedia-contents")
         os.utime(mkv, ns=(initial.st_atime_ns, initial.st_mtime_ns))
         status = bundle_audio_source_status(self.output, prefer_sealed=True)
         self.assertFalse(status["available"])
