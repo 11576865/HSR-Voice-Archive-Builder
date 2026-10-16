@@ -185,7 +185,14 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
             return
         if path.endswith("/api/status"):
             payload = {
-                "ok": True, "version": "visual-fixture", "project": None,
+                "ok": True, "version": "visual-fixture", "project": {
+                    "root": "/qa/fixture", "name": "visual-fixture",
+                    "config": {
+                        "source_text_language": "en", "target_language": "zh-CN",
+                        "subtitle_chs_font": "Arial", "subtitle_primary_font": "Arial",
+                        "delivery_mode": "complete",
+                    }, "report": {}, "outputs": {},
+                },
                 "runtime": {"ffmpeg": False, "warnings": []},
                 "recent_projects": [], "jobs": [],
             }
@@ -253,13 +260,10 @@ def rect(page, selector: str):
 
 def load_studio(page):
     page.wait_for_function("typeof showWorkspace === 'function' && typeof loadLayoutStressSample === 'function'")
-    page.evaluate("""() => {
-        currentProject = {name:'visual-fixture',root:'/qa/fixture',config:{
-            source_text_language:'en',target_language:'zh-CN',subtitle_chs_font:'Arial',
-            subtitle_primary_font:'Arial'
-        }};
-        showWorkspace('layout',{scroll:false});
-    }""")
+    # /api/status, not a manual global assignment, must own the same project
+    # identity. Otherwise a late refresh() clears the selected cue mid-test.
+    page.wait_for_function("currentProject?.root === '/qa/fixture'", timeout=12000)
+    page.evaluate("() => showWorkspace('layout',{scroll:false})")
     page.wait_for_function("layoutCorpusItems.length >= 3", timeout=12000)
     page.wait_for_function("document.getElementById('layoutCueHeading').textContent.includes('字幕')", timeout=12000)
     # A separate effects workbench owns timing, Karaoke and playable preview.
@@ -595,6 +599,17 @@ def mobile_check(browser, base_url, output, report, width, height, label):
            f"{label}: Effects not selected as top-level workspace")
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),
            f"{label}: shared subtitle browser unavailable in Effects")
+    # Mobile controls remain directly operable without sacrificing the 16:9
+    # media stage; the selector and explicit preview are not 31px desktop taps.
+    if width <= 600:
+        taps = page.evaluate("""() => {
+          const height=id=>document.getElementById(id).getBoundingClientRect().height;
+          return {select:height('layoutAuditDrawerToggle'),
+                  preview:height('previewVideoBtn'),
+                  save:height('saveSubtitleLayoutBtn')};
+        }""")
+        ensure(min(taps.values()) >= 42,
+               f"{label}: touch targets undersized: {taps}")
     screenshot(page, output, f"{label}_clean_studio")
     page.locator('#studioStyleTab').click()
     ensure(page.locator("#layoutAuditDrawerToggle").is_visible(),

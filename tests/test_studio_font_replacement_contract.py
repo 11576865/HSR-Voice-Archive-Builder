@@ -26,7 +26,8 @@ class StudioFontReplacementContract(unittest.TestCase):
         self.assertIn("await verifyImportedFontFace(family,target);",fn)
         self.assertIn("saveSubtitleLayoutSettings({autosave:true})",fn)
         self.assertIn("fontChoiceSaved=true;",fn)
-        self.assertIn("if(fontImportTransactionActive)return;\n  clearTimeout(liveRealPreviewTimer)",s)
+        self.assertIn("function queueLiveRealPreview(){",s)
+        self.assertIn("clearTimeout(liveRealPreviewTimer);\n  return;",s)
 
     def test_fast_preview_uses_only_one_svg_caption_layer(self):
         s=self.html
@@ -71,7 +72,8 @@ class StudioFontReplacementContract(unittest.TestCase):
         preview=(ROOT/"app/ass_preview.py").read_text("utf-8")
         fastapi=(ROOT/"app/server.py").read_text("utf-8")
         lite=(ROOT/"app/lite_server.py").read_text("utf-8")
-        self.assertIn('"evidence": "libass-validated-ass-plan"',ass)
+        self.assertIn('"libass-validated-ass-plan" if cfg.verify_libass_layout',ass)
+        self.assertIn('else "geometry-only-ass-plan"',ass)
         self.assertIn('layout_capture=layout_capture',preview)
         for server in (fastapi,lite):
             self.assertIn('X-HSR-Verified-Layout',server)

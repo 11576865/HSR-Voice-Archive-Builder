@@ -410,7 +410,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn('id="prevCardOpacity"', html)
         self.assertIn('id="prevFadeIn"', html)
         self.assertIn('id="prevFadeOut"', html)
-        self.assertIn('id="prevAudioAwareFade"', html)
+        self.assertIn('id="hsrFadeBudgetStatus"', html)
         self.assertIn('id="prevEnableSoftEntry"', html)
         self.assertIn('id="prevSoftEntryScale"', html)
         self.assertIn('id="prevSoftEntryBlur"', html)
@@ -703,7 +703,7 @@ class QuickBuildUiTests(unittest.TestCase):
         self.assertIn("function subtitleLayoutStressScore(", html)
         self.assertNotIn('id="prevPresetLongText"', html)
         self.assertNotIn('id="prevPresetCollision"', html)
-        self.assertIn('id="prevChsSize" min="38" max="64" value="48"', html)
+        self.assertIn('id="prevChsSize" min="12" max="240" value="48"', html)
         self.assertIn('id="prevMarginH" min="0" max="30" value="3"', html)
         self.assertIn('id="prevMarginV" min="0" max="20" value="5"', html)
 

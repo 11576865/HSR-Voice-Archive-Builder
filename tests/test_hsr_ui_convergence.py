@@ -47,7 +47,7 @@ class HsrUiConvergence(unittest.TestCase):
         self.assertIn('id="subListView"', doc)
         self.assertIn('id="layoutCorpusRail"', doc)
         self.assertIn('id="layoutAuditDrawerToggle" aria-expanded="false"', doc)
-        self.assertIn('id="layoutCorpusRail" aria-label="批量排版检查与问题字幕定位" aria-hidden="true" inert', doc)
+        self.assertIn('id="layoutCorpusRail" aria-label="项目字幕浏览器" aria-hidden="true" inert', doc)
         self.assertIn("workbench.classList.toggle('audit-open',!!open)", doc)
         self.assertIn("rail.toggleAttribute('inert',!open)", doc)
         self.assertIn("rail.contains(document.activeElement)", doc)
@@ -88,12 +88,12 @@ class HsrUiConvergence(unittest.TestCase):
 
     def test_effects_closes_layout_qa_and_nav_identity_is_semantic(self):
         doc = self.html
-        self.assertIn("if(next==='effects'){", doc)
-        self.assertIn("document.activeElement===drawerToggle", doc)
-        self.assertIn("const target=document.getElementById('studioEffectsTab')", doc)
+        self.assertIn("if(next==='effects'&&layoutCorpusFilter!=='all'){", doc)
+        self.assertIn("if(sharedRail?.contains(document.activeElement))", doc)
+        self.assertIn("document.getElementById('layoutAuditDrawerToggle')?.focus();", doc)
         self.assertNotIn("data-hsr-focus-task", doc)
         self.assertIn("setHsrAuditDrawer(false);", doc)
-        self.assertIn("if(root.querySelector('.preview-workbench.audit-open'))setHsrAuditDrawer(false);", doc)
+        self.assertIn("root.dataset.studioMode=next;", doc)
         self.assertIn('#subtitleLayoutPreviewCard[data-studio-mode="effects"] .layout-corpus-rail', self.shared)
         for task in ("review", "layout", "effects", "export", "update"):
             self.assertIn(f'.workspace-nav button[data-workspace-target="{task}"]', doc)

@@ -47,7 +47,7 @@ class ReferenceBackgroundTests(unittest.TestCase):
         self.assertIn("position:relative!important", css)
         self.assertNotIn("position:sticky!important;top:0!important;z-index:9", css)
         self.assertIn(".studio-v4-timing", css)
-        self.assertIn('id="layoutCueTimingStart"', html)
+        self.assertIn('id="layoutCueClockOrigin"', html)
         self.assertIn("load_default_red_cloud_background", (ROOT / "app/archive_bundle_lifecycle.py").read_text("utf-8"))
         self.assertIn("默认与工作台相同的红云图片", html)
         self.assertNotIn("studio-red-clouds.webp", (ROOT / "app/archive_bundle_exporter.py").read_text("utf-8"))
