@@ -2,6 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from dataclasses import dataclass
+from unittest.mock import patch
 
 from subtitle_layout.config import SubtitleRenderConfig
 from subtitle_layout.ass_writer import (
@@ -12,7 +13,7 @@ from subtitle_layout.ass_writer import (
     render_ass,
     write_ass,
 )
-from subtitle_layout.layout_solver import SubtitleLinePos
+from subtitle_layout.layout_solver import SubtitleLinePos, SolvedLayout, solve_subtitle_layout
 from subtitle_layout.safe_area import DEFAULT_SAFE_AREA
 from subtitle_layout.fonts import _installed_font_families, list_font_families, validate_ass_font_name
 
@@ -404,14 +405,29 @@ class TestAdvancedTypography(unittest.TestCase):
             margin_vertical_percent=0.20,
             min_central_gap=150.0,
         )
+        # A genuinely extreme string may become layout-safe after modern
+        # geometric line breaking. Force a deterministic solver rejection
+        # instead of assuming a particular font family must overflow.
+        def solver_with_single_failure(**kwargs):
+            if kwargs.get("english_text", "").startswith("This is an extremely long"):
+                return SolvedLayout(
+                    scale_factor=0.85, chs_lines=[], primary_lines=[],
+                    failed=True, failed_condition="GEOMETRY_OVERFLOW",
+                    scale_attempts=[100, 95, 90, 85],
+                )
+            return solve_subtitle_layout(**kwargs)
+
         with tempfile.TemporaryDirectory() as td:
             target = Path(td) / "archive.ass"
             target.write_text("stale", encoding="utf-8")
             report = Path(td) / "overflow.json"
-            with self.assertRaisesRegex(ValueError, "No partial ASS was produced"):
-                write_ass([ok, bad], target, config=cfg, overflow_report_path=report)
+            with patch("subtitle_layout.ass_writer.solve_subtitle_layout",
+                       side_effect=solver_with_single_failure):
+                with self.assertRaisesRegex(ValueError, "No partial ASS was produced"):
+                    write_ass([ok, bad], target, config=cfg, overflow_report_path=report)
             self.assertFalse(target.exists())
             self.assertTrue(report.is_file())
+            self.assertIn("GEOMETRY_OVERFLOW", report.read_text(encoding="utf-8"))
 
     def test_render_ass_toggle_flags(self):
         entries = [
