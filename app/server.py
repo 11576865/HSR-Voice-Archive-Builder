@@ -949,6 +949,7 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             voice = resolve_effect_voice(
                 project, data["project_voice_entry_id"],
                 fade_ms=int(data.get("fade_in_ms", project.subtitle_fade_in_ms)),
+                allow_visual_only=True,
             )
         video = await run_in_threadpool(
             render_ass_preview_video,
@@ -962,7 +963,8 @@ async def api_subtitle_layout_render_preview_video(request: Request):
             container_format=fmt,
             source_video_bytes=source_bytes,
             source_start_seconds=float(data.get("source_start_seconds") or 0.0),
-            include_source_audio=data.get("include_source_audio", True) is True,
+            include_source_audio=(data.get("include_source_audio", True) is True
+                                  and not voice.get("visual_only", False)),
             audio_source_path=voice.get("audio_source_path"),
             audio_source_start_seconds=float(voice.get("audio_source_start_seconds", 0)),
             voice_start_offset_seconds=float(voice.get("voice_start_offset_seconds", 0)),
@@ -975,7 +977,9 @@ async def api_subtitle_layout_render_preview_video(request: Request):
         return Response(
             content=video, media_type="video/webm" if fmt == "webm" else "video/mp4",
             headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
-                     "X-HSR-Preview-Audio": "project" if voice else ("footage" if source_bytes is not None else "none"),
+                     "X-HSR-Preview-Audio": ("visual-only" if voice.get("visual_only") else
+                                              "project" if voice else
+                                              "footage" if source_bytes is not None else "none"),
                      "X-HSR-Preview-Duration": f'{float(voice.get("duration_seconds", data.get("preview_duration_seconds") or 3.0)):.3f}',
                      "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
         )
