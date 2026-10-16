@@ -7,6 +7,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 from typing import Any
@@ -29,6 +30,61 @@ def _signature(path: Path) -> dict[str, int] | None:
         return None
     st = path.stat()
     return {"size": st.st_size, "mtime_ns": st.st_mtime_ns}
+
+
+def _voice_timeline_identity(output: Path) -> str | None:
+    """Fingerprint *audio clocks only*, not mutable subtitle/layout content.
+
+    This binds a newly published MKV to the ordered manifest voice IDs and
+    PCM start/end seconds. Older bundles without the field remain readable;
+    they are not retroactively claimed to have timeline evidence.
+    """
+    manifest = output / "manifest.json"
+    if manifest.is_symlink() or not manifest.is_file():
+        return None
+    try:
+        data = json.loads(manifest.read_text(encoding="utf-8"))
+        entries = data.get("entries")
+        if not isinstance(entries, list):
+            return None
+        clocks = []
+        for row in entries:
+            if not isinstance(row, dict):
+                return None
+            def clock(key: str) -> str | None:
+                value = row.get(key)
+                if value is None:
+                    return None
+                number = float(value)
+                if not math.isfinite(number):
+                    return None
+                return format(number, ".9f")
+            clocks.append([
+                str(row.get("index", row.get("id", row.get("filename", "")))),
+                clock("start_seconds"), clock("audio_end_seconds"),
+            ])
+        canonical = json.dumps(clocks, ensure_ascii=False, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
+    except (OSError, ValueError, TypeError, OverflowError, KeyError):
+        return None
+
+
+def require_bound_voice_timeline(output: Path) -> None:
+    """Reject selected-voice and ASS-internal work on mismatched sealed clocks."""
+    receipt = _read_receipt(output)
+    if receipt is None or receipt.get("sealed") is not True:
+        return
+    expected = receipt.get("voice_timeline_sha256")
+    if expected is None:
+        # Backward compatibility: old receipts cannot prove this relationship.
+        return
+    if (not isinstance(expected, str) or len(expected) != 64
+            or _voice_timeline_identity(output) != expected):
+        raise ValueError(
+            "当前项目语音时间轴与已封存 MKV 的构建时间轴不一致；"
+            "已拒绝从可能错误的位置读取语音或覆盖 MKV。"
+            "仅修改字幕文字、字体或排版不会触发此检查"
+        )
 
 
 def _font_signatures(output: Path, enabled: bool) -> list[dict[str, Any]]:
@@ -400,6 +456,7 @@ def record_bundle_publication(
     receipt = {
         "schema_version": 1,
         "artifact": _signature(artifact if artifact is not None else output / OUTPUT),
+        "voice_timeline_sha256": _voice_timeline_identity(output),
         "sources": _sources(output, include_fonts, include_chapter_flac),
         "include_chapter_flac": bool(include_chapter_flac),
         "background": bg,

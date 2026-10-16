@@ -13,7 +13,7 @@ from unittest.mock import patch
 
 from app.archive_bundle_lifecycle import (
     OUTPUT, RECEIPT, bundle_audio_source_status, bundle_export_status,
-    record_bundle_publication,
+    record_bundle_publication, require_bound_voice_timeline,
 )
 from app.auto_delivery import queue_ass_regeneration
 from app.delivery_artifacts import (
@@ -130,6 +130,58 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         self.assertEqual(health["prerequisites"]["audio_source"], "sealed-mkv")
         self.assertFalse(health["prerequisites"]["ass_current"])
         self.assertTrue((self.output / OUTPUT).exists())
+
+    def test_sealed_archive_rejects_modified_voice_clocks_before_mutation(self):
+        import json
+        (self.output / "manifest.json").write_text(json.dumps({"entries": [
+            {"index": 1, "start_seconds": 10.0,
+             "audio_end_seconds": 12.0, "english": "Before"},
+        ]}), encoding="utf-8")
+        (self.output / "continuous.flac").write_bytes(b"fixture-flac")
+        (self.output / OUTPUT).write_bytes(b"sealed-fixture-mkv")
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        # Legal user subtitle changes don't alter voice-derived time anchors.
+        (self.output / "manifest.json").write_text(json.dumps({"entries": [
+            {"index": 1, "start_seconds": 10.0,
+             "audio_end_seconds": 12.0, "english": "Edited subtitle"},
+        ]}), encoding="utf-8")
+        require_bound_voice_timeline(self.output)
+        # But rewriting the PCM timeline after MKV publication is not legal.
+        (self.output / "manifest.json").write_text(json.dumps({"entries": [
+            {"index": 1, "start_seconds": 11.0,
+             "audio_end_seconds": 12.0, "english": "Edited subtitle"},
+        ]}), encoding="utf-8")
+        names = ("manifest.json", "subtitle_export_receipt.json")
+        previous = {name: (self.output / name).read_bytes() for name in names}
+        with patch("app.auto_delivery.create_job",
+                   side_effect=lambda _kind, runner, **kwargs:
+                       runner(lambda *args: None)), \
+             patch("app.subtitles.refresh_subtitle_artifacts_from_settings") as render:
+            with self.assertRaisesRegex(ValueError, "语音时间轴.*不一致"):
+                queue_ass_regeneration(self.config, self.output)
+            render.assert_not_called()
+        self.assertEqual(previous, {
+            name: (self.output / name).read_bytes() for name in names
+        })
+        self.assertTrue((self.output / OUTPUT).is_file())
+
+    def test_legacy_sealed_receipt_without_timeline_binding_stays_readable(self):
+        import json
+        (self.output / "continuous.flac").write_bytes(b"fixture-flac")
+        (self.output / OUTPUT).write_bytes(b"existing-legacy-mkv")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        receipt = self.output / RECEIPT
+        record = json.loads(receipt.read_text("utf-8"))
+        record.pop("voice_timeline_sha256", None)
+        receipt.write_text(json.dumps(record), encoding="utf-8")
+        require_bound_voice_timeline(self.output)
 
     def test_modified_sealed_mkv_never_becomes_audio_source(self):
         (self.output / "continuous.flac").write_bytes(b"old-flac")

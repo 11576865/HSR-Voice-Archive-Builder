@@ -46,8 +46,11 @@ def verify_internal_ass_audio_source(output: Path) -> dict:
     sealed-MKV receipt authenticates the file's identity, not the codec read
     needed for muxing. Any failure must be detected before rewriting captions.
     """
-    from .archive_bundle_lifecycle import bundle_audio_source_status
+    from .archive_bundle_lifecycle import (
+        bundle_audio_source_status, require_bound_voice_timeline,
+    )
 
+    require_bound_voice_timeline(output)
     status = bundle_audio_source_status(output)
     if not status["available"]:
         raise ValueError(str(status["reason"]))
@@ -105,6 +108,8 @@ def extract_flac_from_mkv(output: Path, *, target: Path | None = None) -> Path:
     if (not receipt or _signature(mkv) != receipt.get("artifact")
             or not receipt.get("sealed")):
         raise ValueError("No verified sealed MKV is available for FLAC extraction")
+    from .archive_bundle_lifecycle import require_bound_voice_timeline
+    require_bound_voice_timeline(output)
     tracks = _probe(mkv)
     audio = [x for x in tracks if x.get("codec_type") == "audio"]
     if not audio or audio[0].get("codec_name") != "flac":

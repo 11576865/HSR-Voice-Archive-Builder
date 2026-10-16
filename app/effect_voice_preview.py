@@ -9,7 +9,9 @@ import json
 import math
 from pathlib import Path
 
-from .archive_bundle_lifecycle import OUTPUT, bundle_audio_source_status
+from .archive_bundle_lifecycle import (
+    OUTPUT, bundle_audio_source_status, require_bound_voice_timeline,
+)
 from .project import ProjectConfig, resolve_project_path
 
 
@@ -18,6 +20,7 @@ def resolve_effect_voice(config: ProjectConfig, entry_id: object, *,
     output = resolve_project_path(config, config.output_dir)
     if output is None:
         raise ValueError("No project output directory is configured")
+    require_bound_voice_timeline(output)
     manifest = output / "manifest.json"
     if not manifest.is_file() or manifest.is_symlink():
         raise ValueError("项目尚未构建真实语音时间轴，不能提供有声特效预览")
