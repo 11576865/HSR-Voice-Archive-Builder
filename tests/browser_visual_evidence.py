@@ -536,8 +536,15 @@ def desktop_check(browser, base_url, output, report):
     page.locator("#layoutAuditDrawerToggle").click()
     ensure(page.locator("#layoutCorpusList").is_visible(),
            "Effects should reuse Layout's project subtitle browser")
-    page.evaluate("() => selectLayoutCorpusByIndex(0)")
-    page.wait_for_function("layoutCueActiveId!==null")
+    selected=page.evaluate("""async () => {
+      const first=layoutCorpusItems[0];
+      const ready=await selectLayoutCorpusByIndex(0);
+      return {ready,expected:first?.id??null,actual:layoutCueActiveId,
+        project:currentProject?.root??null,corpus:layoutCorpusItems.length,
+        error:document.getElementById('layoutCorpusCheckStatus')?.textContent??''};
+    }""")
+    ensure(selected["ready"] and str(selected["actual"])==str(selected["expected"]),
+           "Project cue selection did not finish: "+json.dumps(selected,ensure_ascii=False))
     page.locator("#layoutAuditDrawerToggle").click()
     page.locator("#studioV4Timing > summary").click()
     ensure(page.locator("#layoutCueClockOrigin").is_visible(),
@@ -560,13 +567,14 @@ def desktop_check(browser, base_url, output, report):
     screenshot(page, output, "desktop_studio_failed_export_notice")
     page.locator("#layoutExportHealthRetryBtn").click()
     page.wait_for_function("layoutCueExportHealthState === 'current'")
-    ensure(len(writes) == 1, "Export retry erroneously repeated the cue-timing write")
+    ensure(not writes, "Export retry must not write subtitle timing")
     ensure(page.locator("#layoutExportHealthRetryBtn").is_hidden(),
            "Successful retry must clear old failure affordance")
     report["desktop"] = {
         "resolution": "1600x900", "panel_rectangles": {"rail": rail, "stage": stage, "inspector": inspector},
-        "timeline_width": timeline["width"], "stage_aspect_ratio": round(canvas["width"] / canvas["height"], 3),
-        "dragged_end": end_draft, "write_count": len(writes), "page_errors": errors,
+        "selected_cue_id": selected["actual"],
+        "stage_aspect_ratio": round(canvas["width"] / canvas["height"], 3),
+        "subtitle_timing_writes": len(writes), "page_errors": errors,
     }
     ensure(not errors, "Browser page errors: " + " | ".join(errors))
     page.close()
