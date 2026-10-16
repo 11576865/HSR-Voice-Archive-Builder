@@ -201,6 +201,28 @@ class EffectVoicePreviewTests(unittest.TestCase):
             self.config, 101, fade_ms=200)["audio_source_path"],
             self.output / OUTPUT)
 
+    def test_sealed_mkv_cue_preview_rejects_rewritten_pcm_time_without_audio_read(self):
+        for name, data in (
+            ("HSR_Voice_Archive.ass", "[Events]\\n"),
+            ("HSR_Voice_Archive.srt", "1\\n"),
+        ):
+            (self.output / name).write_text(data, encoding="utf-8")
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        (self.output / OUTPUT).write_bytes(b"verified-archive-placeholder")
+        record_bundle_publication(
+            self.output, background_color="#112233", background_image=None,
+            image_extension=None, include_fonts=False,
+            background_spec={"mode": "color"})
+        seal_complete_delivery(self.output)
+        recorded = json.loads((self.output / "manifest.json").read_text("utf-8"))
+        recorded["entries"][1]["start_seconds"] = 14.2
+        (self.output / "manifest.json").write_text(
+            json.dumps(recorded), encoding="utf-8"
+        )
+        with self.assertRaisesRegex(ValueError, "语音时间轴.*不一致"):
+            resolve_effect_voice(self.config, 102, fade_ms=600)
+        self.assertTrue((self.output / OUTPUT).is_file())
+
     def test_single_cue_ass_end_and_both_fades_match_encoded_preview_envelope(self):
         from types import SimpleNamespace
         entry = SimpleNamespace(
