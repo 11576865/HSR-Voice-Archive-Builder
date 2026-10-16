@@ -122,7 +122,7 @@ class LiveEffectPreviewRouteTests(unittest.TestCase):
         from fastapi.responses import Response
         from subtitle_layout.config import SubtitleRenderConfig
 
-        project = SimpleNamespace(root=str(Path("/fixture/project")), subtitle_fade_in_ms=200)
+        project = SimpleNamespace(root=str(Path("/fixture/project")), output_dir="output", subtitle_fade_in_ms=200)
         selected = {
             "audio_source_path": Path("/fixture/project/output/continuous.flac"),
             "audio_source_start_seconds": 4.8,
