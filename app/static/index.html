@@ -9391,7 +9391,27 @@ async function renderHsrEffectVideo(){
       video.scrollIntoView({block:'center',behavior:'smooth'});
     }
     if(status)status.textContent='真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
-    if(typeof video.play==='function')video.play().catch(()=>{}); // manual Play remains available
+    // Most browsers can reject autoplay *because this clip has real audio*.
+    // Never swallow that rejection: the native video controls remain the
+    // intentional user-gesture playback path, with sound enabled.
+    if(typeof video.play==='function'){
+      try{
+        const playback=video.play();
+        if(playback&&typeof playback.catch==='function'){
+          playback.catch(()=>{
+            if(stillCurrent()&&status){
+              status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；浏览器阻止了自动有声播放，请点击画布上的视频播放按钮开启声音。';
+              status.className='small status-warn';
+            }
+          });
+        }
+      }catch(_){
+        if(stillCurrent()&&status){
+          status.textContent='有声视频已生成（'+actualDuration.toFixed(2)+' 秒）；请点击画布上的播放按钮手动播放。';
+          status.className='small status-warn';
+        }
+      }
+    }
   }catch(error){
     if(!stillCurrent()||error?.name==='AbortError')return;
     clearVideoPreview();
