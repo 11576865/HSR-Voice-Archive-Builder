@@ -5,6 +5,7 @@ a loose/unknown MKV is not provenance. Refuse before rewriting ASS/SRT/receipt.
 """
 from __future__ import annotations
 
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -182,6 +183,45 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         record.pop("voice_timeline_sha256", None)
         receipt.write_text(json.dumps(record), encoding="utf-8")
         require_bound_voice_timeline(self.output)
+
+    def test_published_sha_accepts_only_byte_identical_mkv_after_mtime_change(self):
+        (self.output / "continuous.flac").write_bytes(b"working-flac")
+        (self.output / OUTPUT).write_bytes(b"authentic-media-contents")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        mkv = self.output / OUTPUT
+        initial = mkv.stat()
+        os.utime(mkv, ns=(initial.st_atime_ns, initial.st_mtime_ns + 1_000_000_000))
+        self.assertTrue(bundle_audio_source_status(self.output, prefer_sealed=True)["available"])
+        self.assertEqual(bundle_audio_source_status(self.output, prefer_sealed=True)["source"],
+                         "sealed-mkv")
+        # Keep size and even restore the original mtime: changed bytes cannot
+        # pass the content digest recorded at publication.
+        mkv.write_bytes(b"tamperedxmedia-contents")
+        os.utime(mkv, ns=(initial.st_atime_ns, initial.st_mtime_ns))
+        status = bundle_audio_source_status(self.output, prefer_sealed=True)
+        self.assertFalse(status["available"])
+        self.assertIn("文件身份与封存回执不一致", status["reason"])
+
+    def test_legacy_receipt_mtime_mismatch_remains_unverified(self):
+        import json
+        (self.output / "continuous.flac").write_bytes(b"working-flac")
+        (self.output / OUTPUT).write_bytes(b"legacy-media")
+        record_bundle_publication(
+            self.output, background_color="#000000", background_image=None,
+            image_extension=None, include_fonts=False)
+        seal_complete_delivery(self.output)
+        receipt_file = self.output / RECEIPT
+        record = json.loads(receipt_file.read_text(encoding="utf-8"))
+        record.pop("artifact_sha256")
+        receipt_file.write_text(json.dumps(record), encoding="utf-8")
+        mkv = self.output / OUTPUT
+        original = mkv.stat()
+        os.utime(mkv, ns=(original.st_atime_ns, original.st_mtime_ns + 1_000_000_000))
+        status = bundle_audio_source_status(self.output, prefer_sealed=True)
+        self.assertFalse(status["available"])
 
     def test_modified_sealed_mkv_never_becomes_audio_source(self):
         (self.output / "continuous.flac").write_bytes(b"old-flac")
