@@ -176,6 +176,39 @@ def load_previous_bundle_image(output: Path) -> bytes:
     return image.read_bytes()
 
 
+def bundle_audio_source_status(output: Path) -> dict[str, Any]:
+    """Identify a reusable archive audio source without conflating MKV stale/missing.
+
+    This is a cheap, provenance-based prerequisite check; the actual exporter
+    additionally validates stream codecs with FFprobe before publication.
+    Never certify a loose legacy MKV from its filename alone.
+    """
+    flac_sig = _signature(output / "continuous.flac")
+    if flac_sig is not None and flac_sig["size"] > 0:
+        return {"available": True, "source": "independent-flac", "reason": ""}
+    bundle = output / OUTPUT
+    if bundle.is_symlink():
+        reason = ("旧 MKV 是符号链接，无法作为可信音频来源；"
+                  "请恢复原始项目音频再完成档案构建")
+    elif not bundle.is_file():
+        reason = ("当前项目既没有可用的 continuous.flac，也没有完整 MKV 成品。"
+                  "必须先完成至少一次档案音频构建，才能使用「生成 ASS（内）」")
+    else:
+        receipt = _read_receipt(output)
+        if receipt is None:
+            reason = ("发现已有 MKV 文件，但缺少有效的发布校验回执；"
+                      "不能仅凭文件存在就提取音轨或覆盖它。请先核验或恢复原始档案")
+        elif receipt.get("sealed") is not True:
+            reason = ("发现已有 MKV 及发布回执，但尚未封存验证；"
+                      "不能将它当作已校验的音频来源。请先恢复档案构建")
+        elif _signature(bundle) != receipt.get("artifact"):
+            reason = ("发现已有 MKV，但其文件身份与封存回执不一致；"
+                      "为防止替换错误音轨，拒绝复用。请检查是否移动或修改了旧成品")
+        else:
+            return {"available": True, "source": "sealed-mkv", "reason": ""}
+    return {"available": False, "source": "none", "reason": reason}
+
+
 def bundle_export_status(output: Path) -> dict[str, Any]:
     """Validate the sealed MKV without requiring redundant standalone media files.
 
@@ -223,12 +256,15 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
             srt_current = (srt_current if srt else True)
             ass_current = (ass_current if ass else True)
             subtitles_current = bool(srt_current and ass_current)
-    audio_available = flac or (sealed and bundle_intact)
+    audio_source = bundle_audio_source_status(output)
+    audio_available = bool(audio_source["available"])
     build_busy = (output / ".build_in_progress").exists()
     prerequisites = {
         "continuous_flac": audio_available,
         "independent_flac": flac,
         "embedded_flac": bool(sealed and bundle_intact),
+        "audio_source": audio_source["source"],
+        "audio_source_error": audio_source["reason"],
         "ass": ass,
         "srt": srt,
         "srt_current": srt_current,
@@ -238,7 +274,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     }
     blockers = []
     if not audio_available:
-        blockers.append("既没有独立 FLAC，也没有已验证 MKV 音轨，请先完成档案构建")
+        blockers.append(audio_source["reason"])
     if not srt_current:
         blockers.append("独立 SRT 缺失、为空或已过期，请先更新字幕")
     if not ass_current:
