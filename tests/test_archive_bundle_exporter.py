@@ -146,7 +146,8 @@ class BundleRealFFmpegTests(unittest.TestCase):
     def test_sealed_mkv_survives_style_edit_and_real_effect_preview_has_fade_tail(self):
         """Production pipeline: sealed MKV -> remove FLAC -> style edit -> new cue preview.
 
-        The original external WAV package is deleted *after* MKV sealing. This\n        decodes the actual Matroska FLAC through FFmpeg and checks the
+        The original external WAV package is deleted *after* MKV sealing. This
+        decodes the actual Matroska FLAC through FFmpeg and checks the
         generated video duration and audible samples. Subtitle edit staleness
         must not erase the media's immutable audio provenance.
         """
@@ -170,7 +171,7 @@ class BundleRealFFmpegTests(unittest.TestCase):
                 "-c:a", "pcm_s16le", str(raw_wav),
             ], check=True, capture_output=True, timeout=30)
             (original_package / "index.csv").write_text(
-                "index,filename\\n2,line.wav\\n", encoding="utf-8",
+                "index,filename\n2,line.wav\n", encoding="utf-8",
             )
             audio = root / "continuous.flac"
             subprocess.run([
