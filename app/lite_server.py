@@ -840,6 +840,7 @@ class Handler(BaseHTTPRequestHandler):
                 voice = resolve_effect_voice(
                     project, data["project_voice_entry_id"],
                     fade_ms=_int(data.get("fade_in_ms"), project.subtitle_fade_in_ms),
+                    allow_visual_only=True,
                 )
             video = render_ass_preview_video(
                 english_text=data.get("english_text", ""),
@@ -852,7 +853,8 @@ class Handler(BaseHTTPRequestHandler):
                 container_format=fmt,
                 source_video_bytes=source_bytes,
                 source_start_seconds=_float(data.get("source_start_seconds"), 0.0),
-                include_source_audio=_bool(data.get("include_source_audio", "true")),
+                include_source_audio=(_bool(data.get("include_source_audio", "true"))
+                                      and not voice.get("visual_only", False)),
                 audio_source_path=voice.get("audio_source_path"),
                 audio_source_start_seconds=float(voice.get("audio_source_start_seconds", 0)),
                 voice_start_offset_seconds=float(voice.get("voice_start_offset_seconds", 0)),
@@ -865,7 +867,9 @@ class Handler(BaseHTTPRequestHandler):
             self._send_bytes(
                 200, video, "video/webm" if fmt == "webm" else "video/mp4",
                 extra_headers={"X-HSR-Preview-Renderer": "ffmpeg-libass-" + fmt,
-                               "X-HSR-Preview-Audio": "project" if voice else ("footage" if source_bytes is not None else "none"),
+                               "X-HSR-Preview-Audio": ("visual-only" if voice.get("visual_only") else
+                                              "project" if voice else
+                                              "footage" if source_bytes is not None else "none"),
                                "X-HSR-Preview-Duration": f'{float(voice.get("duration_seconds", _float(data.get("preview_duration_seconds"), 3.0))):.3f}',
                                "X-HSR-Preview-Background": "local-footage" if source_bytes is not None else ("background-image" if background_image is not None else ("black" if background_color == "#000000" else "solid-color"))},
             )
