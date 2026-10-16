@@ -85,6 +85,7 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         mark_ass_style_stale(self.output)
         health = bundle_export_status(self.output)
         self.assertEqual(health["state"], "stale")
+        self.assertIn("原 MKV 文件仍在，原 FLAC 音轨保持可复用", health["message"])
         self.assertTrue(health["prerequisites"]["continuous_flac"])
         self.assertEqual(health["prerequisites"]["audio_source"], "sealed-mkv")
         self.assertFalse(health["prerequisites"]["ass_current"])

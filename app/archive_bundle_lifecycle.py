@@ -327,7 +327,15 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
         if receipt["background"].get("kind") == "image":
             _image_asset(output, receipt)
     except (OSError, ValueError, TypeError) as exc:
-        result.update(state="stale", message="旧 MKV 已过期：" + str(exc) + "；请重新生成。")
+        # Caption/style invalidation makes the *subtitle representation* stale,
+        # not the media file disappear. Distinguish a verified reusable primary
+        # FLAC in a sealed MKV from a file that cannot be safely trusted.
+        retained = (
+            "；原 MKV 文件仍在，原 FLAC 音轨保持可复用；点击「生成 ASS（内）」可更新字幕"
+            if sealed and bundle_intact else
+            "；原 MKV 文件仍在，但尚不能证明其中音轨可安全复用"
+        )
+        result.update(state="stale", message="MKV 字幕或来源待更新：" + str(exc) + retained)
         return result
     result.update(state="current", needs_rebuild=False,
                   message=("MKV 已验证；独立 FLAC/SRT/ASS 按需导出。"
