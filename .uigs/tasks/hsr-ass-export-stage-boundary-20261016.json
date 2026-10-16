@@ -3,7 +3,7 @@
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "Repair exact-head CI failure caused by explicit internal/external export UI tests; retain real libass failure as pending and do not weaken actual-render or physics checks.",
+  "current_bounded_work_unit": "Repair FastAPI real-voice Effects preview configuration shadowing and absent-sample UI crash; prove Layout/Effects settings autosave does not enqueue ASS/MKV rebuilding.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -59,35 +59,40 @@
       "summary": "Adjusted source-only karaoke, Fade-only, explicit inner/external destination, 120sec dynamic preview, 600ms final fade tail, and red-cloud background legacy tests without removing real FFmpeg/libass checks.",
       "commit": "98de3a9e380012ec5658d02b07a811bdf65dbcd5",
       "validation": "Follow-up CI pending after bounded repair; stale independent baseline UI assertions and true-ink collision remain pending."
+    },
+    {
+      "summary": "Preserve separate SubtitleRenderConfig vs ProjectConfig in FastAPI selected-voice video preview; guard null project sample in Effects UI; add tests for true PCM audio/duration and no-auto-export source preservation.",
+      "commit": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
+      "validation": "Exact-head CI queued/in-progress; physical audio/video preview remains user acceptance."
     }
   ],
   "next_units": [
-    "Validate exact-head CI and repair directly attributable new regressions only.",
-    "Prove real selected voice audio+duration and exact 600ms Fade on Termux using current user HSR project.",
-    "Verify first-time red-cloud background MKV video, independently saved user background, and external ASS no-clobber.",
-    "Check true source/Chinese text colors in rendered ASS and source-only Karaoke; do not claim full visual proof from geometric preview."
+    "Review exact-head CI when resumed; only bounded direct regressions first.",
+    "Verify Effects preview plays PCM project voice with actual clip length (e.g. >8s) on real workstation and Termux, including fades and non-8s duration.",
+    "Verify autosave layout/effects settings only changes project configuration and ASS freshness, without automatic output job, on real application.",
+    "Continue remaining seven-contract CI verification and distinct user end-to-end acceptance before merge."
   ],
   "branch": "fix/hsr-seven-ass-contracts-20261016",
   "pr": 186,
-  "latest_durable_commit": "98de3a9e380012ec5658d02b07a811bdf65dbcd5",
+  "latest_durable_commit": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
   "external_validation": {
     "previous_head": "1a2c341c05f2eba7583637645571e1165c245913",
     "previous_ci": "failure; direct new test failures and obsolete historical UI expectations observed",
-    "current_head": "cf739e3d9097cdc29e80e93cb328a50fb8c4815b",
-    "current_ci": "pending post-repair; do not poll another CI generation in same work unit",
+    "current_head": "2a57d43e04969ef1e9da87f9d18c6d42e79caf36",
+    "current_ci": "pending; tests and dedicated seven-contract job in progress, browser evidence pending",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
     "actual_ffmpeg_temporal_fade": "pending",
     "seven_contract_run_id": 38790099410,
     "original_test_run_id": 38790099127,
     "browser_run_id": 38790098931,
-    "user_real_project": "pending_user"
+    "user_real_project": "pending_user",
+    "effects_actual_voice_playback": "pending_user"
   },
   "blockers": [
-    "Real libass ink collision proof still fails; not bypassed or claimed solved.",
-    "Several historical static UI assertions are stale and not proven direct product regressions.",
-    "Post-repair exact-head CI not observed; Android/Termux end-to-end requires user verification.",
-    "Real merged main still at PR #185; PR #186 open until review/CI decision."
+    "Exact-head CI still running; no successful complete verdict yet.",
+    "Real device and real HSR archive spoken preview/synchronization unverified.",
+    "PR #186 remains unmerged; earlier baseline CI failures may be unrelated to current work."
   ],
   "updated_at": "2026-10-16",
   "pr_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/186"
