@@ -143,6 +143,81 @@ class BundleRealFFmpegTests(unittest.TestCase):
         )
         record_subtitle_export(root, state="current", ass_required=True)
 
+    def test_sealed_mkv_survives_style_edit_and_real_effect_preview_has_fade_tail(self):
+        """Production pipeline: sealed MKV -> remove FLAC -> style edit -> new cue preview.
+
+        This decodes the actual Matroska FLAC through FFmpeg and checks the
+        generated video duration and audible samples. Subtitle edit staleness
+        must not erase the media's immutable audio provenance.
+        """
+        from types import SimpleNamespace
+        from app.effect_voice_preview import resolve_effect_voice
+        from app.ass_preview import render_ass_preview_video
+        from app.subtitle_export_status import mark_ass_style_stale
+        from subtitle_layout.config import SubtitleRenderConfig
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            self._certify(root)
+            (root / "manifest.json").write_text(json.dumps({"entries": [
+                {"index": 1, "start_seconds": 0.25, "audio_end_seconds": 0.65},
+                {"index": 2, "start_seconds": 0.95, "audio_end_seconds": 1.35},
+            ]}), encoding="utf-8")
+            record_subtitle_export(root, state="current", ass_required=True)
+            target = root / "HSR_Voice_Archive_Bundle.mkv"
+            ArchiveBundleExporter(width=320, height=180).export(
+                audio, ass, target, require_current_ass=True,
+                include_fonts=False, background_spec={"mode": "color"},
+            )
+            seal_complete_delivery(root)
+            self.assertFalse(audio.exists(), "Complete delivery should not leave a redundant FLAC")
+            self.assertTrue(target.is_file())
+            self.assertTrue(mark_ass_style_stale(root))
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+
+            selected = resolve_effect_voice(
+                SimpleNamespace(root=str(root), output_dir=".",
+                                subtitle_enable_kinetic=True),
+                2, fade_ms=100,
+            )
+            self.assertEqual(selected["audio_source_path"], target)
+            self.assertAlmostEqual(selected["voice_start_offset_seconds"], 0.1)
+            self.assertEqual(selected["preview_after_fade_ms"], 100)
+            self.assertAlmostEqual(selected["duration_seconds"], 0.6)
+
+            actual = render_ass_preview_video(
+                english_text="Selected second archive cue",
+                chinese_text="第二条语音",
+                source_language="en", target_language="zh-CN",
+                config=SubtitleRenderConfig(
+                    primary_font="DejaVu Sans", chs_font="DejaVu Sans",
+                    fade_in_ms=100, fade_out_ms=100, enable_kinetic=True,
+                ),
+                duration_seconds=selected["duration_seconds"],
+                audio_source_path=selected["audio_source_path"],
+                audio_source_start_seconds=selected["audio_source_start_seconds"],
+                voice_start_offset_seconds=selected["voice_start_offset_seconds"],
+                voice_duration_seconds=selected["voice_duration_seconds"],
+                preview_after_fade_ms=selected["preview_after_fade_ms"],
+                container_format="webm", background_color="#000000",
+            )
+            movie = root / "decoded-preview.webm"
+            movie.write_bytes(actual)
+            probe = ArchiveBundleExporter(width=320, height=180)._probe(movie)
+            self.assertAlmostEqual(float(probe["format"]["duration"]), 0.6, delta=0.15)
+            codecs = {r.get("codec_name") for r in probe["streams"]}
+            self.assertIn("opus", codecs)
+            self.assertIn("vp8", codecs)
+            decoded = subprocess.run([
+                "ffmpeg", "-loglevel", "error", "-i", str(movie),
+                "-map", "0:a:0", "-ac", "1", "-ar", "8000",
+                "-t", "0.4", "-f", "s16le", "-",
+            ], check=True, capture_output=True, timeout=20).stdout
+            self.assertGreater(len(decoded), 2000)
+            self.assertTrue(any(decoded), "Audio stream must contain real decoded voice")
+            self.assertTrue(target.exists(), "Preview must never overwrite the original MKV")
+
     def test_chapter_flacs_become_selectable_mkv_audio_and_main_stays_extractable(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
