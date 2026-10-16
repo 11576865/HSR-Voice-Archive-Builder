@@ -121,16 +121,30 @@ def geometry(payload: dict) -> dict:
 
 
 def real_browser_video_fixture() -> bytes:
-    """Real decodable WebM bytes, kept separate from backend libass proof."""
+    """Real browser-decodable WebM with audible audio, not a silent stub.
+
+    Browser evidence checks interactive playback. Actual project PCM source
+    and exact voice duration are independently tested by the FFmpeg pipeline.
+    """
     with tempfile.TemporaryDirectory(prefix="hsr-browser-video-") as td:
         path = Path(td) / "motion.webm"
         subprocess.run(
             ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
-             "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=1.5",
-              "-an", "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
-             "-pix_fmt", "yuv420p", str(path)],
-            capture_output=True, text=True, timeout=40, check=True,
+             "-f", "lavfi", "-i", "testsrc2=size=320x180:rate=24:duration=3.5",
+             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=3.5",
+             "-map", "0:v:0", "-map", "1:a:0",
+             "-c:v", "libvpx", "-deadline", "realtime", "-cpu-used", "8",
+             "-pix_fmt", "yuv420p", "-c:a", "libopus", "-b:a", "96k",
+             "-t", "3.5", str(path)],
+            capture_output=True, text=True, timeout=50, check=True,
         )
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-show_entries", "stream=codec_type",
+             "-of", "json", str(path)],
+            capture_output=True, text=True, timeout=15, check=True,
+        )
+        kinds = {row.get("codec_type") for row in json.loads(probe.stdout)["streams"]}
+        assert {"video", "audio"} <= kinds, "Browser fixture must carry audible audio"
         return path.read_bytes()
 
 
@@ -156,10 +170,18 @@ def make_router(rows: list[dict], writes: list[dict], video_bytes: bytes | None 
                     b"\x89PNG\r\n\x1a\n")
             # Browser test proves decoded playback and UI provenance; separate
             # real-FFmpeg test proves the output pixels include actual ASS.
+            assert body.get("project_voice_entry_id") is not None, (
+                "Effects preview must select a project cue, not an arbitrary silent sample"
+            )
             route.fulfill(status=200, content_type="video/webm", body=video_bytes,
-                          headers={"X-HSR-Preview-Background":
-                                   "local-footage" if has_source else
-                                   "background-image" if has_image or has_reference else "black"})
+                          headers={
+                              "X-HSR-Preview-Audio": "project",
+                              "X-HSR-Preview-Duration": "3.500",
+                              "X-HSR-Preview-Renderer": "ffmpeg-libass-webm",
+                              "X-HSR-Preview-Background":
+                              "local-footage" if has_source else
+                              "background-image" if has_image or has_reference else "black",
+                          })
             return
         if path.endswith("/api/status"):
             payload = {
