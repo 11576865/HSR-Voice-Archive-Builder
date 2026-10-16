@@ -236,7 +236,7 @@ class EffectVoicePreviewTests(unittest.TestCase):
         subtitle = render_ass(
             [entry], config=SubtitleRenderConfig(
                 enable_kinetic=True, fade_in_ms=600, fade_out_ms=600))
-        self.assertIn(r"\\fad(600,600)", subtitle)
+        self.assertIn(r"\fad(600,600)", subtitle)
         self.assertIn("0:00:00.00,0:00:03.70", subtitle)
 
     def test_visual_only_renderer_retains_ass_fade_timing_without_fake_audio(self):
@@ -248,8 +248,8 @@ class EffectVoicePreviewTests(unittest.TestCase):
             return subprocess.CompletedProcess(cmd, 0, "", "")
         def capture_writer(entries, *args, **kwargs):
             captured["entry"] = entries[0]
-        with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \\
-             patch("app.ass_preview.write_ass", side_effect=capture_writer), \\
+        with patch("app.ass_preview.shutil.which", side_effect=lambda n: n), \
+             patch("app.ass_preview.write_ass", side_effect=capture_writer), \
              patch("app.ass_preview.subprocess.run", side_effect=fake_run):
             data = render_ass_preview_video(
                 english_text="Speech", chinese_text="中文",
