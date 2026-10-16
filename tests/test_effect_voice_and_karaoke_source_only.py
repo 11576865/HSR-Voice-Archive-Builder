@@ -189,13 +189,13 @@ class EffectVoicePreviewTests(unittest.TestCase):
                   if line.startswith("Dialogue:") and (",Primary," in line or ",CHS," in line)]
         self.assertEqual(len(voices), 2)
         self.assertTrue(all("0:00:00.00,0:00:05.20" in line for line in voices))
-        self.assertTrue(all(r"\\fad(600,600)" in line for line in voices))
+        self.assertTrue(all(r"\fad(600,600)" in line for line in voices))
         # Even a *shorter* explicitly bounded preview tail may not be
         # overwritten by the archive-only terminal-outgoing fallback.
         entry.preview_end_margin_ms = 200
         entry.display_end_seconds = 4.8
         reduced = render_ass([entry], config=cfg)
-        self.assertIn(r"\\fad(600,200)", reduced)
+        self.assertIn(r"\fad(600,200)", reduced)
         self.assertIn("0:00:00.00,0:00:04.80", reduced)
 
 
