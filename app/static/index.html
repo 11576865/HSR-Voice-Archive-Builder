@@ -7006,6 +7006,36 @@ function clearVideoPreview(){
 }
 if(typeof window!=='undefined')window.addEventListener('beforeunload',clearVideoPreview);
 
+function showHsrAudioRecoveryActions(visible){
+  const status=document.getElementById('videoPreviewStatus');
+  if(!status||!status.parentElement)return;
+  let region=document.getElementById('hsrAudioRecoveryActions');
+  if(!region){
+    region=document.createElement('div');
+    region.id='hsrAudioRecoveryActions';
+    region.className='actions';
+    region.style.marginTop='8px';
+    const independent=document.createElement('button');
+    independent.type='button';
+    independent.className='small secondary';
+    independent.textContent='生成 ASS（外）：不依赖 MKV 音轨';
+    independent.addEventListener('click',()=>document.getElementById('generateSubtitleExternalAssBtn')?.click());
+    const rebuild=document.createElement('button');
+    rebuild.type='button';
+    rebuild.className='small secondary';
+    rebuild.textContent='检查原始语音包并重新构建';
+    rebuild.addEventListener('click',()=>{
+      showWorkspace('project');
+      document.getElementById('buildBtn')?.scrollIntoView({block:'center',behavior:'smooth'});
+      // A full media build is expensive and may require the original source.
+      // Never launch it without a second explicit button press.
+    });
+    region.append(independent,rebuild);
+    status.insertAdjacentElement('afterend',region);
+  }
+  region.hidden=!visible;
+}
+
 function setHsrEffectOperation(phase, detail=''){
   const root=document.getElementById('hsrEffectOperationStatus');
   const title=document.getElementById('hsrEffectOperationTitle');
@@ -9305,6 +9335,7 @@ async function renderHsrEffectVideo(){
   const button=document.getElementById('previewVideoBtn');
   const status=document.getElementById('videoPreviewStatus');
   clearVideoPreview();
+  showHsrAudioRecoveryActions(false);
   setHsrEffectOperation('preparing','正在核对字幕、背景与输出格式；真实视频生成后将显示在画布。');
   // A new video request takes presentation ownership from stale still frames.
   libassPreviewGeneration++;
@@ -9415,6 +9446,10 @@ async function renderHsrEffectVideo(){
         :'真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
       status.className=visualOnly?'small status-warn':'small status-ok';
     }
+    showHsrAudioRecoveryActions(visualOnly);
+    if(visualOnly&&!document.getElementById('prevEnableKinetic')?.checked && status){
+      status.textContent+=' 注意：当前「平滑淡入淡出」未启用，请勾选后再播放。';
+    }
     // Most browsers can reject autoplay *because this clip has real audio*.
     // Never swallow that rejection: the native video controls remain the
     // intentional user-gesture playback path, with sound enabled.
@@ -9448,6 +9483,20 @@ async function renderHsrEffectVideo(){
     if(status){
       status.textContent='动态视频预览失败：'+String(error.message||error)+'。请检查处理主机 FFmpeg、源素材编码与已安装字体；如启用 Karaoke，还需有效词级时间。';
       status.className='small status-bad';
+    }
+    // Provenance is independent of cue selection. Inspect it on demand when
+    // audio or receipt validation fails; never auto-rebuild or sign the MKV.
+    if(/封存|MKV|FLAC|音轨|语音时间轴|voice source/i.test(String(error?.message||error))){
+      showHsrAudioRecoveryActions(true);
+      try{
+        const diagnosis=await api('/api/project/active/audio-integrity');
+        if(status&&identity===currentLibassPreviewIdentity()){
+          status.textContent+=' 来源检查：'+String(diagnosis.detail||'来源状态不明')+
+            '。'+String(diagnosis.recovery_help||'');
+        }
+      }catch(_){
+        if(status)status.textContent+=' 可先尝试「生成 ASS（外）」，再检查原始语音包并重新构建。';
+      }
     }
   }finally{
     if(stillCurrent()){
