@@ -114,6 +114,109 @@ class EffectVoicePreviewTests(unittest.TestCase):
             resolve_effect_voice(self.config, 101, fade_ms=100)
 
 
+class LiveEffectPreviewRouteTests(unittest.TestCase):
+    def test_fastapi_route_keeps_renderer_settings_separate_from_project(self):
+        """Actual FastAPI handler passes SubtitleRenderConfig, not ProjectConfig."""
+        import asyncio
+        from app import server
+        from fastapi.responses import Response
+        from subtitle_layout.config import SubtitleRenderConfig
+
+        project = SimpleNamespace(root=str(Path("/fixture/project")), subtitle_fade_in_ms=200)
+        selected = {
+            "audio_source_path": Path("/fixture/project/output/continuous.flac"),
+            "audio_source_start_seconds": 4.8,
+            "voice_start_offset_seconds": 0.2,
+            "voice_duration_seconds": 12.0,
+            "preview_after_fade_ms": 200,
+            "duration_seconds": 12.4,
+        }
+        submitted = {
+            "english_text": "One extended real voice",
+            "chinese_text": "真实语音测试",
+            "project_voice_entry_id": 101,
+            "expected_project_root": str(project.root),
+            "preview_duration_seconds": 8,
+            "fade_in_ms": 200,
+            "preview_format": "mp4",
+        }
+
+        class RequestFixture:
+            headers = {}
+            async def stream(self):
+                yield json.dumps(submitted).encode("utf-8")
+
+        captured = {}
+        async def execute(renderer, **kwargs):
+            captured.update(kwargs)
+            return b"encoded-audio-video"
+
+        with patch.object(server, "_active_config", return_value=project), \
+             patch.object(server, "resolve_effect_voice", return_value=selected) as resolver, \
+             patch.object(server, "run_in_threadpool", side_effect=execute):
+            result = asyncio.run(
+                server.api_subtitle_layout_render_preview_video(RequestFixture())
+            )
+
+        self.assertIsInstance(result, Response)
+        self.assertEqual(result.status_code, 200, result.body)
+        self.assertIsInstance(captured["config"], SubtitleRenderConfig)
+        self.assertEqual(captured["duration_seconds"], 12.4)
+        self.assertEqual(captured["voice_duration_seconds"], 12.0)
+        self.assertEqual(captured["audio_source_path"], selected["audio_source_path"])
+        self.assertEqual(result.headers["x-hsr-preview-audio"], "project")
+        self.assertEqual(result.headers["x-hsr-preview-duration"], "12.400")
+        resolver.assert_called_once_with(project, 101, fade_ms=200)
+
+    def test_effect_preview_missing_selection_is_guarded_before_sample_id_access(self):
+        html = (Path(__file__).resolve().parents[1] / "app/static/index.html").read_text("utf-8")
+        preview = html[html.index("async function renderHsrEffectVideo(){"):
+                       html.index("// Workbench event wiring", html.index("async function renderHsrEffectVideo(){"))]
+        self.assertIn("payload.project_voice_entry_id=noProjectVoice?null:layoutStressSample.id", preview)
+        self.assertIn("if(noProjectVoice)throw new Error(", preview)
+        self.assertNotIn("Math.min(8", preview)
+        self.assertIn("X-HSR-Preview-Audio", preview)
+        self.assertIn("X-HSR-Preview-Duration", preview)
+
+
+class LayoutSettingPersistenceTests(unittest.TestCase):
+    def test_style_save_invalidates_receipt_without_exporting_or_re_mixing(self):
+        from app.project import ProjectConfig, update_project
+        from app.subtitle_export_status import record_subtitle_export, read_subtitle_export_health
+        from app.auto_delivery import maybe_queue_complete_mkv
+        from app.archive_bundle_lifecycle import bundle_export_status
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            output = root / "output"
+            output.mkdir()
+            (output / "manifest.json").write_text('{"entries":[]}', encoding="utf-8")
+            (output / "HSR_Voice_Archive.ass").write_text("new-ass", encoding="utf-8")
+            (output / "HSR_Voice_Archive.srt").write_text("new-srt", encoding="utf-8")
+            (output / "continuous.flac").write_bytes(b"audio-is-not-rewritten")
+            record_subtitle_export(output, state="current", ass_required=True)
+            config = ProjectConfig(
+                schema_version=1, name="save-only", root=str(root),
+                index_csv="index.csv", wav_source="wav", output_dir="output",
+                delivery_mode="complete",
+            )
+            before = {
+                p.name: p.read_bytes()
+                for p in output.iterdir() if p.name.endswith((".ass", ".srt", ".flac"))
+            }
+            with patch("app.project.save_project"), \
+                 patch("app.auto_delivery.create_job", side_effect=AssertionError("unexpected auto mux")):
+                update_project(config, subtitle_chs_size=56)
+                self.assertEqual(maybe_queue_complete_mkv(config), None)
+            after = {
+                p.name: p.read_bytes()
+                for p in output.iterdir() if p.name.endswith((".ass", ".srt", ".flac"))
+            }
+            self.assertEqual(after, before)
+            self.assertEqual(read_subtitle_export_health(output)["state"], "stale")
+            self.assertFalse(bundle_export_status(output)["can_generate"])
+            self.assertEqual(config.subtitle_chs_size, 56)
+
+
 class KaraokeSourceOnlyTests(unittest.TestCase):
     def test_original_is_progressive_but_chinese_translation_never_has_karaoke(self):
         entry = SimpleNamespace(
