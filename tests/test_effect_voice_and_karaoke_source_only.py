@@ -11,6 +11,9 @@ from unittest.mock import patch
 
 from app.ass_preview import render_ass_preview_video
 from app.effect_voice_preview import resolve_effect_voice
+from app.archive_bundle_lifecycle import OUTPUT, record_bundle_publication, bundle_audio_source_status
+from app.delivery_artifacts import seal_complete_delivery
+from app.subtitle_export_status import record_subtitle_export, mark_ass_style_stale
 from subtitle_layout.ass_writer import render_ass
 from subtitle_layout.config import SubtitleRenderConfig
 
@@ -137,8 +140,63 @@ class EffectVoicePreviewTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "不在"):
             resolve_effect_voice(self.config, 0, fade_ms=100)
         (self.output / "continuous.flac").unlink()
-        with self.assertRaisesRegex(ValueError, "无连续 FLAC"):
+        with self.assertRaisesRegex(ValueError, "没有可用的 continuous.flac"):
             resolve_effect_voice(self.config, 101, fade_ms=100)
+
+    def test_last_voice_preview_includes_explicit_six_hundred_ms_video_tail(self):
+        # Final cue has no next voice in the archive, but its 600ms Fade is
+        # still visible after the 2.5s recorded speech. The audio is unchanged.
+        info = resolve_effect_voice(self.config, 102, fade_ms=600)
+        self.assertEqual(info["voice_duration_seconds"], 2.5)
+        self.assertAlmostEqual(info["voice_start_offset_seconds"], 0.6)
+        self.assertAlmostEqual(info["duration_seconds"], 3.7)
+        self.assertEqual(info["preview_after_fade_ms"], 600)
+        self.assertAlmostEqual(info["audio_source_start_seconds"], 11.4)
+
+    def test_style_only_invalidation_keeps_other_cue_preview_audio_from_sealed_mkv(self):
+        # Complete delivery deliberately discards loose FLAC/ASS/SRT. A
+        # subsequent style edit invalidates the subtitle, never the audio.
+        for name, data in (
+            ("HSR_Voice_Archive.ass", "[Events]\\n"),
+            ("HSR_Voice_Archive.srt", "1\\n"),
+        ):
+            (self.output / name).write_text(data, encoding="utf-8")
+        record_subtitle_export(self.output, state="current", ass_required=True)
+        (self.output / OUTPUT).write_bytes(b"previous-published-mkv")
+        record_bundle_publication(
+            self.output, background_color="#112233",
+            background_image=None, image_extension=None, include_fonts=False,
+            background_spec={"mode": "color"},
+        )
+        seal_complete_delivery(self.output)
+        self.assertFalse((self.output / "continuous.flac").exists())
+        self.assertTrue(mark_ass_style_stale(self.output))
+        self.assertEqual(bundle_audio_source_status(self.output)["source"], "sealed-mkv")
+        preview = resolve_effect_voice(self.config, 102, fade_ms=600)
+        self.assertEqual(preview["audio_source_path"], self.output / OUTPUT)
+        self.assertAlmostEqual(preview["duration_seconds"], 3.7)
+
+    def test_single_cue_ass_end_and_both_fades_match_encoded_preview_envelope(self):
+        from types import SimpleNamespace
+        entry = SimpleNamespace(
+            english="Final spoken cue", chinese="档案末尾",
+            start_seconds=0.6, audio_end_seconds=4.6,
+            display_end_seconds=5.2, preview_end_margin_ms=600,
+        )
+        cfg = SubtitleRenderConfig(enable_kinetic=True, fade_in_ms=600, fade_out_ms=600)
+        ass = render_ass([entry], config=cfg)
+        voices = [line for line in ass.splitlines()
+                  if line.startswith("Dialogue:") and (",Primary," in line or ",CHS," in line)]
+        self.assertEqual(len(voices), 2)
+        self.assertTrue(all("0:00:00.00,0:00:05.20" in line for line in voices))
+        self.assertTrue(all(r"\\fad(600,600)" in line for line in voices))
+        # Even a *shorter* explicitly bounded preview tail may not be
+        # overwritten by the archive-only terminal-outgoing fallback.
+        entry.preview_end_margin_ms = 200
+        entry.display_end_seconds = 4.8
+        reduced = render_ass([entry], config=cfg)
+        self.assertIn(r"\\fad(600,200)", reduced)
+        self.assertIn("0:00:00.00,0:00:04.80", reduced)
 
 
 class LiveEffectPreviewRouteTests(unittest.TestCase):

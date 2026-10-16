@@ -9,7 +9,7 @@ import json
 import math
 from pathlib import Path
 
-from .archive_bundle_lifecycle import OUTPUT, RECEIPT, _read_receipt, _signature
+from .archive_bundle_lifecycle import OUTPUT, bundle_audio_source_status
 from .project import ProjectConfig, resolve_project_path
 
 
@@ -53,12 +53,17 @@ def resolve_effect_voice(config: ProjectConfig, entry_id: object, *,
     if index + 1 < len(entries):
         next_start = float(entries[index + 1]["start_seconds"])
     before_gap = max(0.0, voice_start - previous_end)
-    after_gap = max(0.0, next_start - voice_end) if next_start is not None else 0.0
+    # The final selected voice has no next cue: the ASS envelope *still* needs
+    # its trailing Fade. A single-cue preview synthesizes video-only tail
+    # frames, as the complete MKV publisher already does; speech PCM is never
+    # stretched or padded to fabricate silence.
+    after_gap = max(0.0, next_start - voice_end) if next_start is not None else None
 
-    # For a shared boundary the prior fade-out and next fade-in each receive
-    # their full duration when possible, else half of the real silence.
+    # For shared inter-cue silence a global shortest-gap budget guards the
+    # author-chosen transition. This resolver only chooses the local envelope.
     before = min(fade, before_gap if index == 0 else before_gap / 2 if before_gap < fade * 2 else before_gap)
-    after = min(fade, after_gap / 2 if after_gap < fade * 2 else after_gap)
+    after = (fade if after_gap is None
+             else min(fade, after_gap / 2 if after_gap < fade * 2 else after_gap))
     if not config.subtitle_enable_kinetic:
         before = after = 0.0
     duration = before + voice_end - voice_start + after
@@ -66,14 +71,17 @@ def resolve_effect_voice(config: ProjectConfig, entry_id: object, *,
         raise ValueError("当前语音超过 120 秒的单条特效预览安全预算；不会静默截短，需选择较短语音")
     if duration < 0.01:
         raise ValueError("真实语音时长过短，无法生成可播放预览")
-    audio = output / "continuous.flac"
-    if not audio.is_file() or audio.is_symlink() or audio.stat().st_size == 0:
-        bundle = output / OUTPUT
-        receipt = _read_receipt(output)
-        if not (receipt and receipt.get("sealed") is True
-                and _signature(bundle) == receipt.get("artifact")):
-            raise ValueError("既无连续 FLAC，也无来源校验通过的完整 MKV，无法同步项目音频")
-        audio = bundle
+    source = bundle_audio_source_status(output)
+    if not source["available"]:
+        # Share precisely the same audio-provenance decision as inner ASS
+        # export; a layout/style-only change cannot revoke a sealed MKV
+        # whose exact artifact identity remains intact.
+        raise ValueError(
+            "所选项目语音暂不可用于动态预览：" + str(source["reason"])
+            + "（当前项目输出目录：" + str(output) + "）"
+        )
+    audio = (output / "continuous.flac" if source["source"] == "independent-flac"
+             else output / OUTPUT)
     return {
         "audio_source_path": audio,
         "audio_source_start_seconds": voice_start - before,

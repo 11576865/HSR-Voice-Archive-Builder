@@ -432,12 +432,13 @@ def _voice_fade_windows(
     if windows[0] is not None:
         begin = max(0, round(float(entries[0].start_seconds) * 100))
         windows[0] = (min(incoming, begin), 0)
-    # Preview-only: the selected last/only cue may have a known, bounded
-    # silent tail. The full archive still has no speculative last-cue tail.
-    last_margin = getattr(entries[-1], "preview_end_margin_ms", 0)
-    if windows[-1] is not None and last_margin:
-        windows[-1] = (windows[-1][0],
-                       min(outgoing, max(0, round(int(last_margin) / 10))))
+    # A single-cue video preview explicitly declares its available tail.
+    # Its ASS event must not outlive the encoded frames. The full archive
+    # retains the author-requested terminal fade, and the bundle exporter
+    # lengthens the video stream accordingly without extending PCM audio.
+    preview_tail = getattr(entries[-1], "preview_end_margin_ms", None)
+    final_outgoing = (outgoing if preview_tail is None else
+                      min(outgoing, max(0, round(int(preview_tail) / 10))))
     for index in range(len(entries) - 1):
         if windows[index] is None or windows[index + 1] is None:
             continue
@@ -454,7 +455,7 @@ def _voice_fade_windows(
         windows[index] = (windows[index][0], outgoing)
         windows[index + 1] = (incoming, windows[index + 1][1])
     if windows[-1] is not None:
-        windows[-1] = (windows[-1][0], outgoing)
+        windows[-1] = (windows[-1][0], final_outgoing)
     return windows
 
 
