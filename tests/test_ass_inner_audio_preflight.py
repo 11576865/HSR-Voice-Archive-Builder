@@ -16,7 +16,9 @@ from app.archive_bundle_lifecycle import (
     record_bundle_publication,
 )
 from app.auto_delivery import queue_ass_regeneration
-from app.delivery_artifacts import seal_complete_delivery
+from app.delivery_artifacts import (
+    seal_complete_delivery, verify_internal_ass_audio_source,
+)
 from app.subtitle_export_status import record_subtitle_export, mark_ass_style_stale
 
 
@@ -51,6 +53,44 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
             name: (self.output / name).read_bytes() for name in names
         })
         self.assertIn("没有完整 MKV", bundle_export_status(self.output)["blockers"][0])
+
+    def test_nonempty_but_broken_flac_rejects_before_any_subtitle_mutation(self):
+        (self.output / "continuous.flac").write_bytes(
+            b"nonempty-but-unparseable-lossless-audio"
+        )
+        tracked = ("manifest.json", "HSR_Voice_Archive.ass",
+                   "HSR_Voice_Archive.srt", "subtitle_export_receipt.json")
+        original = {name: (self.output / name).read_bytes()
+                    for name in tracked}
+        with patch("app.auto_delivery.create_job",
+                   side_effect=lambda _kind, runner, **kwargs:
+                       runner(lambda *args: None)), \\
+             patch("app.subtitles.refresh_subtitle_artifacts_from_settings") as render:
+            with self.assertRaisesRegex(ValueError, "FFprobe"):
+                queue_ass_regeneration(self.config, self.output)
+            render.assert_not_called()
+        self.assertEqual(original, {
+            name: (self.output / name).read_bytes() for name in tracked
+        })
+
+    def test_non_flac_primary_track_is_rejected_before_subtitle_mutation(self):
+        (self.output / "continuous.flac").write_bytes(b"placeholder")
+        with patch("app.delivery_artifacts._probe",
+                   return_value=[
+                       {"codec_type": "audio", "codec_name": "aac"},
+                   ]):
+            with self.assertRaisesRegex(ValueError, "第一条音轨不是预期"):
+                verify_internal_ass_audio_source(self.output)
+        self.assertEqual((self.output / "HSR_Voice_Archive.ass").read_text("utf-8"),
+                         "old-ass")
+
+    def test_verified_flac_source_passes_bounded_preflight(self):
+        (self.output / "continuous.flac").write_bytes(b"fake-with-mocked-probe")
+        with patch("app.delivery_artifacts._probe",
+                   return_value=[{"codec_type": "video", "codec_name": "h264"},
+                                 {"codec_type": "audio", "codec_name": "flac"}]):
+            source = verify_internal_ass_audio_source(self.output)
+        self.assertEqual(source["source"], "independent-flac")
 
     def test_unverified_mkv_does_not_impersonate_verified_audio(self):
         (self.output / OUTPUT).write_bytes(b"old-video-unverified")

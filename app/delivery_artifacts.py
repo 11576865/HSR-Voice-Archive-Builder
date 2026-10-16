@@ -39,6 +39,40 @@ def _probe(path: Path) -> list[dict]:
     return json.loads(process.stdout)["streams"]
 
 
+def verify_internal_ass_audio_source(output: Path) -> dict:
+    """Probe real audio before an explicit ASS-internal export changes receipts.
+
+    A nonempty working FLAC is *not* proof of decodability. Likewise, the
+    sealed-MKV receipt authenticates the file's identity, not the codec read
+    needed for muxing. Any failure must be detected before rewriting captions.
+    """
+    from .archive_bundle_lifecycle import bundle_audio_source_status
+
+    status = bundle_audio_source_status(output)
+    if not status["available"]:
+        raise ValueError(str(status["reason"]))
+    source = (output / FLAC if status["source"] == "independent-flac"
+              else output / OUTPUT)
+    try:
+        streams = _probe(source)
+    except (OSError, ValueError, KeyError, RuntimeError,
+            subprocess.SubprocessError) as exc:
+        raise ValueError(
+            "音频来源无法通过 FFprobe 解码前检查："
+            + source.name
+            + "；旧字幕和 MKV 均未改写。请检查临时 FLAC 或封存 MKV"
+        ) from exc
+    audio_tracks = [row for row in streams
+                    if row.get("codec_type") == "audio"]
+    if not audio_tracks or audio_tracks[0].get("codec_name") != "flac":
+        raise ValueError(
+            "音频来源的第一条音轨不是预期的无损 FLAC："
+            + source.name
+            + "；旧字幕和 MKV 均未改写"
+        )
+    return status
+
+
 def _copy_track(source: Path, target: Path, *, map_arg: str, codec: str,
                 fmt: str) -> None:
     if target.is_symlink() or source.is_symlink():
