@@ -249,7 +249,10 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
             verify_internal_ass_audio_source(self.output)
         def mock_ass(_adapters, target, **_kwargs):
             target.write_text("[Events]\\n", encoding="utf-8")
-        with patch("app.subtitles.write_ass", side_effect=mock_ass):
+        from subtitle_layout.config import SubtitleRenderConfig
+        with patch("app.subtitles.write_ass", side_effect=mock_ass), \
+             patch("app.subtitles.subtitle_render_config",
+                   return_value=SubtitleRenderConfig()):
             external = export_independent_ass(self.config, self.output)
         self.assertTrue(Path(external["ass_file"]).is_file())
         self.assertTrue(external["mkv_untouched"])
