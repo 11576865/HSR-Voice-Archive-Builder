@@ -8455,10 +8455,18 @@ function renderLayoutCorpusRail(){
 }
 function selectLayoutCorpusByIndex(index){
   const sub=layoutCorpusItems[index];
-  if(!sub)return;
+  if(!sub)return Promise.resolve(false);
   const position=layoutCorpusVisibleRows().findIndex(row=>String(row.id)===String(sub.id));
   if(position>=0)layoutCorpusPage=Math.floor(position/layoutCorpusPageSize);
-  loadLayoutStressSample({force:true,selectId:sub.id}).catch(e=>setLog(String(e)));
+  // Expose completion to real browser tests and accessibility callers.
+  // Selection is asynchronous because the selected cue may need fresh
+  // server-side timing data; never mark it selected before it loads.
+  return loadLayoutStressSample({force:true,selectId:sub.id}).then(
+    ()=>String(layoutCueActiveId)===String(sub.id)
+  ).catch(e=>{
+    setLog(String(e));
+    return false;
+  });
 }
 function moveLayoutCorpusSelection(offset){
   const rows=layoutCorpusVisibleRows();
