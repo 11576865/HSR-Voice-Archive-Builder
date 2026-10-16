@@ -344,6 +344,78 @@ def bundle_audio_source_status(
     return {"available": False, "source": "none", "reason": reason}
 
 
+def diagnose_bundle_audio_source(output: Path) -> dict[str, Any]:
+    """Read-only provenance triage shared by previews and internal ASS export.
+
+    The sealed receipt can certify content only when the stored digest is
+    authentic. A legacy stat-only receipt is not silently migrated to SHA.
+    No media, manifest, receipt, or project settings are modified here.
+    """
+    bundle = output / OUTPUT
+    receipt = _read_receipt(output)
+    expected = receipt.get("artifact") if receipt else None
+    actual = _signature(bundle)
+    sealed = bool(receipt and receipt.get("sealed") is True)
+    digest_bound = bool(receipt and receipt.get("artifact_sha256"))
+    matched = sealed and _bundle_artifact_matches(bundle, receipt)
+    working_flac = _signature(output / "continuous.flac")
+    manifest = output / "manifest.json"
+    try:
+        require_bound_voice_timeline(output)
+    except ValueError as exc:
+        clock_error = str(exc)
+    else:
+        clock_error = ""
+    if clock_error:
+        code = "voice_timeline_mismatch"
+        detail = "项目语音时间轴与已封存成品不匹配，不能按选中条目的时间读取原音轨。"
+    elif matched:
+        code = "verified_sealed_mkv"
+        detail = "封存 MKV 已通过来源身份校验；更换字幕或样式不会令原音轨失效。"
+    elif bundle.is_symlink():
+        code = "unsafe_mkv_symlink"
+        detail = "成品是符号链接，拒绝复用该音轨。"
+    elif actual is None:
+        code = "mkv_missing"
+        detail = "未发现可复用的完整 MKV。"
+    elif receipt is None:
+        code = "missing_receipt"
+        detail = "MKV 存在，但缺少有效封存回执，无法证明其语音来源。"
+    elif not sealed:
+        code = "not_sealed"
+        detail = "发布回执尚未完成封存验证。"
+    elif not digest_bound:
+        code = "legacy_stat_mismatch"
+        detail = ("旧版封存回执没有 MKV 内容哈希，文件时间或大小与回执不一致；"
+                  "无法判断是元数据变化还是内容被替换。")
+    else:
+        code = "artifact_content_mismatch"
+        detail = "新式内容校验未通过；不能将文件存在或相同文件名当作正确音轨。"
+    # Source presence is merely diagnostic. A loose FLAC still requires an
+    # independent codec probe and may not match the current PCM timeline.
+    return {
+        "code": code,
+        "detail": detail,
+        "sealed": sealed,
+        "digest_bound": digest_bound,
+        "receipt_metadata_match": bool(actual is not None and actual == expected),
+        "artifact_verified": bool(matched),
+        "voice_timeline_match": not bool(clock_error),
+        "working_flac_present": bool(working_flac and working_flac["size"] > 0),
+        "manifest_present": manifest.is_file() and not manifest.is_symlink(),
+        "external_ass_possible": manifest.is_file() and not manifest.is_symlink(),
+        "recommended_action": (
+            "verified" if matched and not clock_error else
+            "rebuild_from_original_sources"
+        ),
+        "recovery_help": (
+            "内封 ASS 必须先有可信的 FLAC/MKV。请先保存现有成品，"
+            "然后在「档案」工作区核查原始索引与语音包，明确点击「开始构建」重建；"
+            "不要删除 MKV 或封存回执。独立 ASS 可先使用「生成 ASS（外）」。"
+        ),
+    }
+
+
 def bundle_export_status(output: Path) -> dict[str, Any]:
     """Validate the sealed MKV without requiring redundant standalone media files.
 
