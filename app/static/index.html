@@ -9413,7 +9413,7 @@ async function renderHsrEffectVideo(){
       status.textContent=visualOnly
         ?'无声视觉预览 · '+actualDuration.toFixed(2)+' 秒 · 包含 ASS 淡入、显示和淡出；原 MKV/语音来源未获验证，未使用音轨。要检查真实语音同步，需从原始资料重新构建并封存档案。'
         :'真实动态特效视频已就绪 · '+actualDuration.toFixed(2)+' 秒（项目语音与静音过渡）· '+payload.preview_format.toUpperCase()+' · '+(footage?'本地画面 + ASS':backgroundImage?'本地背景图片 + ASS':usesReference?'红云参考图 + ASS':'纯色 '+backgroundColor+' + ASS')+' · 项目原声已封入，可播放和拖动检查。';
-      if(visualOnly)status.className='small status-warn';
+      status.className=visualOnly?'small status-warn':'small status-ok';
     }
     // Most browsers can reject autoplay *because this clip has real audio*.
     // Never swallow that rejection: the native video controls remain the
