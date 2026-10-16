@@ -3,7 +3,7 @@
   "task_id": "hsr-ass-export-stage-boundary-20261016",
   "goal": "Close all seven ASS code contracts before user-driven full-project validation: real progress, artifact-vs-pixel checks, verified embedded MKV, PCM Karaoke timing, silent-gap fades, shortest-gap 60/100 safety and no hidden Fade caps.",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "Reconcile Playwright collapsed voice-cue disclosure, source-accurate libass pixel-gap fixture, and async style save / explicit geometry Node regressions.",
+  "current_bounded_work_unit": "Repair CI red on PR #186: make asynchronous corpus selection observable in real browser; correct obsolete visual evidence referencing removed mutable timeline; preserve deterministic atomic ASS failure coverage and solver-safe geometry assertions.",
   "completed_units": [
     {
       "summary": "Initial progress callbacks added to ASS writer, timeline and FastAPI export route",
@@ -79,22 +79,26 @@
       "summary": "Updated Chromium to verify collapsed current-cue disclosure instead of insisting its child be visible, retaining later real open/timing assertions; made source-backed FFmpeg libass precondition conditional on measured ink rather than assumed collision; corrected asynchronous-save and geometry-render harnesses.",
       "commit": "7a3bee7b894f2490222ca2d7e7847f0ec8a65574",
       "validation": "Current exact-head CI pending; browser runner, libass, Node fixtures to be rerun."
+    },
+    {
+      "summary": "Latest CI head d55697a: seven-ass-contracts, real-libass-ink-evidence, Termux lite surface and libass-artifact succeeded. General unit red (17 old/static assertions), Chromium timed out selecting cue. Browser fixture now awaits actual async selection and validates read-only cue/no timing writes, removing deleted timeline references. Legacy ASS atomics tested with deterministic injected failure, geometry with semantic coordinates.",
+      "commit": "1fd6a3d3c73a952cf9015e2d292c06a117b6b201",
+      "validation": "New exact-head CI pending."
     }
   ],
   "next_units": [
-    "Read one new exact-head CI status; if queued/running stop Pending External Validation.",
-    "If fresh CI fails, distinguish updated browser/true ink source regressions from broader historic UI/test assertion debt.",
-    "Preserve user-driven device field validation for live Effects audio duration and explicit-only ASS/MKV operations.",
-    "Leave PR #186 unmerged pending acceptance unless user authorizes merge."
+    "Review fresh exact-head CI once on user continuation; if Chromium cue selection still fails, use new diagnostic to repair real JS async request/state race.",
+    "Assess remaining legacy general unit assertions against currently authorized design; repair actual behavior where broken, update old contracts only when obsolete, never make tests green by disabling checks.",
+    "Perform user's Termux real spoken voice preview/autosave and ASS to embedded MKV field acceptance."
   ],
   "branch": "fix/hsr-seven-ass-contracts-20261016",
   "pr": 186,
-  "latest_durable_commit": "7a3bee7b894f2490222ca2d7e7847f0ec8a65574",
+  "latest_durable_commit": "1fd6a3d3c73a952cf9015e2d292c06a117b6b201",
   "external_validation": {
     "previous_head": "e99a616bcbd1ed26662be2993229f0e1fb8f9dba",
     "previous_ci": "head 34f531d: seven-ass-contracts success, libass-artifact success, Termux Lite surface success; full tests failure (18 failures / 1 error) and Chromium failure due obsolete collapsed cue visibility; real libass baseline expected old collision",
-    "current_head": "7a3bee7b894f2490222ca2d7e7847f0ec8a65574",
-    "current_ci": "pending (new commits, no verdict yet)",
+    "current_head": "1fd6a3d3c73a952cf9015e2d292c06a117b6b201",
+    "current_ci": "pending; prior head d55697a seven contracts, ink, Termux, MKV succeeded, general units and Chromium failed",
     "physical_termux": "pending",
     "full_corpus_pixel_validation": "deliberately_not_performed_in_export",
     "actual_ffmpeg_temporal_fade": "pending",
@@ -102,12 +106,18 @@
     "original_test_run_id": 38790099127,
     "browser_run_id": 38790098931,
     "user_real_project": "pending_user",
-    "effects_actual_voice_playback": "pending_user"
+    "effects_actual_voice_playback": "pending_user",
+    "prior_ci_details": {
+      "head": "d55697a14870f95397dcd814b05f1385c6b536ee",
+      "general_unit": "17 failures (mostly stale UI contracts; layout geometry and partial ASS assumptions)",
+      "chromium": "timeout waiting for layoutCueActiveId after async selection",
+      "targeted": "seven-contracts/ink/Termux/MKV green"
+    }
   },
   "blockers": [
-    "Exact-head CI not yet verified for latest bounded repair.",
-    "General CI has historical structural assertion debt outside selected scope.",
-    "Real project Termux audio/video and full subtitle field acceptance remain user-controlled."
+    "New CI not yet confirmed; previous main general CI has multiple older contract expectation mismatches.",
+    "Chromium selection after real Effects/Layout navigation unconfirmed on new code; no user-device proof.",
+    "Actual Termux/voice and full ASS/MKV acceptance pending."
   ],
   "updated_at": "2026-10-16",
   "pr_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/pull/186"
