@@ -25,7 +25,7 @@ from .effect_voice_preview import resolve_effect_voice
 from .archive_bundle_exporter import ArchiveBundleExporter, decode_bundle_background, require_current_bundle_subtitles
 from .auto_delivery import maybe_queue_complete_mkv, queue_ass_regeneration, queue_external_ass_export
 from .delivery_artifacts import prepare_complete_sources, seal_complete_delivery, export_optional_track
-from .archive_bundle_lifecycle import load_previous_bundle_image
+from .archive_bundle_lifecycle import diagnose_bundle_audio_source, load_previous_bundle_image
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
@@ -383,6 +383,13 @@ class Handler(BaseHTTPRequestHandler):
                 media_type,
                 extra_headers={"Content-Disposition": "inline"},
             )
+            return
+        if path == "/api/project/active/audio-integrity":
+            config = _active_config()
+            output = resolve_project_path(config, config.output_dir)
+            if output is None:
+                raise ValueError("No configured project output directory")
+            self._json({"ok": True, **diagnose_bundle_audio_source(output)})
             return
         if path == "/api/status":
             project = None
