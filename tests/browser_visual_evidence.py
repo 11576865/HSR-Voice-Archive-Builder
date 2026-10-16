@@ -724,18 +724,20 @@ def shared_corpus_request_check(browser, base_url, report):
 
     page.route("**/api/**", route_corpus)
     page.goto(base_url, wait_until="domcontentloaded")
-    page.wait_for_function("typeof fetchSubtitles === 'function'", timeout=15000)
+    # Await real status hydration. Injecting currentProject here races the
+    # production refresh() callback, invalidating an in-flight shared snapshot.
+    page.wait_for_function("""() => typeof fetchSubtitles === 'function' &&
+      currentProject?.root === '/qa/fixture'""", timeout=15000)
     page.evaluate("""() => {
-      currentProject={name:'fixture-project',root:'/qa/fixture',
-                      config:{source_text_language:'en',target_language:'zh-CN'}};
       document.getElementById('subSelector').value='all';
       document.getElementById('subSearchQuery').value='';
       document.getElementById('subTimeRange').value='';
       showWorkspace('review',{scroll:false});
     }""")
     page.evaluate("() => fetchSubtitles()")
+    page.wait_for_function("loadedSubtitles.length === 4",timeout=15000)
     ensure(len(requests) == 1 and "selector=all" in requests[0],
-           "Clean unfiltered Review should issue exactly one full-list request")
+           f"Clean unfiltered Review should issue exactly one full-list request: {requests}")
     page.evaluate("() => showWorkspace('layout',{scroll:false})")
     page.wait_for_function("""() =>
       layoutCorpusItems.length===4 && layoutCorpusSelectedId!==null
