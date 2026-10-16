@@ -957,7 +957,10 @@ def gradient_background_check(browser, base_url, output, report):
               background_spec:{mode:'linear',first:'#e25a6b',second:'#112941',
                 third:'#313f73',direction:'horizontal',resolution:'1080p',quality:'high'}
             }
-          });
+          }, true);
+          // The fixture intentionally replaces a loaded project's saved
+          // background: pass the explicit force flag rather than relying on
+          // a fictitious root change to bypass draft-preservation semantics.
           showWorkspace('export',{scroll:false});
           // This deterministic browser fixture has no built project summary:
           // reveal the normal Export result container explicitly, rather
