@@ -30,6 +30,7 @@ from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, norm
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
+from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
@@ -1539,9 +1540,7 @@ class Handler(BaseHTTPRequestHandler):
                     for audio in incoming.iterdir():
                         if audio.is_file() and not audio.name.endswith(".part"):
                             shutil.copy2(audio, temporary_root / audio.name)
-                    combined.parent.mkdir(parents=True, exist_ok=True)
-                    # Retain the previous generation until the new index/config commits.
-                    temporary_root.replace(combined)
+                    publish_audio_generation(generated, temporary_root, temporary_root.name)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     raise
