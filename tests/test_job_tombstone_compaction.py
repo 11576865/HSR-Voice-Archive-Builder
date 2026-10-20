@@ -103,6 +103,29 @@ class TombstoneCompactionTests(unittest.TestCase):
             self.assertEqual(compact_tombstones(path, limit=100),
                              {"removed": 0, "retained": 0})
 
+    def test_startup_sweep_compacts_dead_owner_but_keeps_live_owner(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._path(td)
+            self._seed(path, "f" * 32)
+            with patch.object(jobs, "JOBS_FILE", path), \
+                 patch.object(jobs, "_JOBS", {}), \
+                 patch.object(jobs, "_DELETED_JOB_IDS", set()):
+                jobs._load_previous()
+                self.assertEqual(
+                    json.loads(_tombstone_path(path).read_text("utf-8"))["job_ids"], []
+                )
+        with tempfile.TemporaryDirectory() as td:
+            path = self._path(td)
+            self._seed(path, SESSION_ID)
+            with patch.object(jobs, "JOBS_FILE", path), \
+                 patch.object(jobs, "_JOBS", {}), \
+                 patch.object(jobs, "_DELETED_JOB_IDS", set()):
+                jobs._load_previous()
+                self.assertEqual(
+                    json.loads(_tombstone_path(path).read_text("utf-8"))["job_ids"],
+                    ["a" * 32],
+                )
+
     def test_sidecar_failure_after_journal_publish_keeps_tombstone(self):
         with tempfile.TemporaryDirectory() as td:
             path = self._path(td)
