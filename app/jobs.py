@@ -314,9 +314,15 @@ def delete_project_jobs(project_root: str) -> int:
             job_id for job_id, job in _JOBS.items()
             if job.project_root == target and job.state not in {"queued", "running"}
         ]
+        previous = {job_id: _JOBS[job_id] for job_id in doomed}
         for job_id in doomed:
             _JOBS.pop(job_id, None)
             _DELETED_JOB_IDS.add(job_id)
         if doomed:
-            _persist_locked()
+            try:
+                _persist_locked()
+            except Exception:
+                _JOBS.update(previous)
+                _DELETED_JOB_IDS.difference_update(doomed)
+                raise
         return len(doomed)
