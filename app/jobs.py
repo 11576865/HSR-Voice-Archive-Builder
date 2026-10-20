@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 from contextlib import contextmanager, nullcontext
 import threading
 import traceback
@@ -9,7 +8,8 @@ from dataclasses import asdict, dataclass
 from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
-from .project import STATE_DIR, atomic_write_json
+from .project import STATE_DIR
+from .job_journal import SESSION_ID, persist_rows, read_rows, recover_rows
 from .project_writer_lock import lock_project_writer
 
 JOBS_FILE = STATE_DIR / "jobs.json"
@@ -43,40 +43,53 @@ class Job:
     progress_total: int = 0
     project_root: str = ""
     project_name: str = ""
+    owner_session: str = ""
 
 
 _LOCK = threading.Lock()
 _JOBS: dict[str, Job] = {}
 # Synchronous HTTP exports must reserve the same writer slot as async jobs.
 _RESERVED_PROJECT_WRITERS: dict[str, str] = {}
+_DELETED_JOB_IDS: set[str] = set()
 
 
 def _persist_locked() -> None:
-    values = list(_JOBS.values())[-MAX_PERSISTED_JOBS:]
-    atomic_write_json(JOBS_FILE, [asdict(job) for job in values])
+    # Persist only this process's state. Never replace another live HSR
+    # instance's jobs with a stale in-memory copy of the shared JSON array.
+    owned = [asdict(job) for job in _JOBS.values()
+             if job.owner_session == SESSION_ID]
+    persist_rows(JOBS_FILE, owned, limit=MAX_PERSISTED_JOBS,
+                 deleted=_DELETED_JOB_IDS)
+
+
+def _refresh_foreign_locked() -> None:
+    """Refresh other processes' jobs, preserving this process's live objects."""
+    fresh: dict[str, Job] = {}
+    for item in read_rows(JOBS_FILE):
+        try:
+            candidate = Job(**item)
+        except (TypeError, ValueError):
+            continue
+        if candidate.owner_session != SESSION_ID:
+            fresh[candidate.id] = candidate
+    for job_id, job in list(_JOBS.items()):
+        if job.owner_session != SESSION_ID and job_id not in fresh:
+            _JOBS.pop(job_id, None)
+    _JOBS.update(fresh)
 
 
 def _load_previous() -> None:
-    if not JOBS_FILE.is_file():
-        return
     try:
-        raw = json.loads(JOBS_FILE.read_text(encoding="utf-8"))
-        if not isinstance(raw, list):
-            return
-        for item in raw[-MAX_PERSISTED_JOBS:]:
-            if not isinstance(item, dict):
+        rows = recover_rows(JOBS_FILE, limit=MAX_PERSISTED_JOBS)
+        for item in rows:
+            try:
+                job = Job(**item)
+            except (TypeError, ValueError):
                 continue
-            job = Job(**item)
-            if job.state in {"queued", "running"}:
-                job.state = "interrupted"
-                job.message = "上次本地后端退出时任务仍未完成"
-                job.finished_at = now()
-                if not job.error:
-                    job.error = "Task was interrupted by application/process shutdown."
             _JOBS[job.id] = job
-        _persist_locked()
     except Exception:
-        # A damaged journal must never prevent the local app from starting.
+        # Preserve the original journal on corruption; subsequent writes
+        # fail closed rather than silently replacing potentially valid jobs.
         _JOBS.clear()
 
 
@@ -84,6 +97,7 @@ _load_previous()
 
 
 def _active_build_locked() -> Job | None:
+    _refresh_foreign_locked()
     for job in reversed(list(_JOBS.values())):
         if job.kind in BUILD_KINDS and job.state in {"queued", "running"}:
             return job
@@ -117,6 +131,7 @@ def reserve_project_output_writer(project_root: str, *, kind: str = "ass-refresh
     if not target:
         raise ValueError("Project root is required for an output writer")
     with _LOCK:
+        _refresh_foreign_locked()
         incumbent = _RESERVED_PROJECT_WRITERS.get(target)
         if not incumbent:
             incumbent = next(
@@ -149,6 +164,7 @@ def assert_project_idle(project_root: str) -> None:
     if not target:
         return
     with _LOCK:
+        _refresh_foreign_locked()
         if target in _RESERVED_PROJECT_WRITERS:
             raise RuntimeError(
                 f"项目「{target}」的字幕输出仍在运行，不能同时修改或删除该项目"
@@ -180,8 +196,10 @@ def create_job(
         created_at=now(),
         project_root=str(project_root or ""),
         project_name=str(project_name or ""),
+        owner_session=SESSION_ID,
     )
     with _LOCK:
+        _refresh_foreign_locked()
         if kind in BUILD_KINDS:
             active = _active_build_locked()
             if active is not None:
@@ -205,7 +223,13 @@ def create_job(
                         + "），请等待完成，避免 FLAC/ASS/MKV 成品被并发覆盖"
                     )
         _JOBS[job.id] = job
-        _persist_locked()
+        try:
+            _persist_locked()
+        except Exception:
+            # A failed journal admission must not leave an unstarted queued
+            # job that blocks future builds for this server process.
+            _JOBS.pop(job.id, None)
+            raise
 
     def report_progress(
         phase: str,
@@ -264,13 +288,15 @@ def create_job(
 
 def get_job(job_id: str) -> dict[str, Any] | None:
     with _LOCK:
+        _refresh_foreign_locked()
         job = _JOBS.get(job_id)
         return asdict(job) if job else None
 
 
 def recent_jobs(limit: int = 20) -> list[dict[str, Any]]:
     with _LOCK:
-        values = list(_JOBS.values())[-limit:]
+        _refresh_foreign_locked()
+        values = sorted(_JOBS.values(), key=lambda job: (job.created_at, job.id))[-limit:]
         return [asdict(job) for job in reversed(values)]
 
 
@@ -280,12 +306,14 @@ def delete_project_jobs(project_root: str) -> int:
     if not target:
         return 0
     with _LOCK:
+        _refresh_foreign_locked()
         doomed = [
             job_id for job_id, job in _JOBS.items()
             if job.project_root == target and job.state not in {"queued", "running"}
         ]
         for job_id in doomed:
             _JOBS.pop(job_id, None)
+            _DELETED_JOB_IDS.add(job_id)
         if doomed:
             _persist_locked()
         return len(doomed)

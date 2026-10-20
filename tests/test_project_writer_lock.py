@@ -22,8 +22,9 @@ from app.project_writer_lock import lock_project_writer
 try:
     with lock_project_writer(sys.argv[1]):
         print("acquired")
-except RuntimeError as exc:
-    print(str(exc))
+except RuntimeError:
+    # CI consoles may use cp1252; the lock result must not require CJK stdout.
+    print("writer locked")
     sys.exit(7)
 """
         repo = Path(__file__).resolve().parents[1]
@@ -42,7 +43,7 @@ except RuntimeError as exc:
             with lock_project_writer(str(project)):
                 blocked = self._child_attempt(project)
                 self.assertEqual(blocked.returncode, 7, blocked.stderr)
-                self.assertIn("另一个 HSR 进程", blocked.stdout)
+                self.assertIn("writer locked", blocked.stdout)
                 with self.assertRaisesRegex(RuntimeError, "另一个 HSR 进程"):
                     jobs.assert_project_idle(str(project))
                 # Another project is independent.
