@@ -123,9 +123,10 @@ def _read_ledger(path: Path) -> tuple[set[str], dict[str, str]]:
                 or any(not isinstance(item, str) or not item for item in ids)
                 or len(ids) != len(set(ids))):
             raise ValueError("Invalid deleted job IDs")
-        if data["schema_version"] == 1:
-            return set(ids), {}
-        owners = data.get("owner_sessions")
+        # Version 1 readers ignore unknown fields; keep this layout for
+        # cross-version HSR instances sharing the same user state directory.
+        # Accept the short-lived v2 writer from PR #199 for migration.
+        owners = data.get("owner_sessions", {})
         if (not isinstance(owners, dict)
                 or any(job_id not in ids or not _valid_session(session)
                        for job_id, session in owners.items())):
@@ -145,7 +146,7 @@ def _read_deleted(path: Path) -> set[str]:
 def _write_ledger(path: Path, deleted: set[str], owners: dict[str, str]) -> None:
     atomic_write_json(
         _tombstone_path(path),
-        {"schema_version": 2, "job_ids": sorted(deleted),
+        {"schema_version": 1, "job_ids": sorted(deleted),
          "owner_sessions": {k: owners[k] for k in sorted(owners)}},
     )
 
@@ -166,6 +167,14 @@ def compact_tombstones(path: Path, *, limit: int) -> dict[str, int]:
         removable = {job_id for job_id, session in owners.items()
                      if job_id in deleted and not session_is_alive(session)}
         if not removable:
+            # A short-lived PR #199 main build wrote schema v2, which older
+            # still-running HSR servers reject. Downgrade in-place even when
+            # the owner is still alive, without dropping any tombstones.
+            location = _tombstone_path(path)
+            if location.is_file():
+                import json
+                if json.loads(location.read_text(encoding="utf-8")).get("schema_version") == 2:
+                    _write_ledger(path, deleted, owners)
             return {"removed": 0, "retained": len(deleted)}
         # The old sidecar still protects deletions until *after* publication
         # of the journal without any row it formerly masked.
