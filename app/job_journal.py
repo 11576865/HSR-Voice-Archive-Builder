@@ -91,6 +91,27 @@ def _journal_lock(path: Path):
         gate.__exit__(None, None, None)
 
 
+# Windows temporarily refuses os.replace() when an unrelated handle
+# (including security scanning) denies delete sharing. This is distinct from
+# the journal's cooperating-process mutex. Retry only WinError 5/32 for a
+# bounded interval; permanent permission failures still fail closed.
+WIN32_REPLACE_RETRY_SECONDS = 3.0
+
+
+def _atomic_journal_write(path: Path, payload: Any) -> None:
+    deadline = time.monotonic() + WIN32_REPLACE_RETRY_SECONDS
+    while True:
+        try:
+            atomic_write_json(path, payload)
+            return
+        except OSError as exc:
+            if getattr(exc, "winerror", None) not in {5, 32}:
+                raise
+            if time.monotonic() >= deadline:
+                raise
+            time.sleep(0.04)
+
+
 def _tombstone_path(path: Path) -> Path:
     # A stable sidecar allows old jobs.json consumers to keep the JSON-list
     # format, while a deleted ID remains authoritative across live processes.
@@ -144,7 +165,7 @@ def _read_deleted(path: Path) -> set[str]:
 
 
 def _write_ledger(path: Path, deleted: set[str], owners: dict[str, str]) -> None:
-    atomic_write_json(
+    _atomic_journal_write(
         _tombstone_path(path),
         {"schema_version": 1, "job_ids": sorted(deleted),
          "owner_sessions": {k: owners[k] for k in sorted(owners)}},
@@ -179,7 +200,7 @@ def compact_tombstones(path: Path, *, limit: int) -> dict[str, int]:
         # The old sidecar still protects deletions until *after* publication
         # of the journal without any row it formerly masked.
         kept = _trim_rows([row for row in disk if row["id"] not in deleted], limit)
-        atomic_write_json(path, kept)
+        _atomic_journal_write(path, kept)
         remaining = deleted - removable
         _write_ledger(path, remaining, {k: v for k, v in owners.items()
                                         if k in remaining})
@@ -220,7 +241,7 @@ def recover_snapshot(path: Path, *, limit: int) -> tuple[list[dict[str, Any]], s
             changed = True
         kept = _trim_rows(rows, limit)
         if changed or len(kept) != len(rows):
-            atomic_write_json(path, kept)
+            _atomic_journal_write(path, kept)
         return kept, deleted
 
 
@@ -263,4 +284,4 @@ def persist_rows(path: Path, owned: list[dict[str, Any]], *, limit: int,
                 raise ValueError("Refusing to overwrite another HSR process's job")
             if job_id not in all_deleted:
                 merged[job_id] = item
-        atomic_write_json(path, _trim_rows(list(merged.values()), limit))
+        _atomic_journal_write(path, _trim_rows(list(merged.values()), limit))
