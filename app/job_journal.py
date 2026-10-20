@@ -24,7 +24,8 @@ def _session_lease(owner_id: str):
 
 
 def session_is_alive(owner_id: object) -> bool:
-    if not isinstance(owner_id, str) or len(owner_id) != 32:
+    if (not isinstance(owner_id, str) or len(owner_id) != 32
+            or any(ch not in "0123456789abcdef" for ch in owner_id)):
         return False
     if owner_id == SESSION_ID:
         return True
@@ -48,6 +49,9 @@ def read_rows(path: Path, *, strict: bool = False) -> list[dict[str, Any]]:
         data = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(data, list):
             raise ValueError("Job journal must contain a list")
+        if strict and any(not isinstance(row, dict) or not isinstance(row.get("id"), str)
+                          for row in data):
+            raise ValueError("Job journal contains malformed entries")
         return [row for row in data if isinstance(row, dict)]
     except (OSError, ValueError, TypeError) as exc:
         if strict:
