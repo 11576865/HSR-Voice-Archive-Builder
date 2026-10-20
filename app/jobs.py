@@ -223,7 +223,13 @@ def create_job(
                         + "），请等待完成，避免 FLAC/ASS/MKV 成品被并发覆盖"
                     )
         _JOBS[job.id] = job
-        _persist_locked()
+        try:
+            _persist_locked()
+        except Exception:
+            # A failed journal admission must not leave an unstarted queued
+            # job that blocks future builds for this server process.
+            _JOBS.pop(job.id, None)
+            raise
 
     def report_progress(
         phase: str,
