@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import io
+from unittest.mock import patch
 import tempfile
 import unittest
 from pathlib import Path
 
-from app.huggingface_audio import confirmed_reference_metadata, resolve_targets
+from app.huggingface_audio import confirmed_reference_metadata, resolve_targets, download_resolved_audio
 
 
 class HuggingFaceAudioTests(unittest.TestCase):
@@ -138,6 +140,57 @@ class HuggingFaceAudioTests(unittest.TestCase):
             "failed": [],
         })
         self.assertEqual(completed["line.wav"]["reference_text"], "官方中文文本")
+
+
+    def test_interrupted_part_is_not_a_completed_audio_download(self) -> None:
+        wav = b"RIFF" + (36).to_bytes(4, "little") + b"WAVEfmt " + b"\\0" * 32
+        plan = {"targets": {"voice_001.wav": {"row_idx": 0}}}
+        payload = {"rows": [{"row_idx": 0, "row": {"audio": {"src": "https://huggingface.co/voice.wav"}}}]}
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td)
+            (destination / "voice_001.wav.part").write_bytes(b"interrupted download")
+            with patch("app.huggingface_audio._json_get", return_value=payload), \\
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(wav)
+                result = download_resolved_audio(plan, destination)
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(result["completed"][0]["status"], "ok")
+            self.assertEqual((destination / "voice_001.wav").read_bytes(), wav)
+            opener.return_value.open.assert_called_once()
+
+    def test_invalid_existing_audio_does_not_claim_success(self) -> None:
+        plan = {"targets": {"voice_001.wav": {"row_idx": 0}}}
+        payload = {"rows": [{"row_idx": 0, "row": {"audio": {"src": "https://huggingface.co/voice.wav"}}}]}
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td)
+            (destination / "voice_001.wav").write_bytes(b"corrupt")
+            (destination / "voice_001.txt").write_text("not audio")
+            with patch("app.huggingface_audio._json_get", return_value=payload), \\
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(b"invalid response")
+                result = download_resolved_audio(plan, destination)
+            self.assertEqual(result["completed"], [])
+            self.assertEqual(len(result["failed"]), 1)
+            self.assertEqual((destination / "voice_001.wav").read_bytes(), b"corrupt")
+
+    def test_audio_bytes_are_bounded_and_private_urls_refused(self) -> None:
+        plan = {"targets": {"voice_001.wav": {"row_idx": 0}}}
+        with tempfile.TemporaryDirectory() as td:
+            destination = Path(td)
+            payload = {"rows": [{"row_idx": 0, "row": {"audio": {"src": "https://huggingface.co/voice.wav"}}}]}
+            with patch("app.huggingface_audio._json_get", return_value=payload), \\
+                 patch("app.huggingface_audio.MAX_AUDIO_DOWNLOAD_BYTES", 16), \\
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(b"RIFF" + b"\\0" * 8 + b"too-big" * 8)
+                bounded = download_resolved_audio(plan, destination)
+            self.assertEqual(bounded["completed"], [])
+            self.assertIn("128 MiB budget", bounded["failed"][0]["reason"])
+            self.assertFalse(list(destination.glob(".hsr-audio-*.part")))
+            payload["rows"][0]["row"]["audio"]["src"] = "https://127.0.0.1/private"
+            with patch("app.huggingface_audio._json_get", return_value=payload):
+                blocked = download_resolved_audio(plan, destination)
+            self.assertEqual(blocked["completed"], [])
+            self.assertIn("Private", blocked["failed"][0]["reason"])
 
 
 if __name__ == "__main__":
