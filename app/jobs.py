@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager, nullcontext
+import logging
 import threading
 import traceback
 import uuid
@@ -9,7 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 from .project import STATE_DIR
-from .job_journal import SESSION_ID, persist_rows, recover_snapshot, recover_rows
+from .job_journal import SESSION_ID, compact_tombstones, persist_rows, recover_snapshot, recover_rows
 from .project_writer_lock import lock_project_writer
 
 JOBS_FILE = STATE_DIR / "jobs.json"
@@ -60,6 +61,9 @@ def _persist_locked() -> None:
              if job.owner_session == SESSION_ID]
     persist_rows(JOBS_FILE, owned, limit=MAX_PERSISTED_JOBS,
                  deleted=_DELETED_JOB_IDS)
+    # Durable sidecar now owns these deletions; do not reassert IDs later
+    # after another process has proven their producer exited and compacted.
+    _DELETED_JOB_IDS.clear()
 
 
 def _refresh_foreign_locked() -> None:
@@ -94,6 +98,16 @@ def _load_previous() -> None:
         # Preserve the original journal on corruption; subsequent writes
         # fail closed rather than silently replacing potentially valid jobs.
         _JOBS.clear()
+        return
+    # One best-effort startup sweep is enough to discard provably expired
+    # v2 tombstones without expensive OS-lease probing on every status poll.
+    # If disk maintenance fails, preserve the existing job view and ledger.
+    try:
+        compact_tombstones(JOBS_FILE, limit=MAX_PERSISTED_JOBS)
+    except (OSError, RuntimeError) as exc:
+        logging.getLogger(__name__).warning(
+            "HSR job tombstone compaction deferred: %s", exc
+        )
 
 
 _load_previous()
@@ -301,6 +315,14 @@ def recent_jobs(limit: int = 20) -> list[dict[str, Any]]:
         _refresh_foreign_locked()
         values = sorted(_JOBS.values(), key=lambda job: (job.created_at, job.id))[-limit:]
         return [asdict(job) for job in reversed(values)]
+
+
+def compact_job_history_tombstones() -> dict[str, int]:
+    """Explicit low-risk maintenance for proven-dead job owners only."""
+    with _LOCK:
+        result = compact_tombstones(JOBS_FILE, limit=MAX_PERSISTED_JOBS)
+        _refresh_foreign_locked()
+        return result
 
 
 def delete_project_jobs(project_root: str) -> int:
