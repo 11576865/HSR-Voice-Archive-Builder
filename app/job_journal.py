@@ -7,6 +7,8 @@ when a second HSR server imports this module.
 from __future__ import annotations
 
 import atexit
+import time
+from contextlib import contextmanager
 import uuid
 from pathlib import Path
 from typing import Any
@@ -63,9 +65,30 @@ def read_rows(path: Path, *, strict: bool = False) -> list[dict[str, Any]]:
         return []
 
 
+@contextmanager
 def _journal_lock(path: Path):
-    # Each filename has exactly one durable journal mutex across HSR processes.
-    return lock_project_writer(str(path.expanduser().resolve()) + ".journal")
+    """Wait briefly for short journal writes; do not fail-fast like media jobs.
+
+    Unlike the project output writer fence, job-journal edits are short,
+    independently mergeable transactions. A transient lock collision must
+    not crash a running job or spuriously mark its owner interrupted.
+    """
+    target = str(path.expanduser().resolve()) + ".journal"
+    deadline = time.monotonic() + 15.0
+    while True:
+        gate = lock_project_writer(target)
+        try:
+            gate.__enter__()
+        except RuntimeError as exc:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("HSR shared job journal lock timed out") from exc
+            time.sleep(0.02)
+        else:
+            break
+    try:
+        yield
+    finally:
+        gate.__exit__(None, None, None)
 
 
 def _tombstone_path(path: Path) -> Path:
