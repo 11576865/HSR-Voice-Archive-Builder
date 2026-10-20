@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import json
-from contextlib import contextmanager
+from contextlib import contextmanager, nullcontext
 import threading
 import traceback
 import uuid
@@ -10,6 +10,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 from .project import STATE_DIR, atomic_write_json
+from .project_writer_lock import lock_project_writer
 
 JOBS_FILE = STATE_DIR / "jobs.json"
 MAX_PERSISTED_JOBS = 100
@@ -110,7 +111,7 @@ def reserve_project_output_writer(project_root: str, *, kind: str = "ass-refresh
 
     Acquiring this reservation happens BEFORE dispatching expensive work to a
     threadpool. It is released even when rendering fails or the request exits.
-    The reservation is process-local, matching the scope of the jobs journal.
+    The reservation also holds a non-blocking OS file lock for its lifetime.
     """
     target = str(project_root or "").strip()
     if not target:
@@ -130,12 +131,17 @@ def reserve_project_output_writer(project_root: str, *, kind: str = "ass-refresh
                 f"同一项目已有输出任务正在运行（{incumbent}），请等待完成，"
                 "避免 FLAC/ASS/MKV 成品被并发覆盖"
             )
+        # Reserve across cooperating processes before exposing a writer slot.
+        # Hold the in-process mutex across acquisition to prevent local races.
+        interprocess = lock_project_writer(target)
+        interprocess.__enter__()
         _RESERVED_PROJECT_WRITERS[target] = kind
     try:
         yield
     finally:
         with _LOCK:
             _RESERVED_PROJECT_WRITERS.pop(target, None)
+        interprocess.__exit__(None, None, None)
 
 
 def assert_project_idle(project_root: str) -> None:
@@ -219,7 +225,11 @@ def create_job(
             job.started_at = now()
             _persist_locked()
         try:
-            result = fn(report_progress) if with_progress else fn()
+            guard = (lock_project_writer(job.project_root)
+                     if kind in PROJECT_OUTPUT_WRITERS and job.project_root
+                     else nullcontext())
+            with guard:
+                result = fn(report_progress) if with_progress else fn()
             with _LOCK:
                 job.result = result
                 job.state = "succeeded"
