@@ -173,6 +173,18 @@ class HuggingFaceAudioTests(unittest.TestCase):
             self.assertEqual(len(result["failed"]), 1)
             self.assertEqual((destination / "voice_001.wav").read_bytes(), b"corrupt")
 
+    def test_audio_type_cannot_silently_mismatch_index_filename(self) -> None:
+        plan = {"targets": {"voice_001.wav": {"row_idx": 0}}}
+        payload = {"rows": [{"row_idx": 0, "row": {"audio": {"src": "https://huggingface.co/voice.wav"}}}]}
+        with tempfile.TemporaryDirectory() as td:
+            with patch("app.huggingface_audio._json_get", return_value=payload), \
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(b"fLaC" + b"1234567890123456")
+                result = download_resolved_audio(plan, Path(td))
+            self.assertEqual(result["completed"], [])
+            self.assertIn("indexed member suffix", result["failed"][0]["reason"])
+            self.assertFalse((Path(td) / "voice_001.flac").exists())
+
     def test_audio_bytes_are_bounded_and_private_urls_refused(self) -> None:
         plan = {"targets": {"voice_001.wav": {"row_idx": 0}}}
         with tempfile.TemporaryDirectory() as td:
