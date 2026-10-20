@@ -1,0 +1,35 @@
+name: HSR pinned legacy interop and process-exit recovery
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  legacy-interop:
+    name: pinned-198-vs-current (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+    steps:
+      - name: Checkout current HSR under test
+        uses: actions/checkout@v4
+      - name: Checkout authentic PR198 main release
+        uses: actions/checkout@v4
+        with:
+          repository: 11576865/HSR-Voice-Archive-Builder
+          ref: f366f3fc6da47b8c06bb961945d4658da21d6a98
+          path: legacy-v198
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install HSR test requirements
+        run: python -m pip install -r requirements-test.txt
+      - name: Check actual historical and current code, then run fault-injection suite
+        env:
+          HSR_LEGACY_CHECKOUT: ${{ github.workspace }}/legacy-v198
+        run: python -m unittest tests.test_real_legacy_interop_and_crash -v
