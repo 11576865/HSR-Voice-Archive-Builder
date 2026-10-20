@@ -39,6 +39,46 @@ def _probe(path: Path) -> list[dict]:
     return json.loads(process.stdout)["streams"]
 
 
+def _verify_primary_flac_decodes(source: Path) -> None:
+    """Decode the entire primary FLAC stream, not only the stream headers.
+
+    This is an explicit, potentially expensive pre-mutation gate for ASS-internal
+    publication. Never claim an FFprobe stream listing proves PCM integrity.
+    """
+    if source.is_symlink() or not source.is_file():
+        raise ValueError("Unsafe or absent primary audio source")
+    executable = shutil.which("ffmpeg")
+    if not executable:
+        raise ValueError("完整语音校验需要安装 FFmpeg；字幕及旧 MKV 均未改写")
+    before = source.stat()
+    command = [
+        executable, "-hide_banner", "-loglevel", "error", "-nostdin",
+        "-xerror", "-i", str(source), "-map", "0:a:0",
+        "-vn", "-sn", "-dn", "-f", "null", "-",
+    ]
+    try:
+        result = subprocess.run(
+            command, stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            check=False, timeout=1800,
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        raise ValueError(
+            "完整 FLAC 解码校验无法完成；旧字幕和 MKV 均未改写"
+        ) from exc
+    if result.returncode:
+        detail = result.stderr.decode("utf-8", errors="replace")[-350:]
+        raise ValueError(
+            "完整 FLAC 解码校验失败，音频可能含损坏帧；旧字幕和 MKV 均未改写："
+            + detail
+        )
+    after = source.stat()
+    identity = lambda stat: (
+        stat.st_dev, stat.st_ino, stat.st_size, stat.st_mtime_ns, stat.st_ctime_ns,
+    )
+    if source.is_symlink() or identity(before) != identity(after):
+        raise ValueError("音源在完整解码检查期间发生变化；旧字幕和 MKV 均未改写")
+
+
 def verify_internal_ass_audio_source(output: Path) -> dict:
     """Probe real audio before an explicit ASS-internal export changes receipts.
 
@@ -73,6 +113,7 @@ def verify_internal_ass_audio_source(output: Path) -> dict:
             + source.name
             + "；旧字幕和 MKV 均未改写"
         )
+    _verify_primary_flac_decodes(source)
     return status
 
 

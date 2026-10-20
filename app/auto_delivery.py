@@ -133,6 +133,7 @@ def queue_ass_regeneration(config: ProjectConfig, output: Path):
         # leaving an avoidable stale intermediate when the archive had never
         # produced a verifiable FLAC/MKV source.
         if config.delivery_mode == "complete":
+            report_progress("preflight-audio", "正在完整解码核验 FLAC 音轨，长档案可能需要几分钟", 0, 0)
             try:
                 verify_internal_ass_audio_source(output)
             except ValueError as exc:
