@@ -264,11 +264,34 @@ def create_job(
             _persist_locked()
 
     def runner() -> None:
-        with _LOCK:
-            job.state = "running"
-            job.message = "正在准备"
-            job.started_at = now()
-            _persist_locked()
+        # A durable transition to "running" is required before executing any
+        # side effects. Failing here used to escape the daemon thread outside
+        # the exception handler and leave an in-memory ghost "running" job.
+        try:
+            with _LOCK:
+                job.state = "running"
+                job.message = "正在准备"
+                job.started_at = now()
+                _persist_locked()
+        except Exception as exc:
+            with _LOCK:
+                job.state = "failed"
+                job.message = "构建失败" if kind in BUILD_KINDS else "失败"
+                job.finished_at = now()
+                job.error = (
+                    f"Task was not started because the running-state journal "
+                    f"could not be saved: {type(exc).__name__}: {exc}"
+                )
+                try:
+                    _persist_locked()
+                except Exception:
+                    # The journal may remain unavailable. Keep this process's
+                    # state terminal and let recovery mark any disk-side queued
+                    # state interrupted once the session ends.
+                    logging.getLogger(__name__).exception(
+                        "Unable to publish failed HSR job startup: %s", job.id
+                    )
+            return
         try:
             guard = (lock_project_writer(job.project_root)
                      if kind in PROJECT_OUTPUT_WRITERS and job.project_root
