@@ -1954,41 +1954,41 @@ def build_project_v02(
             artifacts=[out_dir / "build_report.json"],
             artifact_root=out_dir,
         )
-    if delivery_mode == "complete":
-        # Publish the full product only after the working FLAC and both
-        # subtitle receipts were generated. Failed FFmpeg mux must not replace
-        # an earlier valid MKV or claim that the full delivery completed.
-        from .archive_bundle_backgrounds import RESOLUTIONS
-        from .archive_bundle_exporter import ArchiveBundleExporter
-        from .archive_bundle_lifecycle import (
-            _read_receipt, bundle_export_status, load_previous_bundle_image, previous_bundle_settings,
-        )
-        from .project_fonts import font_asset_directory
-        settings = previous_bundle_settings(out_dir)
-        spec = settings["background_spec"]
-        existing_bundle = _read_receipt(out_dir)
-        if (bundle_export_status(out_dir)["needs_rebuild"] or
-                bool(existing_bundle and existing_bundle.get("include_chapter_flac")) != bool(generate_chapter_flac)):
-            background = (load_previous_bundle_image(out_dir)
-                          if spec["mode"] == "image" else None)
-            width, height = RESOLUTIONS[spec["resolution"]]
-            progress("bundle", "正在更新完整 MKV：视频 + FLAC + ASS + SRT", 6, 6)
-            report["complete_mkv"] = ArchiveBundleExporter(width=width, height=height).export(
-                out_dir / "continuous.flac", out_dir / "HSR_Voice_Archive.ass",
-                out_dir / "HSR_Voice_Archive_Bundle.mkv",
-                fonts_dir=font_asset_directory(out_dir),
-                include_fonts=settings["attach_project_fonts"],
-                background_color=settings["background_color"],
-                background_image=background, background_spec=spec,
-                include_chapter_flac=generate_chapter_flac,
-                require_current_ass=True,
-                progress=lambda current, total, message: progress(
-                    "bundle", message, current, max(1, total)),
+        if delivery_mode == "complete":
+            # Publish the full product only after the working FLAC and both
+            # subtitle receipts were generated. Failed FFmpeg mux must not replace
+            # an earlier valid MKV or claim that the full delivery completed.
+            from .archive_bundle_backgrounds import RESOLUTIONS
+            from .archive_bundle_exporter import ArchiveBundleExporter
+            from .archive_bundle_lifecycle import (
+                _read_receipt, bundle_export_status, load_previous_bundle_image, previous_bundle_settings,
             )
-        seal_complete_delivery(out_dir)
-    elif delivery_mode == "flac_only":
-        publish_flac_only(out_dir)
-    return report
+            from .project_fonts import font_asset_directory
+            settings = previous_bundle_settings(out_dir)
+            spec = settings["background_spec"]
+            existing_bundle = _read_receipt(out_dir)
+            if (bundle_export_status(out_dir)["needs_rebuild"] or
+                    bool(existing_bundle and existing_bundle.get("include_chapter_flac")) != bool(generate_chapter_flac)):
+                background = (load_previous_bundle_image(out_dir)
+                              if spec["mode"] == "image" else None)
+                width, height = RESOLUTIONS[spec["resolution"]]
+                progress("bundle", "正在更新完整 MKV：视频 + FLAC + ASS + SRT", 6, 6)
+                report["complete_mkv"] = ArchiveBundleExporter(width=width, height=height).export(
+                    out_dir / "continuous.flac", out_dir / "HSR_Voice_Archive.ass",
+                    out_dir / "HSR_Voice_Archive_Bundle.mkv",
+                    fonts_dir=font_asset_directory(out_dir),
+                    include_fonts=settings["attach_project_fonts"],
+                    background_color=settings["background_color"],
+                    background_image=background, background_spec=spec,
+                    include_chapter_flac=generate_chapter_flac,
+                    require_current_ass=True,
+                    progress=lambda current, total, message: progress(
+                        "bundle", message, current, max(1, total)),
+                )
+            seal_complete_delivery(out_dir)
+        elif delivery_mode == "flac_only":
+            publish_flac_only(out_dir)
+        return report
 
 
 if __name__ == "__main__":
