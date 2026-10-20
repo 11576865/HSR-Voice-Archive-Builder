@@ -68,12 +68,51 @@ def _journal_lock(path: Path):
     return lock_project_writer(str(path.expanduser().resolve()) + ".journal")
 
 
-def recover_rows(path: Path, *, limit: int) -> list[dict[str, Any]]:
-    """Mark only provably dead owners' jobs interrupted, under journal lock."""
+def _tombstone_path(path: Path) -> Path:
+    # A stable sidecar allows old jobs.json consumers to keep the JSON-list
+    # format, while a deleted ID remains authoritative across live processes.
+    return path.with_name(path.name + ".deleted.json")
+
+
+def _read_deleted(path: Path) -> set[str]:
+    location = _tombstone_path(path)
+    if not location.is_file():
+        return set()
+    try:
+        import json
+        data = json.loads(location.read_text(encoding="utf-8"))
+        if (not isinstance(data, dict) or data.get("schema_version") != 1
+                or not isinstance(data.get("job_ids"), list)
+                or any(not isinstance(item, str) or not item for item in data["job_ids"])):
+            raise ValueError("Invalid job deletion ledger")
+        return set(data["job_ids"])
+    except (OSError, ValueError, TypeError) as exc:
+        raise RuntimeError(
+            "Shared HSR job deletion ledger is unreadable; refusing to resurrect jobs"
+        ) from exc
+
+
+def _trim_rows(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
+    ordered = sorted(rows, key=lambda x: (str(x.get("created_at", "")), str(x["id"])))
+    active = [x for x in ordered if x.get("state") in {"queued", "running"}]
+    completed = [x for x in ordered if x.get("state") not in {"queued", "running"}]
+    keep = max(0, limit - len(active))
+    return sorted(active + (completed[-keep:] if keep else []),
+                  key=lambda x: (str(x.get("created_at", "")), str(x["id"])))
+
+
+def recover_snapshot(path: Path, *, limit: int) -> tuple[list[dict[str, Any]], set[str]]:
+    """Atomically reconcile peer liveness and journal deletion tombstones.
+
+    Called by status polling too, not solely when a new Python server boots.
+    Unknown/permission-denied owner leases are intentionally treated as alive.
+    """
     from datetime import datetime, timezone
     with _journal_lock(path):
-        rows = read_rows(path, strict=True)
-        changed = False
+        disk = read_rows(path, strict=True)
+        deleted = _read_deleted(path)
+        rows = [row for row in disk if row["id"] not in deleted]
+        changed = len(rows) != len(disk)
         for row in rows:
             if row.get("state") not in {"queued", "running"}:
                 continue
@@ -85,30 +124,47 @@ def recover_rows(path: Path, *, limit: int) -> list[dict[str, Any]]:
             if not row.get("error"):
                 row["error"] = "Task was interrupted by application/process shutdown."
             changed = True
-        if changed:
-            atomic_write_json(path, rows[-limit:])
-        return rows[-limit:]
+        kept = _trim_rows(rows, limit)
+        if changed or len(kept) != len(rows):
+            atomic_write_json(path, kept)
+        return kept, deleted
+
+
+def recover_rows(path: Path, *, limit: int) -> list[dict[str, Any]]:
+    """Legacy-compatible recovery wrapper; returns the journal's list rows."""
+    rows, _deleted = recover_snapshot(path, limit=limit)
+    return rows
 
 
 def persist_rows(path: Path, owned: list[dict[str, Any]], *, limit: int,
                  deleted: set[str] | None = None) -> None:
-    """Merge just this process's jobs with latest on-disk rows under an OS lock."""
+    """Merge owned changes while durable tombstones prevent stale resurrection.
+
+    Publish deletion intent *before* rewriting jobs.json. If a crash happens
+    between the two atomic writes, recovery filters deleted IDs and repairs
+    the journal. Deletion tombstones are deliberately retained until a future
+    explicit, independently validated compaction protocol is implemented.
+    """
     with _journal_lock(path):
         disk = read_rows(path, strict=True)
-        merged = {str(row["id"]): row for row in disk if isinstance(row.get("id"), str)}
+        existing_deleted = _read_deleted(path)
+        requests = set(deleted or ())
+        if requests:
+            active = {row["id"] for row in disk
+                      if row["id"] in requests and row.get("state") in {"queued", "running"}}
+            if active:
+                raise RuntimeError("Cannot delete history while a selected job is still active")
+        all_deleted = existing_deleted | requests
+        if all_deleted != existing_deleted:
+            atomic_write_json(
+                _tombstone_path(path),
+                {"schema_version": 1, "job_ids": sorted(all_deleted)},
+            )
+        merged = {row["id"]: row for row in disk if row["id"] not in all_deleted}
         for item in owned:
             job_id = str(item["id"])
             if item.get("owner_session") != SESSION_ID:
                 raise ValueError("Refusing to overwrite another HSR process's job")
-            merged[job_id] = item
-        for job_id in deleted or ():
-            merged.pop(job_id, None)
-        # Do not prune another running process's only durable state. Completed
-        # history remains bounded; active entries may temporarily exceed limit.
-        ordered = sorted(merged.values(), key=lambda x: (str(x.get("created_at", "")), str(x["id"])))
-        active = [x for x in ordered if x.get("state") in {"queued", "running"}]
-        completed = [x for x in ordered if x.get("state") not in {"queued", "running"}]
-        keep_completed = max(0, limit - len(active))
-        surviving = sorted(active + completed[-keep_completed:] if keep_completed else active,
-                           key=lambda x: (str(x.get("created_at", "")), str(x["id"])))
-        atomic_write_json(path, surviving)
+            if job_id not in all_deleted:
+                merged[job_id] = item
+        atomic_write_json(path, _trim_rows(list(merged.values()), limit))
