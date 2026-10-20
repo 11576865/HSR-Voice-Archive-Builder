@@ -75,10 +75,37 @@ class TombstoneCompactionTests(unittest.TestCase):
             }]), encoding="utf-8")
             persist_rows(path, [], limit=100, deleted={other})
             record = json.loads(_tombstone_path(path).read_text("utf-8"))
-            self.assertEqual(record["schema_version"], 2)
+            self.assertEqual(record["schema_version"], 1)
             self.assertEqual(set(record["job_ids"]), {"a" * 32, other})
             self.assertNotIn("a" * 32, record["owner_sessions"])
             self.assertEqual(record["owner_sessions"][other], SESSION_ID)
+
+    def test_old_v1_reader_accepts_new_owner_metadata(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._path(td)
+            self._seed(path, SESSION_ID)
+            data = json.loads(_tombstone_path(path).read_text("utf-8"))
+            # The older PR #198 implementation accepts exactly schema v1 and
+            # ignores optional keys, so an old live server must keep working.
+            self.assertEqual(data.get("schema_version"), 1)
+            self.assertIsInstance(data.get("job_ids"), list)
+            self.assertTrue(all(isinstance(item, str) and item
+                                for item in data["job_ids"]))
+            self.assertEqual(data["owner_sessions"]["a" * 32], SESSION_ID)
+
+    def test_existing_pr199_v2_sidecar_is_rewritten_as_v1_without_pruning(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._path(td)
+            path.write_text("[]", encoding="utf-8")
+            previous = {"schema_version": 2, "job_ids": ["a" * 32],
+                        "owner_sessions": {"a" * 32: SESSION_ID}}
+            _tombstone_path(path).write_text(json.dumps(previous), encoding="utf-8")
+            self.assertEqual(compact_tombstones(path, limit=100),
+                             {"removed": 0, "retained": 1})
+            current = json.loads(_tombstone_path(path).read_text("utf-8"))
+            self.assertEqual(current["schema_version"], 1)
+            self.assertEqual(current["job_ids"], previous["job_ids"])
+            self.assertEqual(current["owner_sessions"], previous["owner_sessions"])
 
     def test_live_owner_deletion_does_not_compact(self):
         with tempfile.TemporaryDirectory() as td:
