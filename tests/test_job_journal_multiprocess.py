@@ -11,7 +11,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from app import jobs
-from app.job_journal import recover_snapshot
+from app.job_journal import recover_snapshot, read_rows, _journal_lock
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -76,7 +76,10 @@ print("replayed", flush=True)
 
 
 def _rows(path: Path):
-    return {row["id"]: row for row in json.loads(path.read_text(encoding="utf-8"))}
+    # Honor the same mutex as application writers; Windows atomic replacement
+    # can fail if a test holds jobs.json open outside that resource boundary.
+    with _journal_lock(path):
+        return {row["id"]: row for row in read_rows(path, strict=True)}
 
 
 class SharedJobJournalProcessTests(unittest.TestCase):
@@ -122,7 +125,8 @@ class SharedJobJournalProcessTests(unittest.TestCase):
             first, id_a = self._start(journal, release_a, root / "first")
             second, id_b = self._start(journal, release_b, root / "second")
             self._wait(lambda: len(_rows(journal)) == 2)
-            self.assertEqual(_rows(journal)[id_a]["state"], "running")
+            self.assertEqual(_rows(journal)[id_a]["state"], "running",
+                             f"first={first.poll()} second={second.poll()}")
             self.assertEqual(_rows(journal)[id_b]["state"], "running")
             probe = subprocess.run(
                 [sys.executable, "-c", INSPECT, str(journal)],
