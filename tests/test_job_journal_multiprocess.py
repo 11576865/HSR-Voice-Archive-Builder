@@ -169,6 +169,34 @@ class SharedJobJournalProcessTests(unittest.TestCase):
             self.assertEqual(second.wait(timeout=10), 0)
 
 
+    def test_journal_lock_waits_for_short_foreign_transaction(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            journal, ready = root / "jobs.json", root / "locked"
+            script = """
+import sys, time
+from pathlib import Path
+from app.job_journal import _journal_lock
+journal, ready = map(Path, sys.argv[1:3])
+with _journal_lock(journal):
+    ready.touch()
+    time.sleep(0.5)
+"""
+            actor = subprocess.Popen(
+                [sys.executable, "-u", "-c", script, str(journal), str(ready)],
+                cwd=ROOT, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True,
+            )
+            self.addCleanup(self._end_child, actor)
+            self._wait(ready.exists)
+            start = time.monotonic()
+            from app.job_journal import recover_rows
+            rows = recover_rows(journal, limit=100)
+            elapsed = time.monotonic() - start
+            self.assertEqual(rows, [])
+            self.assertGreater(elapsed, 0.1, "Journal must wait, not fail on collision")
+            self.assertLess(elapsed, 5.0, "Journal must resume promptly after lock release")
+            self.assertEqual(actor.wait(timeout=8), 0)
+
     def test_tombstone_prevents_stale_live_owner_from_republishing_deleted_job(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
