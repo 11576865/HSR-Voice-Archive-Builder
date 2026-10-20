@@ -247,9 +247,11 @@ def _audio_kind(header: bytes) -> str:
     return ""
 
 
-def _existing_audio(destination: Path, stem: str) -> Path | None:
+def _existing_audio(destination: Path, stem: str, expected_ext: str) -> Path | None:
     """A stale .part, other extension, or broken header is never a download."""
-    for ext in (".wav", ".flac", ".ogg"):
+    if expected_ext not in {".wav", ".flac", ".ogg"}:
+        return None
+    for ext in (expected_ext,):
         path = destination / (stem + ext)
         if path.is_symlink() or not path.is_file():
             continue
@@ -307,7 +309,8 @@ def download_resolved_audio(
         rows = {int(item["row_idx"]): item for item in payload.get("rows", []) if item.get("row_idx") is not None}
         for filename, index in group:
             stem = Path(filename).stem
-            existing = _existing_audio(destination, stem)
+            expected_ext = Path(filename).suffix.lower()
+            existing = _existing_audio(destination, stem, expected_ext)
             if existing is not None:
                 completed.append({"filename": filename, "status": "exists", "path": str(existing)})
                 if progress:
@@ -346,6 +349,8 @@ def download_resolved_audio(
                 extension = _audio_kind(header)
                 if not extension or count < 16:
                     raise ValueError("Downloaded content is not WAV, FLAC, or Ogg audio")
+                if extension != expected_ext:
+                    raise ValueError("Downloaded audio format does not match the indexed member suffix")
                 output = destination / (stem + extension)
                 if output.is_symlink():
                     raise ValueError("Unsafe existing audio symlink")
