@@ -187,6 +187,57 @@ class SustainedJobJournalProcessTests(unittest.TestCase):
                     timeout=8,
                 )
 
+    def test_transient_windows_atomic_replace_denial_is_retried(self):
+        from app import job_journal
+        original = job_journal.atomic_write_json
+        calls = 0
+
+        def temporarily_blocked(path, value):
+            nonlocal calls
+            calls += 1
+            if calls <= 3:
+                exc = PermissionError("transient Windows replace deny")
+                exc.winerror = 5
+                raise exc
+            return original(path, value)
+
+        with patch.object(job_journal, "atomic_write_json", side_effect=temporarily_blocked):
+            job_journal.persist_rows(self.journal, [], limit=100)
+        self.assertEqual(calls, 4)
+        self.assertEqual(json.loads(self.journal.read_text("utf-8")), [])
+
+    def test_permanent_denial_is_never_silently_swallowed(self):
+        from app import job_journal
+        attempts = 0
+
+        def always_denied(_path, _payload):
+            nonlocal attempts
+            attempts += 1
+            exc = PermissionError("persistent Windows replace denial")
+            exc.winerror = 5
+            raise exc
+
+        with patch.object(job_journal, "WIN32_REPLACE_RETRY_SECONDS", 0.08), \
+             patch.object(job_journal, "atomic_write_json", side_effect=always_denied):
+            with self.assertRaisesRegex(PermissionError, "persistent Windows"):
+                job_journal.persist_rows(self.journal, [], limit=100)
+        self.assertGreaterEqual(attempts, 2)
+        self.assertFalse(self.journal.exists())
+
+    def test_other_write_errors_are_not_retried(self):
+        from app import job_journal
+        calls = 0
+
+        def wrong_error(_path, _payload):
+            nonlocal calls
+            calls += 1
+            raise OSError("unrelated journal write failure")
+
+        with patch.object(job_journal, "atomic_write_json", side_effect=wrong_error):
+            with self.assertRaisesRegex(OSError, "unrelated"):
+                job_journal.persist_rows(self.journal, [], limit=100)
+        self.assertEqual(calls, 1)
+
     def test_killed_progress_owner_is_interrupted_but_peer_finishes(self):
         a, id_a = self._worker(self.projects[0])
         b, id_b = self._worker(self.projects[1])
