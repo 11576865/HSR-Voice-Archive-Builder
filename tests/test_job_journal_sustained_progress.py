@@ -150,6 +150,43 @@ class SustainedJobJournalProcessTests(unittest.TestCase):
             self.assertEqual(last[job_id]["progress_current"], STEPS)
             self.assertEqual(last[job_id]["progress_total"], STEPS)
 
+    def test_failed_running_state_journal_publication_cannot_leave_ghost_build(self):
+        # create_job() durably queues first. If the daemon thread's initial
+        # running-state journal write fails, it must fail before invoking work,
+        # rather than remain a live "running" job for this process forever.
+        import threading
+        with patch.object(jobs, "JOBS_FILE", self.journal), \
+             patch.object(jobs, "_JOBS", {}), \
+             patch.object(jobs, "_RESERVED_PROJECT_WRITERS", {}), \
+             patch.object(jobs, "_DELETED_JOB_IDS", set()):
+            actual = jobs._persist_locked
+            count = 0
+
+            def crash_once():
+                nonlocal count
+                count += 1
+                if count == 2:
+                    raise OSError("injected startup state journal failure")
+                return actual()
+
+            executed = threading.Event()
+            with patch.object(jobs, "_persist_locked", side_effect=crash_once):
+                failed = jobs.create_job("build", lambda: executed.set())
+                self._wait_for(
+                    lambda: jobs.get_job(failed.id)["state"] in {"failed", "succeeded"},
+                    timeout=8,
+                )
+                self.assertEqual(jobs.get_job(failed.id)["state"], "failed")
+                self.assertFalse(executed.is_set(), "Unjournaled build must not execute")
+                self.assertIn("injected startup", jobs.get_job(failed.id)["error"])
+                disk = self._states()
+                self.assertEqual(disk[failed.id]["state"], "failed")
+                later = jobs.create_job("build", lambda: True)
+                self._wait_for(
+                    lambda: jobs.get_job(later.id)["state"] == "succeeded",
+                    timeout=8,
+                )
+
     def test_killed_progress_owner_is_interrupted_but_peer_finishes(self):
         a, id_a = self._worker(self.projects[0])
         b, id_b = self._worker(self.projects[1])
