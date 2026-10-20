@@ -67,7 +67,7 @@ while time.monotonic() < deadline:
             raise SystemExit("progress regressed for " + job_id)
         last[job_id] = row["progress_current"]
         if row["state"] in ("failed", "interrupted"):
-            raise SystemExit("unexpected live task failure: " + row["state"])
+            raise SystemExit("unexpected live task failure: " + row["state"] + " " + str(row.get("error", "")))
         if row["state"] == "succeeded":
             terminal[job_id] = row["state"]
     observations += 1
@@ -136,7 +136,7 @@ class SustainedJobJournalProcessTests(unittest.TestCase):
             observers.append(p)
         for observer in observers:
             stdout, stderr = observer.communicate(timeout=36)
-            self.assertEqual(observer.returncode, 0, stderr)
+            self.assertEqual(observer.returncode, 0, stderr + "\n" + repr(self._states()))
             self.assertIn("observed=", stdout)
             self.assertIn(f" {STEPS} {STEPS}", stdout)
         for worker in (a, b):
