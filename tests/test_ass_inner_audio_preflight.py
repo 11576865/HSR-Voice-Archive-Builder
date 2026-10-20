@@ -6,6 +6,8 @@ a loose/unknown MKV is not provenance. Refuse before rewriting ASS/SRT/receipt.
 from __future__ import annotations
 
 import os
+import shutil
+import subprocess
 import tempfile
 import unittest
 from pathlib import Path
@@ -90,9 +92,43 @@ class InternalAssAudioPrerequisiteTests(unittest.TestCase):
         (self.output / "continuous.flac").write_bytes(b"fake-with-mocked-probe")
         with patch("app.delivery_artifacts._probe",
                    return_value=[{"codec_type": "video", "codec_name": "h264"},
-                                 {"codec_type": "audio", "codec_name": "flac"}]):
+                                 {"codec_type": "audio", "codec_name": "flac"}]), \
+             patch("app.delivery_artifacts._verify_primary_flac_decodes"):
             source = verify_internal_ass_audio_source(self.output)
         self.assertEqual(source["source"], "independent-flac")
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
+                         "Real FFmpeg and FFprobe are required")
+    def test_corrupt_late_flac_frames_are_rejected_before_subtitle_mutation(self):
+        audio = self.output / "continuous.flac"
+        subprocess.run(
+            ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+             "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=44100:duration=2",
+             "-c:a", "flac", str(audio)],
+            check=True, capture_output=True, timeout=60,
+        )
+        self.assertEqual(
+            verify_internal_ass_audio_source(self.output)["source"], "independent-flac"
+        )
+        data = bytearray(audio.read_bytes())
+        center = int(len(data) * 0.45)
+        data[center:center + 200] = b"\xff" * 200
+        audio.write_bytes(data)
+        tracked = ("manifest.json", "HSR_Voice_Archive.ass",
+                   "HSR_Voice_Archive.srt", "subtitle_export_receipt.json")
+        previous = {name: (self.output / name).read_bytes() for name in tracked}
+        # Header and stream codec are still readable; frame-level decode fails.
+        from app.delivery_artifacts import _probe
+        self.assertEqual(_probe(audio)[0]["codec_name"], "flac")
+        with patch("app.auto_delivery.create_job",
+                   side_effect=lambda _kind, runner, **kwargs:
+                       runner(lambda *args: None)), \
+             patch("app.subtitles.refresh_subtitle_artifacts_from_settings") as render:
+            with self.assertRaisesRegex(ValueError, "完整 FLAC 解码校验失败"):
+                queue_ass_regeneration(self.config, self.output)
+            render.assert_not_called()
+        for name, original in previous.items():
+            self.assertEqual((self.output / name).read_bytes(), original, name)
 
     def test_unverified_mkv_does_not_impersonate_verified_audio(self):
         (self.output / OUTPUT).write_bytes(b"old-video-unverified")
