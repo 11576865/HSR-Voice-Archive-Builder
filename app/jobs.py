@@ -9,7 +9,7 @@ from datetime import datetime, timezone
 from typing import Any, Callable, Iterator
 
 from .project import STATE_DIR
-from .job_journal import SESSION_ID, persist_rows, read_rows, recover_rows
+from .job_journal import SESSION_ID, persist_rows, recover_snapshot, recover_rows
 from .project_writer_lock import lock_project_writer
 
 JOBS_FILE = STATE_DIR / "jobs.json"
@@ -64,8 +64,9 @@ def _persist_locked() -> None:
 
 def _refresh_foreign_locked() -> None:
     """Refresh other processes' jobs, preserving this process's live objects."""
+    rows, deleted = recover_snapshot(JOBS_FILE, limit=MAX_PERSISTED_JOBS)
     fresh: dict[str, Job] = {}
-    for item in read_rows(JOBS_FILE):
+    for item in rows:
         try:
             candidate = Job(**item)
         except (TypeError, ValueError):
@@ -73,7 +74,9 @@ def _refresh_foreign_locked() -> None:
         if candidate.owner_session != SESSION_ID:
             fresh[candidate.id] = candidate
     for job_id, job in list(_JOBS.items()):
-        if job.owner_session != SESSION_ID and job_id not in fresh:
+        if job_id in deleted and job.state not in {"queued", "running"}:
+            _JOBS.pop(job_id, None)
+        elif job.owner_session != SESSION_ID and job_id not in fresh:
             _JOBS.pop(job_id, None)
     _JOBS.update(fresh)
 
@@ -311,9 +314,15 @@ def delete_project_jobs(project_root: str) -> int:
             job_id for job_id, job in _JOBS.items()
             if job.project_root == target and job.state not in {"queued", "running"}
         ]
+        previous = {job_id: _JOBS[job_id] for job_id in doomed}
         for job_id in doomed:
             _JOBS.pop(job_id, None)
             _DELETED_JOB_IDS.add(job_id)
         if doomed:
-            _persist_locked()
+            try:
+                _persist_locked()
+            except Exception:
+                _JOBS.update(previous)
+                _DELETED_JOB_IDS.difference_update(doomed)
+                raise
         return len(doomed)
