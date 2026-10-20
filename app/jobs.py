@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from contextlib import contextmanager, nullcontext
+import logging
 import threading
 import traceback
 import uuid
@@ -97,6 +98,16 @@ def _load_previous() -> None:
         # Preserve the original journal on corruption; subsequent writes
         # fail closed rather than silently replacing potentially valid jobs.
         _JOBS.clear()
+        return
+    # One best-effort startup sweep is enough to discard provably expired
+    # v2 tombstones without expensive OS-lease probing on every status poll.
+    # If disk maintenance fails, preserve the existing job view and ledger.
+    try:
+        compact_tombstones(JOBS_FILE, limit=MAX_PERSISTED_JOBS)
+    except (OSError, RuntimeError) as exc:
+        logging.getLogger(__name__).warning(
+            "HSR job tombstone compaction deferred: %s", exc
+        )
 
 
 _load_previous()
