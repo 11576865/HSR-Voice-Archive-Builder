@@ -159,6 +159,10 @@ def assert_project_idle(project_root: str) -> None:
                     f"项目「{job.project_name or target}」仍有任务正在运行，请等待任务结束后再删除"
                 )
 
+    # Probe other HSR instances before treating this project as idle.
+    with lock_project_writer(target):
+        pass
+
 
 def create_job(
     kind: str,
