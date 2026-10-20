@@ -29,6 +29,7 @@ from .archive_bundle_lifecycle import diagnose_bundle_audio_source, load_previou
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
+from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
@@ -1729,9 +1730,7 @@ def api_update_apply_remote():
                         staging_target = staging / audio.name
                         staging_target.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(audio, staging_target)
-                combined.parent.mkdir(parents=True, exist_ok=True)
-                # Retain the previous generation until the new index/config commits.
-                staging.replace(combined)
+                publish_audio_generation(generated, staging, temporary_root.name)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
                 raise
