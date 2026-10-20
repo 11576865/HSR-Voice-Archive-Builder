@@ -97,22 +97,84 @@ def _tombstone_path(path: Path) -> Path:
     return path.with_name(path.name + ".deleted.json")
 
 
-def _read_deleted(path: Path) -> set[str]:
+def _valid_session(owner_id: object) -> bool:
+    return (
+        isinstance(owner_id, str) and len(owner_id) == 32
+        and all(c in "0123456789abcdef" for c in owner_id)
+    )
+
+
+def _read_ledger(path: Path) -> tuple[set[str], dict[str, str]]:
+    """Accept v1 IDs conservatively; only v2 records carry pruneable owners.
+
+    A legacy v1 tombstone cannot safely be compacted: its owner is unknown,
+    and a still-live writer may retain the completed job in memory.
+    """
     location = _tombstone_path(path)
     if not location.is_file():
-        return set()
+        return set(), {}
     try:
         import json
         data = json.loads(location.read_text(encoding="utf-8"))
-        if (not isinstance(data, dict) or data.get("schema_version") != 1
-                or not isinstance(data.get("job_ids"), list)
-                or any(not isinstance(item, str) or not item for item in data["job_ids"])):
-            raise ValueError("Invalid job deletion ledger")
-        return set(data["job_ids"])
+        if not isinstance(data, dict) or data.get("schema_version") not in (1, 2):
+            raise ValueError("Invalid job deletion ledger version")
+        ids = data.get("job_ids")
+        if (not isinstance(ids, list)
+                or any(not isinstance(item, str) or not item for item in ids)
+                or len(ids) != len(set(ids))):
+            raise ValueError("Invalid deleted job IDs")
+        if data["schema_version"] == 1:
+            return set(ids), {}
+        owners = data.get("owner_sessions")
+        if (not isinstance(owners, dict)
+                or any(job_id not in ids or not _valid_session(session)
+                       for job_id, session in owners.items())):
+            raise ValueError("Invalid tombstone owner metadata")
+        return set(ids), dict(owners)
     except (OSError, ValueError, TypeError) as exc:
         raise RuntimeError(
             "Shared HSR job deletion ledger is unreadable; refusing to resurrect jobs"
         ) from exc
+
+
+def _read_deleted(path: Path) -> set[str]:
+    # Keep the public/internal v1 set interface for existing consumers.
+    return _read_ledger(path)[0]
+
+
+def _write_ledger(path: Path, deleted: set[str], owners: dict[str, str]) -> None:
+    atomic_write_json(
+        _tombstone_path(path),
+        {"schema_version": 2, "job_ids": sorted(deleted),
+         "owner_sessions": {k: owners[k] for k in sorted(owners)}},
+    )
+
+
+def compact_tombstones(path: Path, *, limit: int) -> dict[str, int]:
+    """Safely compact only tombstones whose exact owner session is dead.
+
+    Under the shared journal OS lock, remove any tombstoned raw JSON rows
+    FIRST, then publish the smaller sidecar. A crash between those atomic
+    writes retains the old sidecar, which is safe to retry. Never compact
+    v1/unknown-owner or live-owner tombstones.
+
+    This is explicit maintenance rather than a timer or a poll-side effect.
+    """
+    with _journal_lock(path):
+        disk = read_rows(path, strict=True)
+        deleted, owners = _read_ledger(path)
+        removable = {job_id for job_id, session in owners.items()
+                     if job_id in deleted and not session_is_alive(session)}
+        if not removable:
+            return {"removed": 0, "retained": len(deleted)}
+        # The old sidecar still protects deletions until *after* publication
+        # of the journal without any row it formerly masked.
+        kept = _trim_rows([row for row in disk if row["id"] not in deleted], limit)
+        atomic_write_json(path, kept)
+        remaining = deleted - removable
+        _write_ledger(path, remaining, {k: v for k, v in owners.items()
+                                        if k in remaining})
+        return {"removed": len(removable), "retained": len(remaining)}
 
 
 def _trim_rows(rows: list[dict[str, Any]], limit: int) -> list[dict[str, Any]]:
@@ -161,28 +223,30 @@ def recover_rows(path: Path, *, limit: int) -> list[dict[str, Any]]:
 
 def persist_rows(path: Path, owned: list[dict[str, Any]], *, limit: int,
                  deleted: set[str] | None = None) -> None:
-    """Merge owned changes while durable tombstones prevent stale resurrection.
+    """Merge local jobs without reintroducing deleted history.
 
-    Publish deletion intent *before* rewriting jobs.json. If a crash happens
-    between the two atomic writes, recovery filters deleted IDs and repairs
-    the journal. Deletion tombstones are deliberately retained until a future
-    explicit, independently validated compaction protocol is implemented.
+    New tombstones capture only authenticated (valid) producer session IDs;
+    unknown legacy owners are never considered safe for compaction. The
+    deletion ledger still publishes *before* the replacement jobs.json.
     """
     with _journal_lock(path):
         disk = read_rows(path, strict=True)
-        existing_deleted = _read_deleted(path)
+        existing_deleted, owners = _read_ledger(path)
         requests = set(deleted or ())
         if requests:
             active = {row["id"] for row in disk
-                      if row["id"] in requests and row.get("state") in {"queued", "running"}}
+                      if row["id"] in requests
+                      and row.get("state") in {"queued", "running"}}
             if active:
                 raise RuntimeError("Cannot delete history while a selected job is still active")
         all_deleted = existing_deleted | requests
         if all_deleted != existing_deleted:
-            atomic_write_json(
-                _tombstone_path(path),
-                {"schema_version": 1, "job_ids": sorted(all_deleted)},
-            )
+            for row in disk:
+                if row["id"] in requests and row["id"] not in existing_deleted:
+                    session = row.get("owner_session")
+                    if _valid_session(session):
+                        owners[row["id"]] = session
+            _write_ledger(path, all_deleted, owners)
         merged = {row["id"]: row for row in disk if row["id"] not in all_deleted}
         for item in owned:
             job_id = str(item["id"])
