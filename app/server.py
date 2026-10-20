@@ -1710,7 +1710,7 @@ def api_update_apply_remote():
 
             generated.mkdir(parents=True, exist_ok=True)
             temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-            combined = generated / "combined_audio"
+            combined = generated / "combined_audio_versions" / temporary_root.name
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
                 staging = temporary_root / "combined"
@@ -1729,8 +1729,8 @@ def api_update_apply_remote():
                         staging_target = staging / audio.name
                         staging_target.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(audio, staging_target)
-                if combined.exists():
-                    shutil.rmtree(combined)
+                combined.parent.mkdir(parents=True, exist_ok=True)
+                # Retain the previous generation until the new index/config commits.
                 staging.replace(combined)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
@@ -1792,7 +1792,7 @@ def api_update_apply_remote():
                     ),
                     "sha256": "",
                 })
-            updated_index = generated / "quick_index_incremental.csv"
+            updated_index = generated / f"quick_index_incremental_{temporary_root.name}.csv"
             with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()
