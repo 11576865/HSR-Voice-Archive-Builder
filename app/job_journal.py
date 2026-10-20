@@ -6,6 +6,7 @@ when a second HSR server imports this module.
 """
 from __future__ import annotations
 
+import atexit
 import uuid
 from pathlib import Path
 from typing import Any
@@ -17,6 +18,9 @@ SESSION_ID = uuid.uuid4().hex
 # Keep the session lease open for the life of this Python interpreter.
 _OWN_LEASE = lock_project_writer(str(STATE_DIR / "job-sessions" / SESSION_ID))
 _OWN_LEASE.__enter__()
+# Release explicitly before interpreter module teardown; OS still releases
+# automatically on crashes / forced process termination.
+atexit.register(_OWN_LEASE.__exit__, None, None, None)
 
 
 def _session_lease(owner_id: str):
