@@ -126,8 +126,9 @@ class SharedJobJournalProcessTests(unittest.TestCase):
             self.assertEqual(_rows(journal)[id_b]["state"], "running")
             probe = subprocess.run(
                 [sys.executable, "-c", INSPECT, str(journal)],
-                cwd=ROOT, text=True, capture_output=True, timeout=15, check=True,
+                cwd=ROOT, text=True, capture_output=True, timeout=15, check=False,
             )
+            self.assertEqual(probe.returncode, 0, probe.stderr)
             visible = json.loads(probe.stdout)
             self.assertEqual(visible[id_a], "running")
             self.assertEqual(visible[id_b], "running")
@@ -152,8 +153,9 @@ class SharedJobJournalProcessTests(unittest.TestCase):
             first.wait(timeout=8)
             probe = subprocess.run(
                 [sys.executable, "-c", INSPECT, str(journal)],
-                cwd=ROOT, text=True, capture_output=True, timeout=15, check=True,
+                cwd=ROOT, text=True, capture_output=True, timeout=15, check=False,
             )
+            self.assertEqual(probe.returncode, 0, probe.stderr)
             visible = json.loads(probe.stdout)
             self.assertEqual(visible[id_a], "interrupted")
             self.assertEqual(visible[id_b], "running")
