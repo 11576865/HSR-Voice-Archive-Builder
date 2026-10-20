@@ -143,13 +143,13 @@ class HuggingFaceAudioTests(unittest.TestCase):
 
 
     def test_interrupted_part_is_not_a_completed_audio_download(self) -> None:
-        wav = b"RIFF" + (36).to_bytes(4, "little") + b"WAVEfmt " + b"\\0" * 32
+        wav = b"RIFF" + (36).to_bytes(4, "little") + b"WAVEfmt " + b"\0" * 32
         plan = {"targets": {"voice_001.wav": {"row_idx": 0}}}
         payload = {"rows": [{"row_idx": 0, "row": {"audio": {"src": "https://huggingface.co/voice.wav"}}}]}
         with tempfile.TemporaryDirectory() as td:
             destination = Path(td)
             (destination / "voice_001.wav.part").write_bytes(b"interrupted download")
-            with patch("app.huggingface_audio._json_get", return_value=payload), \\
+            with patch("app.huggingface_audio._json_get", return_value=payload), \
                  patch("app.huggingface_audio.urllib.request.build_opener") as opener:
                 opener.return_value.open.return_value = io.BytesIO(wav)
                 result = download_resolved_audio(plan, destination)
@@ -165,7 +165,7 @@ class HuggingFaceAudioTests(unittest.TestCase):
             destination = Path(td)
             (destination / "voice_001.wav").write_bytes(b"corrupt")
             (destination / "voice_001.txt").write_text("not audio")
-            with patch("app.huggingface_audio._json_get", return_value=payload), \\
+            with patch("app.huggingface_audio._json_get", return_value=payload), \
                  patch("app.huggingface_audio.urllib.request.build_opener") as opener:
                 opener.return_value.open.return_value = io.BytesIO(b"invalid response")
                 result = download_resolved_audio(plan, destination)
@@ -178,10 +178,10 @@ class HuggingFaceAudioTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as td:
             destination = Path(td)
             payload = {"rows": [{"row_idx": 0, "row": {"audio": {"src": "https://huggingface.co/voice.wav"}}}]}
-            with patch("app.huggingface_audio._json_get", return_value=payload), \\
-                 patch("app.huggingface_audio.MAX_AUDIO_DOWNLOAD_BYTES", 16), \\
+            with patch("app.huggingface_audio._json_get", return_value=payload), \
+                 patch("app.huggingface_audio.MAX_AUDIO_DOWNLOAD_BYTES", 16), \
                  patch("app.huggingface_audio.urllib.request.build_opener") as opener:
-                opener.return_value.open.return_value = io.BytesIO(b"RIFF" + b"\\0" * 8 + b"too-big" * 8)
+                opener.return_value.open.return_value = io.BytesIO(b"RIFF" + b"\0" * 8 + b"too-big" * 8)
                 bounded = download_resolved_audio(plan, destination)
             self.assertEqual(bounded["completed"], [])
             self.assertIn("128 MiB budget", bounded["failed"][0]["reason"])
