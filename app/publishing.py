@@ -16,6 +16,8 @@ BUILD_MARKER = ".build_in_progress"
 # translation checkpoints deliberately remain outside the rollback set.
 ARCHIVE_FILES = (
     "manifest.json",
+    "archive_bundle_receipt.json",
+    "subtitle_export_receipt.json",
     "manifest.csv",
     "bilingual_index_corrected.csv",
     "timeline_resolved.json",

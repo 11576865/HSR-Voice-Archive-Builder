@@ -30,6 +30,7 @@ from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, norm
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
+from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
@@ -1527,7 +1528,7 @@ class Handler(BaseHTTPRequestHandler):
                 report_progress("apply", f"正在合并 {len(successful)} 条新增语音并更新项目索引", 0, 1)
                 generated.mkdir(parents=True, exist_ok=True)
                 temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-                combined = generated / "combined_audio"
+                combined = generated / "combined_audio_versions" / temporary_root.name
                 try:
                     extracted = ensure_dir_or_extract(source, temporary_root, "existing")
                     for wav in extracted.rglob("*.wav"):
@@ -1539,9 +1540,7 @@ class Handler(BaseHTTPRequestHandler):
                     for audio in incoming.iterdir():
                         if audio.is_file() and not audio.name.endswith(".part"):
                             shutil.copy2(audio, temporary_root / audio.name)
-                    if combined.exists():
-                        shutil.rmtree(combined)
-                    temporary_root.replace(combined)
+                    publish_audio_generation(generated, temporary_root, temporary_root.name)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     raise
@@ -1558,7 +1557,7 @@ class Handler(BaseHTTPRequestHandler):
                         metadata = details.get(filename, {})
                         reference = confirmed_references.get(filename, {})
                         existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": dataset, "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
-                updated_index = generated / "quick_index_incremental.csv"
+                updated_index = generated / f"quick_index_incremental_{temporary_root.name}.csv"
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)

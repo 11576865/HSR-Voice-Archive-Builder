@@ -137,6 +137,35 @@ class ArchivePublicationTests(unittest.TestCase):
                 self.build(intro_gap=3.0)
         self.assertEqual((self.output / "continuous.flac").read_bytes(), old_audio)
 
+    def test_complete_mkv_failure_restores_old_manifest_and_publication_receipts(self) -> None:
+        def complete_build(intro_gap: float) -> dict[str, object]:
+            return build_project_v02(
+                self.index, self.wavs, self.output, state_dir=self.state,
+                intro_gap=intro_gap, same_group_gap=0.0, group_gap=0.0,
+                delivery_mode="complete", translate_missing=False,
+            )
+
+        complete_build(1.0)
+        output_names = (
+            "manifest.json", "HSR_Voice_Archive_Bundle.mkv",
+            "archive_bundle_receipt.json", "subtitle_export_receipt.json",
+            "build_report.json",
+        )
+        before = {name: (self.output / name).read_bytes() for name in output_names}
+        old_checkpoint = (self.state / "stages" / "final_report.json").read_bytes()
+        with patch(
+            "app.archive_bundle_exporter.ArchiveBundleExporter.export",
+            side_effect=RuntimeError("injected final MKV encoder failure"),
+        ):
+            with self.assertRaisesRegex(RuntimeError, "injected final MKV"):
+                complete_build(3.0)
+        for name, original in before.items():
+            self.assertEqual((self.output / name).read_bytes(), original, name)
+        self.assertEqual(
+            (self.state / "stages" / "final_report.json").read_bytes(), old_checkpoint
+        )
+        self.assertFalse((self.output / BUILD_MARKER).exists())
+
     def test_interrupted_marker_does_not_report_completed_archive(self) -> None:
         self.build()
         (self.output / BUILD_MARKER).touch()

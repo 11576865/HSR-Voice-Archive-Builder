@@ -29,6 +29,7 @@ from .archive_bundle_lifecycle import diagnose_bundle_audio_source, load_previou
 from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, normalize_bundle_background, render_background_preview
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
+from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .identity import infer_group
@@ -1710,7 +1711,7 @@ def api_update_apply_remote():
 
             generated.mkdir(parents=True, exist_ok=True)
             temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
-            combined = generated / "combined_audio"
+            combined = generated / "combined_audio_versions" / temporary_root.name
             try:
                 extracted = ensure_dir_or_extract(source, temporary_root, "existing")
                 staging = temporary_root / "combined"
@@ -1729,9 +1730,7 @@ def api_update_apply_remote():
                         staging_target = staging / audio.name
                         staging_target.parent.mkdir(parents=True, exist_ok=True)
                         shutil.copy2(audio, staging_target)
-                if combined.exists():
-                    shutil.rmtree(combined)
-                staging.replace(combined)
+                publish_audio_generation(generated, staging, temporary_root.name)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
                 raise
@@ -1792,7 +1791,7 @@ def api_update_apply_remote():
                     ),
                     "sha256": "",
                 })
-            updated_index = generated / "quick_index_incremental.csv"
+            updated_index = generated / f"quick_index_incremental_{temporary_root.name}.csv"
             with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                 writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                 writer.writeheader()

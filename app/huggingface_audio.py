@@ -4,6 +4,9 @@ import hashlib
 import html
 import json
 import mmap
+import os
+import tempfile
+import ipaddress
 import random
 import re
 import time
@@ -17,6 +20,7 @@ from typing import Any, Callable
 
 DATASET = "simon3000/starrail-voice"
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
+MAX_AUDIO_DOWNLOAD_BYTES = 128 * 1024 * 1024
 
 
 def result_url(dataset: str = DATASET) -> str:
@@ -233,6 +237,56 @@ def _audio_src(value: Any) -> str:
     return ""
 
 
+def _audio_kind(header: bytes) -> str:
+    if len(header) >= 12 and header[:4] == b"RIFF" and header[8:12] == b"WAVE":
+        return ".wav"
+    if header.startswith(b"fLaC"):
+        return ".flac"
+    if header.startswith(b"OggS"):
+        return ".ogg"
+    return ""
+
+
+def _existing_audio(destination: Path, stem: str, expected_ext: str) -> Path | None:
+    """A stale .part, other extension, or broken header is never a download."""
+    if expected_ext not in {".wav", ".flac", ".ogg"}:
+        return None
+    for ext in (expected_ext,):
+        path = destination / (stem + ext)
+        if path.is_symlink() or not path.is_file():
+            continue
+        try:
+            if path.stat().st_size >= 16:
+                with path.open("rb") as stream:
+                    if _audio_kind(stream.read(16)) == ext:
+                        return path
+        except OSError:
+            continue
+    return None
+
+
+def _require_public_audio_url(url: str) -> None:
+    """Do not let dataset-provided links contact loopback or private IPs."""
+    split = urllib.parse.urlsplit(url)
+    host = split.hostname or ""
+    if split.scheme != "https" or not host or split.username or split.password:
+        raise ValueError("Only public HTTPS audio URLs are permitted")
+    if host.lower() == "localhost" or host.lower().endswith((".localhost", ".local", ".internal")):
+        raise ValueError("Local audio endpoints are not permitted")
+    try:
+        addr = ipaddress.ip_address(host)
+    except ValueError:
+        return  # A DNS name still needs network egress restrictions at deployment.
+    if not addr.is_global:
+        raise ValueError("Private and non-global audio IP endpoints are not permitted")
+
+
+class _GuardedAudioRedirect(urllib.request.HTTPRedirectHandler):
+    def redirect_request(self, req, fp, code, msg, headers, newurl):
+        _require_public_audio_url(newurl)
+        return super().redirect_request(req, fp, code, msg, headers, newurl)
+
+
 def download_resolved_audio(
     plan: dict[str, Any],
     destination: Path,
@@ -249,40 +303,65 @@ def download_resolved_audio(
         blocks.setdefault(index // 100 * 100, []).append((filename, index))
     completed, failed = [], []
     total = len(targets)
+    opener = urllib.request.build_opener(_GuardedAudioRedirect())
     for start, group in sorted(blocks.items()):
         payload = _json_get(ROWS_URL, {"dataset": dataset, "config": "default", "split": "train", "offset": start, "length": 100})
         rows = {int(item["row_idx"]): item for item in payload.get("rows", []) if item.get("row_idx") is not None}
         for filename, index in group:
             stem = Path(filename).stem
-            existing = list(destination.glob(stem + ".*"))
-            if existing:
-                completed.append({"filename": filename, "status": "exists", "path": str(existing[0])})
+            expected_ext = Path(filename).suffix.lower()
+            existing = _existing_audio(destination, stem, expected_ext)
+            if existing is not None:
+                completed.append({"filename": filename, "status": "exists", "path": str(existing)})
+                if progress:
+                    progress(len(completed) + len(failed), total, filename)
                 continue
             item = rows.get(index)
             src = _audio_src((item or {}).get("row", {}).get("audio"))
             if not src:
                 failed.append({"filename": filename, "reason": "audio.src 不可用"})
+                if progress:
+                    progress(len(completed) + len(failed), total, filename)
                 continue
+            temporary: Path | None = None
             try:
+                _require_public_audio_url(src)
                 request = urllib.request.Request(src, headers={"User-Agent": "HSR-Voice-Archive-Builder/0.9"})
-                with urllib.request.urlopen(request, timeout=120) as response:
-                    data = response.read()
-                    content_type = response.headers.get("Content-Type", "").casefold()
-                if data[:4] == b"RIFF" and data[8:12] == b"WAVE":
-                    extension = ".wav"
-                elif data[:4] == b"fLaC":
-                    extension = ".flac"
-                elif data[:4] == b"OggS":
-                    extension = ".ogg"
-                else:
-                    extension = ".wav" if "wav" in content_type else ".bin"
+                fd, temp_name = tempfile.mkstemp(prefix=".hsr-audio-", suffix=".part", dir=destination)
+                temporary = Path(temp_name)
+                digest = hashlib.sha256()
+                header = b""
+                count = 0
+                with os.fdopen(fd, "wb") as stream, opener.open(request, timeout=120) as response:
+                    while True:
+                        block = response.read(1024 * 1024)
+                        if not block:
+                            break
+                        count += len(block)
+                        if count > MAX_AUDIO_DOWNLOAD_BYTES:
+                            raise ValueError("Audio download exceeds the 128 MiB budget")
+                        if len(header) < 16:
+                            header = (header + block)[:16]
+                        digest.update(block)
+                        stream.write(block)
+                    stream.flush()
+                    os.fsync(stream.fileno())
+                extension = _audio_kind(header)
+                if not extension or count < 16:
+                    raise ValueError("Downloaded content is not WAV, FLAC, or Ogg audio")
+                if extension != expected_ext:
+                    raise ValueError("Downloaded audio format does not match the indexed member suffix")
                 output = destination / (stem + extension)
-                temporary = output.with_suffix(output.suffix + ".part")
-                temporary.write_bytes(data)
-                temporary.replace(output)
-                completed.append({"filename": filename, "status": "ok", "path": str(output), "sha256": hashlib.sha256(data).hexdigest()})
+                if output.is_symlink():
+                    raise ValueError("Unsafe existing audio symlink")
+                os.replace(temporary, output)
+                temporary = None
+                completed.append({"filename": filename, "status": "ok", "path": str(output), "sha256": digest.hexdigest()})
             except Exception as exc:
                 failed.append({"filename": filename, "reason": f"{type(exc).__name__}: {exc}"})
+            finally:
+                if temporary is not None:
+                    temporary.unlink(missing_ok=True)
             if progress:
                 progress(len(completed) + len(failed), total, filename)
     return {"completed": completed, "failed": failed, "unresolved": plan.get("unresolved", [])}
