@@ -10,7 +10,7 @@ import os
 import re
 from pathlib import Path
 
-_GENERATION = re.compile(r"combined-audio-[a-zA-Z0-9_-]+\\Z")
+_GENERATION = re.compile(r"combined-audio-[a-zA-Z0-9_-]+\Z")
 
 
 def publish_audio_generation(generated: Path, staged_audio: Path, generation: str) -> Path:
