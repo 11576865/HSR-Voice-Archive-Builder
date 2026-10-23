@@ -6,6 +6,9 @@ explicit primary audio language.
 """
 from __future__ import annotations
 
+import json
+from pathlib import Path
+
 from .game_profiles import game_index_url, game_provider, normalize_language
 from .project import ProjectConfig
 
@@ -52,4 +55,26 @@ def require_matching_update_plan(plan: dict, audio_language: str) -> None:
         raise ValueError(
             "增补计划的音频语种缺失或已改变；请重新检查远程增补，"
             f"当前主音频语言={audio_language}，计划语言={plan.get('audio_language')!r}。"
+        )
+
+
+def require_safe_prior_incremental_apply(report_path: Path, audio_language: str) -> None:
+    """Do not treat a pre-locale-guard update as proof of correct WAV language.
+
+    This is intentionally non-destructive. The affected project must first be
+    reconstructed from a trustworthy original source package.
+    """
+    if not report_path.is_file():
+        return
+    try:
+        report = json.loads(report_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("历史增补收据不可读取，必须先检查归档来源，禁止继续混入音频") from exc
+    if not isinstance(report, dict):
+        raise ValueError("历史增补收据无效，已拒绝继续自动增补")
+    if report.get("project_updated") and report.get("audio_language") != audio_language:
+        raise ValueError(
+            "发现未记录正确语种或与当前语种不同的历史增补。此前可能已将英语 WAV 合入"
+            "日语来源；请保留原始材料、从可信原始音频包恢复工程并重新检查增补，"
+            "程序不会自动删除或覆盖现有音频。"
         )
