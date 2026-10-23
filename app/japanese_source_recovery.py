@@ -111,6 +111,20 @@ def create_isolated_japanese_recovery(
     if not project_config_path.is_file() or project_config_path.is_symlink():
         raise ValueError("原工程配置不可读取")
     config_before = _sha256(project_config_path)
+    try:
+        on_disk = json.loads(project_config_path.read_text(encoding="utf-8"))
+        if not isinstance(on_disk, dict) or on_disk.get("schema_version") != 1:
+            raise ValueError("Invalid project config")
+        for key in (
+            "wav_source", "index_csv", "audio_language", "source_text_language",
+            "game_id", "output_dir", "name",
+        ):
+            if str(on_disk.get(key, "")) != str(getattr(config, key)):
+                raise ValueError(
+                    "原工程配置自任务提交后发生变化，请重新核对并发起恢复"
+                )
+    except (OSError, json.JSONDecodeError) as exc:
+        raise ValueError("原工程配置无法验证") from exc
     initial_index = root / ".generated" / "quick_index.csv"
     initial_index_before = _sha256(initial_index) if initial_index.is_file() and not initial_index.is_symlink() else ""
 
