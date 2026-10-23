@@ -243,12 +243,24 @@ def publish_flac_only(output: Path) -> Path:
     FLAC has passed independent codec checks.
     """
     audio = output / FLAC
+    if audio.is_symlink():
+        raise ValueError("Unsafe symlinked primary FLAC output")
     if not audio.is_file():
         extract_flac_from_mkv(output, target=audio)
     streams = _probe(audio)
     if not audio.stat().st_size or len([s for s in streams if s.get("codec_type") == "audio"
                                            and s.get("codec_name") == "flac"]) != 1:
         raise ValueError("Single-FLAC output failed codec validation")
+    # FFprobe describes codec headers, not the integrity of every FLAC frame.
+    # A partial or corrupted working FLAC must NEVER replace a valid, sealed
+    # MKV as the project's sole deliverable. Validate the entire decoded
+    # primary stream before any old MKV/receipt is retired.
+    _verify_primary_flac_decodes(audio)
+    verified_audio = audio.stat()
+    verified_identity = (
+        verified_audio.st_dev, verified_audio.st_ino, verified_audio.st_size,
+        verified_audio.st_mtime_ns, verified_audio.st_ctime_ns,
+    )
     for name in (SRT, ASS, LEGACY_BLACK):
         candidate = output / name
         if candidate.is_symlink():
@@ -265,6 +277,15 @@ def publish_flac_only(output: Path) -> Path:
             "background": receipt["background"],
             "attach_project_fonts": receipt["attach_project_fonts"],
         }, ensure_ascii=False, indent=2))
+    # Check again immediately before the first destructive publication
+    # mutation; neither project-side actions nor non-cooperating writers may
+    # silently swap the audio we just decoded.
+    after = audio.stat()
+    if audio.is_symlink() or (
+        after.st_dev, after.st_ino, after.st_size,
+        after.st_mtime_ns, after.st_ctime_ns,
+    ) != verified_identity:
+        raise ValueError("Primary FLAC changed after full decode; old MKV was preserved")
     (output / OUTPUT).unlink(missing_ok=True)
     (output / RECEIPT).unlink(missing_ok=True)
     for name in (SRT, ASS, LEGACY_BLACK):
