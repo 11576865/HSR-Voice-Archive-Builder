@@ -32,6 +32,7 @@ from .diff import classify
 from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
+from .incremental_locale_audit import audit_incremental_audio_locale
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -1556,6 +1557,18 @@ def api_update_scan(candidates_path: str = Form("")):
         return {"ok": True, "plan": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/update/locale-audit")
+def api_update_locale_audit():
+    """Read-only forensic report; never edits audio, index, source or archive."""
+    try:
+        return {"ok": True, "audit": audit_incremental_audio_locale(_active_config())}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
 
 
 @app.post("/api/update/check-remote")
