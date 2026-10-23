@@ -172,6 +172,117 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
             (root / FLAC).unlink()
             self.assertEqual(bundle_export_status(root)["state"], "current")
 
+    def test_unlink_failure_after_mkv_removal_restores_last_verified_bundle(self):
+        """Standalone mode change cannot strand a missing MKV plus old receipt."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "output"
+            root.mkdir()
+            self.create_inputs(root)
+            ArchiveBundleExporter(width=320, height=180).export(
+                root / FLAC, root / ASS, root / OUTPUT, require_current_ass=True)
+            seal_complete_delivery(root)
+            original_mkv = (root / OUTPUT).read_bytes()
+            original_receipt = (root / RECEIPT).read_bytes()
+            (root / PREFERENCES).write_text("previous settings", encoding="utf-8")
+            extract_flac_from_mkv(root)
+            old_unlink = Path.unlink
+            failed = []
+
+            def break_receipt_removal(path, *args, **kwargs):
+                if path == root / RECEIPT and not failed:
+                    failed.append(True)
+                    raise PermissionError("injected receipt removal failure")
+                return old_unlink(path, *args, **kwargs)
+
+            with patch.object(Path, "unlink", new=break_receipt_removal):
+                with self.assertRaisesRegex(PermissionError, "receipt removal"):
+                    publish_flac_only(root)
+            self.assertEqual(failed, [True])
+            self.assertEqual((root / OUTPUT).read_bytes(), original_mkv)
+            self.assertEqual((root / RECEIPT).read_bytes(), original_receipt)
+            self.assertEqual(
+                (root / PREFERENCES).read_text(encoding="utf-8"),
+                "previous settings",
+            )
+            self.assertTrue((root / FLAC).is_file())
+            self.assertFalse(list(root.parent.glob(".hsr-flac-profile-*")))
+            self.assertTrue(_bundle_artifact_matches(
+                root / OUTPUT, _read_receipt(root)))
+            (root / FLAC).unlink()
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+
+    def test_late_legacy_unlink_failure_recovers_prior_subtitle_inputs(self):
+        """No half-deleted sources when the last cleanup target is locked."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "output"
+            root.mkdir()
+            self.create_inputs(root)
+            ArchiveBundleExporter(width=320, height=180).export(
+                root / FLAC, root / ASS, root / OUTPUT, require_current_ass=True)
+            seal_complete_delivery(root)
+            extract_flac_from_mkv(root)
+            saved = {
+                OUTPUT: (root / OUTPUT).read_bytes(),
+                RECEIPT: (root / RECEIPT).read_bytes(),
+            }
+            for name in (SRT, ASS, LEGACY_BLACK):
+                payload = ("kept:" + name).encode("utf-8")
+                (root / name).write_bytes(payload)
+                saved[name] = payload
+            old_unlink = Path.unlink
+            calls = []
+
+            def deny_legacy_once(path, *args, **kwargs):
+                if path == root / LEGACY_BLACK and not calls:
+                    calls.append(True)
+                    raise PermissionError("injected last output cleanup denial")
+                return old_unlink(path, *args, **kwargs)
+
+            with patch.object(Path, "unlink", new=deny_legacy_once):
+                with self.assertRaisesRegex(PermissionError, "last output"):
+                    publish_flac_only(root)
+            self.assertEqual(calls, [True])
+            for name, payload in saved.items():
+                self.assertEqual((root / name).read_bytes(), payload, name)
+            self.assertTrue((root / FLAC).is_file())
+            self.assertFalse(list(root.parent.glob(".hsr-flac-profile-*")))
+
+    def test_failed_rollback_keeps_snapshot_and_marks_output_busy(self):
+        """A second I/O error must not destroy the last snapshot during cleanup."""
+        from app.publishing import BUILD_MARKER
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "output"
+            root.mkdir()
+            self.create_inputs(root)
+            ArchiveBundleExporter(width=320, height=180).export(
+                root / FLAC, root / ASS, root / OUTPUT, require_current_ass=True)
+            seal_complete_delivery(root)
+            previous_mkv = (root / OUTPUT).read_bytes()
+            extract_flac_from_mkv(root)
+            old_unlink, old_replace = Path.unlink, os.replace
+
+            def deny_receipt(path, *args, **kwargs):
+                if path == root / RECEIPT:
+                    raise PermissionError("injected receipt removal failure")
+                return old_unlink(path, *args, **kwargs)
+
+            def deny_mkv_restore(source, target, *args, **kwargs):
+                if (Path(target) == root / OUTPUT
+                        and Path(source).parent.name.startswith(".hsr-flac-profile-")):
+                    raise PermissionError("injected MKV restoration denial")
+                return old_replace(source, target, *args, **kwargs)
+
+            with patch.object(Path, "unlink", new=deny_receipt), patch(
+                "app.delivery_artifacts.os.replace", side_effect=deny_mkv_restore
+            ):
+                with self.assertRaisesRegex(RuntimeError, "snapshot retained"):
+                    publish_flac_only(root)
+            backups = list(root.parent.glob(".hsr-flac-profile-*"))
+            self.assertEqual(len(backups), 1)
+            self.assertEqual((backups[0] / OUTPUT).read_bytes(), previous_mkv)
+            self.assertTrue((root / BUILD_MARKER).exists())
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+
     def test_explicit_export_rejects_symlinked_output_folder(self):
         with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
             root=Path(td)
