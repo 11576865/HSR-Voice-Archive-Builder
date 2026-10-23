@@ -220,6 +220,12 @@ def seal_complete_delivery(output: Path) -> None:
             raise ValueError(f"Refusing to delete modified source: {name}")
         if path.is_symlink():
             raise ValueError(f"Refusing to delete symlinked source: {name}")
+    # All planned cleanup targets must be checked *before* sealing the
+    # receipt or deleting even the first working FLAC/ASS/SRT. A legacy
+    # symlink used to be discovered only after those destructive mutations.
+    legacy = output / LEGACY_BLACK
+    if legacy.is_symlink():
+        raise ValueError("Unsafe historical black-MKV output path")
     receipt["sealed"] = True
     atomic_write_text(output / RECEIPT, json.dumps(receipt, ensure_ascii=False, indent=2))
     for name in MEDIA_NAMES:
@@ -227,9 +233,6 @@ def seal_complete_delivery(output: Path) -> None:
         path.unlink(missing_ok=True)
     # The old subtitle-free black-video output was produced by HSR and is now
     # superseded by the single verified full bundle.
-    legacy = output / LEGACY_BLACK
-    if legacy.is_symlink():
-        raise ValueError("Unsafe historical black-MKV output path")
     legacy.unlink(missing_ok=True)
 
 

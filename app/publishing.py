@@ -104,6 +104,11 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
         )
         try:
             yield
+            # Committing the publication includes removing the busy marker.
+            # If this final mutation fails, roll back the entire previous
+            # coherent artifact set instead of stranding a newly published
+            # archive behind an apparently interrupted build.
+            marker.unlink(missing_ok=True)
         except BaseException:
             try:
                 for path, saved in originals.items():
@@ -125,7 +130,5 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
             if not previously_interrupted:
                 marker.unlink(missing_ok=True)
             raise
-        else:
-            marker.unlink(missing_ok=True)
         finally:
             _OWNED_BUILD_OUTPUTS.reset(token)

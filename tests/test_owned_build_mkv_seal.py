@@ -11,11 +11,12 @@ import os
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.archive_bundle_lifecycle import (
     OUTPUT, RECEIPT, bundle_export_status, record_bundle_publication,
 )
-from app.delivery_artifacts import seal_complete_delivery
+from app.delivery_artifacts import LEGACY_BLACK, seal_complete_delivery
 from app.publishing import BUILD_MARKER, owns_published_build, preserve_published_archive
 from app.subtitle_export_status import record_subtitle_export
 
@@ -126,6 +127,88 @@ class OwnedBuildSealTests(unittest.TestCase):
         self.assertEqual((self.output / RECEIPT).read_bytes(), previous_receipt)
         self.assertEqual((self.output / "continuous.flac").read_bytes(), previous_flac)
         self.assertEqual(bundle_export_status(self.output)["state"], "current")
+
+    def test_unsafe_legacy_output_never_seals_or_discards_working_sources(self):
+        self.make_sources()
+        legacy = self.output / LEGACY_BLACK
+        legacy.write_bytes(b"must-not-modify")
+        receipt_before = (self.output / RECEIPT).read_bytes()
+        real_is_symlink = Path.is_symlink
+
+        def simulate_symlink(path):
+            if path == legacy:
+                return True
+            return real_is_symlink(path)
+
+        with patch.object(Path, "is_symlink", new=simulate_symlink):
+            with self.assertRaisesRegex(ValueError, "Unsafe historical black-MKV"):
+                seal_complete_delivery(self.output)
+
+        # This must be rejected BEFORE receipt publication or any cleanup,
+        # including standalone MKV exports without the outer rollback guard.
+        self.assertEqual((self.output / RECEIPT).read_bytes(), receipt_before)
+        self.assertFalse(json.loads(receipt_before)["sealed"] if
+                         "sealed" in json.loads(receipt_before) else False)
+        self.assertEqual(legacy.read_bytes(), b"must-not-modify")
+        for name in ("continuous.flac", "HSR_Voice_Archive.ass",
+                     "HSR_Voice_Archive.srt"):
+            self.assertTrue((self.output / name).is_file(), name)
+        self.assertEqual(bundle_export_status(self.output)["state"], "current")
+
+    def test_final_marker_unlink_failure_rolls_back_previous_sealed_bundle(self):
+        self.make_sources(text="old", video=b"trusted-old-mkv")
+        seal_complete_delivery(self.output)
+        old_receipt = (self.output / RECEIPT).read_bytes()
+        previous = (self.output / OUTPUT).read_bytes()
+        old_unlink = Path.unlink
+        errors = []
+
+        def deny_once(path, *args, **kwargs):
+            if path.name == BUILD_MARKER and not errors:
+                errors.append(True)
+                raise PermissionError("injected final build-marker commit failure")
+            return old_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", new=deny_once):
+            with self.assertRaisesRegex(PermissionError, "build-marker commit"):
+                with preserve_published_archive(self.output, self.state):
+                    self.make_sources(text="new", video=b"uncommitted-new-mkv")
+                    seal_complete_delivery(self.output)
+
+        self.assertEqual(errors, [True])
+        self.assertEqual((self.output / OUTPUT).read_bytes(), previous)
+        self.assertEqual((self.output / RECEIPT).read_bytes(), old_receipt)
+        self.assertFalse((self.output / "continuous.flac").exists())
+        self.assertFalse((self.output / BUILD_MARKER).exists())
+        self.assertEqual(bundle_export_status(self.output)["state"], "current")
+        self.assertFalse(owns_published_build(self.output))
+
+    def test_persistent_marker_unlink_failure_restores_old_bundle_but_keeps_busy(self):
+        self.make_sources(text="old", video=b"trusted-old-mkv")
+        seal_complete_delivery(self.output)
+        previous = (self.output / OUTPUT).read_bytes()
+        previous_receipt = (self.output / RECEIPT).read_bytes()
+        original_unlink = Path.unlink
+        attempts = []
+
+        def always_deny_marker(path, *args, **kwargs):
+            if path.name == BUILD_MARKER:
+                attempts.append(1)
+                raise PermissionError("persistent marker removal denial")
+            return original_unlink(path, *args, **kwargs)
+
+        with patch.object(Path, "unlink", new=always_deny_marker):
+            with self.assertRaisesRegex(PermissionError, "marker removal denial"):
+                with preserve_published_archive(self.output, self.state):
+                    self.make_sources(text="new", video=b"new-candidate")
+                    seal_complete_delivery(self.output)
+
+        self.assertGreaterEqual(len(attempts), 2)
+        self.assertEqual((self.output / OUTPUT).read_bytes(), previous)
+        self.assertEqual((self.output / RECEIPT).read_bytes(), previous_receipt)
+        self.assertTrue((self.output / BUILD_MARKER).exists())
+        self.assertEqual(bundle_export_status(self.output)["state"], "stale")
+        self.assertFalse(owns_published_build(self.output))
 
     def test_failed_initial_build_keeps_sources_if_seal_rejects(self):
         self.make_sources()
