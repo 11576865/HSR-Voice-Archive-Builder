@@ -80,6 +80,23 @@ class IncrementalLocaleAuditTests(unittest.TestCase):
             self.assertTrue(result["requires_manual_review"])
             self.assertTrue(any("损坏" in msg for msg in result["issues"]))
 
+    def test_missing_receipt_for_combined_source_is_not_declared_safe(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            result = audit_incremental_audio_locale(self._project(root))
+            self.assertTrue(result["requires_manual_review"])
+            self.assertTrue(any("收据缺失" in msg for msg in result["issues"]))
+
+    def test_quick_scan_list_is_treated_as_corrupt_metadata(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            generated = root / ".generated"
+            generated.mkdir()
+            (generated / "quick_scan.json").write_text("[]", encoding="utf-8")
+            result = audit_incremental_audio_locale(self._project(root))
+            self.assertFalse(result["quick_scan_valid"])
+            self.assertTrue(any("Quick Scan" in msg for msg in result["issues"]))
+
     def test_both_server_surfaces_expose_same_read_only_api(self):
         src_root = Path(__file__).resolve().parents[1]
         for filename in ("app/server.py", "app/lite_server.py"):
