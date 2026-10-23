@@ -34,6 +34,7 @@ from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
+from .japanese_source_recovery import create_isolated_japanese_recovery
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -1374,6 +1375,21 @@ class Handler(BaseHTTPRequestHandler):
             result = classify(manifest, candidates)
             atomic_write_text(output / "update_plan.json", json.dumps(result, ensure_ascii=False, indent=2))
             self._json({"ok": True, "plan": result, "project": project_summary(config)})
+            return
+
+        if path == "/api/update/create-japanese-recovery":
+            if data.get("language") != "ja" or data.get("acknowledge") != "create-isolated":
+                raise ValueError("必须明确确认创建隔离的日语恢复候选项目")
+            config = _active_config()
+            assert_project_idle(config.root)
+            job = create_job(
+                "locale-recovery",
+                lambda progress: create_isolated_japanese_recovery(
+                    config, report_progress=progress
+                ),
+                with_progress=True, project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
             return
 
         if path == "/api/update/check-remote":
