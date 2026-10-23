@@ -7,6 +7,7 @@ remain covered by the independent exporter integration suite.
 from __future__ import annotations
 
 import json
+import os
 import tempfile
 import unittest
 from pathlib import Path
@@ -39,9 +40,13 @@ class OwnedBuildSealTests(unittest.TestCase):
         (self.output / "HSR_Voice_Archive.srt").write_text(
             "1\n" + text, encoding="utf-8"
         )
-        (self.output / "continuous.flac").write_bytes(b"fake-source-flac-" + text.encode())
+        temp_flac = self.output / ".candidate-continuous.flac"
+        temp_flac.write_bytes(b"fake-source-flac-" + text.encode())
+        os.replace(temp_flac, self.output / "continuous.flac")
         record_subtitle_export(self.output, state="current", ass_required=True)
-        (self.output / OUTPUT).write_bytes(video)
+        temp_mkv = self.output / ".candidate-bundle.mkv"
+        temp_mkv.write_bytes(video)
+        os.replace(temp_mkv, self.output / OUTPUT)
         record_bundle_publication(
             self.output, background_color="#000000",
             background_image=None, image_extension=None, include_fonts=False,
