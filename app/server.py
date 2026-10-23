@@ -33,6 +33,7 @@ from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
+from .japanese_source_recovery import create_isolated_japanese_recovery
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -1557,6 +1558,32 @@ def api_update_scan(candidates_path: str = Form("")):
         return {"ok": True, "plan": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/create-japanese-recovery")
+def api_update_create_japanese_recovery(
+    language: str = Form(""),
+    acknowledge: str = Form(""),
+):
+    """Create a separate, unbuilt JP candidate; never change active project."""
+    try:
+        if language != "ja" or acknowledge != "create-isolated":
+            raise ValueError("必须明确确认创建隔离的日语恢复候选项目")
+        config = _active_config()
+        assert_project_idle(config.root)
+        job = create_job(
+            "locale-recovery",
+            lambda progress: create_isolated_japanese_recovery(
+                config, report_progress=progress
+            ),
+            with_progress=True, project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
 
 
 @app.get("/api/update/locale-audit")
