@@ -2,15 +2,18 @@
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 import tempfile
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from app.archive_bundle_exporter import ArchiveBundleExporter
 from app.archive_bundle_lifecycle import (
-    OUTPUT, PREFERENCES, bundle_export_status, previous_bundle_settings,
+    OUTPUT, PREFERENCES, RECEIPT, _bundle_artifact_matches, _read_receipt,
+    bundle_export_status, previous_bundle_settings,
 )
 from app.delivery_artifacts import (
     ASS, FLAC, SRT, LEGACY_BLACK, export_optional_track, extract_flac_from_mkv,
@@ -96,6 +99,78 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
                                   if s.get("codec_name")=="flac"]),1)
             self.assertFalse((root / FLAC).exists())
             self.assertGreater(compressed,1000)
+
+    def test_corrupted_existing_flac_cannot_retire_verified_mkv(self):
+        """FFprobe header success alone cannot certify a complete audio stream."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self.create_inputs(root)
+            ArchiveBundleExporter(width=320, height=180).export(
+                root / FLAC, root / ASS, root / OUTPUT, require_current_ass=True)
+            seal_complete_delivery(root)
+            original_mkv = (root / OUTPUT).read_bytes()
+            original_receipt = (root / RECEIPT).read_bytes()
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+
+            # A partial/hijacked working FLAC remains in the output dir.
+            # Simulate a permissive metadata-only probe which reports FLAC
+            # even though a full decoder cannot read the actual frames.
+            (root / FLAC).write_bytes(b"not-a-decodable-flac-stream")
+            with patch(
+                "app.delivery_artifacts._probe",
+                return_value=[{"codec_type": "audio", "codec_name": "flac"}],
+            ):
+                with self.assertRaisesRegex(ValueError, "完整 FLAC 解码"):
+                    publish_flac_only(root)
+            self.assertEqual((root / OUTPUT).read_bytes(), original_mkv)
+            self.assertEqual((root / RECEIPT).read_bytes(), original_receipt)
+            self.assertTrue((root / FLAC).is_file())
+            # The damaged loose FLAC legitimately makes the *working* state
+            # stale; what must survive is the previously sealed MKV evidence.
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertTrue(_read_receipt(root)["sealed"])
+            self.assertTrue(_bundle_artifact_matches(
+                root / OUTPUT, _read_receipt(root)))
+            (root / FLAC).unlink()
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+
+    def test_audio_replaced_after_decode_keeps_previous_verified_mkv(self):
+        """Non-cooperating writers cannot change just-decoded FLAC on commit."""
+        from app.archive_bundle_lifecycle import RECEIPT
+        from app.delivery_artifacts import atomic_write_text as write_preferences
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            self.create_inputs(root)
+            ArchiveBundleExporter(width=320, height=180).export(
+                root / FLAC, root / ASS, root / OUTPUT, require_current_ass=True)
+            seal_complete_delivery(root)
+            original_mkv = (root / OUTPUT).read_bytes()
+            original_receipt = (root / RECEIPT).read_bytes()
+            extract_flac_from_mkv(root)
+            mutated = []
+
+            def hijack_after_decode(path, value):
+                if path.name == PREFERENCES and not mutated:
+                    other = root / "replacement.flac"
+                    other.write_bytes(b"untrusted-updated-audio")
+                    os.replace(other, root / FLAC)
+                    mutated.append(True)
+                return write_preferences(path, value)
+
+            with patch("app.delivery_artifacts.atomic_write_text",
+                       side_effect=hijack_after_decode):
+                with self.assertRaisesRegex(ValueError, "changed after full decode"):
+                    publish_flac_only(root)
+            self.assertEqual(mutated, [True])
+            self.assertEqual((root / OUTPUT).read_bytes(), original_mkv)
+            self.assertEqual((root / RECEIPT).read_bytes(), original_receipt)
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertTrue(_read_receipt(root)["sealed"])
+            self.assertTrue(_bundle_artifact_matches(
+                root / OUTPUT, _read_receipt(root)))
+            (root / FLAC).unlink()
+            self.assertEqual(bundle_export_status(root)["state"], "current")
 
     def test_explicit_export_rejects_symlinked_output_folder(self):
         with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
