@@ -133,6 +133,7 @@ class JapaneseSourceRecoveryTests(unittest.TestCase):
             with patch("app.project.STATE_FILE", base / "recent.json"):
                 cfg, _ = self.prepare(base)
                 cfg.audio_language = "auto"
+                save_project(cfg)
                 with self.assertRaisesRegex(ValueError, "ja"):
                     create_isolated_japanese_recovery(cfg)
 
