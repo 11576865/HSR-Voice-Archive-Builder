@@ -196,9 +196,15 @@ def seal_complete_delivery(output: Path) -> None:
     work files can be removed on the next successful seal attempt. If it dies
     before the receipt update, the original source files are still available.
     """
-    health = bundle_export_status(output)
+    # We are still inside preserve_published_archive, whose marker must
+    # remain until commit/rollback. Exempt ONLY this owned transaction;
+    # all MKV, subtitle, font and source-receipt evidence stays enforced.
+    health = bundle_export_status(output, _owned_build=True)
     if health["state"] != "current":
-        raise ValueError("Cannot discard working files before MKV verification")
+        raise ValueError(
+            "Cannot discard working files before MKV verification: "
+            + str(health.get("message", "unknown verification state"))
+        )
     receipt = _read_receipt(output)
     if receipt is None:
         raise ValueError("Missing MKV publication receipt")
