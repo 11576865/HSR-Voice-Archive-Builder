@@ -84,8 +84,21 @@ class OwnedBuildSealTests(unittest.TestCase):
         # exact protected publishing scope.
         with self.assertRaisesRegex(RuntimeError, "owned build transaction"):
             bundle_export_status(self.output, _owned_build=True)
-        with self.assertRaisesRegex(RuntimeError, "owned build transaction"):
-            seal_complete_delivery(self.output)
+        # Legacy standalone successful export is safe to seal when there is
+        # no build in progress; keep this API backward compatible.
+        seal_complete_delivery(self.output)
+        self.assertFalse((self.output / "continuous.flac").exists())
+        self.assertEqual(bundle_export_status(self.output)["state"], "current")
+
+        # A marker created by an unrelated/other process is never ownership.
+        self.make_sources(text="another")
+        (self.output / BUILD_MARKER).touch()
+        try:
+            with self.assertRaisesRegex(ValueError, "Cannot discard working files"):
+                seal_complete_delivery(self.output)
+            self.assertTrue((self.output / "continuous.flac").exists())
+        finally:
+            (self.output / BUILD_MARKER).unlink()
 
         another = self.root / "other"
         another.mkdir()
