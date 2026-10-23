@@ -381,7 +381,12 @@ def download_resolved_audio(
         for filename, index in group:
             stem = Path(filename).stem
             expected_ext = Path(filename).suffix.lower()
-            existing = _existing_audio(destination, stem, expected_ext)
+            # Old cache entries have no row provenance. A locale-bound update
+            # must re-download rather than trust another operation's WAV bytes.
+            existing = (
+                _existing_audio(destination, stem, expected_ext)
+                if not plan_language else None
+            )
             if existing is not None:
                 completed.append({"filename": filename, "status": "exists", "path": str(existing)})
                 if progress:
@@ -445,6 +450,41 @@ def download_resolved_audio(
             if progress:
                 progress(len(completed) + len(failed), total, filename)
     return {"completed": completed, "failed": failed, "unresolved": plan.get("unresolved", [])}
+
+
+
+def validated_incremental_files(
+    download: dict[str, Any], source_directory: Path,
+) -> list[Path]:
+    """Return only successful files from this download, never stale folder contents."""
+    root = source_directory.resolve()
+    result: list[Path] = []
+    seen: set[str] = set()
+    for row in download.get("completed", []):
+        if not isinstance(row, dict) or row.get("status") != "ok":
+            raise ValueError("Locale-bound audio apply requires a verified new download")
+        name = Path(str(row.get("filename") or "")).name
+        file = Path(str(row.get("path") or ""))
+        if not name or name in seen or file.is_symlink() or not file.is_file():
+            raise ValueError("Invalid or duplicate incremental WAV entry")
+        if file.name != name or file.parent.resolve() != root:
+            raise ValueError("Incremental WAV is not in its locale-specific source directory")
+        if _existing_audio(root, file.stem, file.suffix.lower()) != file:
+            raise ValueError("Incremental WAV no longer passes its audio format check")
+        # The downloader records this digest on successful publish. Refuse files
+        # altered between download completion and insertion into combined source.
+        expected_sha256 = str(row.get("sha256") or "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ValueError("Incremental WAV has no download-time SHA-256 proof")
+        digest = hashlib.sha256()
+        with file.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError("Incremental WAV changed after its verified download")
+        result.append(file)
+        seen.add(name)
+    return result
 
 
 def confirmed_reference_metadata(
