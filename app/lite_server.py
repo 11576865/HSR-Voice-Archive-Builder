@@ -35,7 +35,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
-    require_matching_update_plan,
+    require_matching_update_plan, require_safe_prior_incremental_apply,
 )
 from .identity import infer_group
 from .human_review import import_review_txt
@@ -1395,6 +1395,7 @@ class Handler(BaseHTTPRequestHandler):
             manifest = output / "manifest.json"
             if not manifest.is_file():
                 raise FileNotFoundError("Build the project once before checking remote updates")
+            require_safe_prior_incremental_apply(output / "update_apply_report.json", audio_language)
 
             def run():
                 rows = []
@@ -1454,6 +1455,7 @@ class Handler(BaseHTTPRequestHandler):
             remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
             audio_language = require_incremental_audio_language(config)
             require_matching_update_plan(remote_plan, audio_language)
+            require_safe_prior_incremental_apply(output / "update_apply_report.json", audio_language)
             targets = []
             for item in remote_plan.get("new_logical", []):
                 if isinstance(item, dict):
@@ -1571,7 +1573,7 @@ class Handler(BaseHTTPRequestHandler):
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
                 update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                report = {"audio_language": audio_language, "index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report
