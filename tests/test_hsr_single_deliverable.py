@@ -281,7 +281,10 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
             self.assertEqual(len(backups), 1)
             self.assertEqual((backups[0] / OUTPUT).read_bytes(), previous_mkv)
             self.assertTrue((root / BUILD_MARKER).exists())
-            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            # The main MKV is genuinely absent after the injected second
+            # failure, so "missing" is a truthful fail-closed state. The
+            # mandatory property is NEVER to assert "current"/verified.
+            self.assertEqual(bundle_export_status(root)["state"], "missing")
 
     def test_explicit_export_rejects_symlinked_output_folder(self):
         with tempfile.TemporaryDirectory() as td, tempfile.TemporaryDirectory() as outside:
