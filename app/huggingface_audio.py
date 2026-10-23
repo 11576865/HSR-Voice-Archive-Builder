@@ -242,6 +242,45 @@ def _json_get(url: str, params: dict[str, Any], attempts: int = 7) -> dict[str, 
         time.sleep(wait + random.random())
     raise RuntimeError("Hugging Face 请求失败")
 
+_AUDIO_LOCALE_LABELS = {
+    "english": "en", "english(us)": "en", "en": "en",
+    "chinese": "zh-CN", "chinese(prc)": "zh-CN", "zh-cn": "zh-CN",
+    "japanese": "ja", "japanese(jp)": "ja", "ja": "ja",
+    "korean": "ko", "korean(kr)": "ko", "ko": "ko",
+}
+
+
+def _dataset_locale(raw: object) -> str:
+    value = str(raw or "").strip().casefold()
+    return _AUDIO_LOCALE_LABELS.get(value, normalize_language(value))
+
+
+def _verify_dataset_audio_row(row: Any, target: dict[str, Any], language: str) -> None:
+    """An expected row_idx is not proof that /rows still returns the same locale."""
+    if not isinstance(row, dict):
+        raise ValueError("Hugging Face dataset row is missing")
+    expected = normalize_language(language)
+    declared_raw = str(row.get("language") or "").strip()
+    actual_filename = str(
+        row.get("ingame_filename") or row.get("inGameFilename") or ""
+    ).strip()
+    declared_locale = _dataset_locale(declared_raw) if declared_raw else ""
+    path_folder = actual_filename.replace("\\", "/").split("/", 1)[0]
+    path_locale = _dataset_locale(path_folder) if "/" in actual_filename.replace("\\", "/") else ""
+    if declared_locale and declared_locale != expected:
+        raise ValueError(
+            f"Hugging Face audio locale mismatch: expected {expected}, got {declared_raw}"
+        )
+    if path_locale and path_locale != expected:
+        raise ValueError(
+            f"Hugging Face in-game voice path locale mismatch: expected {expected}, got {path_folder}"
+        )
+    if not declared_locale and not path_locale:
+        raise ValueError("Hugging Face dataset row has no verifiable audio locale")
+    original = str(target.get("ingame_filename") or "").strip()
+    if original and actual_filename and _voice_relative_path(original) != _voice_relative_path(actual_filename):
+        raise ValueError("Hugging Face dataset row identity changed since result.json resolution")
+
 
 def _audio_src(value: Any) -> str:
     if isinstance(value, dict):
@@ -349,7 +388,16 @@ def download_resolved_audio(
                     progress(len(completed) + len(failed), total, filename)
                 continue
             item = rows.get(index)
-            src = _audio_src((item or {}).get("row", {}).get("audio"))
+            remote_row = (item or {}).get("row", {})
+            if plan_language:
+                try:
+                    _verify_dataset_audio_row(remote_row, targets[filename], normalized)
+                except ValueError as exc:
+                    failed.append({"filename": filename, "reason": str(exc)})
+                    if progress:
+                        progress(len(completed) + len(failed), total, filename)
+                    continue
+            src = _audio_src(remote_row.get("audio") if isinstance(remote_row, dict) else None)
             if not src:
                 failed.append({"filename": filename, "reason": "audio.src 不可用"})
                 if progress:
