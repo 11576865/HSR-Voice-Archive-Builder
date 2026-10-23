@@ -7,6 +7,7 @@ remain covered by the independent exporter integration suite.
 from __future__ import annotations
 
 import json
+from contextvars import copy_context
 import os
 import tempfile
 import unittest
@@ -209,6 +210,52 @@ class OwnedBuildSealTests(unittest.TestCase):
         self.assertTrue((self.output / BUILD_MARKER).exists())
         self.assertEqual(bundle_export_status(self.output)["state"], "stale")
         self.assertFalse(owns_published_build(self.output))
+
+    def test_copied_transaction_context_loses_verification_authority_after_exit(self):
+        self.make_sources()
+        with preserve_published_archive(self.output, self.state):
+            inherited = copy_context()
+            self.assertTrue(inherited.run(owns_published_build, self.output))
+            self.assertTrue(owns_published_build(self.output))
+        self.assertFalse(inherited.run(owns_published_build, self.output))
+        self.assertFalse(owns_published_build(self.output))
+
+        # A later independent build has a fresh marker. The old context,
+        # possibly retained in a spawned async task, must never be able to
+        # suppress its build-busy status or impersonate the new build owner.
+        with preserve_published_archive(self.output, self.state):
+            self.assertEqual(bundle_export_status(self.output)["state"], "stale")
+            with self.assertRaisesRegex(RuntimeError, "owned build transaction"):
+                inherited.run(bundle_export_status, self.output, _owned_build=True)
+            self.assertTrue(owns_published_build(self.output))
+            self.assertTrue((self.output / BUILD_MARKER).is_file())
+        self.assertEqual(bundle_export_status(self.output)["state"], "current")
+
+    def test_copied_context_is_revoked_when_original_build_rolls_back(self):
+        self.make_sources()
+        inherited = None
+        with self.assertRaisesRegex(ValueError, "injected rollback"):
+            with preserve_published_archive(self.output, self.state):
+                inherited = copy_context()
+                self.assertTrue(inherited.run(owns_published_build, self.output))
+                raise ValueError("injected rollback")
+        assert inherited is not None
+        self.assertFalse(inherited.run(owns_published_build, self.output))
+        self.assertFalse((self.output / BUILD_MARKER).exists())
+        with self.assertRaisesRegex(RuntimeError, "owned build transaction"):
+            inherited.run(bundle_export_status, self.output, _owned_build=True)
+
+    def test_nested_same_output_build_cannot_clear_outer_marker_early(self):
+        self.make_sources()
+        with preserve_published_archive(self.output, self.state):
+            self.assertTrue((self.output / BUILD_MARKER).is_file())
+            with self.assertRaisesRegex(RuntimeError, "Nested protected builds"):
+                with preserve_published_archive(self.output, self.state):
+                    self.fail("nested build should never enter")
+            self.assertTrue((self.output / BUILD_MARKER).is_file())
+            self.assertTrue(owns_published_build(self.output))
+            self.assertEqual(bundle_export_status(self.output)["state"], "stale")
+        self.assertFalse((self.output / BUILD_MARKER).exists())
 
     def test_failed_initial_build_keeps_sources_if_seal_rejects(self):
         self.make_sources()
