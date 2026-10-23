@@ -265,31 +265,82 @@ def publish_flac_only(output: Path) -> Path:
         candidate = output / name
         if candidate.is_symlink():
             raise ValueError("Unsafe project-generated output path")
-    # The former bundle and its publication receipt are now an obsolete
-    # *project-owned* output. A failure before this line leaves them intact.
+    # Switching the *only* published deliverable has multiple filesystem
+    # mutations (preferences, MKV, receipt and old subtitle outputs). A
+    # standalone caller does not have the pipeline's outer archive rollback
+    # scope, so one failed unlink must not retire a verified MKV/receipt pair.
+    # Snapshot the old artifacts BEFORE changing any of them. On supported
+    # filesystems MKV backups are hard links (no multi-GB duplicate); if
+    # hardlinks are unavailable, a full copy must succeed before publication.
+    from .archive_bundle_lifecycle import PREFERENCES
     receipt = _read_receipt(output)
-    if receipt:
-        # Preserve only the small replayable background configuration, never
-        # the old MKV or the redundant FLAC track after profile transition.
-        from .archive_bundle_lifecycle import PREFERENCES
-        atomic_write_text(output / PREFERENCES, json.dumps({
-            "schema_version": 1,
-            "background": receipt["background"],
-            "attach_project_fonts": receipt["attach_project_fonts"],
-        }, ensure_ascii=False, indent=2))
-    # Check again immediately before the first destructive publication
-    # mutation; neither project-side actions nor non-cooperating writers may
-    # silently swap the audio we just decoded.
-    after = audio.stat()
-    if audio.is_symlink() or (
-        after.st_dev, after.st_ino, after.st_size,
-        after.st_mtime_ns, after.st_ctime_ns,
-    ) != verified_identity:
-        raise ValueError("Primary FLAC changed after full decode; old MKV was preserved")
-    (output / OUTPUT).unlink(missing_ok=True)
-    (output / RECEIPT).unlink(missing_ok=True)
-    for name in (SRT, ASS, LEGACY_BLACK):
-        (output / name).unlink(missing_ok=True)
+    retire = tuple(output / name for name in (
+        OUTPUT, RECEIPT, SRT, ASS, LEGACY_BLACK, PREFERENCES,
+    ))
+    with tempfile.TemporaryDirectory(
+        prefix=".hsr-flac-profile-", dir=output.parent,
+    ) as td:
+        backup = Path(td)
+        snapshots: dict[Path, Path | None] = {}
+        for item in retire:
+            if item.is_symlink() or (item.exists() and not item.is_file()):
+                raise ValueError("Unsafe project-generated output path: " + item.name)
+            if item.is_file():
+                saved = backup / item.name
+                if item.suffix == ".mkv":
+                    try:
+                        os.link(item, saved)
+                    except (OSError, AttributeError):
+                        shutil.copy2(item, saved)
+                else:
+                    shutil.copy2(item, saved)
+                snapshots[item] = saved
+            else:
+                snapshots[item] = None
+
+        try:
+            if receipt:
+                # The replayable backdrop is retained, but not redundant
+                # media. This preference write participates in rollback too.
+                atomic_write_text(output / PREFERENCES, json.dumps({
+                    "schema_version": 1,
+                    "background": receipt["background"],
+                    "attach_project_fonts": receipt["attach_project_fonts"],
+                }, ensure_ascii=False, indent=2))
+            # The verification applies to the exact FLAC retained as the new
+            # deliverable, not an audio path swapped after full decoding.
+            after = audio.stat()
+            if audio.is_symlink() or (
+                after.st_dev, after.st_ino, after.st_size,
+                after.st_mtime_ns, after.st_ctime_ns,
+            ) != verified_identity:
+                raise ValueError(
+                    "Primary FLAC changed after full decode; old MKV was preserved"
+                )
+            for name in (OUTPUT, RECEIPT, SRT, ASS, LEGACY_BLACK):
+                (output / name).unlink(missing_ok=True)
+        except BaseException:
+            # Ordinary I/O failures can occur *after* the MKV unlink but
+            # before receipt/subtitle cleanup. Restore all prior targets.
+            # This is an exception rollback, NOT a multi-file power-loss
+            # atomic transaction; use the outer publisher for full builds.
+            try:
+                for item, saved in snapshots.items():
+                    if saved is None:
+                        item.unlink(missing_ok=True)
+                    else:
+                        os.replace(saved, item)
+            except BaseException as restore_error:
+                # Fail closed when even recovery is obstructed: never show
+                # a possibly mixed pair as a verified current artifact.
+                try:
+                    (output / ".build_in_progress").touch(exist_ok=True)
+                except OSError:
+                    pass
+                raise RuntimeError(
+                    "FLAC-only transition rollback failed; output is blocked"
+                ) from restore_error
+            raise
     return audio
 
 
