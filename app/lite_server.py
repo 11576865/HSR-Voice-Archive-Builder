@@ -33,6 +33,10 @@ from .gpt_sovits_exporter import export_project_dataset
 from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
+from .remote_update_language import (
+    require_incremental_audio_language, select_incremental_index_url,
+    require_matching_update_plan,
+)
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, reserve_project_output_writer
@@ -1376,7 +1380,8 @@ class Handler(BaseHTTPRequestHandler):
                     "Local WAV+LAB archive building remains supported."
                 )
             requested_character = data.get("character", "").strip()
-            remote_url = data.get("remote_index_url", "").strip() or config.remote_index_url or game_index_url(config.game_id, config.source_text_language)
+            audio_language = require_incremental_audio_language(config)
+            remote_url = select_incremental_index_url(config, data.get("remote_index_url", ""))
             characters = remote_character_candidates(config, requested_character)
             if not characters:
                 raise ValueError(
@@ -1397,7 +1402,7 @@ class Handler(BaseHTTPRequestHandler):
                 attempted: list[str] = []
                 for candidate in characters:
                     attempted.append(candidate)
-                    rows = fetch_provider_index(config.game_id, candidate, language=config.source_text_language, url=remote_url)
+                    rows = fetch_provider_index(config.game_id, candidate, language=audio_language, url=remote_url)
                     if rows:
                         matched_character = candidate
                         break
@@ -1412,6 +1417,7 @@ class Handler(BaseHTTPRequestHandler):
                     url=remote_url,
                     queried_character=matched_character,
                 )
+                plan["audio_language"] = audio_language
                 plan = exclude_applied_updates(plan, output / "update_apply_report.json")
                 plan = exclude_indexed_updates(plan, resolve_project_path(config, config.index_csv))
                 resolved_character = str(plan.get("character") or matched_character)
@@ -1446,6 +1452,8 @@ class Handler(BaseHTTPRequestHandler):
             if not update_plan_path.is_file():
                 raise FileNotFoundError("Check the remote index before downloading additions")
             remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
+            audio_language = require_incremental_audio_language(config)
+            require_matching_update_plan(remote_plan, audio_language)
             targets = []
             for item in remote_plan.get("new_logical", []):
                 if isinstance(item, dict):
@@ -1466,7 +1474,7 @@ class Handler(BaseHTTPRequestHandler):
                 result_json = state / "result.json"
                 report_progress("metadata", "正在取得 Hugging Face 定位索引", 0, 1)
                 download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1), dataset=dataset)
-                resolved = resolve_targets(result_json, targets, dataset=dataset)
+                resolved = resolve_targets(result_json, targets, dataset=dataset, source_language=audio_language)
                 report_progress("resolve", f"已可靠定位 {len(resolved['targets'])}/{len(targets)} 条新增语音", len(targets), len(targets))
                 atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
                 if not resolved["targets"]:
@@ -1493,7 +1501,7 @@ class Handler(BaseHTTPRequestHandler):
                         len(targets),
                     )
                     return report
-                incoming = generated / "incremental_audio"
+                incoming = generated / "incremental_audio" / audio_language
                 downloaded = download_resolved_audio(
                     resolved, incoming,
                     lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
@@ -1505,6 +1513,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise RuntimeError("没有新增音频下载成功；未修改项目")
                 reference_plan = {
                     **resolved,
+                    "audio_language": "zh-CN",
                     "targets": {
                         name: row for name, row in resolved.get("reference_targets", {}).items()
                         if Path(name).name in successful
