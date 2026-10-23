@@ -30,7 +30,7 @@ from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, norm
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .remote_apply_generation import publish_audio_generation
-from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
+from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .remote_update_language import (
@@ -1749,11 +1749,10 @@ def api_update_apply_remote():
                     shutil.copy2(wav, target)
                 if extracted.parent == temporary_root and extracted != temporary_root:
                     shutil.rmtree(extracted)
-                for audio in incoming.iterdir():
-                    if audio.is_file() and not audio.name.endswith(".part"):
-                        staging_target = staging / audio.name
-                        staging_target.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(audio, staging_target)
+                for audio in validated_incremental_files(downloaded, incoming):
+                    staging_target = staging / audio.name
+                    staging_target.parent.mkdir(parents=True, exist_ok=True)
+                    shutil.copy2(audio, staging_target)
                 publish_audio_generation(generated, staging, temporary_root.name)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
