@@ -17,6 +17,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from .game_profiles import normalize_language
+
 
 DATASET = "simon3000/starrail-voice"
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
@@ -110,8 +112,23 @@ def resolve_targets(
     targets: list[dict[str, str]],
     *,
     dataset: str = DATASET,
+    source_language: str = "en",
 ) -> dict[str, Any]:
-    """Resolve English rows and same-file Chinese reference rows conservatively."""
+    """Resolve only the selected primary audio locale; pair Chinese as optional reference.
+
+    Matching by filename, media ID or text must never silently select an
+    English dataset row for a Japanese/Korean/Chinese source package.
+    """
+    language = normalize_language(source_language)
+    folders = {
+        "en": {"english", "english(us)"},
+        "zh-CN": {"chinese(prc)", "chinese"},
+        "ja": {"japanese", "japanese(jp)"},
+        "ko": {"korean", "korean(kr)"},
+    }
+    if language not in folders:
+        raise ValueError(f"Unsupported incremental audio language: {source_language!r}")
+    primary_folders = folders[language]
     by_name = {Path(str(t.get("filename", ""))).stem: t for t in targets}
     by_hash = {str(t.get("hash", "")).casefold(): t for t in targets if t.get("hash")}
     by_media = {}
@@ -120,7 +137,10 @@ def resolve_targets(
         match = re.search(r"_(\d+)$", stem) if stem.casefold().startswith("ev_archive_") else None
         if match:
             by_media[match.group(1)] = target
-    by_path = {f"english/voice/{name}.wem".casefold(): t for name, t in by_name.items()}
+    by_path = {
+        f"{folder}/voice/{name}.wem".casefold(): t
+        for folder in primary_folders for name, t in by_name.items()
+    }
     by_ingame_basename = {(Path(name).stem + ".wem").casefold(): t for name, t in by_name.items()}
     resolved: dict[str, dict[str, Any]] = {}
     chinese_by_path: dict[str, dict[str, Any]] = {}
@@ -137,7 +157,7 @@ def resolve_targets(
             row_index = total
             total += 1
             language_prefix = key.split("/", 1)[0].casefold()
-            if language_prefix in {"english", "english(us)", "chinese(prc)"}:
+            if language_prefix in primary_folders or language_prefix == "chinese(prc)":
                 stem = Path(key).stem
                 ingame = _field(chunk, "inGameFilename")
                 transcription = _field(chunk, "transcription")
@@ -151,11 +171,12 @@ def resolve_targets(
                     "ingame_filename": ingame,
                 }
                 relative = _voice_relative_path(ingame)
-                if language_prefix == "chinese(prc)":
+                if language_prefix == "chinese(prc)" and language != "zh-CN":
                     if relative:
                         chinese_by_path.setdefault(relative, row)
                     current = following
                     continue
+                row["audio_language"] = language
                 target = by_path.get(ingame.casefold()) if ingame else None
                 method = "inGameFilename"
                 if target is None and ingame:
@@ -190,10 +211,12 @@ def resolve_targets(
                 **chinese,
                 "method": "same_ingame_filename",
                 "reference_language": "zh-CN",
+                "audio_language": "zh-CN",
             }
     unresolved = [str(t.get("filename", "")) for t in targets if str(t.get("filename", "")) not in resolved]
     return {
         "dataset": dataset,
+        "audio_language": language,
         "total_rows": total,
         "targets": resolved,
         "reference_targets": reference_targets,
@@ -297,6 +320,15 @@ def download_resolved_audio(
     destination.mkdir(parents=True, exist_ok=True)
     dataset = str(dataset or plan.get("dataset") or DATASET)
     targets = plan.get("targets", {})
+    plan_language = str(plan.get("audio_language") or "").strip()
+    if plan_language:
+        normalized = normalize_language(plan_language)
+        for name, row in targets.items():
+            if normalize_language(str(row.get("audio_language") or "")) != normalized:
+                raise ValueError(
+                    f"Audio locale mismatch for {name}: expected {normalized}, "
+                    f"got {row.get('audio_language')!r}"
+                )
     blocks: dict[int, list[tuple[str, int]]] = {}
     for filename, row in targets.items():
         index = int(row["row_idx"])
