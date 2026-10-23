@@ -72,7 +72,9 @@ def require_safe_prior_incremental_apply(report_path: Path, audio_language: str)
         raise ValueError("历史增补收据不可读取，必须先检查归档来源，禁止继续混入音频") from exc
     if not isinstance(report, dict):
         raise ValueError("历史增补收据无效，已拒绝继续自动增补")
-    if report.get("project_updated") and report.get("audio_language") != audio_language:
+    # Historical builds always downloaded English; they are safe only for EN projects.
+    prior_language = report.get("audio_language") or "en"
+    if report.get("project_updated") and prior_language != audio_language:
         raise ValueError(
             "发现未记录正确语种或与当前语种不同的历史增补。此前可能已将英语 WAV 合入"
             "日语来源；请保留原始材料、从可信原始音频包恢复工程并重新检查增补，"
