@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.huggingface_audio import confirmed_reference_metadata, resolve_targets, download_resolved_audio
+from app.huggingface_audio import confirmed_reference_metadata, resolve_targets, download_resolved_audio, validated_incremental_files
 
 
 class HuggingFaceAudioTests(unittest.TestCase):
@@ -282,6 +282,78 @@ class HuggingFaceAudioTests(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "Audio locale mismatch"):
                 download_resolved_audio(plan, Path(directory))
 
+
+
+    def test_dataset_row_rechecked_before_downloading_japanese_audio(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 0,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        wrong_row = {"rows": [{"row_idx": 0, "row": {
+            "language": "English",
+            "ingame_filename": "English/voice/line.wem",
+            "audio": {"src": "https://huggingface.co/english.wav"},
+        }}]}
+        with tempfile.TemporaryDirectory() as td:
+            with patch("app.huggingface_audio._json_get", return_value=wrong_row), \
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                result = download_resolved_audio(plan, Path(td))
+            self.assertEqual(result["completed"], [])
+            self.assertIn("locale mismatch", result["failed"][0]["reason"])
+            opener.return_value.open.assert_not_called()
+
+    def test_dataset_row_identity_change_fails_even_with_japanese_locale(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 0,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        moved_row = {"rows": [{"row_idx": 0, "row": {
+            "language": "Japanese",
+            "ingame_filename": "Japanese/voice/someone_else.wem",
+            "audio": {"src": "https://huggingface.co/japanese.wav"},
+        }}]}
+        with tempfile.TemporaryDirectory() as td:
+            with patch("app.huggingface_audio._json_get", return_value=moved_row):
+                result = download_resolved_audio(plan, Path(td))
+            self.assertEqual(result["completed"], [])
+            self.assertIn("identity changed", result["failed"][0]["reason"])
+
+    def test_stale_japanese_cache_is_not_reused_and_is_not_stage_input(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 0,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        wav = b"RIFF" + (16).to_bytes(4, "little") + b"WAVEfmt " + b"\0" * 12
+        valid_row = {"rows": [{"row_idx": 0, "row": {
+            "language": "Japanese",
+            "ingame_filename": "Japanese/voice/line.wem",
+            "audio": {"src": "https://huggingface.co/japanese.wav"},
+        }}]}
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            (folder / "line.wav").write_bytes(b"RIFF" + b"\0" * 4 + b"WAVE" + b"old bytes")
+            (folder / "stale.wav").write_bytes(wav)
+            with patch("app.huggingface_audio._json_get", return_value=valid_row), \
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(wav)
+                result = download_resolved_audio(plan, folder)
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(result["completed"][0]["status"], "ok")
+            self.assertEqual(result["completed"][0]["sha256"], __import__("hashlib").sha256(wav).hexdigest())
+            self.assertEqual([p.name for p in validated_incremental_files(result, folder)], ["line.wav"])
+            self.assertTrue((folder / "stale.wav").is_file())
+            (folder / "line.wav").write_bytes(wav + b"changed")
+            with self.assertRaisesRegex(ValueError, "changed"):
+                validated_incremental_files(result, folder)
 
 
 if __name__ == "__main__":
