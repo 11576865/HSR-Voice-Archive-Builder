@@ -33,6 +33,7 @@ from .gpt_sovits_exporter import export_project_dataset
 from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
+from .incremental_locale_audit import audit_incremental_audio_locale
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -346,6 +347,9 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/update/locale-audit":
+            self._json({"ok": True, "audit": audit_incremental_audio_locale(_active_config())})
+            return
         if path == "/api/project/active/archive/audit":
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
