@@ -59,9 +59,18 @@ jobs:
           python-version: "3.12"
       - name: Install actual renderer and fonts
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          # Ubuntu runners may already provide FFmpeg/libass and DejaVu.
+          # Avoid unconditional apt-get update (it can block real ink CI for
+          # minutes) unless actual media/font prerequisites are missing.
+          if ! command -v ffmpeg >/dev/null 2>&1 || \
+             ! ffmpeg -hide_banner -filters 2>/dev/null | grep -Eq ' subtitles | ass ' || \
+             ! command -v fc-match >/dev/null 2>&1 || \
+             ! fc-match "DejaVu Sans" >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fontconfig
+          fi
           ffmpeg -hide_banner -filters | grep -E ' subtitles | ass '
+          fc-match "DejaVu Sans"
       - name: Install minimal test dependencies
         run: python -m pip install -r requirements-test.txt
       - name: Validate real rendered ink evidence
