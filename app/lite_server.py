@@ -31,7 +31,7 @@ from .project_fonts import font_asset_directory, import_project_font, list_proje
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
 from .remote_apply_generation import publish_audio_generation
-from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
+from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .remote_update_language import (
@@ -1552,9 +1552,8 @@ class Handler(BaseHTTPRequestHandler):
                             shutil.copy2(wav, target)
                     if extracted.parent == temporary_root and extracted != temporary_root:
                         shutil.rmtree(extracted)
-                    for audio in incoming.iterdir():
-                        if audio.is_file() and not audio.name.endswith(".part"):
-                            shutil.copy2(audio, temporary_root / audio.name)
+                    for audio in validated_incremental_files(downloaded, incoming):
+                        shutil.copy2(audio, temporary_root / audio.name)
                     publish_audio_generation(generated, temporary_root, temporary_root.name)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
