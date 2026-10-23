@@ -205,5 +205,84 @@ class HuggingFaceAudioTests(unittest.TestCase):
             self.assertIn("Private", blocked["failed"][0]["reason"])
 
 
+    def test_japanese_augmentation_uses_japanese_wav_not_matching_english(self) -> None:
+        records = {
+            "English/en.wav": {
+                "filename": "en", "inGameFilename": "English/voice/chapter5_1_hero_101.wem",
+                "transcription": "Hello",
+            },
+            "Japanese/ja.wav": {
+                "filename": "ja", "inGameFilename": "Japanese/voice/chapter5_1_hero_101.wem",
+                "transcription": "こんにちは",
+            },
+            "Chinese(PRC)/zh.wav": {
+                "filename": "zh", "inGameFilename": "Chinese(PRC)/voice/chapter5_1_hero_101.wem",
+                "transcription": "你好",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            result = resolve_targets(
+                path, [{"filename": "chapter5_1_hero_101.wav", "english": "こんにちは"}],
+                source_language="ja",
+            )
+        selected = result["targets"]["chapter5_1_hero_101.wav"]
+        self.assertEqual(result["audio_language"], "ja")
+        self.assertEqual(selected["key"], "Japanese/ja.wav")
+        self.assertEqual(selected["audio_language"], "ja")
+        self.assertEqual(result["reference_targets"]["chapter5_1_hero_101.wav"]["key"], "Chinese(PRC)/zh.wav")
+
+    def test_japanese_augmentation_never_falls_back_to_english(self) -> None:
+        records = {
+            "English/en.wav": {
+                "filename": "en", "inGameFilename": "English/voice/chapter5_1_hero_101.wem",
+                "transcription": "Hello",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            result = resolve_targets(
+                path, [{"filename": "chapter5_1_hero_101.wav", "english": "Hello"}],
+                source_language="ja",
+            )
+        self.assertEqual(result["targets"], {})
+        self.assertEqual(result["unresolved"], ["chapter5_1_hero_101.wav"])
+
+    def test_chinese_and_korean_are_primary_audio_locales(self) -> None:
+        records = {
+            "Chinese(PRC)/zh.wav": {
+                "filename": "zh", "inGameFilename": "Chinese(PRC)/voice/line_1.wem",
+                "transcription": "你好",
+            },
+            "Korean/ko.wav": {
+                "filename": "ko", "inGameFilename": "Korean/voice/line_1.wem",
+                "transcription": "안녕하세요",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            for language, key in (("zh-CN", "Chinese(PRC)/zh.wav"), ("ko", "Korean/ko.wav")):
+                result = resolve_targets(
+                    path, [{"filename": "line_1.wav"}], source_language=language,
+                )
+                self.assertEqual(result["targets"]["line_1.wav"]["key"], key)
+            self.assertEqual(resolve_targets(
+                path, [{"filename": "line_1.wav"}], source_language="zh-CN",
+            )["reference_targets"], {})
+
+    def test_download_plan_rejects_mixed_language_rows(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {"audio_language": "en", "row_idx": 0}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "Audio locale mismatch"):
+                download_resolved_audio(plan, Path(directory))
+
+
+
 if __name__ == "__main__":
     unittest.main()
