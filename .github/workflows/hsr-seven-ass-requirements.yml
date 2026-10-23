@@ -20,10 +20,21 @@ jobs:
           python-version: "3.12"
       - name: Install real libass, FFmpeg and fonts
         run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq ffmpeg fonts-dejavu-core
+          # GitHub-hosted Ubuntu commonly ships usable FFmpeg/libass and
+          # DejaVu already. Avoid an unconditional apt index update (which
+          # can stall the entire media acceptance suite on mirror latency).
+          # Fall back to apt only if the actual renderer/font prerequisite
+          # is missing. The strict real-mux tests below still run in full.
+          if ! command -v ffmpeg >/dev/null 2>&1 || \
+             ! ffmpeg -hide_banner -filters 2>/dev/null | grep -Eq ' subtitles | ass ' || \
+             ! command -v fc-match >/dev/null 2>&1 || \
+             ! fc-match "DejaVu Sans" >/dev/null 2>&1; then
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq ffmpeg fonts-dejavu-core fontconfig
+          fi
           python -m pip install -r requirements-test.txt
           ffmpeg -hide_banner -filters | grep -E ' subtitles | ass '
+          fc-match "DejaVu Sans"
       - name: Compile production and regression code
         run: |
           python -m compileall -q app subtitle_layout tests
