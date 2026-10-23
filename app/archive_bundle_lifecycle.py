@@ -416,13 +416,20 @@ def diagnose_bundle_audio_source(output: Path) -> dict[str, Any]:
     }
 
 
-def bundle_export_status(output: Path) -> dict[str, Any]:
+def bundle_export_status(output: Path, *, _owned_build: bool = False) -> dict[str, Any]:
     """Validate the sealed MKV without requiring redundant standalone media files.
 
     Legacy (unsealed) bundles continue to require their original inputs. Sealed
     bundles instead bind their subtitle receipt's source hashes and the current
     font identities to the verified container identity.
     """
+    # Only the same protected build transaction can discount its own marker.
+    # Other callers — including UI/status polling — remain blocked while a
+    # build is active. This does NOT waive receipts or artifact checks.
+    if _owned_build:
+        from .publishing import owns_published_build
+        if not owns_published_build(output):
+            raise RuntimeError("Internal MKV verification requires an owned build transaction")
     settings = previous_bundle_settings(output)
     target = output / OUTPUT
     # An empty file exists, but cannot be a usable FLAC or subtitle product.
@@ -465,7 +472,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
             subtitles_current = bool(srt_current and ass_current)
     audio_source = bundle_audio_source_status(output)
     audio_available = bool(audio_source["available"])
-    build_busy = (output / ".build_in_progress").exists()
+    build_busy = (output / ".build_in_progress").exists() and not _owned_build
     prerequisites = {
         "continuous_flac": audio_available,
         "independent_flac": flac,
@@ -503,7 +510,7 @@ def bundle_export_status(output: Path) -> dict[str, Any]:
     try:
         if blockers:
             raise ValueError("MKV 生成前提不满足：" + "；".join(blockers))
-        if (output / ".build_in_progress").exists():
+        if build_busy:
             raise ValueError("项目构建进行中，旧 MKV 不代表最新结果")
         if not _bundle_artifact_matches(target, receipt):
             raise ValueError("MKV 文件已被修改或替换")
