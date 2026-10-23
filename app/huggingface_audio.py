@@ -266,7 +266,9 @@ def _verify_dataset_audio_row(row: Any, target: dict[str, Any], language: str) -
     ).strip()
     declared_locale = _dataset_locale(declared_raw) if declared_raw else ""
     path_folder = actual_filename.replace("\\", "/").split("/", 1)[0]
-    path_locale = _dataset_locale(path_folder) if "/" in actual_filename.replace("\\", "/") else ""
+    # Genshin paths may have a generic VO_anecdote/ folder; only recognized
+    # language labels provide locale evidence.
+    path_locale = _AUDIO_LOCALE_LABELS.get(path_folder.casefold(), "")
     if declared_locale and declared_locale != expected:
         raise ValueError(
             f"Hugging Face audio locale mismatch: expected {expected}, got {declared_raw}"
