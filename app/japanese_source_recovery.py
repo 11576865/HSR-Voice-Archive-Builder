@@ -180,7 +180,7 @@ def create_isolated_japanese_recovery(
         )
         if _sha256(project_config_path) != config_before or _sha256(initial_index) != initial_index_before:
             raise ValueError("原工程在发布前发生变化；拒绝发布恢复副本")
-            os.replace(staging, destination)
+        os.replace(staging, destination)
         published = True
     finally:
         if not published:
