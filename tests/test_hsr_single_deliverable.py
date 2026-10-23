@@ -12,7 +12,8 @@ from unittest.mock import patch
 
 from app.archive_bundle_exporter import ArchiveBundleExporter
 from app.archive_bundle_lifecycle import (
-    OUTPUT, PREFERENCES, bundle_export_status, previous_bundle_settings,
+    OUTPUT, PREFERENCES, RECEIPT, _bundle_artifact_matches, _read_receipt,
+    bundle_export_status, previous_bundle_settings,
 )
 from app.delivery_artifacts import (
     ASS, FLAC, SRT, LEGACY_BLACK, export_optional_track, extract_flac_from_mkv,
@@ -101,8 +102,6 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
 
     def test_corrupted_existing_flac_cannot_retire_verified_mkv(self):
         """FFprobe header success alone cannot certify a complete audio stream."""
-        from app.archive_bundle_lifecycle import RECEIPT
-
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
             self.create_inputs(root)
@@ -126,6 +125,13 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
             self.assertEqual((root / OUTPUT).read_bytes(), original_mkv)
             self.assertEqual((root / RECEIPT).read_bytes(), original_receipt)
             self.assertTrue((root / FLAC).is_file())
+            # The damaged loose FLAC legitimately makes the *working* state
+            # stale; what must survive is the previously sealed MKV evidence.
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertTrue(_read_receipt(root)["sealed"])
+            self.assertTrue(_bundle_artifact_matches(
+                root / OUTPUT, _read_receipt(root)))
+            (root / FLAC).unlink()
             self.assertEqual(bundle_export_status(root)["state"], "current")
 
     def test_audio_replaced_after_decode_keeps_previous_verified_mkv(self):
@@ -159,6 +165,11 @@ class OneDeliverableLifecycleTests(unittest.TestCase):
             self.assertEqual(mutated, [True])
             self.assertEqual((root / OUTPUT).read_bytes(), original_mkv)
             self.assertEqual((root / RECEIPT).read_bytes(), original_receipt)
+            self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertTrue(_read_receipt(root)["sealed"])
+            self.assertTrue(_bundle_artifact_matches(
+                root / OUTPUT, _read_receipt(root)))
+            (root / FLAC).unlink()
             self.assertEqual(bundle_export_status(root)["state"], "current")
 
     def test_explicit_export_rejects_symlinked_output_folder(self):
