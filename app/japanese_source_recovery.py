@@ -18,7 +18,6 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from .game_profiles import game_index_url, normalize_language
-from .jobs import assert_project_idle
 from .project import (
     PROJECT_FILENAME, ProjectConfig, remember_project, resolve_project_path,
 )
@@ -107,7 +106,6 @@ def create_isolated_japanese_recovery(
     Recovery never mutates the existing HSR project. The only writes are a
     newly allocated sibling folder and the application's recent-project list.
     """
-    assert_project_idle(config.root)
     root = Path(config.root).expanduser().resolve()
     project_config_path = root / PROJECT_FILENAME
     if not project_config_path.is_file() or project_config_path.is_symlink():
@@ -123,7 +121,6 @@ def create_isolated_japanese_recovery(
     original, initial_index, fingerprint, count = _verified_initial_source(config, progress)
     if not initial_index_before or _sha256(initial_index) != initial_index_before or _sha256(project_config_path) != config_before:
         raise ValueError("源工程配置或初始索引在核验过程中发生变化；拒绝发布恢复副本")
-    assert_project_idle(config.root)
 
     # Use a new UUID-based sibling, never follow an existing destination.
     # Original audio stays referenced at its verified path rather than copied.
@@ -169,8 +166,7 @@ def create_isolated_japanese_recovery(
         )
         if _sha256(project_config_path) != config_before or _sha256(initial_index) != initial_index_before:
             raise ValueError("原工程在发布前发生变化；拒绝发布恢复副本")
-        assert_project_idle(config.root)
-        os.replace(staging, destination)
+            os.replace(staging, destination)
         published = True
     finally:
         if not published:
