@@ -74,6 +74,10 @@ def preserve_published_archive(output: Path, state: Path) -> Iterator[None]:
     hard links can preserve them without copying gigabytes. Text artifacts
     are copied because some CSV writers overwrite their existing inode.
     """
+    if owns_published_build(output):
+        # A nested scope would unlink the shared marker on its inner commit,
+        # falsely exposing the still-running outer build as available.
+        raise RuntimeError("Nested protected builds for the same output are not supported")
     output.mkdir(parents=True, exist_ok=True)
     marker = output / BUILD_MARKER
     previously_interrupted = marker.exists()
