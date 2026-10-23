@@ -196,9 +196,19 @@ def seal_complete_delivery(output: Path) -> None:
     work files can be removed on the next successful seal attempt. If it dies
     before the receipt update, the original source files are still available.
     """
-    health = bundle_export_status(output)
+    # The full build seals while its own rollback marker is present. A
+    # standalone, already-verified MKV export also calls this function with
+    # NO marker and must retain its older safe behavior. Foreign/busy markers
+    # still block sealing; no media/provenance checks are skipped.
+    from .publishing import owns_published_build
+    health = bundle_export_status(
+        output, _owned_build=owns_published_build(output)
+    )
     if health["state"] != "current":
-        raise ValueError("Cannot discard working files before MKV verification")
+        raise ValueError(
+            "Cannot discard working files before MKV verification: "
+            + str(health.get("message", "unknown verification state"))
+        )
     receipt = _read_receipt(output)
     if receipt is None:
         raise ValueError("Missing MKV publication receipt")

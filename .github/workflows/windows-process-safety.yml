@@ -19,4 +19,4 @@ jobs:
       - name: Compile job modules
         run: python -m compileall -q app tests
       - name: Two-process writer and journal regression (native Windows)
-        run: python -m unittest tests.test_project_writer_lock tests.test_job_journal_multiprocess tests.test_job_tombstone_compaction -v
+        run: python -m unittest tests.test_project_writer_lock tests.test_job_journal_multiprocess tests.test_job_tombstone_compaction tests.test_owned_build_mkv_seal -v

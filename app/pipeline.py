@@ -1967,7 +1967,7 @@ def build_project_v02(
             settings = previous_bundle_settings(out_dir)
             spec = settings["background_spec"]
             existing_bundle = _read_receipt(out_dir)
-            if (bundle_export_status(out_dir)["needs_rebuild"] or
+            if (bundle_export_status(out_dir, _owned_build=True)["needs_rebuild"] or
                     bool(existing_bundle and existing_bundle.get("include_chapter_flac")) != bool(generate_chapter_flac)):
                 background = (load_previous_bundle_image(out_dir)
                               if spec["mode"] == "image" else None)

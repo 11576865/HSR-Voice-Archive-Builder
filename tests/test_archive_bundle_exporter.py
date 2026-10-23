@@ -143,6 +143,40 @@ class BundleRealFFmpegTests(unittest.TestCase):
         )
         record_subtitle_export(root, state="current", ass_required=True)
 
+    def test_real_initial_complete_bundle_seals_inside_its_build_marker(self):
+        """Actual FFmpeg mux is verified before working FLAC/SRT/ASS removal."""
+        from app.publishing import preserve_published_archive
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td) / "output"
+            root.mkdir()
+            state = Path(td) / "state"
+            state.mkdir()
+            with preserve_published_archive(root, state):
+                audio, ass = self._audio(root), self._ass(root)
+                self._certify(root)
+                target = root / "HSR_Voice_Archive_Bundle.mkv"
+                exporter = ArchiveBundleExporter(width=320, height=180)
+                report = exporter.export(
+                    audio, ass, target, require_current_ass=True,
+                    include_fonts=False, background_spec={"mode": "color"},
+                )
+                self.assertEqual(report["subtitle_codecs"], ["ass", "subrip"])
+                # External readers may NOT certify an in-progress build.
+                self.assertEqual(bundle_export_status(root)["state"], "stale")
+                self.assertEqual(bundle_export_status(
+                    root, _owned_build=True)["state"], "current")
+                seal_complete_delivery(root)
+                self.assertFalse(audio.exists())
+                self.assertFalse(ass.exists())
+                self.assertFalse((root / "HSR_Voice_Archive.srt").exists())
+                self.assertEqual(bundle_export_status(root)["state"], "stale")
+            self.assertEqual(bundle_export_status(root)["state"], "current")
+            codecs = [row["codec_name"]
+                      for row in exporter._probe(target)["streams"]
+                      if row["codec_type"] == "subtitle"]
+            self.assertEqual(codecs, ["ass", "subrip"])
+
     def test_sealed_mkv_survives_style_edit_and_real_effect_preview_has_fade_tail(self):
         """Production pipeline: sealed MKV -> remove FLAC -> style edit -> new cue preview.
 
