@@ -31,8 +31,14 @@ from .project_fonts import font_asset_directory, import_project_font, list_proje
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
 from .remote_apply_generation import publish_audio_generation
-from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets
+from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
+from .incremental_locale_audit import audit_incremental_audio_locale
+from .japanese_source_recovery import create_isolated_japanese_recovery
+from .remote_update_language import (
+    require_incremental_audio_language, select_incremental_index_url,
+    require_matching_update_plan, require_safe_prior_incremental_apply,
+)
 from .identity import infer_group
 from .human_review import import_review_txt
 from .jobs import assert_no_active_build, assert_project_idle, create_job, delete_project_jobs, get_job, recent_jobs, reserve_project_output_writer
@@ -342,6 +348,9 @@ class Handler(BaseHTTPRequestHandler):
         self._json({"ok": False, "error": "Not found"}, 404)
 
     def _handle_api_get(self, path: str) -> None:
+        if path == "/api/update/locale-audit":
+            self._json({"ok": True, "audit": audit_incremental_audio_locale(_active_config())})
+            return
         if path == "/api/project/active/archive/audit":
             config = _active_config()
             output = resolve_project_path(config, config.output_dir)
@@ -1368,6 +1377,21 @@ class Handler(BaseHTTPRequestHandler):
             self._json({"ok": True, "plan": result, "project": project_summary(config)})
             return
 
+        if path == "/api/update/create-japanese-recovery":
+            if data.get("language") != "ja" or data.get("acknowledge") != "create-isolated":
+                raise ValueError("必须明确确认创建隔离的日语恢复候选项目")
+            config = _active_config()
+            assert_project_idle(config.root)
+            job = create_job(
+                "locale-recovery",
+                lambda progress: create_isolated_japanese_recovery(
+                    config, report_progress=progress
+                ),
+                with_progress=True, project_root=config.root, project_name=config.name,
+            )
+            self._json({"ok": True, "job": job.id})
+            return
+
         if path == "/api/update/check-remote":
             config = _active_config()
             if not remote_updates_supported(getattr(config, "game_id", "honkai-star-rail")):
@@ -1376,7 +1400,8 @@ class Handler(BaseHTTPRequestHandler):
                     "Local WAV+LAB archive building remains supported."
                 )
             requested_character = data.get("character", "").strip()
-            remote_url = data.get("remote_index_url", "").strip() or config.remote_index_url or game_index_url(config.game_id, config.source_text_language)
+            audio_language = require_incremental_audio_language(config)
+            remote_url = select_incremental_index_url(config, data.get("remote_index_url", ""))
             characters = remote_character_candidates(config, requested_character)
             if not characters:
                 raise ValueError(
@@ -1390,6 +1415,7 @@ class Handler(BaseHTTPRequestHandler):
             manifest = output / "manifest.json"
             if not manifest.is_file():
                 raise FileNotFoundError("Build the project once before checking remote updates")
+            require_safe_prior_incremental_apply(output / "update_apply_report.json", audio_language)
 
             def run():
                 rows = []
@@ -1397,7 +1423,7 @@ class Handler(BaseHTTPRequestHandler):
                 attempted: list[str] = []
                 for candidate in characters:
                     attempted.append(candidate)
-                    rows = fetch_provider_index(config.game_id, candidate, language=config.source_text_language, url=remote_url)
+                    rows = fetch_provider_index(config.game_id, candidate, language=audio_language, url=remote_url)
                     if rows:
                         matched_character = candidate
                         break
@@ -1412,6 +1438,7 @@ class Handler(BaseHTTPRequestHandler):
                     url=remote_url,
                     queried_character=matched_character,
                 )
+                plan["audio_language"] = audio_language
                 plan = exclude_applied_updates(plan, output / "update_apply_report.json")
                 plan = exclude_indexed_updates(plan, resolve_project_path(config, config.index_csv))
                 resolved_character = str(plan.get("character") or matched_character)
@@ -1446,6 +1473,9 @@ class Handler(BaseHTTPRequestHandler):
             if not update_plan_path.is_file():
                 raise FileNotFoundError("Check the remote index before downloading additions")
             remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
+            audio_language = require_incremental_audio_language(config)
+            require_matching_update_plan(remote_plan, audio_language)
+            require_safe_prior_incremental_apply(output / "update_apply_report.json", audio_language)
             targets = []
             for item in remote_plan.get("new_logical", []):
                 if isinstance(item, dict):
@@ -1466,7 +1496,7 @@ class Handler(BaseHTTPRequestHandler):
                 result_json = state / "result.json"
                 report_progress("metadata", "正在取得 Hugging Face 定位索引", 0, 1)
                 download_result_json(result_json, lambda message: report_progress("metadata", message, 0, 1), dataset=dataset)
-                resolved = resolve_targets(result_json, targets, dataset=dataset)
+                resolved = resolve_targets(result_json, targets, dataset=dataset, source_language=audio_language)
                 report_progress("resolve", f"已可靠定位 {len(resolved['targets'])}/{len(targets)} 条新增语音", len(targets), len(targets))
                 atomic_write_text(state / "incremental_resolution.json", json.dumps(resolved, ensure_ascii=False, indent=2))
                 if not resolved["targets"]:
@@ -1493,7 +1523,7 @@ class Handler(BaseHTTPRequestHandler):
                         len(targets),
                     )
                     return report
-                incoming = generated / "incremental_audio"
+                incoming = generated / "incremental_audio" / audio_language
                 downloaded = download_resolved_audio(
                     resolved, incoming,
                     lambda current, total, name: report_progress("download", f"正在下载：{name}", current, total),
@@ -1505,6 +1535,7 @@ class Handler(BaseHTTPRequestHandler):
                     raise RuntimeError("没有新增音频下载成功；未修改项目")
                 reference_plan = {
                     **resolved,
+                    "audio_language": "zh-CN",
                     "targets": {
                         name: row for name, row in resolved.get("reference_targets", {}).items()
                         if Path(name).name in successful
@@ -1537,9 +1568,8 @@ class Handler(BaseHTTPRequestHandler):
                             shutil.copy2(wav, target)
                     if extracted.parent == temporary_root and extracted != temporary_root:
                         shutil.rmtree(extracted)
-                    for audio in incoming.iterdir():
-                        if audio.is_file() and not audio.name.endswith(".part"):
-                            shutil.copy2(audio, temporary_root / audio.name)
+                    for audio in validated_incremental_files(downloaded, incoming):
+                        shutil.copy2(audio, temporary_root / audio.name)
                     publish_audio_generation(generated, temporary_root, temporary_root.name)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
@@ -1562,7 +1592,7 @@ class Handler(BaseHTTPRequestHandler):
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
                     writer.writeheader(); writer.writerows(existing_rows)
                 update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
-                report = {"index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
+                report = {"audio_language": audio_language, "index_new": len(targets), "resolved": len(resolved["targets"]), "unresolved": resolved["unresolved"], "audio_available": len(successful), "audio_unavailable": len(resolved["unresolved"]), "downloaded_or_existing": len(downloaded["completed"]), "failed": downloaded["failed"], "chinese_reference_matched": len(reference_plan["targets"]), "chinese_reference_downloaded": len(reference_successful), "chinese_reference_failed": reference_download["failed"], "official_target_available": len(reference_successful), "reference_guided_translation": 0, "unreferenced_api_translation": len(successful - reference_successful), "api_translation_required": len(successful - reference_successful), "project_updated": True, "rebuild_required": True, "applied_filenames": sorted(successful)}
                 atomic_write_text(output / "update_apply_report.json", json.dumps(report, ensure_ascii=False, indent=2))
                 report_progress("apply", "新增语音已应用，等待重新构建成品", 1, 1)
                 return report

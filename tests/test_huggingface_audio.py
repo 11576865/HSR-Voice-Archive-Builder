@@ -7,7 +7,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.huggingface_audio import confirmed_reference_metadata, resolve_targets, download_resolved_audio
+from app.huggingface_audio import confirmed_reference_metadata, resolve_targets, download_resolved_audio, validated_incremental_files
 
 
 class HuggingFaceAudioTests(unittest.TestCase):
@@ -203,6 +203,157 @@ class HuggingFaceAudioTests(unittest.TestCase):
                 blocked = download_resolved_audio(plan, destination)
             self.assertEqual(blocked["completed"], [])
             self.assertIn("Private", blocked["failed"][0]["reason"])
+
+
+    def test_japanese_augmentation_uses_japanese_wav_not_matching_english(self) -> None:
+        records = {
+            "English/en.wav": {
+                "filename": "en", "inGameFilename": "English/voice/chapter5_1_hero_101.wem",
+                "transcription": "Hello",
+            },
+            "Japanese/ja.wav": {
+                "filename": "ja", "inGameFilename": "Japanese/voice/chapter5_1_hero_101.wem",
+                "transcription": "こんにちは",
+            },
+            "Chinese(PRC)/zh.wav": {
+                "filename": "zh", "inGameFilename": "Chinese(PRC)/voice/chapter5_1_hero_101.wem",
+                "transcription": "你好",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            result = resolve_targets(
+                path, [{"filename": "chapter5_1_hero_101.wav", "english": "こんにちは"}],
+                source_language="ja",
+            )
+        selected = result["targets"]["chapter5_1_hero_101.wav"]
+        self.assertEqual(result["audio_language"], "ja")
+        self.assertEqual(selected["key"], "Japanese/ja.wav")
+        self.assertEqual(selected["audio_language"], "ja")
+        self.assertEqual(result["reference_targets"]["chapter5_1_hero_101.wav"]["key"], "Chinese(PRC)/zh.wav")
+
+    def test_japanese_augmentation_never_falls_back_to_english(self) -> None:
+        records = {
+            "English/en.wav": {
+                "filename": "en", "inGameFilename": "English/voice/chapter5_1_hero_101.wem",
+                "transcription": "Hello",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            result = resolve_targets(
+                path, [{"filename": "chapter5_1_hero_101.wav", "english": "Hello"}],
+                source_language="ja",
+            )
+        self.assertEqual(result["targets"], {})
+        self.assertEqual(result["unresolved"], ["chapter5_1_hero_101.wav"])
+
+    def test_chinese_and_korean_are_primary_audio_locales(self) -> None:
+        records = {
+            "Chinese(PRC)/zh.wav": {
+                "filename": "zh", "inGameFilename": "Chinese(PRC)/voice/line_1.wem",
+                "transcription": "你好",
+            },
+            "Korean/ko.wav": {
+                "filename": "ko", "inGameFilename": "Korean/voice/line_1.wem",
+                "transcription": "안녕하세요",
+            },
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            path = Path(directory) / "result.json"
+            path.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            for language, key in (("zh-CN", "Chinese(PRC)/zh.wav"), ("ko", "Korean/ko.wav")):
+                result = resolve_targets(
+                    path, [{"filename": "line_1.wav"}], source_language=language,
+                )
+                self.assertEqual(result["targets"]["line_1.wav"]["key"], key)
+            self.assertEqual(resolve_targets(
+                path, [{"filename": "line_1.wav"}], source_language="zh-CN",
+            )["reference_targets"], {})
+
+    def test_download_plan_rejects_mixed_language_rows(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {"audio_language": "en", "row_idx": 0}},
+        }
+        with tempfile.TemporaryDirectory() as directory:
+            with self.assertRaisesRegex(ValueError, "Audio locale mismatch"):
+                download_resolved_audio(plan, Path(directory))
+
+
+
+    def test_dataset_row_rechecked_before_downloading_japanese_audio(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 0,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        wrong_row = {"rows": [{"row_idx": 0, "row": {
+            "language": "English",
+            "ingame_filename": "English/voice/line.wem",
+            "audio": {"src": "https://huggingface.co/english.wav"},
+        }}]}
+        with tempfile.TemporaryDirectory() as td:
+            with patch("app.huggingface_audio._json_get", return_value=wrong_row), \
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                result = download_resolved_audio(plan, Path(td))
+            self.assertEqual(result["completed"], [])
+            self.assertIn("locale mismatch", result["failed"][0]["reason"])
+            opener.return_value.open.assert_not_called()
+
+    def test_dataset_row_identity_change_fails_even_with_japanese_locale(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 0,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        moved_row = {"rows": [{"row_idx": 0, "row": {
+            "language": "Japanese",
+            "ingame_filename": "Japanese/voice/someone_else.wem",
+            "audio": {"src": "https://huggingface.co/japanese.wav"},
+        }}]}
+        with tempfile.TemporaryDirectory() as td:
+            with patch("app.huggingface_audio._json_get", return_value=moved_row):
+                result = download_resolved_audio(plan, Path(td))
+            self.assertEqual(result["completed"], [])
+            self.assertIn("identity changed", result["failed"][0]["reason"])
+
+    def test_stale_japanese_cache_is_not_reused_and_is_not_stage_input(self) -> None:
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 0,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        wav = b"RIFF" + (16).to_bytes(4, "little") + b"WAVEfmt " + b"\0" * 12
+        valid_row = {"rows": [{"row_idx": 0, "row": {
+            "language": "Japanese",
+            "ingame_filename": "Japanese/voice/line.wem",
+            "audio": {"src": "https://huggingface.co/japanese.wav"},
+        }}]}
+        with tempfile.TemporaryDirectory() as td:
+            folder = Path(td)
+            (folder / "line.wav").write_bytes(b"RIFF" + b"\0" * 4 + b"WAVE" + b"old bytes")
+            (folder / "stale.wav").write_bytes(wav)
+            with patch("app.huggingface_audio._json_get", return_value=valid_row), \
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(wav)
+                result = download_resolved_audio(plan, folder)
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(result["completed"][0]["status"], "ok")
+            self.assertEqual(result["completed"][0]["sha256"], __import__("hashlib").sha256(wav).hexdigest())
+            self.assertEqual([p.name for p in validated_incremental_files(result, folder)], ["line.wav"])
+            self.assertTrue((folder / "stale.wav").is_file())
+            (folder / "line.wav").write_bytes(wav + b"changed")
+            with self.assertRaisesRegex(ValueError, "changed"):
+                validated_incremental_files(result, folder)
 
 
 if __name__ == "__main__":

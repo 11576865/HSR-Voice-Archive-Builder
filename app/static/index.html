@@ -4022,11 +4022,17 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <input id="remoteCharacter" readonly>
         </div>
         <div class="actions">
+          <button id="auditRemoteLocaleBtn" type="button">核对语音来源</button>
+          <button id="createJapaneseRecoveryBtn" type="button">创建独立日语恢复工程</button>
           <button id="scanRemoteBtn">检查远程索引</button>
           <button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button>
         </div>
       </div>
       <div id="updateResult" class="small muted" role="status" aria-live="polite">尚未检查。</div>
+      <pre id="remoteLocaleAuditResult" class="hidden" aria-live="polite"></pre>
+      <div id="japaneseRecoveryResult" class="small muted" role="status" aria-live="polite">
+        恢复工程只在验证原始日语包指纹及初始索引后创建，不覆盖当前工程，不自动生成或发布成品。
+      </div>
 
       <div id="updateStats" class="stats update-stats">
         <button type="button" class="stat existing update-filter" data-update-filter="exact_existing"><b id="uExisting">—</b><span>已存在</span></button>
@@ -5793,6 +5799,59 @@ document.getElementById('translationRetestBtn')?.addEventListener('click',runTra
 document.getElementById('projectForm').onsubmit=async e=>{e.preventDefault();try{await saveProject();setLog('设置已保存。')}catch(x){setLog(String(x))}};
 document.getElementById('buildBtn').onclick=async()=>{try{beginBuildLaunch();await saveProject();const j=await api('/api/project/build',{method:'POST'});setInlineBuildStatus('构建任务已创建，正在等待第一条进度信息。');setLog('构建任务已启动：'+j.job);watchJob(j.job)}catch(x){setLog(String(x));setBuildButtonText('开始构建');setInlineBuildStatus('启动失败：'+shortError(x),true);setBuildButtonsDisabled(false)}};
 document.getElementById('scanLocalBtn').onclick=async()=>{try{const d=new FormData();d.set('candidates_path',document.getElementById('candidatePath').value);const j=await api('/api/update/scan',{method:'POST',body:d});showPlan(j.plan);fillProject(j.project)}catch(x){setLog(String(x))}};
+document.getElementById('auditRemoteLocaleBtn').onclick=async()=>{
+  const panel=document.getElementById('remoteLocaleAuditResult');
+  const button=document.getElementById('auditRemoteLocaleBtn');
+  if(panel){panel.classList.remove('hidden');panel.textContent='正在只读核查工程来源…';}
+  try{
+    button.disabled=true;
+    const res=await api('/api/update/locale-audit');
+    const audit=res.audit;
+    const lines=[
+      '来源审计（只读；不是 WAV 语音识别）',
+      '主音频语言：'+(audit.audio_language||'—')+' · 原文语言：'+(audit.source_text_language||'—'),
+      '当前音频来源：'+(audit.current_source||'—'),
+      '当前索引：'+(audit.current_index||'—'),
+      '原始音频候选：'+(audit.original_source_candidate||'未知')+(audit.original_source_exists?' [文件存在]':' [未确认存在]'),
+      '原始索引：'+(audit.original_index_candidate||'未知')+(audit.original_index_exists?' [文件存在]':' [未确认存在]'),
+      '原始包哈希本次未核验；不能将文件存在视为原始内容正确。',
+      '历史增补：'+(audit.legacy_apply?.applied?'已应用':'无明确应用证据')+
+        ' · 语种：'+(audit.legacy_apply?.audio_language||'未记录'),
+      '语种污染风险：'+(audit.suspicious_wrong_language_apply?'存在明确的历史跨语种记录':'未由现有记录确认（不代表已排除）'),
+      ...((audit.issues||[]).map(x=>'注意：'+x)),
+      '恢复建议：'+audit.remediation
+    ];
+    if(panel)panel.textContent=lines.join('\n');
+    if(audit.suspicious_wrong_language_apply || audit.audio_language==='auto'){
+      document.getElementById('applyRemoteBtn').disabled=true;
+    }
+  }catch(e){
+    if(panel)panel.textContent='来源审计失败：'+shortError(e);
+  }finally{button.disabled=false;}
+};
+document.getElementById('createJapaneseRecoveryBtn').onclick=async()=>{
+  const state=document.getElementById('japaneseRecoveryResult');
+  const button=document.getElementById('createJapaneseRecoveryBtn');
+  const project=currentProject?.config;
+  if(project?.audio_language!=='ja'||project?.source_text_language!=='ja'){
+    if(state)state.textContent='仅允许主音频和对应原文均明确设置为 ja 的工程；请先核实原始日语语音包并保存项目设置。';
+    return;
+  }
+  if(!window.confirm('将完整校验原始日语语音包的指纹与初始索引，并创建独立恢复工程。现有工程、缓存、FLAC/MKV、字幕及人工修改均不覆盖。新工程需要重新构建与试听验收。确认创建？'))return;
+  try{
+    button.disabled=true;
+    if(state)state.textContent='已确认隔离恢复操作，正在提交原始来源验证任务…';
+    const body=new FormData();
+    body.set('language','ja');
+    body.set('acknowledge','create-isolated');
+    const job=await api('/api/update/create-japanese-recovery',{method:'POST',body});
+    if(state)state.textContent='独立恢复任务已提交：'+job.job+'。在任务中心查看验证与候选工程路径；不会切换当前工程。';
+    watchJob(job.job);
+  }catch(e){
+    if(state)state.textContent='恢复候选创建失败：'+shortError(e);
+    setLog(String(e));
+  }finally{button.disabled=false;}
+};
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};
 async function startAssExport(mode='internal'){

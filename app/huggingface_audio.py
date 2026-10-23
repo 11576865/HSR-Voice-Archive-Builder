@@ -17,6 +17,8 @@ import urllib.request
 from pathlib import Path
 from typing import Any, Callable
 
+from .game_profiles import normalize_language
+
 
 DATASET = "simon3000/starrail-voice"
 ROWS_URL = "https://datasets-server.huggingface.co/rows"
@@ -110,8 +112,23 @@ def resolve_targets(
     targets: list[dict[str, str]],
     *,
     dataset: str = DATASET,
+    source_language: str = "en",
 ) -> dict[str, Any]:
-    """Resolve English rows and same-file Chinese reference rows conservatively."""
+    """Resolve only the selected primary audio locale; pair Chinese as optional reference.
+
+    Matching by filename, media ID or text must never silently select an
+    English dataset row for a Japanese/Korean/Chinese source package.
+    """
+    language = normalize_language(source_language)
+    folders = {
+        "en": {"english", "english(us)"},
+        "zh-CN": {"chinese(prc)", "chinese"},
+        "ja": {"japanese", "japanese(jp)"},
+        "ko": {"korean", "korean(kr)"},
+    }
+    if language not in folders:
+        raise ValueError(f"Unsupported incremental audio language: {source_language!r}")
+    primary_folders = folders[language]
     by_name = {Path(str(t.get("filename", ""))).stem: t for t in targets}
     by_hash = {str(t.get("hash", "")).casefold(): t for t in targets if t.get("hash")}
     by_media = {}
@@ -120,7 +137,10 @@ def resolve_targets(
         match = re.search(r"_(\d+)$", stem) if stem.casefold().startswith("ev_archive_") else None
         if match:
             by_media[match.group(1)] = target
-    by_path = {f"english/voice/{name}.wem".casefold(): t for name, t in by_name.items()}
+    by_path = {
+        f"{folder}/voice/{name}.wem".casefold(): t
+        for folder in primary_folders for name, t in by_name.items()
+    }
     by_ingame_basename = {(Path(name).stem + ".wem").casefold(): t for name, t in by_name.items()}
     resolved: dict[str, dict[str, Any]] = {}
     chinese_by_path: dict[str, dict[str, Any]] = {}
@@ -137,7 +157,7 @@ def resolve_targets(
             row_index = total
             total += 1
             language_prefix = key.split("/", 1)[0].casefold()
-            if language_prefix in {"english", "english(us)", "chinese(prc)"}:
+            if language_prefix in primary_folders or language_prefix == "chinese(prc)":
                 stem = Path(key).stem
                 ingame = _field(chunk, "inGameFilename")
                 transcription = _field(chunk, "transcription")
@@ -151,11 +171,12 @@ def resolve_targets(
                     "ingame_filename": ingame,
                 }
                 relative = _voice_relative_path(ingame)
-                if language_prefix == "chinese(prc)":
+                if language_prefix == "chinese(prc)" and language != "zh-CN":
                     if relative:
                         chinese_by_path.setdefault(relative, row)
                     current = following
                     continue
+                row["audio_language"] = language
                 target = by_path.get(ingame.casefold()) if ingame else None
                 method = "inGameFilename"
                 if target is None and ingame:
@@ -190,10 +211,12 @@ def resolve_targets(
                 **chinese,
                 "method": "same_ingame_filename",
                 "reference_language": "zh-CN",
+                "audio_language": "zh-CN",
             }
     unresolved = [str(t.get("filename", "")) for t in targets if str(t.get("filename", "")) not in resolved]
     return {
         "dataset": dataset,
+        "audio_language": language,
         "total_rows": total,
         "targets": resolved,
         "reference_targets": reference_targets,
@@ -218,6 +241,47 @@ def _json_get(url: str, params: dict[str, Any], attempts: int = 7) -> dict[str, 
             raise RuntimeError(f"Hugging Face 请求失败：{target}")
         time.sleep(wait + random.random())
     raise RuntimeError("Hugging Face 请求失败")
+
+_AUDIO_LOCALE_LABELS = {
+    "english": "en", "english(us)": "en", "en": "en",
+    "chinese": "zh-CN", "chinese(prc)": "zh-CN", "zh-cn": "zh-CN",
+    "japanese": "ja", "japanese(jp)": "ja", "ja": "ja",
+    "korean": "ko", "korean(kr)": "ko", "ko": "ko",
+}
+
+
+def _dataset_locale(raw: object) -> str:
+    value = str(raw or "").strip().casefold()
+    return _AUDIO_LOCALE_LABELS.get(value, normalize_language(value))
+
+
+def _verify_dataset_audio_row(row: Any, target: dict[str, Any], language: str) -> None:
+    """An expected row_idx is not proof that /rows still returns the same locale."""
+    if not isinstance(row, dict):
+        raise ValueError("Hugging Face dataset row is missing")
+    expected = normalize_language(language)
+    declared_raw = str(row.get("language") or "").strip()
+    actual_filename = str(
+        row.get("ingame_filename") or row.get("inGameFilename") or ""
+    ).strip()
+    declared_locale = _dataset_locale(declared_raw) if declared_raw else ""
+    path_folder = actual_filename.replace("\\", "/").split("/", 1)[0]
+    # Genshin paths may have a generic VO_anecdote/ folder; only recognized
+    # language labels provide locale evidence.
+    path_locale = _AUDIO_LOCALE_LABELS.get(path_folder.casefold(), "")
+    if declared_locale and declared_locale != expected:
+        raise ValueError(
+            f"Hugging Face audio locale mismatch: expected {expected}, got {declared_raw}"
+        )
+    if path_locale and path_locale != expected:
+        raise ValueError(
+            f"Hugging Face in-game voice path locale mismatch: expected {expected}, got {path_folder}"
+        )
+    if not declared_locale and not path_locale:
+        raise ValueError("Hugging Face dataset row has no verifiable audio locale")
+    original = str(target.get("ingame_filename") or "").strip()
+    if original and actual_filename and _voice_relative_path(original) != _voice_relative_path(actual_filename):
+        raise ValueError("Hugging Face dataset row identity changed since result.json resolution")
 
 
 def _audio_src(value: Any) -> str:
@@ -297,6 +361,15 @@ def download_resolved_audio(
     destination.mkdir(parents=True, exist_ok=True)
     dataset = str(dataset or plan.get("dataset") or DATASET)
     targets = plan.get("targets", {})
+    plan_language = str(plan.get("audio_language") or "").strip()
+    if plan_language:
+        normalized = normalize_language(plan_language)
+        for name, row in targets.items():
+            if normalize_language(str(row.get("audio_language") or "")) != normalized:
+                raise ValueError(
+                    f"Audio locale mismatch for {name}: expected {normalized}, "
+                    f"got {row.get('audio_language')!r}"
+                )
     blocks: dict[int, list[tuple[str, int]]] = {}
     for filename, row in targets.items():
         index = int(row["row_idx"])
@@ -310,14 +383,28 @@ def download_resolved_audio(
         for filename, index in group:
             stem = Path(filename).stem
             expected_ext = Path(filename).suffix.lower()
-            existing = _existing_audio(destination, stem, expected_ext)
+            # Old cache entries have no row provenance. A locale-bound update
+            # must re-download rather than trust another operation's WAV bytes.
+            existing = (
+                _existing_audio(destination, stem, expected_ext)
+                if not plan_language else None
+            )
             if existing is not None:
                 completed.append({"filename": filename, "status": "exists", "path": str(existing)})
                 if progress:
                     progress(len(completed) + len(failed), total, filename)
                 continue
             item = rows.get(index)
-            src = _audio_src((item or {}).get("row", {}).get("audio"))
+            remote_row = (item or {}).get("row", {})
+            if plan_language:
+                try:
+                    _verify_dataset_audio_row(remote_row, targets[filename], normalized)
+                except ValueError as exc:
+                    failed.append({"filename": filename, "reason": str(exc)})
+                    if progress:
+                        progress(len(completed) + len(failed), total, filename)
+                    continue
+            src = _audio_src(remote_row.get("audio") if isinstance(remote_row, dict) else None)
             if not src:
                 failed.append({"filename": filename, "reason": "audio.src 不可用"})
                 if progress:
@@ -365,6 +452,41 @@ def download_resolved_audio(
             if progress:
                 progress(len(completed) + len(failed), total, filename)
     return {"completed": completed, "failed": failed, "unresolved": plan.get("unresolved", [])}
+
+
+
+def validated_incremental_files(
+    download: dict[str, Any], source_directory: Path,
+) -> list[Path]:
+    """Return only successful files from this download, never stale folder contents."""
+    root = source_directory.resolve()
+    result: list[Path] = []
+    seen: set[str] = set()
+    for row in download.get("completed", []):
+        if not isinstance(row, dict) or row.get("status") != "ok":
+            raise ValueError("Locale-bound audio apply requires a verified new download")
+        name = Path(str(row.get("filename") or "")).name
+        file = Path(str(row.get("path") or ""))
+        if not name or name in seen or file.is_symlink() or not file.is_file():
+            raise ValueError("Invalid or duplicate incremental WAV entry")
+        if file.name != name or file.parent.resolve() != root:
+            raise ValueError("Incremental WAV is not in its locale-specific source directory")
+        if _existing_audio(root, file.stem, file.suffix.lower()) != file:
+            raise ValueError("Incremental WAV no longer passes its audio format check")
+        # The downloader records this digest on successful publish. Refuse files
+        # altered between download completion and insertion into combined source.
+        expected_sha256 = str(row.get("sha256") or "").lower()
+        if not re.fullmatch(r"[0-9a-f]{64}", expected_sha256):
+            raise ValueError("Incremental WAV has no download-time SHA-256 proof")
+        digest = hashlib.sha256()
+        with file.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+        if digest.hexdigest() != expected_sha256:
+            raise ValueError("Incremental WAV changed after its verified download")
+        result.append(file)
+        seen.add(name)
+    return result
 
 
 def confirmed_reference_metadata(
