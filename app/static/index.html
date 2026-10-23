@@ -4023,12 +4023,16 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
         <div class="actions">
           <button id="auditRemoteLocaleBtn" type="button">核对语音来源</button>
+          <button id="createJapaneseRecoveryBtn" type="button">创建独立日语恢复工程</button>
           <button id="scanRemoteBtn">检查远程索引</button>
           <button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button>
         </div>
       </div>
       <div id="updateResult" class="small muted" role="status" aria-live="polite">尚未检查。</div>
       <pre id="remoteLocaleAuditResult" class="hidden" aria-live="polite"></pre>
+      <div id="japaneseRecoveryResult" class="small muted" role="status" aria-live="polite">
+        恢复工程只在验证原始日语包指纹及初始索引后创建，不覆盖当前工程，不自动生成或发布成品。
+      </div>
 
       <div id="updateStats" class="stats update-stats">
         <button type="button" class="stat existing update-filter" data-update-filter="exact_existing"><b id="uExisting">—</b><span>已存在</span></button>
@@ -5823,6 +5827,29 @@ document.getElementById('auditRemoteLocaleBtn').onclick=async()=>{
     }
   }catch(e){
     if(panel)panel.textContent='来源审计失败：'+shortError(e);
+  }finally{button.disabled=false;}
+};
+document.getElementById('createJapaneseRecoveryBtn').onclick=async()=>{
+  const state=document.getElementById('japaneseRecoveryResult');
+  const button=document.getElementById('createJapaneseRecoveryBtn');
+  const project=currentProject?.config;
+  if(project?.audio_language!=='ja'||project?.source_text_language!=='ja'){
+    if(state)state.textContent='仅允许主音频和对应原文均明确设置为 ja 的工程；请先核实原始日语语音包并保存项目设置。';
+    return;
+  }
+  if(!window.confirm('将完整校验原始日语语音包的指纹与初始索引，并创建独立恢复工程。现有工程、缓存、FLAC/MKV、字幕及人工修改均不覆盖。新工程需要重新构建与试听验收。确认创建？'))return;
+  try{
+    button.disabled=true;
+    if(state)state.textContent='已确认隔离恢复操作，正在提交原始来源验证任务…';
+    const body=new FormData();
+    body.set('language','ja');
+    body.set('acknowledge','create-isolated');
+    const job=await api('/api/update/create-japanese-recovery',{method:'POST',body});
+    if(state)state.textContent='独立恢复任务已提交：'+job.job+'。在任务中心查看验证与候选工程路径；不会切换当前工程。';
+    watchJob(job.job);
+  }catch(e){
+    if(state)state.textContent='恢复候选创建失败：'+shortError(e);
+    setLog(String(e));
   }finally{button.disabled=false;}
 };
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
