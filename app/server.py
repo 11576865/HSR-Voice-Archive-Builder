@@ -34,7 +34,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
-    require_matching_update_plan,
+    require_matching_update_plan, require_safe_prior_incremental_apply,
 )
 from .identity import infer_group
 from .human_review import import_review_txt
@@ -1587,6 +1587,7 @@ def api_update_check_remote(
         manifest = output / "manifest.json"
         if not manifest.is_file():
             raise FileNotFoundError("Build the project once before checking remote updates")
+        require_safe_prior_incremental_apply(output / "update_apply_report.json", audio_language)
 
         def run():
             rows = []
@@ -1654,6 +1655,7 @@ def api_update_apply_remote():
         remote_plan = json.loads(update_plan_path.read_text(encoding="utf-8"))
         audio_language = require_incremental_audio_language(config)
         require_matching_update_plan(remote_plan, audio_language)
+        require_safe_prior_incremental_apply(output / "update_apply_report.json", audio_language)
         targets = []
         for item in remote_plan.get("new_logical", []):
             if isinstance(item, dict):
@@ -1807,6 +1809,7 @@ def api_update_apply_remote():
                 writer.writerows(existing_rows)
             update_project(config, wav_source=str(combined), index_csv=str(updated_index), wav_source_fingerprint="")
             report = {
+                "audio_language": audio_language,
                 "resolved": len(resolved["targets"]),
                 "unresolved": resolved["unresolved"],
                 "downloaded_or_existing": len(downloaded["completed"]),
