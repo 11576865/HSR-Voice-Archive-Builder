@@ -277,10 +277,11 @@ def publish_flac_only(output: Path) -> Path:
     retire = tuple(output / name for name in (
         OUTPUT, RECEIPT, SRT, ASS, LEGACY_BLACK, PREFERENCES,
     ))
-    with tempfile.TemporaryDirectory(
+    backup = Path(tempfile.mkdtemp(
         prefix=".hsr-flac-profile-", dir=output.parent,
-    ) as td:
-        backup = Path(td)
+    ))
+    keep_backup = False
+    try:
         snapshots: dict[Path, Path | None] = {}
         for item in retire:
             if item.is_symlink() or (item.exists() and not item.is_file()):
@@ -331,16 +332,23 @@ def publish_flac_only(output: Path) -> Path:
                     else:
                         os.replace(saved, item)
             except BaseException as restore_error:
-                # Fail closed when even recovery is obstructed: never show
-                # a possibly mixed pair as a verified current artifact.
+                # A second disk error can prevent restoring the old MKV.
+                # Retain hardlinked/copied snapshots on disk for deliberate
+                # operator recovery instead of auto-deleting the *only*
+                # remaining intact MKV as a TemporaryDirectory would.
+                keep_backup = True
                 try:
                     (output / ".build_in_progress").touch(exist_ok=True)
                 except OSError:
                     pass
                 raise RuntimeError(
-                    "FLAC-only transition rollback failed; output is blocked"
+                    "FLAC-only transition rollback failed; output is blocked; "
+                    f"recovery snapshot retained at {backup}"
                 ) from restore_error
             raise
+    finally:
+        if not keep_backup:
+            shutil.rmtree(backup)
     return audio
 
 
