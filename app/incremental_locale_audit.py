@@ -36,6 +36,8 @@ def audit_incremental_audio_locale(config: ProjectConfig) -> dict[str, Any]:
     if _regular_file(quick_scan):
         try:
             payload = json.loads(quick_scan.read_text(encoding="utf-8"))
+            if not isinstance(payload, dict):
+                raise ValueError("Invalid Quick Scan metadata")
             primary = payload.get("english", {})
             if not isinstance(primary, dict):
                 raise ValueError("Invalid primary source metadata")
@@ -77,6 +79,13 @@ def audit_incremental_audio_locale(config: ProjectConfig) -> dict[str, Any]:
         )
     if history["applied"] and not current_is_original:
         issues.append("当前工程使用增补后的来源，必须核对对应语音条目再重建。")
+    if (
+        not history["exists"]
+        and current is not None
+        and "combined_audio_versions" in current.parts
+        and not current_is_original
+    ):
+        issues.append("当前来源指向历史增补合并目录，但增补收据缺失；不能确认语种来源。")
     if not original or not original.exists() or (original.is_symlink()):
         issues.append("无法确认原始日语语音包仍然可用；不得执行自动恢复。")
     if not _regular_file(original_index):
