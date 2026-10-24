@@ -14,15 +14,18 @@ class JapaneseHfMetadataProbeTests(unittest.TestCase):
         path = folder / "result.json"
         path.write_text(json.dumps({
             "English/en.wav": {
+                "filename": "en",
                 "inGameFilename": "English/voice/en.wem",
             },
             "Japanese/ja1.wav": {
+                "filename": "ja1",
                 "inGameFilename": "Japanese/voice/one.wem",
             },
             "Japanese/ja2.wav": {
+                "filename": "ja2",
                 "inGameFilename": "Japanese/voice/two.wem",
             },
-            "Japanese/orphan.wav": {"inGameFilename": ""},
+            "Japanese/orphan.wav": {"filename": "orphan", "inGameFilename": ""},
         }, separators=(",", ":")), encoding="utf-8")
         return path
 
