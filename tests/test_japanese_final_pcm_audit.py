@@ -94,6 +94,48 @@ class JapaneseFinalPcmAuditTests(unittest.TestCase):
             self.assertEqual(result["media_file"], "remuxed.mkv")
             self.assertEqual(result["status"], "final-pcm-lossless-verified")
 
+    def test_real_multitrack_matroska_selects_continuous_voice_not_chapter_flac(self):
+        with tempfile.TemporaryDirectory() as temp:
+            base = Path(temp)
+            config, _source, output = self.build(base)
+            continuous = output / "continuous.flac"
+            chapter = output / "chapter.flac"
+            mkv = output / "multitrack.mkv"
+            duration = 0.85
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-v", "error", "-y", "-f", "lavfi",
+                 "-i", "sine=frequency=900:sample_rate=16000", "-t", str(duration),
+                 "-c:a", "flac", str(chapter)],
+                check=True, capture_output=True,
+            )
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-v", "error", "-y",
+                 "-i", str(continuous), "-i", str(chapter),
+                 "-map", "0:a:0", "-map", "1:a:0", "-c:a", "copy",
+                 "-metadata:s:a:0", "title=HSR continuous voice",
+                 "-disposition:a:0", "default",
+                 "-metadata:s:a:1", "title=HSR chapter 1",
+                 "-disposition:a:1", "0", str(mkv)],
+                check=True, capture_output=True,
+            )
+            with patch("app.japanese_final_pcm_audit._media", return_value=(mkv, "single-flac")):
+                good = verify_japanese_final_audio_pcm(config)
+            self.assertEqual(good["status"], "final-pcm-lossless-verified")
+            self.assertEqual(good["media_stream"], "0:0")
+            # Swapping the order would put the chapter stream first: refuse
+            # instead of accidentally blessing the wrong soundtrack.
+            reordered = output / "reordered.mkv"
+            subprocess.run(
+                ["ffmpeg", "-nostdin", "-v", "error", "-y",
+                 "-i", str(mkv), "-map", "0:a:1", "-map", "0:a:0",
+                 "-c:a", "copy", "-disposition:a:0", "default",
+                 "-disposition:a:1", "0", str(reordered)],
+                check=True, capture_output=True,
+            )
+            with patch("app.japanese_final_pcm_audit._media", return_value=(reordered, "single-flac")):
+                with self.assertRaisesRegex(ValueError, "无法唯一确认"):
+                    verify_japanese_final_audio_pcm(config)
+
     def test_bad_builder_digest_and_tampered_provenance_are_refused(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
