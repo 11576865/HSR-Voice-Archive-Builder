@@ -79,4 +79,4 @@ jobs:
         run: |
           command -v ffmpeg
           command -v ffprobe
-          python -m unittest tests.test_japanese_listening_pack -v
+          python -m unittest tests.test_japanese_listening_pack tests.test_japanese_final_pcm_audit -v
