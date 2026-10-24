@@ -19,7 +19,7 @@ def prepare_incremental_audio_stage(
     download: dict[str, Any],
     incoming: Path,
 ) -> Path:
-    """Stage a new immutable generation, preserving old member paths.
+    """Stage a new immutable generation, preserving old WAV/LAB member paths.
 
     Only fully verified current-operation downloads may enter the new source.
     A new flat WAV basename already present anywhere in the source would be
@@ -42,10 +42,14 @@ def prepare_incremental_audio_stage(
     for member in sorted(extracted.rglob("*")):
         if member.is_symlink():
             raise ValueError(f"Source package contains unsafe symbolic link: {member}")
-        if not member.is_file() or member.suffix.casefold() != ".wav":
+        if not member.is_file() or member.suffix.casefold() not in {".wav", ".lab"}:
             continue
         rel = member.relative_to(extracted)
-        old_names.add(member.name.casefold())
+        # Keep same-member Japanese/Chinese LAB files: the builder reads
+        # these by chapter-relative path for non-English source text.
+        # Dropping LAB files changes text provenance after incrementals.
+        if member.suffix.casefold() == ".wav":
+            old_names.add(member.name.casefold())
         out = stage / rel
         out.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(member, out)
