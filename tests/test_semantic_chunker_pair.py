@@ -68,11 +68,11 @@ class JiebaPairRegressionTests(unittest.TestCase):
                 output.setnchannels(1)
                 output.setsampwidth(2)
                 output.setframerate(8000)
-                output.writeframes(b"\\x00\\x00" * 8000)
+                output.writeframes(b"\x00\x00" * 8000)
             (labs / f"{name}.lab").write_text(chinese, encoding="utf-8")
             index = root / "index.csv"
             index.write_text(
-                f"filename,english\\n{name}.wav,Hello.\\n",
+                f"filename,english\n{name}.wav,Hello.\n",
                 encoding="utf-8-sig",
             )
             out_dir = root / "out"
