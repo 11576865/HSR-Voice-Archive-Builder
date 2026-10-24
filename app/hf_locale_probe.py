@@ -39,20 +39,29 @@ def probe_japanese_row_identity(
     ) as mm:
         iterator = ENTRY_RE.finditer(mm)
         current = next(iterator, None)
-        while current is not None and len(selected) < samples:
-            following = next(iterator, None)
-            index = total
-            total += 1
-            key = current.group(1).decode("utf-8", "replace")
-            if key.casefold().startswith(("japanese/", "japanese(jp)/")):
-                end = following.start() if following else len(mm)
-                path = _field(mm[current.start():end], "inGameFilename")
-                if _voice_relative_path(path).endswith(".wem"):
-                    selected.append({
-                        "row_idx": index, "key": key,
-                        "ingame_filename": path,
-                    })
-            current = following
+        following = None
+        try:
+            while current is not None and len(selected) < samples:
+                following = next(iterator, None)
+                index = total
+                total += 1
+                key = current.group(1).decode("utf-8", "replace")
+                if key.casefold().startswith(("japanese/", "japanese(jp)/")):
+                    end = following.start() if following else len(mm)
+                    path = _field(mm[current.start():end], "inGameFilename")
+                    if _voice_relative_path(path).endswith(".wem"):
+                        selected.append({
+                            "row_idx": index, "key": key,
+                            "ingame_filename": path,
+                        })
+                current = following
+        finally:
+            # mmap cannot close while the regex iterator/match objects
+            # still export pointers into the mapped buffer. Unlike the full
+            # resolver, this probe deliberately stops after a few matches.
+            current = None
+            following = None
+            del iterator
     evidence = []
     for item in selected:
         idx = item["row_idx"]
