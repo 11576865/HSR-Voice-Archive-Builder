@@ -5576,7 +5576,21 @@ async function watchJob(id){
         }
         if(x.job.state==='succeeded'){
           terminal=true;
-          if(x.job.kind==='remote-update-check'){
+          if(x.job.kind==='locale-probe'){
+            const status=document.getElementById('japaneseRowsProbeStatus');
+            const proof=x.job.result||{};
+            const message='日语元数据身份核验通过：'+Number(proof.matched||0)+'/'+Number(proof.requested_samples||0)+
+              ' 条。仅确认 result.json 与在线记录一致，不代表已验证 WAV 的实际日语发音。';
+            if(status){status.textContent=message;status.className='small status-ok'}
+            setRunReport('日语元数据校验通过',message,false);
+          }else if(x.job.kind==='locale-recovery'){
+            const status=document.getElementById('japaneseRecoveryResult');
+            const proof=x.job.result||{};
+            const message='独立恢复候选已创建：'+(proof.candidate_project||'未知路径')+
+              '。原工程未覆盖，新工程仍须构建及试听验收。';
+            if(status){status.textContent=message;status.className='small status-ok'}
+            setRunReport('隔离恢复候选已创建',message,false);
+          }else if(x.job.kind==='remote-update-check'){
             showPlan(x.job.result);
           }else if(x.job.kind==='remote-update-apply'){
             const r=x.job.result||{};
@@ -5634,6 +5648,20 @@ async function watchJob(id){
               status.className='small status-bad layout-corpus-status';
             }
             await loadWordAlignmentDiagnostics();
+          }
+          if(x.job.kind==='locale-probe'){
+            const status=document.getElementById('japaneseRowsProbeStatus');
+            if(status){
+              status.textContent='日语元数据核验未通过：'+shortError(x.job.error||x.job);
+              status.className='small status-bad';
+            }
+          }
+          if(x.job.kind==='locale-recovery'){
+            const status=document.getElementById('japaneseRecoveryResult');
+            if(status){
+              status.textContent='独立恢复候选创建失败：'+shortError(x.job.error||x.job);
+              status.className='small status-bad';
+            }
           }
           if(x.job.kind==='remote-update-check'){
             const result=document.getElementById('updateResult');
