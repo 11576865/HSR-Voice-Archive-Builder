@@ -1,0 +1,55 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-HSR-Voice-Archive-Builder-40078512547-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "tests: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/HSR-Voice-Archive-Builder",
+  "source_event": "workflow_run",
+  "source_ref": "feat/jp-verified-full-final-pcm-20261024",
+  "source_sha": "619d51e9db8cf0a34472d582312263f7818b588c",
+  "source_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/actions/runs/40078512547",
+  "created_at": "2026-10-24T08:34:31+00:00",
+  "dedupe_key": "workflow_run:11576865/HSR-Voice-Archive-Builder:40078512547:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "tests",
+    "run_id": "40078512547",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 120826947932,
+        "name": "unit (3.13)",
+        "conclusion": "failure"
+      },
+      {
+        "id": 120826948181,
+        "name": "termux-lite-surface",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "unit (3.13)",
+        "number": 5,
+        "name": "Compile Python sources",
+        "conclusion": "failure"
+      },
+      {
+        "job": "termux-lite-surface",
+        "number": 6,
+        "name": "Compile lite server path",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
