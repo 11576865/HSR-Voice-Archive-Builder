@@ -34,7 +34,7 @@ from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
-from .hf_locale_probe import probe_japanese_row_identity
+from .hf_locale_probe import require_japanese_row_identity_parity
 from .japanese_source_recovery import create_isolated_japanese_recovery
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
@@ -1396,7 +1396,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
             job = create_job(
                 "locale-probe",
-                lambda progress: probe_japanese_row_identity(
+                lambda progress: require_japanese_row_identity_parity(
                     result_json, dataset=dataset, samples=samples,
                 ),
                 with_progress=True,
