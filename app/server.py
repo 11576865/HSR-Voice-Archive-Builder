@@ -30,6 +30,7 @@ from .archive_bundle_backgrounds import MAX_BUNDLE_JSON_BYTES, RESOLUTIONS, norm
 from .project_fonts import font_asset_directory, import_project_font, list_project_fonts, project_font_for_family
 from .diff import classify
 from .remote_apply_generation import publish_audio_generation
+from .incremental_stage import prepare_incremental_audio_stage
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
@@ -1799,22 +1800,9 @@ def api_update_apply_remote():
             temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
             combined = generated / "combined_audio_versions" / temporary_root.name
             try:
-                extracted = ensure_dir_or_extract(source, temporary_root, "existing")
-                staging = temporary_root / "combined"
-                staging.mkdir()
-                # Preserve package-relative member paths so same-basename WAVs
-                # in different directories keep their identity instead of
-                # overwriting each other in one flat directory.
-                for wav in extracted.rglob("*.wav"):
-                    target = staging / wav.relative_to(extracted)
-                    target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(wav, target)
-                if extracted.parent == temporary_root and extracted != temporary_root:
-                    shutil.rmtree(extracted)
-                for audio in validated_incremental_files(downloaded, incoming):
-                    staging_target = staging / audio.name
-                    staging_target.parent.mkdir(parents=True, exist_ok=True)
-                    shutil.copy2(audio, staging_target)
+                staging = prepare_incremental_audio_stage(
+                    source, temporary_root, downloaded, incoming,
+                )
                 publish_audio_generation(generated, staging, temporary_root.name)
             except Exception:
                 shutil.rmtree(temporary_root, ignore_errors=True)
