@@ -5576,7 +5576,14 @@ async function watchJob(id){
         }
         if(x.job.state==='succeeded'){
           terminal=true;
-          if(x.job.kind==='locale-probe'){
+          if(x.job.kind==='build'&&x.job.result?.japanese_source_recovery){
+            const proof=x.job.result.japanese_source_recovery;
+            const status=document.getElementById('japaneseRecoveryResult');
+            const message='原始来源及构建清单已核对：'+Number(proof.wav_members||0)+
+              ' 条 WAV 成员身份匹配。此结果仅证明来源及成员完整，尚未证明实际发音为日语；仍须试听验收。';
+            if(status){status.textContent=message;status.className='small status-warn'}
+            setRunReport('日语来源恢复构建：成员验证通过，待试听',message,true);
+          }else if(x.job.kind==='locale-probe'){
             const status=document.getElementById('japaneseRowsProbeStatus');
             const proof=x.job.result||{};
             const message='日语元数据身份核验通过：'+Number(proof.matched||0)+'/'+Number(proof.requested_samples||0)+
@@ -5637,6 +5644,14 @@ async function watchJob(id){
         }else if(x.job.state==='failed'){
           terminal=true;
           setLog(x.job.error||x.job);
+          if(x.job.kind==='build'){
+            const status=document.getElementById('japaneseRecoveryResult');
+            if(status){
+              status.textContent='日语恢复构建未通过：'+shortError(x.job.error||x.job)+
+                '。未确认来源和成员身份，不能标记为恢复完成。';
+              status.className='small status-bad';
+            }
+          }
           if(['ass-export','ass-external','black-video-export','archive-bundle-export'].includes(x.job.kind)){
             const status=document.getElementById('optionalOutputStatus');
             if(status)status.textContent='生成失败：'+shortError(x.job.error||x.job);
