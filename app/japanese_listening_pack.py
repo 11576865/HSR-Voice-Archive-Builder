@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import uuid
 import zipfile
+from datetime import datetime, timezone
 from collections import Counter
 from pathlib import Path, PurePosixPath
 from typing import Any, Callable
@@ -25,6 +26,7 @@ from .japanese_source_recovery import (
     verify_japanese_recovery_build_manifest,
 )
 from .project import ProjectConfig, resolve_project_path
+from .builder import atomic_write_text
 from .quick import _extract_source_members
 
 PACK_DIR = "recovery_listening_packs"
@@ -128,7 +130,7 @@ def _clip(source: Path, dest: Path, duration: float, *, start: float = 0,
         raise RuntimeError("试听片段解码为空或无效：" + dest.name)
 
 
-def _review_html(rows: list[dict[str, Any]]) -> str:
+def _review_html(rows: list[dict[str, Any]], pack_id: str, evidence_sha256: str) -> str:
     items: list[str] = []
     for row in rows:
         code = str(row["id"])
@@ -162,8 +164,11 @@ label{display:inline-block;margin:.4rem .8rem .4rem 0}select,button{padding:.45r
 <p>逐项试听原始 WAV 与最终 FLAC/MKV 对应音频，核查原文与发音。自动化只能保证来源身份和时间定位；
 <strong>勾选项属于你的人工判断</strong>，不是自动语言识别。抽检通过不证明整个归档没有问题。</p>
 """ + "\n".join(items) + """
+<p><label><input id="human-confirm" type="checkbox">我确认以上判断基于亲自试听原始音频与成品音频，而非自动推断。</label></p>
 <p><button id="save">导出人工试听记录 JSON</button></p><p id="result"></p>
 <script>
+const PACK_ID=""" + json.dumps(pack_id) + """;
+const EVIDENCE_HASH=""" + json.dumps(evidence_sha256) + """;
 document.getElementById('save').onclick=()=>{
  const results=[...document.querySelectorAll('section[data-id]')].map(s=>({
    id:s.dataset.id,language:s.querySelector('.language').value,
@@ -171,7 +176,9 @@ document.getElementById('save').onclick=()=>{
    rendered_match:s.querySelector('.render').value
  }));
  const completed=results.every(r=>r.language&&r.text_match&&r.rendered_match);
- const payload={schema_version:1,kind:'manual-japanese-recovery-listening-review',
+ const payload={schema_version:2,kind:'manual-japanese-recovery-listening-review',
+  pack_id:PACK_ID,evidence_sha256:EVIDENCE_HASH,
+  reviewer_confirmed:document.getElementById('human-confirm').checked,
   completed,generated_from:'original-and-final-clips',results};
  const blob=new Blob([JSON.stringify(payload,null,2)],{type:'application/json'});
  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
@@ -284,8 +291,9 @@ def build_japanese_listening_pack(
             if report_progress:
                 report_progress("audition", f"正在生成日语原始/成品试听对照 {i}/{len(chosen)}", i, len(chosen))
         evidence = {
-            "schema_version": 1,
+            "schema_version": 2,
             "kind": "japanese-recovery-manual-audition",
+            "pack_id": pack_id,
             "original_source_fingerprint": proof["source_fingerprint"],
             "build_manifest_sha256": manifest_sha,
             "final_artifact": final.name,
@@ -300,7 +308,9 @@ def build_japanese_listening_pack(
             "rows": catalog,
         }
         (stage / "evidence.json").write_text(json.dumps(evidence, ensure_ascii=False, indent=2), "utf-8")
-        (stage / "review.html").write_text(_review_html(catalog), "utf-8")
+        (stage / "review.html").write_text(
+            _review_html(catalog, pack_id, _hash(stage / "evidence.json")), "utf-8",
+        )
         (stage / "README.txt").write_text(
             "解压此 ZIP 后打开 review.html，试听每项原始与最终成品切片。"
             "检查是否为日语、原文是否对应、成品音频是否一致，再导出人工记录。"
@@ -356,3 +366,160 @@ def get_japanese_listening_pack(config: ProjectConfig, pack_id: str) -> Path:
     ):
         raise ValueError("成品音频自试听包生成后已变化，请重新导出")
     return result
+
+
+
+def import_japanese_listening_review(
+    config: ProjectConfig,
+    review_text: str,
+) -> dict[str, Any]:
+    """Import one explicit user assessment as append-only SAMPLE evidence.
+
+    A downloaded JSON is not a cryptographic proof of who actually listened:
+    the app records it as user-reported, never as an automatic language verdict.
+    The result must be for the active unchanged source/manifest/final artifact.
+    """
+    if not isinstance(review_text, str) or len(review_text.encode("utf-8")) > 64 * 1024:
+        raise ValueError("人工试听记录必须为不超过 64 KiB 的 JSON 文本")
+    try:
+        payload = json.loads(review_text)
+    except (ValueError, TypeError) as exc:
+        raise ValueError("人工试听记录不是合法 JSON") from exc
+    if not isinstance(payload, dict) or payload.get("schema_version") != 2 or payload.get("kind") != "manual-japanese-recovery-listening-review":
+        raise ValueError("人工试听记录格式不支持；请从最新试听包 review.html 重新导出")
+    pack_id = payload.get("pack_id")
+    expected_evidence_sha256 = payload.get("evidence_sha256")
+    if not isinstance(pack_id, str) or not _PACK_ID.fullmatch(pack_id):
+        raise ValueError("试听记录缺少有效试听包 ID")
+    if not isinstance(expected_evidence_sha256, str) or not re.fullmatch(r"[0-9a-f]{64}", expected_evidence_sha256):
+        raise ValueError("试听记录未绑定有效的证据摘要")
+    pack_path = get_japanese_listening_pack(config, pack_id)
+    with zipfile.ZipFile(pack_path) as z:
+        raw_evidence = z.read("evidence.json")
+    if hashlib.sha256(raw_evidence).hexdigest() != expected_evidence_sha256:
+        raise ValueError("试听记录与原始/成品对照包的证据摘要不符")
+    evidence = json.loads(raw_evidence)
+    if evidence.get("schema_version") != 2 or evidence.get("pack_id") != pack_id:
+        raise ValueError("试听包不是可接受的带身份验收证据")
+    rows = evidence.get("rows")
+    if not isinstance(rows, list) or not 2 <= len(rows) <= MAX_SAMPLES:
+        raise ValueError("试听证据中没有可验收的有效样本")
+    expected_ids = [row.get("id") for row in rows if isinstance(row, dict)]
+    if len(expected_ids) != len(rows) or len(set(expected_ids)) != len(rows):
+        raise ValueError("试听包的样本身份不唯一")
+    answers = payload.get("results")
+    if not isinstance(answers, list) or len(answers) != len(expected_ids):
+        raise ValueError("人工试听记录的样本数与原始证据不匹配")
+    values = {"", "yes", "no", "unclear"}
+    answer_by_id: dict[str, dict[str, str]] = {}
+    for item in answers:
+        if not isinstance(item, dict) or type(item.get("id")) is not str:
+            raise ValueError("人工试听结果中存在无效样本")
+        ident = item["id"]
+        if ident in answer_by_id or ident not in expected_ids:
+            raise ValueError("人工试听记录含重复或陌生的样本 ID")
+        for field in ("language", "text_match", "rendered_match"):
+            if type(item.get(field)) is not str or item[field] not in values:
+                raise ValueError(f"人工试听结果字段无效：{field}")
+        answer_by_id[ident] = {name: item[name] for name in ("language", "text_match", "rendered_match")}
+    if set(answer_by_id) != set(expected_ids):
+        raise ValueError("人工试听样本集合与原始试听包不一致")
+
+    # Recalculate rather than trust the easily edited 'completed' flag.
+    confirmed = payload.get("reviewer_confirmed") is True
+    total = len(expected_ids)
+    failed = sum("no" in answer_by_id[key].values() for key in expected_ids)
+    unclear = sum(
+        "no" not in answer_by_id[key].values() and "unclear" in answer_by_id[key].values()
+        for key in expected_ids
+    )
+    missing = sum(
+        all(answer_by_id[key][column] != "no" for column in ("language", "text_match", "rendered_match"))
+        and "unclear" not in answer_by_id[key].values()
+        and "" in answer_by_id[key].values()
+        for key in expected_ids
+    )
+    passed = sum(all(value == "yes" for value in answer_by_id[key].values()) for key in expected_ids)
+    if failed:
+        status = "sample-failed"
+    elif unclear:
+        status = "sample-inconclusive"
+    elif missing or not confirmed:
+        status = "sample-incomplete"
+    else:
+        status = "sample-user-reported-pass"
+
+    record = {
+        "schema_version": 1,
+        "kind": "japanese-recovery-human-audition-receipt",
+        "pack_id": pack_id,
+        "evidence_sha256": expected_evidence_sha256,
+        "original_source_fingerprint": evidence["original_source_fingerprint"],
+        "build_manifest_sha256": evidence["build_manifest_sha256"],
+        "pack_sha256": _hash(pack_path),
+        "recorded_at": datetime.now(timezone.utc).isoformat(),
+        "status": status,
+        "reviewer_confirmed": confirmed,
+        "summary": {
+            "sample_count": total,
+            "passed": passed,
+            "failed": failed,
+            "inconclusive": unclear,
+            "unreviewed": missing,
+        },
+        "results": [
+            {"id": key,
+             "source_member_id": next(row["source_member_id"] for row in rows if row["id"] == key),
+             **answer_by_id[key]}
+            for key in expected_ids
+        ],
+        "entire_archive_verified": False,
+        "spoken_japanese_automatically_verified": False,
+        "assessment_source": "user-reported-manual-listening",
+    }
+    # Keep every submission immutable rather than silently overwriting a
+    # previous failure; later corrections can be separately audited.
+    get_japanese_listening_pack(config, pack_id)
+    output = resolve_project_path(config, config.output_dir)
+    assert output is not None
+    receipt_dir = output / "recovery_listening_reviews" / pack_id
+    receipt_dir.mkdir(parents=True, exist_ok=True)
+    receipt_id = uuid.uuid4().hex
+    path = receipt_dir / (receipt_id + ".json")
+    atomic_write_text(path, json.dumps(record, ensure_ascii=False, indent=2))
+    return {
+        "pack_id": pack_id,
+        "receipt_id": receipt_id,
+        "status": status,
+        "summary": record["summary"],
+        "entire_archive_verified": False,
+        "spoken_japanese_automatically_verified": False,
+        "reviewer_confirmed": confirmed,
+        "receipt_path": str(path),
+    }
+
+
+def japanese_listening_review_history(config: ProjectConfig, pack_id: str) -> dict[str, Any]:
+    """Read append-only reviewer submissions, but only for a current pack."""
+    get_japanese_listening_pack(config, pack_id)
+    output = resolve_project_path(config, config.output_dir)
+    assert output is not None
+    folder = output / "recovery_listening_reviews" / pack_id
+    records: list[dict[str, Any]] = []
+    if folder.is_dir():
+        for path in folder.glob("*.json"):
+            if path.is_symlink() or not re.fullmatch(r"[0-9a-f]{32}\.json", path.name):
+                continue
+            data = json.loads(path.read_text(encoding="utf-8"))
+            if data.get("kind") == "japanese-recovery-human-audition-receipt" and data.get("pack_id") == pack_id:
+                records.append({
+                    "receipt_id": path.stem,
+                    "status": data["status"],
+                    "recorded_at": data["recorded_at"],
+                    "summary": data["summary"],
+                    "reviewer_confirmed": data["reviewer_confirmed"],
+                })
+    records.sort(key=lambda x: (x["recorded_at"], x["receipt_id"]), reverse=True)
+    return {"pack_id": pack_id, "total_submissions": len(records),
+            "latest": records[0] if records else None, "history": records[:30],
+            "entire_archive_verified": False}

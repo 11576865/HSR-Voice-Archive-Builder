@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import hashlib
 import io
 import json
 import math
@@ -15,6 +16,7 @@ from unittest.mock import patch
 
 from app.japanese_listening_pack import (
     _select, build_japanese_listening_pack, get_japanese_listening_pack,
+    import_japanese_listening_review, japanese_listening_review_history,
 )
 from app.japanese_source_recovery import create_isolated_japanese_recovery
 from app.pipeline import build_project_v02
@@ -176,6 +178,125 @@ class JapaneseListeningPackTests(unittest.TestCase):
                 target.write_bytes(target.read_bytes()+b"\n")
                 with self.assertRaisesRegex(ValueError,"清单已变化"):
                     get_japanese_listening_pack(recovered,report["pack_id"])
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "requires FFmpeg")
+    def test_manual_review_round_trip_is_bound_to_pack_and_append_only(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            with patch("app.project.STATE_FILE",base/"recent.json"):
+                recovered,_,source=self._fixture(base)
+                output=Path(recovered.root)/"output"
+                build_project_v02(Path(recovered.root)/".generated/quick_index.csv",
+                                   source,output,make_flac=True,
+                                   delivery_mode="flac_only",translate_missing=False,
+                                   audio_language="ja",source_text_language="ja",
+                                   target_language="ja",state_dir=Path(recovered.root)/".state")
+                pack=build_japanese_listening_pack(recovered,sample_count=3)
+                with zipfile.ZipFile(pack["pack_path"]) as z:
+                    raw=z.read("evidence.json")
+                    evidence=json.loads(raw)
+                    page=z.read("review.html").decode("utf-8")
+                digest=hashlib.sha256(raw).hexdigest()
+                self.assertIn(pack["pack_id"],page)
+                self.assertIn(digest,page)
+                self.assertIn("reviewer_confirmed",page)
+                self.assertEqual(evidence["pack_id"],pack["pack_id"])
+                response={
+                    "schema_version":2,
+                    "kind":"manual-japanese-recovery-listening-review",
+                    "pack_id":pack["pack_id"],
+                    "evidence_sha256":digest,
+                    "completed":True,
+                    "reviewer_confirmed":True,
+                    "results":[{"id":row["id"],"language":"yes",
+                                "text_match":"yes","rendered_match":"yes"}
+                               for row in evidence["rows"]],
+                }
+                accepted=import_japanese_listening_review(recovered,json.dumps(response))
+                self.assertEqual(accepted["status"],"sample-user-reported-pass")
+                self.assertEqual(accepted["summary"]["passed"],3)
+                self.assertFalse(accepted["entire_archive_verified"])
+                self.assertFalse(accepted["spoken_japanese_automatically_verified"])
+                response["results"][0]["language"]="no"
+                rejected=import_japanese_listening_review(recovered,json.dumps(response))
+                self.assertEqual(rejected["status"],"sample-failed")
+                self.assertEqual(rejected["summary"]["failed"],1)
+                self.assertNotEqual(accepted["receipt_path"],rejected["receipt_path"])
+                self.assertTrue(Path(accepted["receipt_path"]).is_file())
+                self.assertTrue(Path(rejected["receipt_path"]).is_file())
+                history=japanese_listening_review_history(recovered,pack["pack_id"])
+                self.assertEqual(history["total_submissions"],2)
+                self.assertEqual(history["latest"]["status"],"sample-failed")
+                self.assertFalse(history["entire_archive_verified"])
+
+                response["results"][0]["language"]="yes"
+                response["reviewer_confirmed"]=False
+                incomplete=import_japanese_listening_review(recovered,json.dumps(response))
+                self.assertEqual(incomplete["status"],"sample-incomplete")
+                response["reviewer_confirmed"]=True
+                response["results"][0]["text_match"]="unclear"
+                unknown=import_japanese_listening_review(recovered,json.dumps(response))
+                self.assertEqual(unknown["status"],"sample-inconclusive")
+
+                receipt_dir=output/"recovery_listening_reviews"/pack["pack_id"]
+                count=len(list(receipt_dir.glob("*.json")))
+                response["evidence_sha256"]="0"*64
+                with self.assertRaisesRegex(ValueError,"证据摘要不符"):
+                    import_japanese_listening_review(recovered,json.dumps(response))
+                response["evidence_sha256"]=digest
+                response["pack_id"]="1"*20
+                with self.assertRaises((ValueError, FileNotFoundError)):
+                    import_japanese_listening_review(recovered,json.dumps(response))
+                response["pack_id"]=pack["pack_id"]
+                response["results"].append(dict(response["results"][0]))
+                with self.assertRaisesRegex(ValueError,"样本数"):
+                    import_japanese_listening_review(recovered,json.dumps(response))
+                response["results"].pop()
+                response["results"][0]["id"]="999"
+                with self.assertRaisesRegex(ValueError,"陌生"):
+                    import_japanese_listening_review(recovered,json.dumps(response))
+                self.assertEqual(len(list(receipt_dir.glob("*.json"))),count)
+
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "requires FFmpeg")
+    def test_no_review_import_for_changed_final_archive_evidence(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            with patch("app.project.STATE_FILE",base/"recent.json"):
+                recovered,_,source=self._fixture(base)
+                output=Path(recovered.root)/"output"
+                build_project_v02(Path(recovered.root)/".generated/quick_index.csv",
+                                   source,output,make_flac=True,
+                                   delivery_mode="flac_only",translate_missing=False,
+                                   audio_language="ja",source_text_language="ja",
+                                   target_language="ja",state_dir=Path(recovered.root)/".state")
+                pack=build_japanese_listening_pack(recovered,sample_count=2)
+                with zipfile.ZipFile(pack["pack_path"]) as z:
+                    data=z.read("evidence.json")
+                    evidence=json.loads(data)
+                response={
+                    "schema_version":2,"kind":"manual-japanese-recovery-listening-review",
+                    "pack_id":pack["pack_id"],
+                    "evidence_sha256":hashlib.sha256(data).hexdigest(),
+                    "completed":True,"reviewer_confirmed":True,
+                    "results":[{"id":r["id"],"language":"yes","text_match":"yes","rendered_match":"yes"}
+                               for r in evidence["rows"]]
+                }
+                (output/"manifest.json").write_bytes(
+                    (output/"manifest.json").read_bytes()+b"\n")
+                with self.assertRaisesRegex(ValueError,"清单已变化"):
+                    import_japanese_listening_review(recovered,json.dumps(response))
+                self.assertFalse((output/"recovery_listening_reviews").exists())
+
+    def test_manual_review_rejects_legacy_unbound_or_oversized_json(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            with patch("app.project.STATE_FILE",base/"recent.json"):
+                recovered,_,_source=self._fixture(base)
+                with self.assertRaisesRegex(ValueError,"格式不支持"):
+                    import_japanese_listening_review(recovered,
+                        '{"schema_version":1,"kind":"manual-japanese-recovery-listening-review"}')
+                with self.assertRaisesRegex(ValueError,"64 KiB"):
+                    import_japanese_listening_review(recovered,"X"*65537)
 
     def test_rejects_ordinary_project_and_path_injection(self):
         with tempfile.TemporaryDirectory() as td:

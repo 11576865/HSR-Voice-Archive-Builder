@@ -37,7 +37,8 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .hf_locale_probe import require_japanese_row_identity_parity
 from .japanese_source_recovery import create_isolated_japanese_recovery, verify_japanese_recovery_build_inputs, verify_japanese_recovery_build_manifest
-from .japanese_listening_pack import build_japanese_listening_pack, get_japanese_listening_pack
+from .japanese_listening_pack import (build_japanese_listening_pack, get_japanese_listening_pack,
+    import_japanese_listening_review, japanese_listening_review_history)
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -434,6 +435,10 @@ class Handler(BaseHTTPRequestHandler):
                 200, source.read_bytes(), "application/zip",
                 extra_headers={"Content-Disposition": f'attachment; filename="Japanese_Recovery_Listening_{pack_id}.zip"'},
             )
+            return
+        if path.startswith("/api/recovery/listening-review/"):
+            pack_id = path.rsplit("/", 1)[-1]
+            self._json({"ok": True, "review": japanese_listening_review_history(_active_config(), pack_id)})
             return
         if path == "/api/recovery/export":
             config = _active_config()
@@ -1418,6 +1423,13 @@ class Handler(BaseHTTPRequestHandler):
                 project_root=config.root, project_name=config.name,
             )
             self._json({"ok": True, "job": job.id})
+            return
+
+        if path == "/api/recovery/listening-review":
+            config = _active_config()
+            with reserve_project_output_writer(config.root, kind="jp-listening-review"):
+                review = import_japanese_listening_review(config, data.get("review_text", ""))
+            self._json({"ok": True, "review": review})
             return
 
         if path == "/api/recovery/listening-pack":
