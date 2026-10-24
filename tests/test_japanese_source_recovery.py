@@ -112,6 +112,7 @@ class JapaneseSourceRecoveryTests(unittest.TestCase):
                 proof = verify_japanese_recovery_build_inputs(recovered)
                 self.assertEqual(proof["wav_members"], 1)
                 self.assertEqual(proof["member_ids"], ["chapter/voice_jp_001.wav"])
+                self.assertTrue(recovered.recovery_source_attestation_required)
 
     def test_tampered_original_source_is_refused_without_new_project(self):
         with tempfile.TemporaryDirectory() as td:
@@ -184,6 +185,26 @@ class JapaneseSourceRecoveryTests(unittest.TestCase):
                 recovered.wav_source = cfg.wav_source
                 with self.assertRaisesRegex(ValueError, "偏离"):
                     verify_japanese_recovery_build_inputs(recovered)
+
+    def test_deleted_candidate_receipt_fails_closed(self):
+        from app.project import load_project
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            with patch("app.project.STATE_FILE", base / "recent.json"):
+                cfg, _ = self.prepare(base)
+                candidate = Path(create_isolated_japanese_recovery(cfg)["candidate_project"])
+                recovered = load_project(candidate)
+                (candidate / RECOVERY_ATTESTATION).unlink()
+                with self.assertRaisesRegex(ValueError, "缺少必须的来源证明"):
+                    verify_japanese_recovery_build_inputs(recovered)
+
+    def test_ordinary_preexisting_projects_are_not_forced_into_recovery_contract(self):
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            with patch("app.project.STATE_FILE", base / "recent.json"):
+                cfg, _ = self.prepare(base)
+                self.assertFalse(cfg.recovery_source_attestation_required)
+                self.assertIsNone(verify_japanese_recovery_build_inputs(cfg))
 
     def test_manifest_member_identity_must_match_after_build(self):
         from app.project import load_project
