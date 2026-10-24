@@ -128,6 +128,14 @@ class JapaneseListeningPackTests(unittest.TestCase):
                         self.assertTrue(rendered.startswith(b"RIFF"))
                         self.assertGreater(len(rendered),1000)
                         self.assertGreater(len(src),1000)
+                        # Final-excerpt time positions must contain actual
+                        # speech-band PCM samples, not inter-chapter silence.
+                        import struct
+                        with wave.open(io.BytesIO(rendered), "rb") as reader:
+                            count=min(reader.getnframes(),4000)
+                            decoded=struct.unpack("<" + "h"*count,
+                                                  reader.readframes(count))
+                        self.assertGreater(sum(abs(x) for x in decoded)/max(1,count),500)
                     page=z.read("review.html").decode("utf-8")
                     self.assertIn("人工试听验收",page)
                     self.assertIn("manual_listening_review.json",page)
@@ -151,13 +159,30 @@ class JapaneseListeningPackTests(unittest.TestCase):
                     build_japanese_listening_pack(recovered,sample_count=2)
                 self.assertFalse((output/"recovery_listening_packs").exists())
 
+    @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"), "requires FFmpeg")
+    def test_stale_pack_download_is_rejected_after_manifest_edit(self):
+        with tempfile.TemporaryDirectory() as td:
+            base=Path(td)
+            with patch("app.project.STATE_FILE",base/"recent.json"):
+                recovered,_,source=self._fixture(base)
+                output=Path(recovered.root)/"output"
+                build_project_v02(Path(recovered.root)/".generated/quick_index.csv",
+                                   source,output,make_flac=True,
+                                   delivery_mode="flac_only",translate_missing=False,
+                                   audio_language="ja",source_text_language="ja",
+                                   target_language="ja",state_dir=Path(recovered.root)/".state")
+                report=build_japanese_listening_pack(recovered,sample_count=2)
+                target=output/"manifest.json"
+                target.write_bytes(target.read_bytes()+b"\n")
+                with self.assertRaisesRegex(ValueError,"清单已变化"):
+                    get_japanese_listening_pack(recovered,report["pack_id"])
+
     def test_rejects_ordinary_project_and_path_injection(self):
         with tempfile.TemporaryDirectory() as td:
             base=Path(td)
             with patch("app.project.STATE_FILE",base/"app_recent.json"):
                 recovered,old,_=self._fixture(base)
-                self.assertIsNone(getattr(load_project(old),"recovery_source_attestation_required",None)
-                                  if False else None)
+                self.assertFalse(load_project(old).recovery_source_attestation_required)
                 with self.assertRaisesRegex(ValueError,"identifier"):
                     get_japanese_listening_pack(recovered,"../outside")
                 with self.assertRaisesRegex(ValueError,"No verified"):
