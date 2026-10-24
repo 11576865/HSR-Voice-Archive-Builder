@@ -31,6 +31,7 @@ from .project_fonts import font_asset_directory, import_project_font, list_proje
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
 from .remote_apply_generation import publish_audio_generation
+from .incremental_stage import prepare_incremental_audio_stage
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
@@ -1589,32 +1590,69 @@ class Handler(BaseHTTPRequestHandler):
                 temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
                 combined = generated / "combined_audio_versions" / temporary_root.name
                 try:
-                    extracted = ensure_dir_or_extract(source, temporary_root, "existing")
-                    for wav in extracted.rglob("*.wav"):
-                        target = temporary_root / wav.name
-                        if wav.resolve() != target.resolve():
-                            shutil.copy2(wav, target)
-                    if extracted.parent == temporary_root and extracted != temporary_root:
-                        shutil.rmtree(extracted)
-                    for audio in validated_incremental_files(downloaded, incoming):
-                        shutil.copy2(audio, temporary_root / audio.name)
-                    publish_audio_generation(generated, temporary_root, temporary_root.name)
+                    staging = prepare_incremental_audio_stage(
+                        source, temporary_root, downloaded, incoming,
+                    )
+                    publish_audio_generation(generated, staging, temporary_root.name)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     raise
+                else:
+                    shutil.rmtree(temporary_root, ignore_errors=True)
                 with index.open("r", encoding="utf-8-sig", newline="") as handle:
                     existing_rows = list(csv.DictReader(handle))
-                    fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256"]
-                for field in ("reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source"):
+                    fields = list(existing_rows[0].keys()) if existing_rows else [
+                        "index", "group", "filename", "source", "source_detail", "english",
+                        "reference_text", "reference_language",
+                        "official_target_text", "official_target_language", "official_target_source",
+                        "sha256", "source_member_id",
+                    ]
+                for field in (
+                    "reference_text", "reference_language",
+                    "official_target_text", "official_target_language", "official_target_source",
+                    "source_member_id",
+                ):
                     if field not in fields:
                         fields.append(field)
                 known = {Path(str(row.get("filename", ""))).name for row in existing_rows}
+                known_members = {
+                    str(row.get("source_member_id", "")).strip()
+                    or Path(str(row.get("filename", ""))).name
+                    for row in existing_rows
+                }
                 details = {Path(str(row.get("filename", ""))).name: row for row in targets}
                 for filename in sorted(successful):
-                    if filename not in known:
-                        metadata = details.get(filename, {})
-                        reference = confirmed_references.get(filename, {})
-                        existing_rows.append({"index": str(len(existing_rows) + 1), "group": infer_group(Path(filename).stem), "filename": filename, "source": "huggingface", "source_detail": dataset, "english": str(metadata.get("english", "")), "reference_text": str(reference.get("reference_text", "")), "reference_language": str(reference.get("reference_language", "")), "official_target_text": str(reference.get("reference_text", "")) if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_language": "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "official_target_source": "huggingface:Chinese(PRC):same_ingame_filename" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else "", "sha256": ""})
+                    if filename in known or filename in known_members:
+                        continue
+                    metadata = details.get(filename, {})
+                    reference = confirmed_references.get(filename, {})
+                    existing_rows.append({
+                        "index": str(len(existing_rows) + 1),
+                        "group": infer_group(Path(filename).stem),
+                        "filename": filename,
+                        # Incremental downloads land flat at the combined root, so
+                        # the member id is the bare filename by construction.
+                        "source_member_id": filename,
+                        "source": "huggingface",
+                        "source_detail": dataset,
+                        "english": str(metadata.get("english", "")),
+                        "reference_text": str(reference.get("reference_text", "")),
+                        "reference_language": str(reference.get("reference_language", "")),
+                        "official_target_text": (
+                            str(reference.get("reference_text", ""))
+                            if str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"}
+                            else ""
+                        ),
+                        "official_target_language": (
+                            "zh-CN" if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"} else ""
+                        ),
+                        "official_target_source": (
+                            "huggingface:Chinese(PRC):same_ingame_filename"
+                            if reference and str(config.target_language or "").lower() in {"zh", "zh-cn", "chs", "cn"}
+                            else ""
+                        ),
+                        "sha256": "",
+                    })
                 updated_index = generated / f"quick_index_incremental_{temporary_root.name}.csv"
                 with updated_index.open("w", encoding="utf-8-sig", newline="") as handle:
                     writer = csv.DictWriter(handle, fieldnames=fields, extrasaction="ignore")
