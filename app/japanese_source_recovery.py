@@ -239,6 +239,15 @@ def verify_japanese_recovery_build_inputs(config: ProjectConfig) -> dict[str, An
     if not proof_path.exists():
         if config.recovery_source_attestation_required:
             raise ValueError("日语恢复工程缺少必须的来源证明文件，拒绝构建")
+        # Candidates created by the older release lacked build-time proofs.
+        # Never silently treat an old generated candidate as an ordinary
+        # project merely because its receipt does not exist.
+        import re
+        if re.fullmatch(r".+-JP-source-recovery-[0-9a-f]{10}", root.name):
+            raise ValueError(
+                "旧版日语恢复候选缺少构建时来源证明；请从仍可核验的"
+                "原始日语包重新创建独立恢复候选，旧工程保持不变"
+            )
         return None
     if not config.recovery_source_attestation_required:
         raise ValueError("存在日语恢复证明文件但工程未标记需要来源验证，拒绝构建")
