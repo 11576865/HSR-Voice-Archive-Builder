@@ -4025,6 +4025,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <button id="auditRemoteLocaleBtn" type="button">核对语音来源</button>
           <button id="probeJapaneseRowsBtn" type="button">核对日语远程记录（只读）</button>
           <button id="createJapaneseRecoveryBtn" type="button">创建独立日语恢复工程</button>
+          <button id="generateJapaneseListeningPackBtn" type="button">导出日语成品试听验收包</button>
           <button id="scanRemoteBtn">检查远程索引</button>
           <button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button>
         </div>
@@ -4036,6 +4037,11 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       </div>
       <div id="japaneseRecoveryResult" class="small muted" role="status" aria-live="polite">
         恢复工程只在验证原始日语包指纹及初始索引后创建，不覆盖当前工程，不自动生成或发布成品。
+      </div>
+      <div id="japaneseListeningPackStatus" class="small muted" role="status" aria-live="polite">
+        切换到已完成构建的独立日语恢复候选，导出原始 WAV 与最终 FLAC/MKV 成对试听切片。
+        样本需人工核查；抽检不等于全量验收。
+        <a id="japaneseListeningPackDownload" hidden>下载离线试听 ZIP</a>
       </div>
 
       <div id="updateStats" class="stats update-stats">
@@ -5590,6 +5596,19 @@ async function watchJob(id){
               ' 条。仅确认 result.json 与在线记录一致，不代表已验证 WAV 的实际日语发音。';
             if(status){status.textContent=message;status.className='small status-ok'}
             setRunReport('日语元数据校验通过',message,false);
+          }else if(x.job.kind==='jp-listening-pack'){
+            const proof=x.job.result||{};
+            const status=document.getElementById('japaneseListeningPackStatus');
+            const link=document.getElementById('japaneseListeningPackDownload');
+            const message='试听包已生成：'+Number(proof.selected||0)+
+              ' 组原始/成品音频。请下载 ZIP，解压后打开 review.html 逐项人工试听；尚未确认日语发音。';
+            if(status){status.className='small status-warn';status.firstChild.textContent=message+' '}
+            if(link){
+              link.href=proof.download_url||'#';
+              link.hidden=!proof.download_url;
+              link.textContent='下载离线试听 ZIP';
+            }
+            setRunReport('日语试听包已生成，等待人工验收',message,true);
           }else if(x.job.kind==='locale-recovery'){
             const status=document.getElementById('japaneseRecoveryResult');
             const proof=x.job.result||{};
@@ -5644,6 +5663,12 @@ async function watchJob(id){
         }else if(x.job.state==='failed'){
           terminal=true;
           setLog(x.job.error||x.job);
+          if(x.job.kind==='jp-listening-pack'){
+            const status=document.getElementById('japaneseListeningPackStatus');
+            if(status){status.textContent='日语试听包生成失败：'+shortError(x.job.error||x.job);status.className='small status-bad'}
+            const link=document.getElementById('japaneseListeningPackDownload');
+            if(link)link.hidden=true;
+          }
           if(x.job.kind==='build'){
             const status=document.getElementById('japaneseRecoveryResult');
             if(status){
@@ -5874,6 +5899,25 @@ document.getElementById('auditRemoteLocaleBtn').onclick=async()=>{
     }
   }catch(e){
     if(panel)panel.textContent='来源审计失败：'+shortError(e);
+  }finally{button.disabled=false;}
+};
+document.getElementById('generateJapaneseListeningPackBtn').onclick=async()=>{
+  const button=document.getElementById('generateJapaneseListeningPackBtn');
+  const status=document.getElementById('japaneseListeningPackStatus');
+  const config=currentProject?.config;
+  if(!config?.recovery_source_attestation_required){
+    if(status)status.textContent='请先切换到已完成构建的独立日语恢复候选工程；普通工程不可冒充恢复验收。';
+    return;
+  }
+  try{
+    button.disabled=true;
+    if(status)status.textContent='正在提交原始音频与成品音轨的成对试听抽样任务…';
+    const body=new FormData();
+    body.set('samples','8');
+    const job=await api('/api/recovery/listening-pack',{method:'POST',body});
+    watchJob(job.job);
+  }catch(e){
+    if(status)status.textContent='试听抽样任务无法启动：'+shortError(e);
   }finally{button.disabled=false;}
 };
 document.getElementById('createJapaneseRecoveryBtn').onclick=async()=>{
