@@ -36,6 +36,8 @@ class IncrementalMemberSafeStageTests(unittest.TestCase):
         (original / "chapter2").mkdir()
         (original / "chapter1" / "same.wav").write_bytes(b"first original")
         (original / "chapter2" / "same.wav").write_bytes(b"second original")
+        (original / "chapter1" / "same.lab").write_text("日本語一", encoding="utf-8")
+        (original / "chapter2" / "same.lab").write_text("日本語二", encoding="utf-8")
         return original
 
     def test_preserves_same_basename_members_in_distinct_chapters_and_new_root_voice(self):
@@ -59,6 +61,8 @@ class IncrementalMemberSafeStageTests(unittest.TestCase):
                 b"second original",
             )
             self.assertEqual((result / "incoming.wav").read_bytes(), WAV)
+            self.assertEqual((result / "chapter1" / "same.lab").read_text(encoding="utf-8"), "日本語一")
+            self.assertEqual((result / "chapter2" / "same.lab").read_text(encoding="utf-8"), "日本語二")
             self.assertFalse((result / "same.wav").exists())
             self.assertEqual((source / "chapter1" / "same.wav").read_bytes(), b"first original")
             self.assertEqual((source / "chapter2" / "same.wav").read_bytes(), b"second original")
@@ -70,6 +74,8 @@ class IncrementalMemberSafeStageTests(unittest.TestCase):
             with zipfile.ZipFile(archive, "w") as pack:
                 pack.writestr("chapter1/same.wav", b"first")
                 pack.writestr("chapter2/same.wav", b"second")
+                pack.writestr("chapter1/same.lab", "日本語一")
+                pack.writestr("chapter2/same.lab", "日本語二")
             incoming = base / "incoming"
             receipt = download_file(incoming)
             working = base / ".generated" / "combined-audio-zip"
@@ -78,6 +84,8 @@ class IncrementalMemberSafeStageTests(unittest.TestCase):
             self.assertEqual((staged / "chapter1" / "same.wav").read_bytes(), b"first")
             self.assertEqual((staged / "chapter2" / "same.wav").read_bytes(), b"second")
             self.assertEqual((staged / "incoming.wav").read_bytes(), WAV)
+            self.assertEqual((staged / "chapter1" / "same.lab").read_text(encoding="utf-8"), "日本語一")
+            self.assertEqual((staged / "chapter2" / "same.lab").read_text(encoding="utf-8"), "日本語二")
             self.assertEqual((archive.stat().st_size), len(archive.read_bytes()))
 
     def test_preexisting_nested_basename_collision_rejected_before_publishing(self):
