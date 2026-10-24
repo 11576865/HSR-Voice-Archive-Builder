@@ -182,6 +182,7 @@ def create_isolated_japanese_recovery(
             update_candidates="",
             remote_index_url=game_index_url("honkai-star-rail", "ja"),
             wav_source_fingerprint=fingerprint,
+            recovery_source_attestation_required=True,
             chs_source_fingerprint="",
             reference_source_fingerprint="",
             reference_text_embedded=False,
@@ -236,7 +237,11 @@ def verify_japanese_recovery_build_inputs(config: ProjectConfig) -> dict[str, An
     root = Path(config.root).expanduser().resolve()
     proof_path = root / RECOVERY_ATTESTATION
     if not proof_path.exists():
+        if config.recovery_source_attestation_required:
+            raise ValueError("日语恢复工程缺少必须的来源证明文件，拒绝构建")
         return None
+    if not config.recovery_source_attestation_required:
+        raise ValueError("存在日语恢复证明文件但工程未标记需要来源验证，拒绝构建")
     if proof_path.is_symlink() or not proof_path.is_file():
         raise ValueError("日语恢复来源证明文件不是安全的常规文件")
     try:
