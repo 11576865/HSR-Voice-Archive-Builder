@@ -1,0 +1,44 @@
+{
+  "packet_version": 1,
+  "packet_id": "ci-11576865-HSR-Voice-Archive-Builder-40058507536-1",
+  "status": "pending",
+  "record_type": "ci_failure",
+  "title": "tests: failure",
+  "summary": "Tracked CI workflow did not complete successfully. Source adapter captured failed job/step evidence when available.",
+  "source_repository": "11576865/HSR-Voice-Archive-Builder",
+  "source_event": "workflow_run",
+  "source_ref": "fix/jp-audio-row-identity-proof-20261024",
+  "source_sha": "d5ceb9aef00c548a1c9d7fe85f2cfbb9a1db96bc",
+  "source_url": "https://github.com/11576865/HSR-Voice-Archive-Builder/actions/runs/40058507536",
+  "created_at": "2026-10-24T03:31:31+00:00",
+  "dedupe_key": "workflow_run:11576865/HSR-Voice-Archive-Builder:40058507536:1",
+  "routing_hints": [
+    "interface-grammar",
+    "operations",
+    "red-reason",
+    "reliability"
+  ],
+  "evidence": {
+    "workflow": "tests",
+    "run_id": "40058507536",
+    "run_attempt": "1",
+    "conclusion": "failure",
+    "trigger_event": "pull_request",
+    "failed_jobs": [
+      {
+        "id": 120766706547,
+        "name": "unit (3.12)",
+        "conclusion": "failure"
+      }
+    ],
+    "failed_steps": [
+      {
+        "job": "unit (3.12)",
+        "number": 7,
+        "name": "Run unit tests",
+        "conclusion": "failure"
+      }
+    ],
+    "capture_error": ""
+  }
+}
