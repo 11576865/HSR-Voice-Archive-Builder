@@ -201,6 +201,14 @@ def _source_size_limit(source: Path, members: list[str]) -> None:
             raise ValueError("压缩包缺少待核验来源成员")
         if sum(found[member].file_size for member in members) > MAX_EXTRACT_BYTES:
             raise ValueError("试听抽样 ZIP 解压总大小超过安全上限")
+    elif source.suffix.lower() == ".7z":
+        from .quick import _list_7z_members
+        records, _reader = _list_7z_members(source)
+        found = {str(row["name"]): int(row["size"]) for row in records}
+        if any(member not in found for member in members):
+            raise ValueError("7z 压缩包缺少待核验来源成员")
+        if sum(found[member] for member in members) > MAX_EXTRACT_BYTES:
+            raise ValueError("试听抽样 7z 解压总大小超过安全上限")
 
 
 def build_japanese_listening_pack(
@@ -325,4 +333,26 @@ def get_japanese_listening_pack(config: ProjectConfig, pack_id: str) -> Path:
     result = output / PACK_DIR / (pack_id + ".zip")
     if result.is_symlink() or not result.is_file():
         raise FileNotFoundError("试听包不存在")
+    # A ZIP exported for an earlier build must not be presented as current
+    # evidence after a user edits the manifest, final file, or original source.
+    verify_japanese_recovery_build_inputs(config)
+    manifest = output / "manifest.json"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ValueError("试听包对应的构建 Manifest 已不存在")
+    with zipfile.ZipFile(result) as pack:
+        evidence = json.loads(pack.read("evidence.json"))
+    if (
+        evidence.get("kind") != "japanese-recovery-manual-audition"
+        or evidence.get("build_manifest_sha256") != _hash(manifest)
+        or evidence.get("original_source_fingerprint") != str(config.wav_source_fingerprint)
+    ):
+        raise ValueError("试听包的原始来源或构建清单已变化，请重新导出")
+    final, _map = _media(config, output)
+    state = final.stat()
+    if (
+        final.name != evidence.get("final_artifact")
+        or state.st_size != evidence.get("final_artifact_size")
+        or state.st_mtime_ns != evidence.get("final_artifact_mtime_ns")
+    ):
+        raise ValueError("成品音频自试听包生成后已变化，请重新导出")
     return result
