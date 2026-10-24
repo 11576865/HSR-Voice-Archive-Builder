@@ -4044,6 +4044,19 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         <a id="japaneseListeningPackDownload" hidden>下载离线试听 ZIP</a>
       </div>
 
+      <div class="update-toolbar">
+        <div>
+          <label for="japaneseListeningReviewFile">导入人工试听结果（review.html 导出的 JSON）</label>
+          <input id="japaneseListeningReviewFile" type="file" accept=".json,application/json">
+        </div>
+        <div class="actions">
+          <button id="importJapaneseListeningReviewBtn" type="button">核验并归档人工试听结果</button>
+        </div>
+      </div>
+      <div id="japaneseListeningReviewStatus" class="small muted" role="status" aria-live="polite">
+        尚未导入人工记录。只有本人完成试听、记录与当前证据匹配时，才能形成“抽样人工验收”结论，不能据此宣布全量通过。
+      </div>
+
       <div id="updateStats" class="stats update-stats">
         <button type="button" class="stat existing update-filter" data-update-filter="exact_existing"><b id="uExisting">—</b><span>已存在</span></button>
         <button type="button" class="stat variant update-filter" data-update-filter="variant_of_existing"><b id="uVariant">—</b><span>已有台词变量</span></button>
@@ -5904,6 +5917,47 @@ document.getElementById('auditRemoteLocaleBtn').onclick=async()=>{
   }catch(e){
     if(panel)panel.textContent='来源审计失败：'+shortError(e);
   }finally{button.disabled=false;}
+};
+document.getElementById('importJapaneseListeningReviewBtn').onclick=async()=>{
+  const button=document.getElementById('importJapaneseListeningReviewBtn');
+  const status=document.getElementById('japaneseListeningReviewStatus');
+  const file=document.getElementById('japaneseListeningReviewFile')?.files?.[0];
+  if(!currentProject?.config?.recovery_source_attestation_required){
+    if(status)status.textContent='请先切换到完成构建的独立日语恢复候选工程。';
+    return;
+  }
+  if(!file){if(status)status.textContent='请选择离线 review.html 导出的人工试听 JSON。';return}
+  if(file.size>64*1024){
+    if(status)status.textContent='人工试听 JSON 超过 64 KiB，拒绝导入。';
+    return;
+  }
+  try{
+    button.disabled=true;
+    if(status)status.textContent='正在核验试听包、原始文件、最终成品与人工样本身份…';
+    const form=new FormData();
+    form.set('review_text',await file.text());
+    const response=await api('/api/recovery/listening-review',{method:'POST',body:form});
+    const proof=response.review||{};
+    const count=proof.summary||{};
+    const statusNames={
+      'sample-user-reported-pass':'人工声明的抽样试听全部通过',
+      'sample-failed':'人工试听发现不通过的样本',
+      'sample-inconclusive':'人工试听存在无法判定的样本',
+      'sample-incomplete':'人工试听记录未完成或未确认'
+    };
+    const message=(statusNames[proof.status]||proof.status||'结果未知')+
+      '：样本 '+Number(count.sample_count||0)+'，符合 '+Number(count.passed||0)+
+      '，不通过 '+Number(count.failed||0)+'，无法判定 '+Number(count.inconclusive||0)+
+      '，未检查 '+Number(count.unreviewed||0)+
+      '。证据已存入工程；此结论仅针对抽样，不代表全量归档或自动语言鉴别。';
+    if(status){status.textContent=message;status.className=
+      proof.status==='sample-user-reported-pass'?'small status-ok':'small status-warn'}
+    setRunReport('人工试听证据已归档',message,proof.status!=='sample-user-reported-pass');
+    setLog(proof);
+  }catch(e){
+    if(status){status.textContent='人工试听记录核验/归档失败：'+shortError(e);status.className='small status-bad'}
+    setLog(String(e));
+  }finally{button.disabled=false}
 };
 document.getElementById('generateJapaneseListeningPackBtn').onclick=async()=>{
   const button=document.getElementById('generateJapaneseListeningPackBtn');
