@@ -31,6 +31,7 @@ from .project_fonts import font_asset_directory, import_project_font, list_proje
 from .diff import classify
 from .gpt_sovits_exporter import export_project_dataset
 from .remote_apply_generation import publish_audio_generation
+from .incremental_stage import prepare_incremental_audio_stage
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
@@ -1589,19 +1590,15 @@ class Handler(BaseHTTPRequestHandler):
                 temporary_root = Path(tempfile.mkdtemp(prefix="combined-audio-", dir=generated))
                 combined = generated / "combined_audio_versions" / temporary_root.name
                 try:
-                    extracted = ensure_dir_or_extract(source, temporary_root, "existing")
-                    for wav in extracted.rglob("*.wav"):
-                        target = temporary_root / wav.name
-                        if wav.resolve() != target.resolve():
-                            shutil.copy2(wav, target)
-                    if extracted.parent == temporary_root and extracted != temporary_root:
-                        shutil.rmtree(extracted)
-                    for audio in validated_incremental_files(downloaded, incoming):
-                        shutil.copy2(audio, temporary_root / audio.name)
-                    publish_audio_generation(generated, temporary_root, temporary_root.name)
+                    staging = prepare_incremental_audio_stage(
+                        source, temporary_root, downloaded, incoming,
+                    )
+                    publish_audio_generation(generated, staging, temporary_root.name)
                 except Exception:
                     shutil.rmtree(temporary_root, ignore_errors=True)
                     raise
+                else:
+                    shutil.rmtree(temporary_root, ignore_errors=True)
                 with index.open("r", encoding="utf-8-sig", newline="") as handle:
                     existing_rows = list(csv.DictReader(handle))
                     fields = list(existing_rows[0].keys()) if existing_rows else ["index", "group", "filename", "source", "source_detail", "english", "reference_text", "reference_language", "official_target_text", "official_target_language", "official_target_source", "sha256"]
