@@ -6,7 +6,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.hf_locale_probe import probe_japanese_row_identity
+from app.hf_locale_probe import probe_japanese_row_identity, require_japanese_row_identity_parity
 
 
 class JapaneseHfMetadataProbeTests(unittest.TestCase):
@@ -75,6 +75,30 @@ class JapaneseHfMetadataProbeTests(unittest.TestCase):
             self.assertEqual(report["matched"], 1)
             self.assertEqual(report["evidence"][-1]["status"], "mismatch")
             self.assertIn("identity changed", report["evidence"][-1]["reason"])
+
+    def test_incomplete_or_drifted_online_parity_must_fail_job(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._index(Path(td))
+            with self.assertRaisesRegex(ValueError, "一致 1/2"):
+                require_japanese_row_identity_parity(
+                    path, samples=2, fetch=self._fetch(wrong_second=True),
+                )
+            with self.assertRaisesRegex(ValueError, "一致 2/3"):
+                require_japanese_row_identity_parity(
+                    path, samples=3, fetch=self._fetch(),
+                )
+
+    def test_both_http_surfaces_and_browser_offer_read_only_probe(self):
+        root = Path(__file__).resolve().parents[1]
+        for filename in ("server.py", "lite_server.py"):
+            with self.subTest(filename=filename):
+                code = (root / "app" / filename).read_text(encoding="utf-8")
+                self.assertIn("/api/update/probe-japanese-rows", code)
+                self.assertIn("require_japanese_row_identity_parity(", code)
+                self.assertIn("locale-probe", code)
+        markup = (root / "app/static/index.html").read_text(encoding="utf-8")
+        self.assertIn('id="probeJapaneseRowsBtn"', markup)
+        self.assertIn("不下载音频、不变更归档", markup)
 
     def test_missing_identity_is_not_sampled(self):
         with tempfile.TemporaryDirectory() as td:
