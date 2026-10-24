@@ -99,6 +99,9 @@ class JapaneseHfMetadataProbeTests(unittest.TestCase):
         markup = (root / "app/static/index.html").read_text(encoding="utf-8")
         self.assertIn('id="probeJapaneseRowsBtn"', markup)
         self.assertIn("不下载音频、不变更归档", markup)
+        self.assertIn("日语元数据身份核验通过", markup)
+        self.assertIn("日语元数据核验未通过", markup)
+        self.assertIn("独立恢复候选已创建", markup)
 
     def test_missing_identity_is_not_sampled(self):
         with tempfile.TemporaryDirectory() as td:
