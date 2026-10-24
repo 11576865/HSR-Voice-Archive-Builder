@@ -31,6 +31,8 @@ class ProjectConfig:
     glossary_path: str = ""
     reference_source: str = ""
     wav_source_fingerprint: str = ""
+    # A recovery candidate must never be built without its original-source receipt.
+    recovery_source_attestation_required: bool = False
     chs_source_fingerprint: str = ""
     reference_source_fingerprint: str = ""
     reference_text_embedded: bool = False
