@@ -36,7 +36,8 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .hf_locale_probe import require_japanese_row_identity_parity
 from .japanese_source_recovery import create_isolated_japanese_recovery, verify_japanese_recovery_build_inputs, verify_japanese_recovery_build_manifest
-from .japanese_listening_pack import build_japanese_listening_pack, get_japanese_listening_pack
+from .japanese_listening_pack import (build_japanese_listening_pack, get_japanese_listening_pack,
+    import_japanese_listening_review, japanese_listening_review_history)
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -1627,6 +1628,25 @@ def api_download_japanese_listening_pack(pack_id: str):
         result = get_japanese_listening_pack(config, pack_id)
         return FileResponse(result, media_type="application/zip",
                             filename="Japanese_Recovery_Listening_" + pack_id + ".zip")
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/recovery/listening-review")
+def api_import_japanese_listening_review(review_text: str = Form(...)):
+    try:
+        config = _active_config()
+        with reserve_project_output_writer(config.root, kind="jp-listening-review"):
+            report = import_japanese_listening_review(config, review_text)
+        return {"ok": True, "review": report}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/recovery/listening-review/{pack_id}")
+def api_japanese_listening_review_status(pack_id: str):
+    try:
+        return {"ok": True, "review": japanese_listening_review_history(_active_config(), pack_id)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
