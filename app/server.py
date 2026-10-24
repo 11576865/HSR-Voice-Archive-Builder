@@ -36,9 +36,11 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .hf_locale_probe import require_japanese_row_identity_parity
 from .japanese_source_recovery import create_isolated_japanese_recovery, verify_japanese_recovery_build_inputs, verify_japanese_recovery_build_manifest
-from .japanese_listening_pack import (build_japanese_listening_pack, get_japanese_listening_pack,
+from .japanese_listening_pack import (
+    build_japanese_listening_pack, get_japanese_listening_pack,
+    import_japanese_listening_review, japanese_listening_review_history,
+)
 from .japanese_final_pcm_audit import verify_japanese_final_audio_pcm
-    import_japanese_listening_review, japanese_listening_review_history)
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
