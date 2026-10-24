@@ -36,6 +36,7 @@ from .game_profiles import game_audio_dataset, game_index_url, remote_updates_su
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .hf_locale_probe import require_japanese_row_identity_parity
 from .japanese_source_recovery import create_isolated_japanese_recovery, verify_japanese_recovery_build_inputs, verify_japanese_recovery_build_manifest
+from .japanese_listening_pack import build_japanese_listening_pack, get_japanese_listening_pack
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -1599,6 +1600,35 @@ def api_update_probe_japanese_rows(samples: int = Form(5)):
             {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
             status_code=400,
         )
+
+
+@app.post("/api/recovery/listening-pack")
+def api_generate_japanese_listening_pack(samples: int = Form(8)):
+    try:
+        config = _active_config()
+        if not 2 <= samples <= 12:
+            raise ValueError("试听抽样数必须在 2 至 12 之间")
+        job = create_job(
+            "jp-listening-pack",
+            lambda progress: build_japanese_listening_pack(
+                config, sample_count=samples, report_progress=progress,
+            ),
+            with_progress=True, project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.get("/api/recovery/listening-pack/{pack_id}")
+def api_download_japanese_listening_pack(pack_id: str):
+    try:
+        config = _active_config()
+        result = get_japanese_listening_pack(config, pack_id)
+        return FileResponse(result, media_type="application/zip",
+                            filename="Japanese_Recovery_Listening_" + pack_id + ".zip")
+    except Exception as exc:
+        return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
 
 
 @app.post("/api/update/create-japanese-recovery")
