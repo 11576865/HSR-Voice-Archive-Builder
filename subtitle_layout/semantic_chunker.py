@@ -11,7 +11,9 @@ PUNCTUATION_SPLITS = ("，", "。", "！", "？", "；", "——", "~", ",", ";"
 def _cut_words(cleaned: str) -> list[tuple[str, str]]:
     if pseg is not None:
         try:
-            return list(pseg.cut(cleaned))
+            # jieba.posseg.cut yields iterable pair objects, not tuples.
+            # Normalize at the boundary: the orphan guard indexes words1[-1][0].
+            return [(word, flag) for word, flag in pseg.cut(cleaned)]
         except Exception:
             pass
     return [(char, "") for char in cleaned]
