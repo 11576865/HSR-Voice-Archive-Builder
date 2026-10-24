@@ -4026,6 +4026,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
           <button id="probeJapaneseRowsBtn" type="button">核对日语远程记录（只读）</button>
           <button id="createJapaneseRecoveryBtn" type="button">创建独立日语恢复工程</button>
           <button id="generateJapaneseListeningPackBtn" type="button">导出日语成品试听验收包</button>
+          <button id="verifyJapaneseFinalPcmBtn" type="button">全音轨 PCM 一致性复核</button>
           <button id="scanRemoteBtn">检查远程索引</button>
           <button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button>
         </div>
@@ -4037,6 +4038,10 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       </div>
       <div id="japaneseRecoveryResult" class="small muted" role="status" aria-live="polite">
         恢复工程只在验证原始日语包指纹及初始索引后创建，不覆盖当前工程，不自动生成或发布成品。
+      </div>
+      <div id="japaneseFinalPcmStatus" class="small muted" role="status" aria-live="polite">
+        从最终 FLAC/MKV 解码全部音频帧，对照构建时编码前的 PCM SHA-256 与帧数。
+        属于全音轨字节一致性核查，不是语种识别或日语原文语义验收。
       </div>
       <div id="japaneseListeningPackStatus" class="small muted" role="status" aria-live="polite">
         切换到已完成构建的独立日语恢复候选，导出原始 WAV 与最终 FLAC/MKV 成对试听切片。
@@ -5609,6 +5614,14 @@ async function watchJob(id){
               ' 条。仅确认 result.json 与在线记录一致，不代表已验证 WAV 的实际日语发音。';
             if(status){status.textContent=message;status.className='small status-ok'}
             setRunReport('日语元数据校验通过',message,false);
+          }else if(x.job.kind==='jp-full-audio-audit'){
+            const proof=x.job.result||{};
+            const status=document.getElementById('japaneseFinalPcmStatus');
+            const message='最终成品整条音轨 PCM 校验通过：'+Number(proof.verified_frames||0).toLocaleString()+
+              ' 帧，SHA-256 与构建前字节一致；来源成员 '+Number(proof.original_members||0)+
+              ' 个。尚未证明日语发音和原文语义。';
+            if(status){status.textContent=message;status.className='small status-ok'}
+            setRunReport('最终成品全音轨无损一致性通过',message,false);
           }else if(x.job.kind==='jp-listening-pack'){
             const proof=x.job.result||{};
             const status=document.getElementById('japaneseListeningPackStatus');
@@ -5680,6 +5693,11 @@ async function watchJob(id){
         }else if(x.job.state==='failed'){
           terminal=true;
           setLog(x.job.error||x.job);
+          if(x.job.kind==='jp-full-audio-audit'){
+            const status=document.getElementById('japaneseFinalPcmStatus');
+            if(status){status.textContent='最终全音轨 PCM 核验失败：'+shortError(x.job.error||x.job);
+              status.className='small status-bad'}
+          }
           if(x.job.kind==='jp-listening-pack'){
             const status=document.getElementById('japaneseListeningPackStatus');
             if(status){status.textContent='日语试听包生成失败：'+shortError(x.job.error||x.job);status.className='small status-bad'}
@@ -5957,6 +5975,23 @@ document.getElementById('importJapaneseListeningReviewBtn').onclick=async()=>{
   }catch(e){
     if(status){status.textContent='人工试听记录核验/归档失败：'+shortError(e);status.className='small status-bad'}
     setLog(String(e));
+  }finally{button.disabled=false}
+};
+document.getElementById('verifyJapaneseFinalPcmBtn').onclick=async()=>{
+  const button=document.getElementById('verifyJapaneseFinalPcmBtn');
+  const status=document.getElementById('japaneseFinalPcmStatus');
+  if(!currentProject?.config?.recovery_source_attestation_required){
+    if(status)status.textContent='请先切换到已构建的独立日语恢复候选工程。';
+    return;
+  }
+  try{
+    button.disabled=true;
+    if(status){status.textContent='已启动整条最终音轨流式 PCM 校验；大型成品将完整解码，期间不会修改成品。';
+      status.className='small muted'}
+    const job=await api('/api/recovery/verify-finished-pcm',{method:'POST'});
+    watchJob(job.job);
+  }catch(e){
+    if(status){status.textContent='无法启动全音轨复核：'+shortError(e);status.className='small status-bad'}
   }finally{button.disabled=false}
 };
 document.getElementById('generateJapaneseListeningPackBtn').onclick=async()=>{
