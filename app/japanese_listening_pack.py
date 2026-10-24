@@ -105,7 +105,8 @@ def _flac_stream(target: Path, wanted: str) -> str:
         raise RuntimeError("需要本地 FFmpeg 和 FFprobe 才能从原始与最终音轨生成试听切片")
     probe = subprocess.run(
         ["ffprobe", "-v", "error", "-show_entries",
-         "stream=index,codec_type,codec_name", "-of", "json", str(target)],
+         "stream=index,codec_type,codec_name:stream_tags=title:stream_disposition=default",
+         "-of", "json", str(target)],
         capture_output=True, text=True, timeout=90, check=True,
     )
     streams = json.loads(probe.stdout).get("streams", [])
@@ -114,9 +115,25 @@ def _flac_stream(target: Path, wanted: str) -> str:
         if stream.get("codec_type") == "audio"
         and stream.get("codec_name") == "flac"
     ]
-    if len(flac) != 1:
-        raise ValueError("试听包需要唯一的 FLAC 成品音轨，不能猜测多个音频轨道")
-    return "0:" + str(int(flac[0]["index"]))
+    if len(flac) == 1:
+        return "0:" + str(int(flac[0]["index"]))
+    if wanted != "single-flac" or not flac:
+        raise ValueError("需要明确的成品连续 FLAC 音轨，不能猜测多个音频轨道")
+    # The certified MKV exporter maps the continuous stream as the first
+    # audio track with explicit default disposition and title; chapter FLACs
+    # follow it. Refuse if either the ordering or metadata was lost.
+    audios = [stream for stream in streams if stream.get("codec_type") == "audio"]
+    named = [
+        stream for stream in flac
+        if (stream.get("tags") or {}).get("title") == "HSR continuous voice"
+        and int((stream.get("disposition") or {}).get("default") or 0) == 1
+    ]
+    if (
+        len(named) != 1 or not audios
+        or int(named[0]["index"]) != int(audios[0]["index"])
+    ):
+        raise ValueError("MKV 包含多条 FLAC，但无法唯一确认默认的 HSR continuous voice 主音轨")
+    return "0:" + str(int(named[0]["index"]))
 
 
 def _clip(source: Path, dest: Path, duration: float, *, start: float = 0,
