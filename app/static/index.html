@@ -5599,14 +5599,18 @@ async function watchJob(id){
           }else if(x.job.kind==='jp-listening-pack'){
             const proof=x.job.result||{};
             const status=document.getElementById('japaneseListeningPackStatus');
-            const link=document.getElementById('japaneseListeningPackDownload');
             const message='试听包已生成：'+Number(proof.selected||0)+
               ' 组原始/成品音频。请下载 ZIP，解压后打开 review.html 逐项人工试听；尚未确认日语发音。';
-            if(status){status.className='small status-warn';status.firstChild.textContent=message+' '}
-            if(link){
-              link.href=proof.download_url||'#';
-              link.hidden=!proof.download_url;
-              link.textContent='下载离线试听 ZIP';
+            if(status){
+              status.className='small status-warn';
+              status.textContent=message+' ';
+              if(/^[0-9a-f]{20}$/.test(String(proof.pack_id||''))){
+                const link=document.createElement('a');
+                link.id='japaneseListeningPackDownload';
+                link.href='/api/recovery/listening-pack/'+proof.pack_id;
+                link.textContent='下载离线试听 ZIP';
+                status.append(link);
+              }
             }
             setRunReport('日语试听包已生成，等待人工验收',message,true);
           }else if(x.job.kind==='locale-recovery'){
