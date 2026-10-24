@@ -1306,7 +1306,7 @@ class Handler(BaseHTTPRequestHandler):
                 )
 
             def run(report_progress):
-                                initial_proof = verify_japanese_recovery_build_inputs(config)
+                initial_proof = verify_japanese_recovery_build_inputs(config)
                 result = build_project_v02(
                     paths["index"],
                     paths["wavs"],
