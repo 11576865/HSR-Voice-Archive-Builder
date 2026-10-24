@@ -42,6 +42,61 @@ class JiebaPairRegressionTests(unittest.TestCase):
             )
         self.assertEqual(result, text)
 
+    def test_archive_build_writes_ass_with_non_subscriptable_pos_pairs(self) -> None:
+        """Exercise the real build -> subtitle layout -> ASS writer path."""
+        import tempfile
+        import wave
+        from pathlib import Path
+
+        from app.pipeline import build_project_v02
+
+        chinese = "你好吗，" + "接下来还会有很多内容作为字幕示例" * 4
+        pos_inputs: list[str] = []
+
+        def cut(text: str):
+            pos_inputs.append(text)
+            return (pair(char, "n") for char in text)
+
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            wavs = root / "wavs"
+            labs = root / "labs"
+            wavs.mkdir()
+            labs.mkdir()
+            name = "archive_evanescia_1"
+            with wave.open(str(wavs / f"{name}.wav"), "wb") as output:
+                output.setnchannels(1)
+                output.setsampwidth(2)
+                output.setframerate(8000)
+                output.writeframes(b"\\x00\\x00" * 8000)
+            (labs / f"{name}.lab").write_text(chinese, encoding="utf-8")
+            index = root / "index.csv"
+            index.write_text(
+                f"filename,english\\n{name}.wav,Hello.\\n",
+                encoding="utf-8-sig",
+            )
+            out_dir = root / "out"
+            with patch(
+                "subtitle_layout.semantic_chunker.pseg",
+                SimpleNamespace(cut=cut),
+            ):
+                report = build_project_v02(
+                    index, wavs, out_dir,
+                    chs_source=labs, make_flac=False, generate_ass=True,
+                    translate_missing=False,
+                )
+
+            self.assertEqual(report["count_total"], 1)
+            # Confirm the short-line orphan guard actually consumed POS pairs;
+            # a successful build alone could otherwise miss the crash branch.
+            self.assertIn("你好吗", pos_inputs)
+            ass = (out_dir / "HSR_Voice_Archive.ass").read_text(
+                encoding="utf-8-sig"
+            )
+            self.assertIn("Dialogue:", ass)
+            self.assertIn("Hello.", ass)
+            self.assertIn("接下来", ass)
+
     def test_posseg_unavailable_keeps_character_fallback(self) -> None:
         with patch("subtitle_layout.semantic_chunker.pseg", None):
             self.assertEqual(_cut_words("你好"), [("你", ""), ("好", "")])
