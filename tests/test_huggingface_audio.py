@@ -276,11 +276,13 @@ class HuggingFaceAudioTests(unittest.TestCase):
     def test_japanese_resolver_marks_missing_game_identity_unresolved(self) -> None:
         records = {
             "Japanese/known.wav": {
+                "filename": "known",
                 "language": "Japanese",
                 "inGameFilename": "Japanese/voice/known.wem",
                 "transcription": "確認済み",
             },
             "Japanese/orphanhash.wav": {
+                "filename": "orphanhash",
                 "language": "Japanese",
                 "inGameFilename": "",
                 "transcription": "身元不明",
