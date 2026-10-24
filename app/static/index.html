@@ -4023,6 +4023,7 @@ body[data-workspace="project"] #archiveCard{display:none!important}
         </div>
         <div class="actions">
           <button id="auditRemoteLocaleBtn" type="button">核对语音来源</button>
+          <button id="probeJapaneseRowsBtn" type="button">核对日语远程记录（只读）</button>
           <button id="createJapaneseRecoveryBtn" type="button">创建独立日语恢复工程</button>
           <button id="scanRemoteBtn">检查远程索引</button>
           <button id="applyRemoteBtn" class="success" disabled>下载并应用新增语音</button>
@@ -4030,6 +4031,9 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       </div>
       <div id="updateResult" class="small muted" role="status" aria-live="polite">尚未检查。</div>
       <pre id="remoteLocaleAuditResult" class="hidden" aria-live="polite"></pre>
+      <div id="japaneseRowsProbeStatus" class="small muted" role="status" aria-live="polite">
+        读取现有 Hugging Face 索引，并核对 5 条日语在线记录的语种及游戏内文件身份；不下载音频、不变更归档。该操作不能证明 WAV 实际发音语言。
+      </div>
       <div id="japaneseRecoveryResult" class="small muted" role="status" aria-live="polite">
         恢复工程只在验证原始日语包指纹及初始索引后创建，不覆盖当前工程，不自动生成或发布成品。
       </div>
@@ -5572,7 +5576,21 @@ async function watchJob(id){
         }
         if(x.job.state==='succeeded'){
           terminal=true;
-          if(x.job.kind==='remote-update-check'){
+          if(x.job.kind==='locale-probe'){
+            const status=document.getElementById('japaneseRowsProbeStatus');
+            const proof=x.job.result||{};
+            const message='日语元数据身份核验通过：'+Number(proof.matched||0)+'/'+Number(proof.requested_samples||0)+
+              ' 条。仅确认 result.json 与在线记录一致，不代表已验证 WAV 的实际日语发音。';
+            if(status){status.textContent=message;status.className='small status-ok'}
+            setRunReport('日语元数据校验通过',message,false);
+          }else if(x.job.kind==='locale-recovery'){
+            const status=document.getElementById('japaneseRecoveryResult');
+            const proof=x.job.result||{};
+            const message='独立恢复候选已创建：'+(proof.candidate_project||'未知路径')+
+              '。原工程未覆盖，新工程仍须构建及试听验收。';
+            if(status){status.textContent=message;status.className='small status-ok'}
+            setRunReport('隔离恢复候选已创建',message,false);
+          }else if(x.job.kind==='remote-update-check'){
             showPlan(x.job.result);
           }else if(x.job.kind==='remote-update-apply'){
             const r=x.job.result||{};
@@ -5630,6 +5648,20 @@ async function watchJob(id){
               status.className='small status-bad layout-corpus-status';
             }
             await loadWordAlignmentDiagnostics();
+          }
+          if(x.job.kind==='locale-probe'){
+            const status=document.getElementById('japaneseRowsProbeStatus');
+            if(status){
+              status.textContent='日语元数据核验未通过：'+shortError(x.job.error||x.job);
+              status.className='small status-bad';
+            }
+          }
+          if(x.job.kind==='locale-recovery'){
+            const status=document.getElementById('japaneseRecoveryResult');
+            if(status){
+              status.textContent='独立恢复候选创建失败：'+shortError(x.job.error||x.job);
+              status.className='small status-bad';
+            }
           }
           if(x.job.kind==='remote-update-check'){
             const result=document.getElementById('updateResult');
@@ -5851,6 +5883,29 @@ document.getElementById('createJapaneseRecoveryBtn').onclick=async()=>{
     if(state)state.textContent='恢复候选创建失败：'+shortError(e);
     setLog(String(e));
   }finally{button.disabled=false;}
+};
+document.getElementById('probeJapaneseRowsBtn').onclick=async()=>{
+  const button=document.getElementById('probeJapaneseRowsBtn');
+  const status=document.getElementById('japaneseRowsProbeStatus');
+  const config=currentProject?.config;
+  if(config?.audio_language!=='ja'||config?.source_text_language!=='ja'){
+    if(status)status.textContent='请先在项目设置中确认并保存日语主音频 ja 和日语原文 ja，再进行远程元数据核验。';
+    return;
+  }
+  try{
+    button.disabled=true;
+    if(status)status.textContent='正在启动只读元数据对照任务…';
+    const data=new FormData();
+    data.set('samples','5');
+    const job=await api('/api/update/probe-japanese-rows',{method:'POST',body:data});
+    if(status)status.textContent='已启动任务：'+job.job+'。前往任务中心查看行身份核验结果。该操作不下载或替换任何 WAV。';
+    watchJob(job.job);
+  }catch(e){
+    if(status)status.textContent='在线日语行核验失败：'+shortError(e);
+    setLog(String(e));
+  }finally{
+    button.disabled=false;
+  }
 };
 document.getElementById('scanRemoteBtn').onclick=async()=>{try{const d=new FormData();const result=document.getElementById('updateResult');if(result)result.textContent='正在读取远程索引并比较已有 manifest…';const j=await api('/api/update/check-remote',{method:'POST',body:d});setLog('远程检查任务已启动：'+j.job);watchJob(j.job)}catch(x){const result=document.getElementById('updateResult');if(result)result.textContent='检查启动失败：'+shortError(x);setLog(String(x))}};
 document.getElementById('applyRemoteBtn').onclick=async()=>{try{document.getElementById('applyRemoteBtn').disabled=true;const j=await api('/api/update/apply-remote',{method:'POST'});setLog('新增语音应用任务已启动：'+j.job);watchJob(j.job)}catch(x){document.getElementById('applyRemoteBtn').disabled=false;setRunReport('启动失败',shortError(x),true);setLog(String(x))}};

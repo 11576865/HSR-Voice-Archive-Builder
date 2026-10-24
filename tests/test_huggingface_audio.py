@@ -14,9 +14,9 @@ class HuggingFaceAudioTests(unittest.TestCase):
     def test_resolves_filename_hash_media_id_and_unique_text(self) -> None:
         records = {
             "English/111.wav": {"filename": "a", "inGameFilename": "English/voice/chapter5_1_hero_101.wem", "transcription": "First", "speaker": "Hero"},
-            "English/deadbeef.wav": {"filename": "b", "transcription": "Second", "speaker": "Hero"},
-            "English/333.wav": {"filename": "c", "voiceID": "98765", "transcription": "Third", "speaker": "Hero"},
-            "English/444.wav": {"filename": "d", "transcription": "Unique line", "speaker": "Hero"},
+            "English/deadbeef.wav": {"filename": "b", "inGameFilename": "English/voice/other_second.wem", "transcription": "Second", "speaker": "Hero"},
+            "English/333.wav": {"filename": "c", "voiceID": "98765", "inGameFilename": "English/voice/other_third.wem", "transcription": "Third", "speaker": "Hero"},
+            "English/444.wav": {"filename": "d", "inGameFilename": "English/voice/other_fourth.wem", "transcription": "Unique line", "speaker": "Hero"},
         }
         with tempfile.TemporaryDirectory() as directory:
             path = Path(directory) / "result.json"
@@ -272,6 +272,89 @@ class HuggingFaceAudioTests(unittest.TestCase):
             self.assertEqual(resolve_targets(
                 path, [{"filename": "line_1.wav"}], source_language="zh-CN",
             )["reference_targets"], {})
+
+    def test_japanese_resolver_marks_missing_game_identity_unresolved(self) -> None:
+        records = {
+            "Japanese/known.wav": {
+                "filename": "known",
+                "language": "Japanese",
+                "inGameFilename": "Japanese/voice/known.wem",
+                "transcription": "確認済み",
+            },
+            "Japanese/orphanhash.wav": {
+                "filename": "orphanhash",
+                "language": "Japanese",
+                "inGameFilename": "",
+                "transcription": "身元不明",
+            },
+        }
+        with tempfile.TemporaryDirectory() as td:
+            location = Path(td) / "result.json"
+            location.write_text(json.dumps(records, separators=(",", ":")), encoding="utf-8")
+            plan = resolve_targets(location, [
+                {"filename": "known.wav", "english": "確認済み"},
+                {"filename": "orphan.wav", "hash": "orphanhash", "english": "身元不明"},
+            ], source_language="ja")
+        self.assertIn("known.wav", plan["targets"])
+        self.assertNotIn("orphan.wav", plan["targets"])
+        self.assertEqual(plan["unresolved"], ["orphan.wav"])
+        self.assertEqual(plan["identity_unverified"], ["orphan.wav"])
+
+    def test_japanese_live_row_like_parquet_schema_accepts_same_voice_identity(self) -> None:
+        # Based on the upstream parquet.py columns: ingame_filename, language,
+        # transcription, speaker, voice_type, audio. No original WAV hash column.
+        plan = {
+            "audio_language": "ja",
+            "targets": {"line.wav": {
+                "audio_language": "ja", "row_idx": 101,
+                "ingame_filename": "Japanese/voice/line.wem",
+            }},
+        }
+        payload = {"rows": [{"row_idx": 101, "row": {
+            "language": "Japanese",
+            "ingame_filename": "Japanese/voice/line.wem",
+            "transcription": "こんにちは",
+            "speaker": "Hero",
+            "voice_type": "dialogue",
+            "audio": {"src": "https://huggingface.co/japanese.wav"},
+        }}]}
+        wav = b"RIFF" + (36).to_bytes(4, "little") + b"WAVEfmt " + b"\0" * 32
+        with tempfile.TemporaryDirectory() as td:
+            with patch("app.huggingface_audio._json_get", return_value=payload), \
+                 patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                opener.return_value.open.return_value = io.BytesIO(wav)
+                result = download_resolved_audio(plan, Path(td))
+            self.assertEqual(result["failed"], [])
+            self.assertEqual(result["completed"][0]["status"], "ok")
+            self.assertEqual([x.name for x in validated_incremental_files(result, Path(td))], ["line.wav"])
+
+    def test_japanese_locale_alone_never_authorizes_a_row_without_identity(self) -> None:
+        for original, actual in (
+            ("", "Japanese/voice/line.wem"),
+            ("Japanese/voice/line.wem", ""),
+            ("", ""),
+        ):
+            with self.subTest(original=original, actual=actual):
+                plan = {
+                    "audio_language": "ja",
+                    "targets": {"line.wav": {
+                        "audio_language": "ja", "row_idx": 0,
+                        "ingame_filename": original,
+                    }},
+                }
+                payload = {"rows": [{"row_idx": 0, "row": {
+                    "language": "Japanese",
+                    "ingame_filename": actual,
+                    "audio": {"src": "https://huggingface.co/japanese.wav"},
+                }}]}
+                with tempfile.TemporaryDirectory() as td:
+                    with patch("app.huggingface_audio._json_get", return_value=payload), \
+                         patch("app.huggingface_audio.urllib.request.build_opener") as opener:
+                        result = download_resolved_audio(plan, Path(td))
+                    self.assertEqual(result["completed"], [])
+                    self.assertIn("no verifiable in-game voice identity", result["failed"][0]["reason"])
+                    opener.return_value.open.assert_not_called()
+                    self.assertFalse(list(Path(td).glob("*.wav")))
 
     def test_download_plan_rejects_mixed_language_rows(self) -> None:
         plan = {

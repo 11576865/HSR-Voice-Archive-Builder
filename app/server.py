@@ -33,6 +33,7 @@ from .remote_apply_generation import publish_audio_generation
 from .huggingface_audio import confirmed_reference_metadata, download_resolved_audio, download_result_json, resolve_targets, validated_incremental_files
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
+from .hf_locale_probe import require_japanese_row_identity_parity
 from .japanese_source_recovery import create_isolated_japanese_recovery
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
@@ -1558,6 +1559,40 @@ def api_update_scan(candidates_path: str = Form("")):
         return {"ok": True, "plan": result, "project": project_summary(config)}
     except Exception as exc:
         return JSONResponse({"ok": False, "error": f"{type(exc).__name__}: {exc}"}, status_code=400)
+
+
+@app.post("/api/update/probe-japanese-rows")
+def api_update_probe_japanese_rows(samples: int = Form(5)):
+    """Read-only remote metadata identity validation; no WAV download."""
+    try:
+        config = _active_config()
+        if config.game_id != "honkai-star-rail" or require_incremental_audio_language(config) != "ja":
+            raise ValueError("仅支持明确设置主音频/文本均为 ja 的星穹铁道工程")
+        if not 1 <= samples <= 20:
+            raise ValueError("日语元数据验证样本数必须介于 1 和 20")
+        dataset = game_audio_dataset(config.game_id)
+        result_json = (
+            Path(config.root).resolve() / ".state" / "providers" /
+            config.game_id / dataset.replace("/", "--") / "result.json"
+        )
+        if not result_json.is_file():
+            raise FileNotFoundError(
+                "尚无已缓存的 Hugging Face result.json；该只读核对不会自动下载大型元数据或 WAV"
+            )
+        job = create_job(
+            "locale-probe",
+            lambda progress: require_japanese_row_identity_parity(
+                result_json, dataset=dataset, samples=samples,
+            ),
+            with_progress=True,
+            project_root=config.root, project_name=config.name,
+        )
+        return {"ok": True, "job": job.id}
+    except Exception as exc:
+        return JSONResponse(
+            {"ok": False, "error": f"{type(exc).__name__}: {exc}"},
+            status_code=400,
+        )
 
 
 @app.post("/api/update/create-japanese-recovery")

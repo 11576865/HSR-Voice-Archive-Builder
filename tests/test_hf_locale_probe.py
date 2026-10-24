@@ -1,0 +1,123 @@
+"""Offline acceptance of the opt-in, read-only Japanese HF parity probe."""
+from __future__ import annotations
+
+import json
+import tempfile
+import unittest
+from pathlib import Path
+
+from app.hf_locale_probe import probe_japanese_row_identity, require_japanese_row_identity_parity
+
+
+class JapaneseHfMetadataProbeTests(unittest.TestCase):
+    def _index(self, folder: Path) -> Path:
+        path = folder / "result.json"
+        path.write_text(json.dumps({
+            "English/en.wav": {
+                "filename": "en",
+                "inGameFilename": "English/voice/en.wem",
+            },
+            "Japanese/ja1.wav": {
+                "filename": "ja1",
+                "inGameFilename": "Japanese/voice/one.wem",
+            },
+            "Japanese/ja2.wav": {
+                "filename": "ja2",
+                "inGameFilename": "Japanese/voice/two.wem",
+            },
+            "Japanese/orphan.wav": {"filename": "orphan", "inGameFilename": ""},
+        }, separators=(",", ":")), encoding="utf-8")
+        return path
+
+    def _fetch(self, wrong_second: bool = False):
+        def fetch(url, params):
+            self.assertIn("/rows", url)
+            self.assertEqual(params["dataset"], "simon3000/starrail-voice")
+            self.assertEqual(params["offset"], 0)
+            return {"rows": [
+                {"row_idx": 0, "row": {
+                    "language": "English",
+                    "ingame_filename": "English/voice/en.wem",
+                }},
+                {"row_idx": 1, "row": {
+                    "language": "Japanese",
+                    "ingame_filename": "Japanese/voice/one.wem",
+                }},
+                {"row_idx": 2, "row": {
+                    "language": "Japanese",
+                    "ingame_filename": (
+                        "Japanese/voice/drifted.wem"
+                        if wrong_second else "Japanese/voice/two.wem"
+                    ),
+                }},
+            ]}
+        return fetch
+
+    def test_metadata_identity_probe_reports_two_matching_japanese_rows(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = probe_japanese_row_identity(
+                self._index(Path(td)), samples=2, fetch=self._fetch()
+            )
+            self.assertTrue(report["passed"])
+            self.assertEqual(report["checked"], 2)
+            self.assertEqual(report["matched"], 2)
+            self.assertEqual([row["row_idx"] for row in report["evidence"]], [1, 2])
+            self.assertFalse(report["audio_downloaded"])
+            self.assertFalse(report["spoken_language_verified"])
+
+    def test_moved_japanese_row_is_not_claimed_as_verified(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = probe_japanese_row_identity(
+                self._index(Path(td)), samples=2,
+                fetch=self._fetch(wrong_second=True),
+            )
+            self.assertFalse(report["passed"])
+            self.assertEqual(report["matched"], 1)
+            self.assertEqual(report["evidence"][-1]["status"], "mismatch")
+            self.assertIn("identity changed", report["evidence"][-1]["reason"])
+
+    def test_incomplete_or_drifted_online_parity_must_fail_job(self):
+        with tempfile.TemporaryDirectory() as td:
+            path = self._index(Path(td))
+            with self.assertRaisesRegex(ValueError, "一致 1/2"):
+                require_japanese_row_identity_parity(
+                    path, samples=2, fetch=self._fetch(wrong_second=True),
+                )
+            with self.assertRaisesRegex(ValueError, "一致 2/3"):
+                require_japanese_row_identity_parity(
+                    path, samples=3, fetch=self._fetch(),
+                )
+
+    def test_both_http_surfaces_and_browser_offer_read_only_probe(self):
+        root = Path(__file__).resolve().parents[1]
+        for filename in ("server.py", "lite_server.py"):
+            with self.subTest(filename=filename):
+                code = (root / "app" / filename).read_text(encoding="utf-8")
+                self.assertIn("/api/update/probe-japanese-rows", code)
+                self.assertIn("require_japanese_row_identity_parity(", code)
+                self.assertIn("locale-probe", code)
+        markup = (root / "app/static/index.html").read_text(encoding="utf-8")
+        self.assertIn('id="probeJapaneseRowsBtn"', markup)
+        self.assertIn("不下载音频、不变更归档", markup)
+        self.assertIn("日语元数据身份核验通过", markup)
+        self.assertIn("日语元数据核验未通过", markup)
+        self.assertIn("独立恢复候选已创建", markup)
+
+    def test_missing_identity_is_not_sampled(self):
+        with tempfile.TemporaryDirectory() as td:
+            report = probe_japanese_row_identity(
+                self._index(Path(td)), samples=3, fetch=self._fetch(),
+            )
+            self.assertFalse(report["passed"])
+            self.assertEqual(report["checked"], 2)
+
+    def test_rejects_missing_input_and_unbounded_sample_count(self):
+        with tempfile.TemporaryDirectory() as td:
+            with self.assertRaises(FileNotFoundError):
+                probe_japanese_row_identity(Path(td) / "does-not-exist.json")
+            with self.assertRaisesRegex(ValueError, "between 1 and 20"):
+                probe_japanese_row_identity(Path(td) / "does-not-exist.json", samples=21)
+
+
+if __name__ == "__main__":
+    unittest.main()

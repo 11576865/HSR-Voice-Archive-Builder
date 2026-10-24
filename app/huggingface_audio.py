@@ -200,6 +200,17 @@ def resolve_targets(
         candidates = text_rows.get(_normal_text(str(target.get("english", ""))), [])
         if len(candidates) == 1:
             resolved[filename] = {**candidates[0], "method": "unique_transcription"}
+    # The Parquet viewer exposes language/transcription/speaker but not the
+    # original WAV hash key. If inGameFilename is missing, the row_idx cannot
+    # establish audio identity after dataset revisions. Keep those entries
+    # unresolved rather than accepting language-only matches.
+    identity_unverified: list[str] = []
+    for filename, row in list(resolved.items()):
+        ingame = str(row.get("ingame_filename") or "").strip()
+        relative = _voice_relative_path(ingame)
+        if not relative or not relative.endswith(".wem"):
+            identity_unverified.append(filename)
+            del resolved[filename]
     reference_targets: dict[str, dict[str, Any]] = {}
     for filename, english_row in resolved.items():
         relative = _voice_relative_path(str(english_row.get("ingame_filename", "")))
@@ -221,6 +232,7 @@ def resolve_targets(
         "targets": resolved,
         "reference_targets": reference_targets,
         "unresolved": unresolved,
+        "identity_unverified": identity_unverified,
     }
 
 
@@ -280,8 +292,23 @@ def _verify_dataset_audio_row(row: Any, target: dict[str, Any], language: str) -
     if not declared_locale and not path_locale:
         raise ValueError("Hugging Face dataset row has no verifiable audio locale")
     original = str(target.get("ingame_filename") or "").strip()
-    if original and actual_filename and _voice_relative_path(original) != _voice_relative_path(actual_filename):
-        raise ValueError("Hugging Face dataset row identity changed since result.json resolution")
+    expected_identity = _voice_relative_path(original)
+    actual_identity = _voice_relative_path(actual_filename)
+    # Parquet does not contain the source WAV hash. Checking the language alone
+    # cannot disambiguate two Japanese rows when the table order changes.
+    if (
+        not expected_identity or not actual_identity
+        or not expected_identity.endswith(".wem")
+        or not actual_identity.endswith(".wem")
+    ):
+        raise ValueError(
+            "Hugging Face audio row has no verifiable in-game voice identity; "
+            "leave unresolved rather than silently downloading by row number"
+        )
+    if expected_identity != actual_identity:
+        raise ValueError(
+            "Hugging Face dataset row identity changed since result.json resolution"
+        )
 
 
 def _audio_src(value: Any) -> str:
