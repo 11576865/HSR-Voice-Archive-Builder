@@ -233,6 +233,100 @@ class JapaneseSourceRecoveryTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "成员数"):
                     verify_japanese_recovery_build_manifest(recovered, proof)
 
+    def test_real_offline_pipeline_rebuild_preserves_original_member_identity(self):
+        # Exercise Quick CSV -> ZIP PCM -> metadata/manifest pipeline, not only
+        # an invented manifest. No translation, network, or FFmpeg is needed.
+        import io
+        import wave
+        from app.pipeline import build_project_v02
+        from app.project import load_project
+
+        def pcm_wav() -> bytes:
+            buffer = io.BytesIO()
+            with wave.open(buffer, "wb") as audio:
+                audio.setnchannels(1)
+                audio.setsampwidth(2)
+                audio.setframerate(16000)
+                audio.writeframes(b"\x00\x00" * 1600)
+            return buffer.getvalue()
+
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            with patch("app.project.STATE_FILE", base / "recent.json"):
+                config, original = self.prepare(base)
+                chapter_wavs = ("chapter1/same.wav", "chapter2/same.wav")
+                chapter_texts = ("日本語の台詞一", "日本語の台詞二")
+                with zipfile.ZipFile(original, "w") as archive:
+                    for member, text in zip(chapter_wavs, chapter_texts):
+                        archive.writestr(member, pcm_wav())
+                        archive.writestr(member[:-4] + ".lab", text)
+                index = Path(config.root) / ".generated" / "quick_index.csv"
+                with index.open("w", newline="", encoding="utf-8-sig") as file:
+                    writer = csv.DictWriter(file, fieldnames=[
+                        "index", "group", "filename", "source_member_id",
+                        "english", "source",
+                    ])
+                    writer.writeheader()
+                    for i, (member, text) in enumerate(zip(chapter_wavs, chapter_texts), 1):
+                        writer.writerow({
+                            "index": str(i), "group": "chapter",
+                            "filename": "same.wav", "source_member_id": member,
+                            "english": text, "source": "primary-package-lab",
+                        })
+                scan_file = Path(config.root) / ".generated" / "quick_scan.json"
+                scan = json.loads(scan_file.read_text(encoding="utf-8"))
+                scan["english"]["fingerprint"] = source_inventory(original)["fingerprint"]
+                scan_file.write_text(json.dumps(scan), encoding="utf-8")
+                config.target_language = "ja"
+                config.translate_missing = False
+                save_project(config)
+                old_flac = Path(config.root) / "output" / "continuous.flac"
+                old_bytes = old_flac.read_bytes()
+                restored = Path(create_isolated_japanese_recovery(config)["candidate_project"])
+                recovered = load_project(restored)
+                source_proof = verify_japanese_recovery_build_inputs(recovered)
+                output = restored / "output"
+                build_project_v02(
+                    restored / ".generated" / "quick_index.csv",
+                    original, output,
+                    make_flac=False,
+                    translate_missing=False,
+                    audio_language="ja",
+                    source_text_language="ja",
+                    target_language="ja",
+                    state_dir=restored / ".state",
+                )
+                acceptance = verify_japanese_recovery_build_manifest(
+                    recovered, source_proof,
+                )
+                self.assertEqual(acceptance["wav_members"], 2)
+                self.assertFalse(acceptance["spoken_japanese_verified"])
+                manifest = json.loads((output / "manifest.json").read_text(encoding="utf-8"))
+                self.assertEqual(
+                    {row["source_member_id"] for row in manifest["entries"]},
+                    set(chapter_wavs),
+                )
+                self.assertEqual(
+                    {row["source_member_id"]: row["source_text"] for row in manifest["entries"]},
+                    dict(zip(chapter_wavs, chapter_texts)),
+                )
+                self.assertEqual(old_flac.read_bytes(), old_bytes)
+
+    def test_preexisting_unattested_candidate_directory_fails_closed(self):
+        from app.project import load_project
+        with tempfile.TemporaryDirectory() as td:
+            base = Path(td)
+            with patch("app.project.STATE_FILE", base / "recent.json"):
+                config, original = self.prepare(base)
+                legacy = base / "Original-JP-JP-source-recovery-0123456789"
+                legacy.mkdir()
+                config.root = str(legacy)
+                config.wav_source = str(original)
+                config.index_csv = ".generated/quick_index.csv"
+                save_project(config)
+                with self.assertRaisesRegex(ValueError, "旧版日语恢复候选"):
+                    verify_japanese_recovery_build_inputs(load_project(legacy))
+
     def test_recovery_build_gate_is_applied_by_both_queued_backend_jobs(self):
         repository = Path(__file__).resolve().parents[1]
         for filename in ("server.py", "lite_server.py"):
