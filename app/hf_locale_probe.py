@@ -86,3 +86,25 @@ def probe_japanese_row_identity(
         "spoken_language_verified": False,
         "disclaimer": "Row identity alone cannot prove spoken Japanese. Original audio/field listening acceptance is separate.",
     }
+
+
+def require_japanese_row_identity_parity(
+    result_json: Path, *, dataset: str = DATASET, samples: int = 5,
+    fetch: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+) -> dict[str, Any]:
+    """Fail the visible audit job when parity is incomplete or mismatched."""
+    result = probe_japanese_row_identity(
+        result_json, dataset=dataset, samples=samples, fetch=fetch,
+    )
+    if not result["passed"]:
+        mismatches = [
+            str(row.get("row_idx", "?")) for row in result["evidence"]
+            if row.get("status") != "match"
+        ]
+        raise ValueError(
+            "上游日语元数据行身份核验失败："
+            f"一致 {result['matched']}/{result['requested_samples']}；"
+            f"不一致行 {', '.join(mismatches) or '不足够样本'}。"
+            "拒绝将此次检查判定为安全增补依据。"
+        )
+    return result
