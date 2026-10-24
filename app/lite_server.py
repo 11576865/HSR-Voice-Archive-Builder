@@ -36,7 +36,7 @@ from .huggingface_audio import confirmed_reference_metadata, download_resolved_a
 from .game_profiles import game_audio_dataset, game_index_url, remote_updates_supported
 from .incremental_locale_audit import audit_incremental_audio_locale
 from .hf_locale_probe import require_japanese_row_identity_parity
-from .japanese_source_recovery import create_isolated_japanese_recovery
+from .japanese_source_recovery import create_isolated_japanese_recovery, verify_japanese_recovery_build_inputs, verify_japanese_recovery_build_manifest
 from .remote_update_language import (
     require_incremental_audio_language, select_incremental_index_url,
     require_matching_update_plan, require_safe_prior_incremental_apply,
@@ -1306,7 +1306,8 @@ class Handler(BaseHTTPRequestHandler):
                 )
 
             def run(report_progress):
-                return build_project_v02(
+                initial_proof = verify_japanese_recovery_build_inputs(config)
+                result = build_project_v02(
                     paths["index"],
                     paths["wavs"],
                     paths["output"],
@@ -1336,6 +1337,10 @@ class Handler(BaseHTTPRequestHandler):
                     review_official_target=config.review_official_target,
                     game_id=getattr(config, "game_id", "honkai-star-rail"),
                 )
+                attested = verify_japanese_recovery_build_manifest(config, initial_proof)
+                if attested is not None:
+                    result["japanese_source_recovery"] = attested
+                return result
 
             job = create_job(
             "build", run, with_progress=True,

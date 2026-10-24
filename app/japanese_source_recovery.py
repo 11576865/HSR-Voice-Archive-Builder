@@ -23,6 +23,8 @@ from .project import (
 )
 from .quick import source_inventory
 
+RECOVERY_ATTESTATION = ".generated/japanese_source_attestation.json"
+
 
 def _sha256(path: Path) -> str:
     digest = hashlib.sha256()
@@ -150,6 +152,19 @@ def create_isolated_japanese_recovery(
         shutil.copy2(initial_index, generated / "quick_index.csv")
         if _sha256(generated / "quick_index.csv") != initial_index_before:
             raise ValueError("初始索引在创建恢复副本时发生变化")
+        # The original is deliberately NOT copied. Its fingerprint must be
+        # rechecked by each subsequent build because the source lives outside
+        # this candidate and can be replaced after candidate creation.
+        (staging / RECOVERY_ATTESTATION).write_text(json.dumps({
+            "schema_version": 1,
+            "kind": "isolated-ja-source-recovery",
+            "source": str(original),
+            "source_fingerprint": fingerprint,
+            "index_sha256": initial_index_before,
+            "wav_members": count,
+            "audio_language": "ja",
+            "source_text_language": "ja",
+        }, ensure_ascii=False, indent=2), encoding="utf-8")
         # Do not transplant generated incremental WAV caches, source versions,
         # previous outputs, subtitle overrides, checkpoint or old remote plan.
         recovered = replace(
@@ -167,6 +182,7 @@ def create_isolated_japanese_recovery(
             update_candidates="",
             remote_index_url=game_index_url("honkai-star-rail", "ja"),
             wav_source_fingerprint=fingerprint,
+            recovery_source_attestation_required=True,
             chs_source_fingerprint="",
             reference_source_fingerprint="",
             reference_text_embedded=False,
@@ -201,10 +217,130 @@ def create_isolated_japanese_recovery(
         "source": str(original),
         "source_fingerprint_verified": True,
         "initial_index_verified": True,
+        "build_source_attestation_required": True,
         "wav_members": count,
         "isolated": True,
         "built": False,
         "listening_verified": False,
         "original_project_modified": False,
         "next_action": "打开新恢复候选项目，独立构建并试听核验；原工程及其输出保持原状。",
+    }
+
+
+def verify_japanese_recovery_build_inputs(config: ProjectConfig) -> dict[str, Any] | None:
+    """Guard the *next* build against source changes after recovery creation.
+
+    Old projects without a recovery receipt retain their historical build flow.
+    The check is intentionally performed inside the build job, not when an HTTP
+    request starts, so queued jobs do not trust a stale preflight.
+    """
+    root = Path(config.root).expanduser().resolve()
+    proof_path = root / RECOVERY_ATTESTATION
+    if not proof_path.exists():
+        if config.recovery_source_attestation_required:
+            raise ValueError("日语恢复工程缺少必须的来源证明文件，拒绝构建")
+        # Candidates created by the older release lacked build-time proofs.
+        # Never silently treat an old generated candidate as an ordinary
+        # project merely because its receipt does not exist.
+        import re
+        if re.fullmatch(r".+-JP-source-recovery-[0-9a-f]{10}", root.name):
+            raise ValueError(
+                "旧版日语恢复候选缺少构建时来源证明；请从仍可核验的"
+                "原始日语包重新创建独立恢复候选，旧工程保持不变"
+            )
+        return None
+    if not config.recovery_source_attestation_required:
+        raise ValueError("存在日语恢复证明文件但工程未标记需要来源验证，拒绝构建")
+    if proof_path.is_symlink() or not proof_path.is_file():
+        raise ValueError("日语恢复来源证明文件不是安全的常规文件")
+    try:
+        receipt = json.loads(proof_path.read_text(encoding="utf-8"))
+    except (OSError, ValueError, TypeError) as exc:
+        raise ValueError("日语恢复来源证明文件无效，拒绝构建") from exc
+    if not isinstance(receipt, dict) or receipt.get("schema_version") != 1 or receipt.get("kind") != "isolated-ja-source-recovery":
+        raise ValueError("日语恢复来源证明格式无效，拒绝构建")
+    if config.audio_language != "ja" or config.source_text_language != "ja" or config.game_id != "honkai-star-rail":
+        raise ValueError("日语恢复工程主音频、源文本或游戏类型发生变化，拒绝构建")
+    original_path = resolve_project_path(config, config.wav_source)
+    index_path = resolve_project_path(config, config.index_csv)
+    if original_path is None or index_path is None:
+        raise ValueError("恢复工程音频或索引路径缺失")
+    expected_source = Path(str(receipt.get("source") or "")).expanduser()
+    if (
+        not expected_source.is_absolute() or original_path.is_symlink()
+        or not original_path.exists() or original_path.resolve() != expected_source
+        or str(config.index_csv).replace("\\", "/") != ".generated/quick_index.csv"
+        or index_path.is_symlink() or not index_path.is_file()
+    ):
+        raise ValueError("恢复候选已偏离经过核验的原始日语来源或初始索引，拒绝构建")
+    recorded_fingerprint = str(receipt.get("source_fingerprint") or "")
+    recorded_index = str(receipt.get("index_sha256") or "")
+    if (
+        len(recorded_fingerprint) != 64
+        or len(recorded_index) != 64
+        or not all(c in "0123456789abcdef" for c in recorded_fingerprint + recorded_index)
+        or recorded_fingerprint != str(config.wav_source_fingerprint)
+        or _sha256(index_path) != recorded_index
+    ):
+        raise ValueError("恢复工程初始索引或来源指纹证明不一致，拒绝构建")
+    inventory = source_inventory(original_path)
+    if inventory["fingerprint"]["digest"] != recorded_fingerprint:
+        raise ValueError("恢复工程所引用的原始语音包自创建后已发生变化，拒绝构建")
+    members = _original_members(index_path)
+    recorded_count = receipt.get("wav_members")
+    if (
+        type(recorded_count) is not int or recorded_count <= 0
+        or len(members) != recorded_count
+        or set(members) != set(inventory["wav_members"])
+    ):
+        raise ValueError("恢复工程初始索引的来源成员集合不完整，拒绝构建")
+    return {
+        "source": str(original_path),
+        "source_fingerprint": recorded_fingerprint,
+        "index_sha256": recorded_index,
+        "wav_members": recorded_count,
+        "member_ids": members,
+    }
+
+
+def verify_japanese_recovery_build_manifest(
+    config: ProjectConfig,
+    initial: dict[str, Any] | None,
+) -> dict[str, Any] | None:
+    """Re-attest all members and produced manifest; do not claim speech QA."""
+    if initial is None:
+        return None
+    checked = verify_japanese_recovery_build_inputs(config)
+    if checked is None or checked["source_fingerprint"] != initial["source_fingerprint"]:
+        raise ValueError("构建期间原始日语语音包来源证明消失或改变")
+    output = resolve_project_path(config, config.output_dir)
+    if output is None:
+        raise ValueError("恢复工程输出路径缺失")
+    manifest = output / "manifest.json"
+    if manifest.is_symlink() or not manifest.is_file():
+        raise ValueError("恢复候选构建后缺少安全的音频成员清单")
+    try:
+        document = json.loads(manifest.read_text(encoding="utf-8"))
+        entries = document["entries"]
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        raise ValueError("恢复候选的成品成员清单损坏") from exc
+    if not isinstance(entries, list) or len(entries) != initial["wav_members"]:
+        raise ValueError("恢复构建音频成员数与原始日语包不一致")
+    built: list[str] = []
+    for row in entries:
+        if not isinstance(row, dict):
+            raise ValueError("恢复构建音频成员清单含无效行")
+        name = str(row.get("source_member_id") or row.get("filename") or "")
+        if not name or str(row.get("filename") or "") != PurePosixPath(name).name:
+            raise ValueError("恢复构建音频成员的文件身份已发生变化")
+        built.append(name)
+    if len(set(built)) != len(built) or set(built) != set(initial["member_ids"]):
+        raise ValueError("恢复构建的章节成员身份与原始日语包不完全匹配")
+    return {
+        "status": "source-members-verified",
+        "source_fingerprint": initial["source_fingerprint"],
+        "wav_members": len(built),
+        "chapter_member_identity_verified": True,
+        "spoken_japanese_verified": False,
+        "human_listening_required": True,
     }
