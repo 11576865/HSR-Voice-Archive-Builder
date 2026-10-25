@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "hsr-jieba-pair-build-crash-20261024",
+  "goal": "修复 evanescia 在 Android/Termux 构建时的 TypeError: 'pair' object is not subscriptable，并取得真实设备端到端构建验收证据。",
+  "status": "agent_execution_complete_pending_external_validation",
+  "current_bounded_work_unit": "已完成并核验 main 合并后 CI；等待实际 Android/Termux 环境在更新到修复提交后重建现有 evanescia 工程。",
+  "completed_units": [
+    {
+      "summary": "在 subtitle_layout.semantic_chunker._cut_words 入口将 jieba.posseg.pair 转为二元组，补最小复现回归。",
+      "pr": 216,
+      "merge_commit": "19145b4ec7cba4c96da0a818c7ee35944cd0dd9e",
+      "validation": "PR CI passed"
+    },
+    {
+      "summary": "以合成有效 WAV、官方中文 LAB 和非下标化 pair double 贯穿 build_project_v02 → ASS 输出。",
+      "pr": 217,
+      "merge_commit": "c4e67fed174a37989669b1b98dcdc8321bd13f63",
+      "validation": "PR and merged-main CI passed"
+    },
+    {
+      "summary": "在 termux-lite-surface 使用 requirements-termux.txt 单独执行该构建级回归测试。",
+      "pr": 218,
+      "merge_commit": "27c281aba9bc6d17053ac548d4a39fdc9b0c55d5",
+      "validation": "PR CI passed; merged main has 6 succeeded workflows, 0 failed; UIGS Intake Adapter skipped"
+    }
+  ],
+  "next_units": [
+    "在真实设备停止旧 Termux 服务；检查 git status，不覆盖未提交本地修改；git pull --ff-only；重新启动 HSR。",
+    "在真实设备执行 python -m unittest tests.test_semantic_chunker_pair -v 并用现有 evanescia 工程发起构建；只在本地完成，避免从云端读取私人语音包。",
+    "核验任务日志没有 TypeError、最终产品/收据/轨道有效；记录设备版本、准确 SHA、失败/成功日志及真实成品的 FFprobe 验证结果。",
+    "若仍失败，依据完整 traceback 识别新根因，在限定修复单位内处理；若成功再关闭该设备验收门槛。"
+  ],
+  "branch": "main",
+  "pr": null,
+  "latest_durable_commit": "27c281aba9bc6d17053ac548d4a39fdc9b0c55d5",
+  "external_validation": {
+    "source_fix": "complete",
+    "source_level_regression": "complete",
+    "build_path_regression": "complete",
+    "termux_dependency_surface_ci": "complete",
+    "exact_merge_head_ci": "complete_6_success_0_failure_1_skipped",
+    "physical_android_termux_build": "pending",
+    "real_evanescia_artifact_and_mkv_validation": "pending"
+  },
+  "blockers": [
+    "当前连接只可核验 GitHub，无法读取用户 Android/Termux 进程、现有 evanescia 语音包或真实导出成品。"
+  ],
+  "updated_at": "2026-10-26"
+}
