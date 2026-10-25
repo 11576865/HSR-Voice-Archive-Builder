@@ -49,6 +49,11 @@ jobs:
           import app.lite_server
           print("Termux lite dependency surface: OK")
           PY
+      - name: Exercise ASS build regression with Termux-only Python dependencies
+        run: |
+          # Uses a synthetic PCM WAV and Chinese LAB; needs no vendor SDK,
+          # FastAPI, py7zr, or production voice package.
+          .venv-termux/bin/python -m unittest tests.test_semantic_chunker_pair -v
 
   real-libass-ink-evidence:
     runs-on: ubuntu-latest
