@@ -58,6 +58,35 @@ file stays in the project and need not be installed globally.
 
 Keep Termux running and open `http://127.0.0.1:8765/` in the browser.
 
+## Read-only archive acceptance after a real device build
+
+After pulling the latest code, restarting Termux, and manually running
+"构建 / 更新档案" for the existing project, run this from the repository root:
+
+```bash
+python -m app.device_acceptance \
+  --project "/storage/emulated/0/Download/HSR_Voice_Test/evanescia-3"
+```
+
+The command **does not start a build, delete files, overwrite recovery
+checkpoints, or send project media to GitHub**. It prints a small JSON result
+that avoids transcript text, credentials, full traceback and source paths.
+The exit code is 0 for a verified result and 2 for incomplete acceptance
+evidence; a nonzero exit is not automatically a newly discovered crash.
+
+The field report compares the latest stored project build job, its completion
+timestamp, the pipeline report, the sealed MKV's provenance state and FFprobe
+video/FLAC/ASS/SRT streams. It checks that the local Git checkout contains
+the POS-pair fix commit. Read the build timestamp: an old completed job is
+not evidence you just reran the actual voice archive. Run the command **only
+after** the real current build finishes, not while the job is running.
+
+The MKV provenance check reads and hashes the output file. On large mobile
+archives, this may take substantial I/O and battery, but it does not rewrite
+media. FFprobe checks stream types, not complete audio-frame decoding or
+real-font playback. Device playback and final audio/subtitle acceptance
+remain separate from this report.
+
 ## Translation
 
 Core archive functions, local project management, update scanning, subtitles and FLAC remain available on Termux.
