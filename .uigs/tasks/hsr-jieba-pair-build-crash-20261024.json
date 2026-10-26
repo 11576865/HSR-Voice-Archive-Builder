@@ -3,7 +3,7 @@
   "task_id": "hsr-jieba-pair-build-crash-20261024",
   "goal": "修复 evanescia 在 Android/Termux 构建时的 TypeError: 'pair' object is not subscriptable，并取得真实设备端到端构建验收证据。",
   "status": "agent_execution_complete_pending_external_validation",
-  "current_bounded_work_unit": "已完成并核验 main 合并后 CI；等待实际 Android/Termux 环境在更新到修复提交后重建现有 evanescia 工程。",
+  "current_bounded_work_unit": "实现可在现有 Android/Termux 工程完成构建后运行的只读现场验收 CLI；代码与测试已提交 PR #219，正在等待精确提交 CI；真实 evanescia 构建仍未执行。",
   "completed_units": [
     {
       "summary": "在 subtitle_layout.semantic_chunker._cut_words 入口将 jieba.posseg.pair 转为二元组，补最小复现回归。",
@@ -22,17 +22,24 @@
       "pr": 218,
       "merge_commit": "27c281aba9bc6d17053ac548d4a39fdc9b0c55d5",
       "validation": "PR CI passed; merged main has 6 succeeded workflows, 0 failed; UIGS Intake Adapter skipped"
+    },
+    {
+      "summary": "增加只读 post-build 验收入口：关联最新项目 job、修复提交、构建报告、来源封存校验和实际 FFprobe 音视频/ASS/SRT 轨道，不复制语音、字幕正文或秘钥；含失败优先及旧 MKV 误判回归。",
+      "pr": 219,
+      "branch": "feat/hsr-termux-readonly-acceptance-20261027",
+      "commit": "1f2e85bd99e91348d23a7389829da689bd42d299",
+      "validation": "Pending exact-head CI; physical Android still pending"
     }
   ],
   "next_units": [
-    "在真实设备停止旧 Termux 服务；检查 git status，不覆盖未提交本地修改；git pull --ff-only；重新启动 HSR。",
-    "在真实设备执行 python -m unittest tests.test_semantic_chunker_pair -v 并用现有 evanescia 工程发起构建；只在本地完成，避免从云端读取私人语音包。",
-    "核验任务日志没有 TypeError、最终产品/收据/轨道有效；记录设备版本、准确 SHA、失败/成功日志及真实成品的 FFprobe 验证结果。",
-    "若仍失败，依据完整 traceback 识别新根因，在限定修复单位内处理；若成功再关闭该设备验收门槛。"
+    "核对 PR #219 精确提交的 CI，若通过再合入 main；若失败只处理本次可归因的失败。",
+    "在真实 Android/Termux 上检查 git status 并安全更新至含修复及验收命令的提交；停止旧进程后重启服务。",
+    "使用已存在的 evanescia-3 工程重新执行真实构建，然后运行 python -m app.device_acceptance --project \"/storage/emulated/0/Download/HSR_Voice_Test/evanescia-3\" 获取只读摘要。",
+    "根据最后 job 的完成时间、sanitized 错误类型、MKV 来源回执和 FFprobe 流结果评估；若为成功，再另行做播放器/全音轨检查；若失败，依据新完整 traceback 定位。"
   ],
-  "branch": "main",
-  "pr": null,
-  "latest_durable_commit": "27c281aba9bc6d17053ac548d4a39fdc9b0c55d5",
+  "branch": "feat/hsr-termux-readonly-acceptance-20261027",
+  "pr": 219,
+  "latest_durable_commit": "1f2e85bd99e91348d23a7389829da689bd42d299",
   "external_validation": {
     "source_fix": "complete",
     "source_level_regression": "complete",
@@ -40,10 +47,12 @@
     "termux_dependency_surface_ci": "complete",
     "exact_merge_head_ci": "complete_6_success_0_failure_1_skipped",
     "physical_android_termux_build": "pending",
-    "real_evanescia_artifact_and_mkv_validation": "pending"
+    "real_evanescia_artifact_and_mkv_validation": "pending",
+    "device_acceptance_cli": "submitted_pending_ci"
   },
   "blockers": [
-    "当前连接只可核验 GitHub，无法读取用户 Android/Termux 进程、现有 evanescia 语音包或真实导出成品。"
+    "当前仅能访问 GitHub，无法直接执行用户 Android/Termux 上的旧服务重启、真实 evanescia 构建或 MKV 播放。",
+    "必须有来自设备的新任务完成时间与本地验收摘要，才能认定真机故障已解除。"
   ],
-  "updated_at": "2026-10-26"
+  "updated_at": "2026-10-27"
 }
