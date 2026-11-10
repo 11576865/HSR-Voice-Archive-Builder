@@ -88,7 +88,7 @@ class NativeAssPacketVerificationTests(unittest.TestCase):
                 ("text", original.replace("Cue 3521 ", "TAMPERED 3521 ", 1),
                  "字段 Text"),
                 ("time", original.replace(
-                    "10:00:00.00,10:00:01.", "10:00:00.01,10:00:01.", 1),
+                    "10:00:00.00,10:00:00.80", "10:00:00.01,10:00:00.80", 1),
                  "字段 Start"),
                 ("style", original.replace(
                     "Style: Card,Arial", "Style: Wrong,Arial", 1),
