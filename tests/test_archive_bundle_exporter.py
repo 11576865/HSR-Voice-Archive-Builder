@@ -143,6 +143,64 @@ class BundleRealFFmpegTests(unittest.TestCase):
         )
         record_subtitle_export(root, state="current", ass_required=True)
 
+    def test_real_ass_centisecond_format_roundtrip_is_not_a_false_mismatch(self):
+        """ASS's .1 means one centisecond; FFmpeg serializes it as .01."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            source = ass.read_text(encoding="utf-8")
+            ass.write_text(
+                source.replace("0:00:00.00", "0:00:00.1")
+                      .replace("0:00:01.50", "0:00:01.5")
+                      .replace("Default,,0,0,0,,", "Default,,0000,0,000,,"),
+                encoding="utf-8",
+            )
+            self._certify(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            target = root / "roundtrip.mkv"
+            exporter.export(audio, ass, target, require_current_ass=True)
+            exporter._verify_embedded_ass(target, ass)
+            self.assertTrue(target.is_file())
+
+    def test_real_wrong_embedded_ass_text_remains_rejected(self):
+        """A matching track count is never sufficient to publish changed text."""
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            audio, ass = self._audio(root), self._ass(root)
+            exporter = ArchiveBundleExporter(width=320, height=180)
+            target = root / "wrong-ass.mkv"
+            exporter.export(audio, ass, target)
+            source = ass.read_text(encoding="utf-8")
+            ass.write_text(
+                source.replace("Test \\N soft subtitle", "Different internal text"),
+                encoding="utf-8",
+            )
+            with self.assertRaisesRegex(RuntimeError, "字幕事件第"):
+                exporter._verify_embedded_ass(target, ass)
+            self.assertTrue(target.exists())
+
+    def test_ass_semantic_signature_keeps_effects_and_event_multiplicity(self):
+        sample = (
+            "Style: Default,Arial,48\n"
+            "Dialogue: 1,0:00:00.1,0:00:01.5,Default,,0000,0,000,,"
+            "{\\fad(100,200)}Hello\n"
+        )
+        normalized = (
+            "Style: Default,Arial,48\n"
+            "Dialogue: 01,0:00:00.01,0:00:01.05,Default,,0,000,0,,"
+            "{\\fad(100,200)}Hello\n"
+        )
+        signature = ArchiveBundleExporter._ass_content_signature
+        self.assertEqual(signature(sample), signature(normalized))
+        self.assertNotEqual(
+            signature(sample),
+            signature(normalized.replace("fad(100,200)", "fad(100,250)")),
+        )
+        self.assertNotEqual(
+            signature(sample),
+            signature(normalized + normalized.splitlines()[1] + "\n"),
+        )
+
     def test_real_initial_complete_bundle_seals_inside_its_build_marker(self):
         """Actual FFmpeg mux is verified before working FLAC/SRT/ASS removal."""
         from app.publishing import preserve_published_archive

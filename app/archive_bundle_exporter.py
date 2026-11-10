@@ -115,17 +115,39 @@ class ArchiveBundleExporter:
         return last
 
     @staticmethod
-    def _ass_content_signature(content: str) -> tuple[tuple[str, ...], tuple[str, ...]]:
-        """Compare the actual selectable ASS styles and events, not just codec.
+    def _ass_content_signature(
+        content: str,
+    ) -> tuple[tuple[str, ...], tuple[tuple[str, ...], ...]]:
+        """Compare ASS event meaning rather than incidental FFmpeg serialization.
 
-        Matroska/FFmpeg may rewrite headers and reorder event packets, but must
-        preserve every style and rendered event, including original text and
-        karaoke/animation override tags.
+        FFmpeg may render a one-digit ASS centisecond as two digits and pad
+        numeric fields. Preserve every text/override-tag byte, style, event
+        occurrence, and layer; normalize only ASS time and integer syntax.
         """
         lines = content.lstrip("\ufeff").splitlines()
         styles = sorted(line.strip() for line in lines if line.startswith("Style: "))
-        events = sorted(line.strip() for line in lines if line.startswith("Dialogue: "))
-        return tuple(styles), tuple(events)
+        events: list[tuple[str, ...]] = []
+        for line in lines:
+            if not line.startswith("Dialogue: "):
+                continue
+            fields = line[len("Dialogue: "):].split(",", 9)
+            if len(fields) != 10:
+                raise ValueError("ASS Dialogue has an invalid field count")
+            for index in (1, 2):
+                clock = re.fullmatch(r"(\d+):([0-5]\d):([0-5]\d)\.(\d{1,2})", fields[index].strip())
+                if not clock:
+                    raise ValueError("ASS Dialogue has an invalid timestamp")
+                hours, minutes, seconds, centiseconds = (int(part) for part in clock.groups())
+                fields[index] = str(((hours * 60 + minutes) * 60 + seconds) * 100 + centiseconds)
+            for index in (0, 5, 6, 7):
+                value = fields[index].strip()
+                if not re.fullmatch(r"\d+", value):
+                    raise ValueError("ASS Dialogue has an invalid layer or margin")
+                fields[index] = str(int(value))
+            # Fields 3/4/8/9 (style, actor, effect, original text/ASS tags)
+            # are NOT normalized: any content difference must reject publish.
+            events.append(tuple(fields))
+        return tuple(styles), tuple(sorted(events))
 
     def _verify_embedded_ass(self, mkv: Path, source: Path) -> None:
         expected = self._ass_content_signature(source.read_text(encoding="utf-8-sig"))
@@ -142,8 +164,20 @@ class ArchiveBundleExporter:
             raise RuntimeError("MKV 内嵌 ASS 回读失败；保留上一个成品") from exc
         actual = self._ass_content_signature(probe.stdout.decode("utf-8-sig"))
         if actual != expected:
+            style_changed = actual[0] != expected[0]
+            event_changed = actual[1] != expected[1]
+            kind = "样式" if style_changed else "字幕事件"
+            reference, embedded = (expected[0], actual[0]) if style_changed else (expected[1], actual[1])
+            first = next(
+                (index + 1 for index in range(min(len(reference), len(embedded)))
+                 if reference[index] != embedded[index]),
+                min(len(reference), len(embedded)) + 1,
+            )
             raise RuntimeError(
                 "MKV 内的 ASS 字幕文本、时间、样式或特效与最新生成的 ASS 不一致；"
+                f"{kind}第 {first} 项不同；"
+                f"源样式 {len(expected[0])}/内嵌 {len(actual[0])}，"
+                f"源事件 {len(expected[1])}/内嵌 {len(actual[1])}；"
                 "拒绝覆盖旧 MKV"
             )
 
@@ -301,7 +335,7 @@ class ArchiveBundleExporter:
                 "-c:v", "libx264", "-preset", "ultrafast",
                 "-crf", str(QUALITIES[spec["quality"]]),
                 "-tune", "stillimage", "-pix_fmt", "yuv420p",
-                "-c:a", "copy", "-c:s:0", "ass",
+                "-c:a", "copy", "-c:s:0", "copy",
                 "-metadata:s:a:0", "title=HSR continuous voice",
                 "-disposition:a:0", "default",
                 "-metadata:s:s:0", "title=HSR ASS subtitles",
