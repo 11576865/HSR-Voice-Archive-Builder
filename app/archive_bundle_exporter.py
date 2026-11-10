@@ -150,36 +150,21 @@ class ArchiveBundleExporter:
         return tuple(styles), tuple(sorted(events))
 
     def _verify_embedded_ass(self, mkv: Path, source: Path) -> None:
-        expected = self._ass_content_signature(source.read_text(encoding="utf-8-sig"))
+        """Verify MKV native ASS packets without reserializing long timestamps.
+
+        FFmpeg's ASS *text* muxer can clamp ten-hour-and-later times to
+        9:59:59.99, although the original Matroska packet PTS and duration
+        remain exact. Comparing that textual export would falsely reject
+        an intact archive (and tempt unsafe relaxation of the equality gate).
+        """
+        from .ass_mkv_packet_verifier import assert_native_ass_matches
+
+        expected = self._ass_content_signature(
+            source.read_text(encoding="utf-8-sig")
+        )
         if not expected[1]:
             raise ValueError("Cannot certify an MKV with no source ASS Dialogue events")
-        try:
-            probe = subprocess.run(
-                [self.ffmpeg, "-hide_banner", "-loglevel", "error", "-nostdin",
-                 "-i", str(mkv), "-map", "0:s:0", "-c:s", "copy",
-                 "-f", "ass", "-"],
-                capture_output=True, check=True, timeout=180,
-            )
-        except (subprocess.SubprocessError, OSError) as exc:
-            raise RuntimeError("MKV 内嵌 ASS 回读失败；保留上一个成品") from exc
-        actual = self._ass_content_signature(probe.stdout.decode("utf-8-sig"))
-        if actual != expected:
-            style_changed = actual[0] != expected[0]
-            event_changed = actual[1] != expected[1]
-            kind = "样式" if style_changed else "字幕事件"
-            reference, embedded = (expected[0], actual[0]) if style_changed else (expected[1], actual[1])
-            first = next(
-                (index + 1 for index in range(min(len(reference), len(embedded)))
-                 if reference[index] != embedded[index]),
-                min(len(reference), len(embedded)) + 1,
-            )
-            raise RuntimeError(
-                "MKV 内的 ASS 字幕文本、时间、样式或特效与最新生成的 ASS 不一致；"
-                f"{kind}第 {first} 项不同；"
-                f"源样式 {len(expected[0])}/内嵌 {len(actual[0])}，"
-                f"源事件 {len(expected[1])}/内嵌 {len(actual[1])}；"
-                "拒绝覆盖旧 MKV"
-            )
+        assert_native_ass_matches(self.ffprobe, mkv, expected)
 
     def export(
         self, flac: str | Path, ass: str | Path, output: str | Path,
