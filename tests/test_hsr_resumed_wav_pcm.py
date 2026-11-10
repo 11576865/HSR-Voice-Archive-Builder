@@ -35,7 +35,7 @@ class ResumedMixedRateWavTests(unittest.TestCase):
                         "ffmpeg", "-y", "-loglevel", "error", "-nostdin",
                         "-f", "lavfi",
                         "-i", f"sine=frequency={frequency}:sample_rate=48000",
-                        "-frames:a", "277363", "-ac", "1", "-c:a", "pcm_s16le",
+                        "-t", "5.778395833333333", "-ac", "1", "-c:a", "pcm_s16le",
                         str(original),
                     ],
                     check=True, capture_output=True,
