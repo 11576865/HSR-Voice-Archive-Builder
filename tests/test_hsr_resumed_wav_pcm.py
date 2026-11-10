@@ -11,14 +11,12 @@ import shutil
 import subprocess
 import tempfile
 import unittest
-from dataclasses import replace
 from pathlib import Path
 
 from app.builder import (
-    _normalize_wav_pcm, build_continuous_flac, sha256_file,
+    Entry, _normalize_wav_pcm, build_continuous_flac, sha256_file,
 )
 from app.wavpcm import parse_wav_pcm
-from tests.test_v04 import entry
 
 
 @unittest.skipUnless(shutil.which("ffmpeg") and shutil.which("ffprobe"),
@@ -59,13 +57,14 @@ class ResumedMixedRateWavTests(unittest.TestCase):
                               expected.bits_per_sample, expected.frames),
                              (44100, 1, 16, 254828))
 
-            saved = replace(
-                entry(1, original.name, expected.frames, 0, expected.frames),
-                sample_rate=44100,
-                source_frames=expected.frames,
+            saved = Entry(
+                index=1, group="g", filename=original.name, source="test",
+                source_detail="", english="voice", chinese="语音",
+                chinese_source="test", sample_rate=44100, channels=1,
+                sample_width_bits=16, source_frames=expected.frames,
                 source_duration_seconds=expected.frames / 44100,
-                audio_end_sample=expected.frames,
-                next_start_sample=expected.frames,
+                start_sample=0, audio_end_sample=expected.frames,
+                next_start_sample=expected.frames, start_seconds=0,
                 audio_end_seconds=expected.frames / 44100,
                 display_end_seconds=expected.frames / 44100,
                 sha256=sha256_file(normalized),
