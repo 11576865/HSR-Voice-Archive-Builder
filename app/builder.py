@@ -971,7 +971,12 @@ def build_continuous_flac(
     pcm_hash = hashlib.sha256()
     written_frames = 0
 
-    with tempfile.TemporaryFile() as stderr_log:
+    # Metadata checkpoints store the PCM *after* format normalization. Archive
+    # extraction on resume yields original WAVs again. Recreate only the
+    # needed normalized streams in a private working directory; never use
+    # mismatched source bytes with the saved timeline.
+    with tempfile.TemporaryDirectory(prefix=".hsr-pcm-stream-", dir=out_flac.parent) as pcm_work, \
+         tempfile.TemporaryFile() as stderr_log:
         cmd = [
             "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
             "-f", pcm_format,
@@ -1021,12 +1026,51 @@ def build_continuous_flac(
                     e.sample_width_bits,
                     e.source_frames,
                 )
+                stream_source = src
                 if actual != expected:
-                    raise RuntimeError(
-                        f"WAV changed or no longer matches manifest at {e.filename}: "
-                        f"{actual} != {expected}"
+                    # build_entries() normalizes mixed-format WAVs when it
+                    # resolves the metadata timeline. A later resumed build
+                    # extracts the ORIGINAL package again, so a 48 kHz member
+                    # can legitimately correspond to a 44.1 kHz manifest.
+                    # Reconstruct that exact normalization off-source, then
+                    # prove its complete bytes match the recorded member hash.
+                    stream_source = Path(pcm_work) / f"{i:06d}.wav"
+                    try:
+                        subprocess.run(
+                            [
+                                "ffmpeg", "-y", "-hide_banner", "-loglevel", "error",
+                                "-nostdin", "-i", str(src),
+                                "-ar", str(e.sample_rate),
+                                "-ac", str(e.channels),
+                                "-c:a", pcm_codec,
+                                "-f", "wav", str(stream_source),
+                            ],
+                            check=True, capture_output=True,
+                        )
+                    except (OSError, subprocess.CalledProcessError) as exc:
+                        raise RuntimeError(
+                            f"Cannot normalize WAV for resumed FLAC build: "
+                            f"{e.source_member_id or e.filename}"
+                        ) from exc
+                    info = parse_wav_pcm(stream_source)
+                    actual = (
+                        info.sample_rate,
+                        info.channels,
+                        info.bits_per_sample,
+                        info.frames,
                     )
-                for frames in iter_pcm_chunks(src, info):
+                    if actual != expected:
+                        raise RuntimeError(
+                            f"WAV normalization does not match manifest at {e.filename}: "
+                            f"{actual} != {expected}"
+                        )
+                if e.sha256 and sha256_file(stream_source).lower() != e.sha256.lower():
+                    raise RuntimeError(
+                        "WAV PCM identity does not match manifest at "
+                        f"{e.source_member_id or e.filename}; "
+                        "refusing to reuse stale audio metadata"
+                    )
+                for frames in iter_pcm_chunks(stream_source, info):
                     proc.stdin.write(frames)
                     pcm_hash.update(frames)
                     written_frames += len(frames) // (ch * sw)
