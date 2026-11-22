@@ -116,6 +116,23 @@ class FlacQuickSourceTests(unittest.TestCase):
                 self.assertEqual(len(e["sha256"]), 64)
             self.assertTrue((root / "project" / "output" / "continuous.flac").is_file())
 
+            # User-facing source audition and read-only provenance checks must
+            # resolve original FLAC rather than looking for nonexistent WAVs.
+            from app.reference_workbench import resolve_reference_audio
+            from app.archive_audit import verify_archive_source_audio
+            preview, preview_entry = resolve_reference_audio(
+                config, root / "project" / "output", entries[0]["index"],
+            )
+            self.assertTrue(preview.is_file())
+            self.assertEqual(parse_wav_pcm(preview).sample_rate, 48000)
+            self.assertEqual(
+                preview_entry["original_source_sha256"],
+                entries[0]["original_source_sha256"],
+            )
+            audit = verify_archive_source_audio(config, root / "project" / "output")
+            self.assertEqual(audit["summary"]["verified"], 2, audit["findings"])
+            self.assertEqual(audit["summary"]["mismatch"], 0, audit["findings"])
+
             # Resuming the same source must retain exact identity and audio.
             rerun = build_project_v02(
                 index, source, root / "project" / "output",
