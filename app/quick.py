@@ -624,8 +624,43 @@ def _package_lab_candidate(
     }
 
 
+def _directory_has_wav(source: Path, *, max_entries: int = 8192) -> bool:
+    """Cheap, bounded hint for the file picker; full source_inventory verifies.
+
+    Do not hash or extract source media just to populate a dropdown. Manual
+    directory paths remain available when a very large/deep tree exceeds
+    the discovery budget. Avoid following symlinks or walking hidden caches.
+    """
+    pending: list[tuple[Path, int]] = [(source, 0)]
+    visited = 0
+    while pending and visited < max_entries:
+        directory, depth = pending.pop()
+        try:
+            with os.scandir(directory) as items:
+                for item in items:
+                    visited += 1
+                    if visited > max_entries:
+                        return False
+                    if item.is_symlink():
+                        continue
+                    if item.is_file(follow_symlinks=False):
+                        if item.name.casefold().endswith(".wav"):
+                            return True
+                    elif depth < 6 and item.is_dir(follow_symlinks=False):
+                        if not item.name.startswith("."):
+                            pending.append((Path(item.path), depth + 1))
+        except (OSError, PermissionError):
+            continue
+    return False
+
+
 def discover_source_candidates() -> list[dict[str, Any]]:
-    """List likely local voice-package archives without opening or uploading them."""
+    """Discover ZIP/7z packages AND extracted WAV directories for Quick Create.
+
+    This is a fast hint only: Quick Scan and project creation independently
+    fingerprint and validate the user-selected source, including any nested
+    folders. A local path entry in the UI handles folders outside these roots.
+    """
     home = Path.home()
     roots = [
         home / "Downloads",
@@ -644,7 +679,9 @@ def discover_source_candidates() -> list[dict[str, Any]]:
                 continue
             candidates = [
                 p for p in root.iterdir()
-                if p.is_file() and p.suffix.lower() in SUPPORTED_ARCHIVES
+                if not p.is_symlink()
+                and (p.is_file() and p.suffix.lower() in SUPPORTED_ARCHIVES
+                     or p.is_dir() and _directory_has_wav(p))
             ]
         except (OSError, PermissionError):
             continue
@@ -663,10 +700,12 @@ def discover_source_candidates() -> list[dict[str, Any]]:
                 "english" if re.search(r"(^|[^a-z])(en|english)([^a-z]|$)", lower)
                 else ("chinese" if any(x in lower for x in ("chs", "chinese", "中文")) else "")
             )
+            kind = "directory" if path.is_dir() else path.suffix.lower().lstrip(".")
             result.append({
                 "path": key,
                 "name": path.name,
-                "size_bytes": stat.st_size,
+                "kind": kind,
+                "size_bytes": stat.st_size if kind != "directory" else 0,
                 "modified_ns": stat.st_mtime_ns,
                 "role_hint": role_hint,
             })
