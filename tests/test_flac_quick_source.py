@@ -162,6 +162,37 @@ class FlacQuickSourceTests(unittest.TestCase):
                 )
             self.assertEqual(_sha(archive), archive_hash)
 
+    def test_duplicate_flac_basename_with_identical_labs_keeps_both_members(self):
+        with tempfile.TemporaryDirectory() as td:
+            root = Path(td)
+            a = self._voice(root / "female", "archive_mar7th_1", freq=440)
+            b = self._voice(root / "male", "archive_mar7th_1", freq=880)
+            # Equal LAB text must not erase member identities, since the
+            # local package supplies unambiguous sibling paths for both.
+            members = source_inventory(root)
+            self.assertEqual(members["flac_count"], 2)
+            self._ready_scan(root)
+            with patch(
+                "app.quick.fetch_ai_hobbyist_index_for_filenames_cached",
+                side_effect=AssertionError("LAB source needs no remote index"),
+            ):
+                config, plan = create_quick_project(root, root=Path(td) / "project")
+            self.assertEqual(plan["duplicates"]["pending"], 0)
+            from app.project import resolve_project_path
+            import csv
+            with resolve_project_path(config, config.index_csv).open(
+                encoding="utf-8-sig", newline=""
+            ) as reader:
+                rows = list(csv.DictReader(reader))
+            self.assertEqual(len(rows), 2)
+            self.assertEqual(
+                sorted(row["来源成员路径"] for row in rows),
+                [
+                    "female/chapter1/archive_mar7th_1.wav",
+                    "male/chapter1/archive_mar7th_1.wav",
+                ],
+            )
+
     def test_same_stem_wav_flac_collision_is_rejected(self):
         with tempfile.TemporaryDirectory() as td:
             root = Path(td)
