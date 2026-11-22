@@ -3036,11 +3036,14 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       </details>
       <div id="noProject">
         <h3>快速创建</h3>
-        <p class="small muted">从本机 Download 目录选择语音包。扫描阶段只读取文件，不修改源包；索引、项目目录和 AI 翻译设置由程序自动准备。</p>
+        <p class="small muted">从本机 Download 目录选择 ZIP、7z 或已解压的 WAV 文件夹，也可填写其他本地目录路径。扫描阶段只读取文件，不修改源包；索引、项目目录和 AI 翻译设置由程序自动准备。</p>
         <div class="row">
           <div>
             <label>主音频包（用于连续 FLAC）</label>
             <select id="quickEnglish"><option value="">正在扫描本机文件…</option></select>
+            <label for="quickEnglishPath">其他本地音频目录或 ZIP/7z 的完整路径（填写后优先于上方候选）</label>
+            <input id="quickEnglishPath" type="text" autocomplete="off" spellcheck="false" placeholder="/storage/emulated/0/Download/角色语音文件夹">
+            <p class="small muted">已解压的普通文件夹可直接输入路径，包含多层子文件夹也可递归扫描；这是 Termux 本地路径，不是浏览器上传。原始 FLAC 音频尚不支持，请使用 PCM WAV。</p>
           </div>
           <div>
             <label>官方中文语音包（可选）</label>
@@ -5263,12 +5266,12 @@ async function loadQuickCandidates(){
     const j=await api('/api/quick/candidates'),items=j.candidates||[];
     primary.innerHTML='';target.innerHTML='<option value="">不提供；缺失中文字幕交给翻译</option>';reference.innerHTML='<option value="">不提供参考包</option>';
     if(!items.length){
-      primary.innerHTML='<option value="">Download 中未发现 .7z / .zip</option>';
-      document.getElementById('quickPlan').textContent='未发现语音包。若 Termux 尚未获得共享存储权限，请先运行 termux-setup-storage。';
+      primary.innerHTML='<option value="">未自动发现 ZIP、7z 或 WAV 文件夹；可在下方填写本地路径</option>';
+      document.getElementById('quickPlan').textContent='未自动发现语音包。可填写包含 WAV 的本地目录路径；如果 Termux 没有共享存储权限，先运行 termux-setup-storage。';
       return;
     }
     for(const item of items){
-      const label=item.name+' · '+bytes(item.size_bytes);
+      const label=item.name+' · '+(item.kind==='directory'?'已解压 WAV 文件夹':bytes(item.size_bytes));
       for(const select of [primary,target,reference]){
         const option=document.createElement('option');option.value=item.path;option.textContent=label;select.appendChild(option);
       }
@@ -5325,8 +5328,18 @@ function renderQuickPlan(plan){
   const aiBudget=document.getElementById('quickAiBudget');
   if(aiBudget)aiBudget.classList.toggle('hidden',Number(tr.pending_translation_count||0)===0);
 }
+function quickPrimarySource(){
+  return (document.getElementById('quickEnglishPath')?.value||'').trim()
+    ||document.getElementById('quickEnglish').value;
+}
+function invalidateQuickSource(){
+  quickPlanState=null;
+  const button=document.getElementById('quickBuildBtn');
+  if(button)button.disabled=true;
+  setQuickPlanMessage('音频来源已改变，请重新扫描 / 预检。');
+}
 async function quickScan(){
-  const english=document.getElementById('quickEnglish').value;
+  const english=quickPrimarySource();
   if(!english){
     setQuickPlanMessage('预检无法开始：请选择主音频包。','error');
     throw new Error('请选择主音频包');
@@ -5794,12 +5807,17 @@ document.getElementById('updateCopySummaryBtn').onclick=()=>{
   }).catch(e=>setLog(String(e)));
 };
 
+document.getElementById('quickEnglishPath').addEventListener('input',invalidateQuickSource);
+document.getElementById('quickEnglish').addEventListener('change',()=>{
+  document.getElementById('quickEnglishPath').value='';
+  invalidateQuickSource();
+});
 document.getElementById('quickRefreshBtn').onclick=async()=>{quickPlanState=null;document.getElementById('quickBuildBtn').disabled=true;setQuickPlanMessage('正在扫描本机文件…','running');await loadQuickCandidates()};
 document.getElementById('quickScanBtn').onclick=async()=>{try{await quickScan()}catch(x){document.getElementById('quickBuildBtn').disabled=true}};
 document.getElementById('quickBuildBtn').onclick=async()=>{try{
   beginBuildLaunch();
   if(!quickPlanState?.ready)await quickScan();
-  const d=new FormData();d.set('english_source',document.getElementById('quickEnglish').value);
+  const d=new FormData();d.set('english_source',quickPrimarySource());
   const chinese=document.getElementById('quickChinese').value;if(chinese)d.set('chs_source',chinese);
   const reference=document.getElementById('quickReference').value;if(reference)d.set('reference_source',reference);
   d.set('audio_language',document.getElementById('quickAudioLanguage').value||'auto');
