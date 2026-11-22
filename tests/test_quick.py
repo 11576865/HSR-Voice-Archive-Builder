@@ -210,8 +210,8 @@ class QuickModeTests(unittest.TestCase):
         self.assertIn("const english=quickPrimarySource();", html)
         self.assertIn("d.set('english_source',quickPrimarySource())", html)
         self.assertEqual(html.count("d.set('english_source',quickPrimarySource())"), 1)
-        self.assertIn("未自动发现 ZIP、7z 或 WAV 文件夹", html)
-        self.assertIn("item.kind==='directory'?'已解压 WAV 文件夹'", html)
+        self.assertIn("未自动发现 ZIP、7z 或 WAV/FLAC 文件夹", html)
+        self.assertIn("item.kind==='directory'?'已解压 WAV/FLAC 文件夹'", html)
 
     def test_7z_quick_scan_falls_back_to_py7zr_without_cli(self) -> None:
         import py7zr
