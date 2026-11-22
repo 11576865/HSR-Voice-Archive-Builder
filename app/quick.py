@@ -664,7 +664,7 @@ def _directory_has_wav(source: Path, *, max_entries: int = 8192) -> bool:
                     if item.is_symlink():
                         continue
                     if item.is_file(follow_symlinks=False):
-                        if item.name.casefold().endswith(".wav"):
+                        if item.name.casefold().endswith((".wav", ".flac")):
                             return True
                     elif depth < 6 and item.is_dir(follow_symlinks=False):
                         if not item.name.startswith("."):
@@ -1724,6 +1724,11 @@ def create_quick_project(
         bound = dict(row)
         bound["filename"] = basename
         bound["source_member_id"] = member
+        if member.casefold() in flac_aliases:
+            bound["sha256"] = ""
+            bound["source_detail"] = (
+                str(bound.get("source_detail") or "") + "; FLAC source, decoded-PCM hash"
+            ).strip("; ")
         assigned[member] = bound
         try:
             used_indexes.add(int(str(bound.get("index", "")).strip()))
