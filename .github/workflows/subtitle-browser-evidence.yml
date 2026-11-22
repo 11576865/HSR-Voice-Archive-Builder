@@ -63,7 +63,9 @@ permissions:
 
 jobs:
   chromium-ui:
-    runs-on: ubuntu-latest
+    # Playwright 1.55 installs Chromium on Ubuntu 24.04; GitHub's newer
+    # ubuntu-latest image has an unsupported 26.04 browser dependency target.
+    runs-on: ubuntu-24.04
     timeout-minutes: 15
     steps:
       - uses: actions/checkout@v4
