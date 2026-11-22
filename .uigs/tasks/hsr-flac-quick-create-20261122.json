@@ -1,20 +1,23 @@
 {
   "schema_version": 1,
   "goal": "Make extracted folder, ZIP and 7z original FLAC voice clips discoverable and buildable through Quick Create on Android/Termux without altering original audio.",
-  "status": "pending_external_validation",
-  "current_bounded_work_unit": "Repair skipped real-FFmpeg CI acceptance and generated quick-index CSV test field mismatch.",
+  "status": "pending_device_acceptance",
+  "current_bounded_work_unit": "Release: merged both Quick Create directory and FLAC source PRs to main; verified main source and mandatory real FFmpeg CI.",
   "completed_units": [
     "Quick Create directory source picker + manual local path: PR #224, head dbc97bd13bb45b6c386b3bb15de7b1076469af52, six workflows passed and PR still open",
     "FLAC inventory, unique virtual WAV IDs and source-to-PCM staging with SHA-256 identities: PR #225 stacked on #224",
     "Real FFmpeg FLAC folder/mixed ZIP/output/recovery/original-source audit tests added; previous head's green unit matrix had skipped entire real-FFmpeg class",
     "Mandatory media-enabled FLAC regression added to tests workflow. First genuine FFmpeg run passed 4 tests; fifth failed due to test's Chinese CSV key; key corrected to source_member_id",
-    "Reusable CI skip-mask observation appended to existing UIGS-Foundry Observation record"
+    "Reusable CI skip-mask observation appended to existing UIGS-Foundry Observation record",
+    "PR #224 exact-head six workflows succeeded; merged with ancestry preserved (merge commit def0efcf3d5412086fd26f129df363ecffcd5663).",
+    "PR #225 exact-head six workflows succeeded; confirmed FFmpeg/FFprobe media CI actually executed all five test_flac_quick_source cases and all five passed (real-libass-ink-evidence job 137259424502).",
+    "PR #225 retargeted main and mergeability reconfirmed; merged (merge commit f0d1ee9072480912af7bbcba577b0c671339659d).",
+    "Post-merge readback on main confirms flac_source.py, builder provenance, Quick Create folder/manual path, WAV and FLAC counts, mandatory FFmpeg workflow."
   ],
   "next_units": [
-    "Read exact-head f9c805426c08379438a89a054f27e9d8fd4b8347 CI results on a later user continue",
-    "If mandatory FFmpeg media job passes, merge PR #224 to main; retarget and merge PR #225 after resolving stacked base and complete CI",
-    "Verify merged main detects native FLAC, renders correct WAV+FLAC counts in Quick Create, and can start FLAC-only actual Termux build",
-    "User field acceptance on actual archive and recorded output source-identity checks"
+    "User updates Android Termux main at or after f0d1ee9072480912af7bbcba577b0c671339659d and restarts server, hard-reloads UI.",
+    "Run actual extracted FLAC folder or archive through Quick Scan and Quick Build, check nonzero FLAC count, output PCM verification, same-stem LAB and original source SHA-256.",
+    "Record actual device acceptance and close the task only after real original project succeeds."
   ],
   "branch": "feat/flac-voice-input-quick-create-20261122",
   "pr": 225,
@@ -22,16 +25,16 @@
     "pr": 224,
     "branch": "fix/quick-create-folder-sources-20261122"
   },
-  "latest_durable_commit": "f9c805426c08379438a89a054f27e9d8fd4b8347",
+  "latest_durable_commit": "f0d1ee9072480912af7bbcba577b0c671339659d",
   "external_validation_states": {
     "pr224_ci": "six_succeeded",
-    "pr225_latest_head_ci": "pending_external_validation",
-    "termux_field": "pending",
-    "merged_main": "not_yet"
+    "pr225_latest_head_ci": "six_succeeded_real_ffmpeg_five_tests_executed",
+    "termux_field": "pending_external_validation",
+    "merged_main": "both_merged_readback_verified"
   },
   "blockers": [
-    "Both PRs unmerged, so main only recognizes .wav in app/quick.py and archive-only Quick Create dropdown.",
-    "Must not infer feature acceptance from previously skipped FFmpeg tests."
+    "Android/Termux app has not yet been updated and rerun on the user's original FLAC voice package; device acceptance pending.",
+    "Auto-discovery scans known roots for folder candidates; for a folder deeper or elsewhere manual local path input is required."
   ],
   "updated_at": "2026-11-22"
 }
