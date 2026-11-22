@@ -1193,7 +1193,9 @@ def quick_scan(
             warnings.append(f"Remote index fallback failed: {type(exc).__name__}: {exc}")
 
     index_usable = False
-    package_lab_index = False
+    package_lab_index = bool(
+        selected_index and selected_index.get("source") == "primary-package-lab"
+    )
     if selected_index is not None and int(selected_index.get("matched_wavs", 0)) == 0:
         selected_index = None
     if selected_index is None:
@@ -1715,7 +1717,12 @@ def create_quick_project(
         ]
         if not candidates:
             continue
-        if len(candidates) == 1:
+        explicit_member = str(row.get("source_member_id") or "")
+        if package_lab_index and explicit_member in candidates:
+            # This row came directly from this exact member's sibling LAB,
+            # not from a basename-only external index.
+            member = explicit_member
+        elif len(candidates) == 1:
             member = candidates[0]
         else:
             member = _disambiguate_member(english_source, candidates, row)
