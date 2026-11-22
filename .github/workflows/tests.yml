@@ -80,6 +80,11 @@ jobs:
         run: python -m pip install -r requirements-test.txt
       - name: Validate real rendered ink evidence
         run: python -m unittest tests.test_libass_ink_layout -v
+      - name: Require real FLAC Quick Create full-pipeline acceptance (not skipped)
+        run: |
+          command -v ffmpeg
+          command -v ffprobe
+          python -m unittest tests.test_flac_quick_source -v
       - name: Validate paired original/final voice and bound human review with actual FFmpeg
         run: |
           command -v ffmpeg
