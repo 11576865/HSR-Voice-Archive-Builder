@@ -64,13 +64,63 @@ def _probe_flac(source: Path, *, ffprobe: str) -> tuple[int, int, int, int]:
             raise ValueError(
                 f"Unsupported FLAC bit depth {bits}; expected 8/16/24/32"
             )
-        if sample_count < 0:
-            raise ValueError("Invalid FLAC sample count")
+        if sample_count <= 0:
+            raise ValueError("FLAC sample count must be available for lossless verification")
         return sample_rate, channels, bits, sample_count
     except (OSError, subprocess.SubprocessError, KeyError, TypeError, ValueError) as exc:
         raise RuntimeError(
             f"无法验证原始 FLAC 音频格式：{source.name}：{exc}"
         ) from exc
+
+
+def decode_flac_clip(
+    source: Path,
+    target: Path,
+    *,
+    ffmpeg: str = "ffmpeg",
+    ffprobe: str = "ffprobe",
+) -> None:
+    """Decode one FLAC clip losslessly and atomically into PCM WAV.
+
+    Verify the exact FLAC STREAMINFO sample count, original bit depth and
+    source-byte identity before/after decoding; never accept clipped output.
+    """
+    from .wavpcm import parse_wav_pcm
+
+    sr, channels, bits, samples = _probe_flac(source, ffprobe=ffprobe)
+    estimated_pcm_bytes = samples * channels * (bits // 8)
+    if estimated_pcm_bytes + 4096 > MAX_DECODED_CLIP_BYTES:
+        raise RuntimeError("FLAC decoded PCM clip exceeds the 4 GiB safety limit")
+    original_hash = _sha256(source)
+    codec = {8: "pcm_u8", 16: "pcm_s16le", 24: "pcm_s24le", 32: "pcm_s32le"}[bits]
+    target.parent.mkdir(parents=True, exist_ok=True)
+    tmp = target.with_name(target.name + ".decoding")
+    tmp.unlink(missing_ok=True)
+    try:
+        subprocess.run(
+            [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
+             "-nostdin", "-i", str(source), "-map", "0:a:0",
+             "-vn", "-sn", "-dn", "-map_metadata", "-1",
+             "-flags", "+bitexact", "-c:a", codec,
+             "-f", "wav", "-fs", str(MAX_DECODED_CLIP_BYTES), str(tmp)],
+            capture_output=True, check=True, timeout=600,
+        )
+        info = parse_wav_pcm(tmp)
+        if (info.sample_rate, info.channels, info.bits_per_sample) != (
+            sr, channels, bits
+        ):
+            raise RuntimeError("FLAC decoder altered the original PCM format")
+        if info.frames != samples:
+            raise RuntimeError(
+                f"FLAC decoded sample count mismatch: {info.frames} != {samples}"
+            )
+        if _sha256(source) != original_hash:
+            raise RuntimeError("Original FLAC changed during decoding")
+        tmp.replace(target)
+    except (OSError, subprocess.SubprocessError, ValueError) as exc:
+        raise RuntimeError(f"FLAC lossless decoding failed: {source.name}: {exc}") from exc
+    finally:
+        tmp.unlink(missing_ok=True)
 
 
 def materialize_flac_as_wav(
@@ -128,33 +178,12 @@ def materialize_flac_as_wav(
         if ext != ".flac":
             shutil.copy2(source, target)
             continue
-        sr, channels, bits, samples = _probe_flac(source, ffprobe=ffprobe)
-        codec = {8: "pcm_u8", 16: "pcm_s16le", 24: "pcm_s24le", 32: "pcm_s32le"}[bits]
-        tmp = target.with_name(target.name + ".decoding")
         try:
-            proc = subprocess.run(
-                [ffmpeg, "-y", "-hide_banner", "-loglevel", "error",
-                 "-nostdin", "-i", str(source), "-map", "0:a:0",
-                 "-vn", "-sn", "-dn", "-map_metadata", "-1",
-                 "-flags", "+bitexact", "-c:a", codec,
-                 "-f", "wav", "-fs", str(MAX_DECODED_CLIP_BYTES), str(tmp)],
-                capture_output=True, check=True, timeout=600,
-            )
-            info = parse_wav_pcm(tmp)
-            if (info.sample_rate, info.channels, info.bits_per_sample) != (
-                sr, channels, bits
-            ):
-                raise RuntimeError("FLAC decoder altered the original PCM format")
-            if samples and info.frames != samples:
-                raise RuntimeError(
-                    f"FLAC decoded sample count mismatch: {info.frames} != {samples}"
-                )
-            if info.frames <= 0:
-                raise RuntimeError("FLAC decoder returned zero PCM frames")
-            total_size += tmp.stat().st_size
+            decode_flac_clip(source, target, ffmpeg=ffmpeg, ffprobe=ffprobe)
+            total_size += target.stat().st_size
             if total_size > MAX_DECODED_TOTAL_BYTES:
+                target.unlink(missing_ok=True)
                 raise RuntimeError("Decoded FLAC corpus exceeds 32 GiB limit")
-            tmp.replace(target)
             provenance[rel.as_posix()] = {
                 "original_member": source.relative_to(source_root).as_posix(),
                 "original_sha256": _sha256(source),
@@ -165,8 +194,6 @@ def materialize_flac_as_wav(
             raise RuntimeError(
                 f"FLAC 无损解码失败（{source.relative_to(source_root)}）：{exc}"
             ) from exc
-        finally:
-            tmp.unlink(missing_ok=True)
     (staging_root / PROVENANCE_FILENAME).write_text(
         json.dumps({"schema_version": 1, "entries": provenance},
                    ensure_ascii=False, indent=2),
