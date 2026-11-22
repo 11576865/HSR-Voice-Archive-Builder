@@ -159,7 +159,7 @@ def verify_archive_source_audio(
         report_progress("resolve", "正在定位原始语音包并检查来源成员身份", 0, max(1, len(entries)))
     source = resolve_project_path(config, config.wav_source)
     if source is None or not source.exists():
-        raise FileNotFoundError("项目原始 WAV/ZIP/7z 音频源不存在，无法核对字节")
+        raise FileNotFoundError("项目原始 WAV/FLAC/ZIP/7z 音频源不存在，无法核对字节")
     source = source.resolve()
     source_before = source.stat() if source.is_file() else None
     root = _preview_root(config).resolve()
@@ -189,14 +189,25 @@ def verify_archive_source_audio(
                 f"正在核验原始 WAV {index}/{len(entries)} · #{entry_id}",
                 index - 1, max(1, len(entries)),
             )
-        expected = str(entry.get("sha256") or "").strip().lower()
+        original_flac = str(entry.get("original_source_member_id") or "").replace("\\", "/").strip()
+        original_flac_hash = str(entry.get("original_source_sha256") or "").strip().lower()
+        expected = (
+            original_flac_hash if original_flac
+            else str(entry.get("sha256") or "").strip().lower()
+        )
         member = str(entry.get("source_member_id") or "").replace("\\", "/").strip()
         filename = str(entry.get("filename") or "").strip()
         if not _SHA256.fullmatch(expected):
-            code, detail = "unverifiable", "Manifest 未提供合法的原始 WAV SHA-256"
+            code, detail = "unverifiable", "Manifest 未提供合法的原始音频 SHA-256"
         else:
             try:
-                audio, resolved_member = resolve_member_wav(members, filename, member)
+                if original_flac:
+                    audio = root / original_flac
+                    resolved_member = original_flac
+                    if (not audio.is_file() or audio.suffix.casefold() != ".flac"):
+                        audio = None
+                else:
+                    audio, resolved_member = resolve_member_wav(members, filename, member)
                 if audio is None:
                     code, detail = "missing", f"原始语音源不存在：{resolved_member or filename}"
                 elif (not audio.resolve().is_relative_to(root)
@@ -210,12 +221,15 @@ def verify_archive_source_audio(
                             or before.st_mtime_ns != after.st_mtime_ns):
                         code, detail = "changed_during_verify", "WAV 在流式校验期间发生变化"
                     elif actual != expected:
-                        code = "normalization_ambiguous" if normalized_count > 0 else "mismatch"
+                        code = (
+                            "normalization_ambiguous"
+                            if normalized_count > 0 and not original_flac else "mismatch"
+                        )
                         detail = (
                             f"{resolved_member} · expected {expected[:16]}…"
                             f" / observed {actual[:16]}…"
                         )
-                        if normalized_count > 0:
+                        if normalized_count > 0 and not original_flac:
                             detail += " · 本档案曾规范化 PCM；须核对构建前 WAV 哈希，不能直接断定损坏"
                     else:
                         code = "verified"
