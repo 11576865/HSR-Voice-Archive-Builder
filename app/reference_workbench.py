@@ -317,6 +317,56 @@ def resolve_reference_audio(
 ) -> tuple[Path, dict[str, Any]]:
     entry = _find_entry(output_dir, item_id)
     root = _preview_root(config)
+    original_flac = str(entry.get("original_source_member_id") or "").strip()
+    if original_flac:
+        from .builder import sha256_file
+        from .flac_source import decode_flac_clip
+
+        source = root / original_flac
+        if (not source.is_file() or source.suffix.casefold() != ".flac"
+                or source.is_symlink()
+                or not source.resolve().is_relative_to(root.resolve())):
+            raise FileNotFoundError("Original FLAC source member is missing or unsafe")
+        expected_sha = str(entry.get("original_source_sha256") or "").strip().lower()
+        actual_sha = sha256_file(source).lower()
+        if len(expected_sha) != 64 or actual_sha != expected_sha:
+            raise ValueError("Original FLAC changed; refusing to use stale preview")
+        import hashlib
+        key = hashlib.sha256(
+            (original_flac + "\0" + actual_sha).encode("utf-8")
+        ).hexdigest()
+        state = resolve_project_path(config, config.state_dir)
+        if state is None:
+            state = Path(config.root) / ".state"
+        cache = state / "reference-flac-pcm"
+        cache.mkdir(parents=True, exist_ok=True)
+        decoded = cache / f"{key}.wav"
+        receipt = cache / f"{key}.json"
+        reusable = False
+        if decoded.is_file() and receipt.is_file():
+            try:
+                proof = json.loads(receipt.read_text(encoding="utf-8"))
+                reusable = (
+                    proof.get("original_sha256") == actual_sha
+                    and proof.get("decoded_sha256") == sha256_file(decoded)
+                    and parse_wav_pcm(decoded).frames > 0
+                )
+            except (OSError, ValueError):
+                pass
+        if not reusable:
+            decode_flac_clip(source, decoded)
+            if sha256_file(source).lower() != actual_sha:
+                decoded.unlink(missing_ok=True)
+                raise RuntimeError("Original FLAC changed while preparing voice preview")
+            atomic_write_text(
+                receipt,
+                json.dumps({
+                    "original_sha256": actual_sha,
+                    "decoded_sha256": sha256_file(decoded),
+                }),
+            )
+        return decoded, entry
+
     members = collect_wav_members(root)
     audio, resolved_member = resolve_member_wav(
         members,
