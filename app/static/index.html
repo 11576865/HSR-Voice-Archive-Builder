@@ -3036,14 +3036,14 @@ body[data-workspace="project"] #archiveCard{display:none!important}
       </details>
       <div id="noProject">
         <h3>快速创建</h3>
-        <p class="small muted">从本机 Download 目录选择 ZIP、7z 或已解压的 WAV 文件夹，也可填写其他本地目录路径。扫描阶段只读取文件，不修改源包；索引、项目目录和 AI 翻译设置由程序自动准备。</p>
+        <p class="small muted">从本机 Download 目录选择 ZIP、7z 或已解压的 WAV/FLAC 文件夹，也可填写其他本地目录路径。扫描阶段只读取文件，不修改源包；索引、项目目录和 AI 翻译设置由程序自动准备。</p>
         <div class="row">
           <div>
             <label>主音频包（用于连续 FLAC）</label>
             <select id="quickEnglish"><option value="">正在扫描本机文件…</option></select>
-            <label for="quickEnglishPath">其他本地音频目录或 ZIP/7z 的完整路径（填写后优先于上方候选）</label>
+            <label for="quickEnglishPath">其他本地 WAV/FLAC 音频目录或 ZIP/7z 的完整路径（填写后优先于上方候选）</label>
             <input id="quickEnglishPath" type="text" autocomplete="off" spellcheck="false" placeholder="/storage/emulated/0/Download/角色语音文件夹">
-            <p class="small muted">已解压的普通文件夹可直接输入路径，包含多层子文件夹也可递归扫描；这是 Termux 本地路径，不是浏览器上传。原始 FLAC 音频尚不支持，请使用 PCM WAV。</p>
+            <p class="small muted">已解压的普通文件夹可直接输入路径，包含多层子文件夹也可递归扫描。支持 PCM WAV 与无损 FLAC 片段（生成连续 FLAC 时于临时目录解码），不修改源文件。这是 Termux 本地路径，不是浏览器上传。</p>
           </div>
           <div>
             <label>官方中文语音包（可选）</label>
@@ -5266,12 +5266,12 @@ async function loadQuickCandidates(){
     const j=await api('/api/quick/candidates'),items=j.candidates||[];
     primary.innerHTML='';target.innerHTML='<option value="">不提供；缺失中文字幕交给翻译</option>';reference.innerHTML='<option value="">不提供参考包</option>';
     if(!items.length){
-      primary.innerHTML='<option value="">未自动发现 ZIP、7z 或 WAV 文件夹；可在下方填写本地路径</option>';
+      primary.innerHTML='<option value="">未自动发现 ZIP、7z 或 WAV/FLAC 文件夹；可在下方填写本地路径</option>';
       document.getElementById('quickPlan').textContent='未自动发现语音包。可填写包含 WAV 的本地目录路径；如果 Termux 没有共享存储权限，先运行 termux-setup-storage。';
       return;
     }
     for(const item of items){
-      const label=item.name+' · '+(item.kind==='directory'?'已解压 WAV 文件夹':bytes(item.size_bytes));
+      const label=item.name+' · '+(item.kind==='directory'?'已解压 WAV/FLAC 文件夹':bytes(item.size_bytes));
       for(const select of [primary,target,reference]){
         const option=document.createElement('option');option.value=item.path;option.textContent=label;select.appendChild(option);
       }
@@ -5298,7 +5298,7 @@ function renderQuickPlan(plan){
       : (idx.path||idx.provider||idx.source||'未找到');
   const lines=[
     '游戏识别：'+(game.label||'Generic voice package')+' ('+(game.confidence||'none')+')',
-    '主音频：WAV '+n(e.wav_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
+    '主音频：WAV '+n(e.native_wav_count??e.wav_count)+' · FLAC '+n(e.flac_count)+' · LAB '+n(e.lab_count)+' · 同 stem '+n(e.wav_lab_pairs),
     '角色识别：'+(ch.value||'未确定')+' ('+(ch.confidence||'none')+')',
     '章节 / 大组识别：'+n(chap.classified)+' / '+n(chap.total)+' · 明确 '+n(chap.confirmed)+' · 推断 '+n(chap.inferred)+' · 未归类 '+n(chap.unknown),
     '源文本：'+(tr.source_text_language||idx.source_text_language||'en')+' · 索引：'+indexLabel+(idx.matched_wavs!==undefined?' · 覆盖 '+idx.matched_wavs+'/'+e.wav_count:''),

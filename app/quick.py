@@ -309,9 +309,26 @@ def source_inventory(source: Path) -> dict[str, Any]:
     else:
         raise ValueError("Quick mode accepts a directory, .zip, or .7z source")
 
-    wav_members = [
+    # Downstream index/PCM stages use WAV member identifiers. A FLAC clip
+    # gets a virtual .wav alias with the same directory and stem; the real
+    # .flac member and its SHA-256 are retained in the decoded-PCM ledger.
+    native_wav_members = [
         str(item["name"]) for item in files if str(item["name"]).lower().endswith(".wav")
     ]
+    flac_members = [
+        str(item["name"]) for item in files if str(item["name"]).lower().endswith(".flac")
+    ]
+    virtual_flac_members = [
+        PurePosixPath(member).with_suffix(".wav").as_posix()
+        for member in flac_members
+    ]
+    wav_members = native_wav_members + virtual_flac_members
+    folded = [member.casefold() for member in wav_members]
+    if len(folded) != len(set(folded)):
+        raise ValueError(
+            "WAV/FLAC 文件具有重复的目录和文件名主体；"
+            "无法生成唯一的 PCM 成员路径，请移除同目录的重名格式文件"
+        )
     lab_members = [
         str(item["name"]) for item in files if str(item["name"]).lower().endswith(".lab")
     ]
@@ -346,6 +363,9 @@ def source_inventory(source: Path) -> dict[str, Any]:
         "archive_reader": archive_reader,
         "file_count": len(files),
         "wav_count": len(wavs),
+        "native_wav_count": len(native_wav_members),
+        "flac_count": len(flac_members),
+        "flac_members": flac_members,
         "lab_count": len(labs),
         "wav_names": wavs,
         "lab_names": labs,
@@ -644,7 +664,7 @@ def _directory_has_wav(source: Path, *, max_entries: int = 8192) -> bool:
                     if item.is_symlink():
                         continue
                     if item.is_file(follow_symlinks=False):
-                        if item.name.casefold().endswith(".wav"):
+                        if item.name.casefold().endswith((".wav", ".flac")):
                             return True
                     elif depth < 6 and item.is_dir(follow_symlinks=False):
                         if not item.name.startswith("."):
@@ -1101,7 +1121,7 @@ def quick_scan(
                 )
 
     if english["wav_count"] == 0:
-        blockers.append("No WAV files were found in the primary audio source")
+        blockers.append("主音频来源没有找到 WAV 或 FLAC 音频；请检查所选目录或压缩包")
     wav_names = {Path(name).name for name in english["wav_names"]}
     # Existing local CSV discovery predates explicit language roles and its
     # schema does not declare the text language. Keep that legacy shortcut only
@@ -1115,6 +1135,19 @@ def quick_scan(
     selected_index = indexes[0] if indexes else None
     if selected_index is not None:
         selected_index = {**selected_index, "source": "local"}
+    if int(english.get("flac_count", 0)) and complete_primary_lab:
+        # Every FLAC has its own same-stem transcript: do not override this
+        # independently grounded source with an unrelated .WAV index hash.
+        selected_index = _package_lab_candidate(english, source_text_language)
+        warnings.append(
+            "FLAC 已作为原始无损音频识别；使用包内同名 LAB 文本，"
+            "构建阶段将在隔离目录解码为 PCM WAV，不修改原始文件"
+        )
+    elif int(english.get("flac_count", 0)):
+        warnings.append(
+            "部分 FLAC 缺少同名 LAB；外部索引仅按虚拟 WAV 文件名匹配，"
+            "无法证明该索引原 WAV 字节哈希对应当前 FLAC，需人工核对文本"
+        )
 
     character = infer_character(list(wav_names))
     total_wavs = int(english["wav_count"])
@@ -1160,7 +1193,9 @@ def quick_scan(
             warnings.append(f"Remote index fallback failed: {type(exc).__name__}: {exc}")
 
     index_usable = False
-    package_lab_index = False
+    package_lab_index = bool(
+        selected_index and selected_index.get("source") == "primary-package-lab"
+    )
     if selected_index is not None and int(selected_index.get("matched_wavs", 0)) == 0:
         selected_index = None
     if selected_index is None:
@@ -1616,6 +1651,10 @@ def create_quick_project(
         if current_reference["fingerprint"] != plan["reference"]["fingerprint"]:
             raise RuntimeError("Reference source changed after Quick Scan; scan again before building")
     wanted_members = [str(m) for m in current_inventory.get("wav_members", [])]
+    flac_aliases = {
+        PurePosixPath(str(member)).with_suffix(".wav").as_posix().casefold()
+        for member in current_inventory.get("flac_members", [])
+    }
     if not wanted_members:
         # Defensive fallback; source_inventory always provides member paths.
         wanted_members = sorted(set(current_inventory["wav_names"]))
@@ -1652,6 +1691,19 @@ def create_quick_project(
         original_rows = normalize_index(local_index)
         base_rows = [row for row in original_rows if Path(row["filename"]).name in wanted]
 
+    # A foreign WAV-index SHA-256 does not attest decoded FLAC bytes. Keep
+    # source-container identity separately in the manifest and never mistake
+    # a hash of another codec's file for this project's input hash.
+    for row in base_rows:
+        name = str(row.get("source_member_id", "") or "")
+        if not name:
+            name = str(row.get("filename", "") or "")
+        if name.casefold() in flac_aliases:
+            row["sha256"] = ""
+            row["source_detail"] = (
+                str(row.get("source_detail") or "") + "; FLAC source, decoded-PCM hash"
+            ).strip("; ")
+
     # Bind each index row to exactly one package member. Same-basename groups
     # are resolved by hash/LAB disambiguation; anything undecided falls
     # through to the appendix below instead of blocking the build.
@@ -1665,7 +1717,12 @@ def create_quick_project(
         ]
         if not candidates:
             continue
-        if len(candidates) == 1:
+        explicit_member = str(row.get("source_member_id") or "")
+        if package_lab_index and explicit_member in candidates:
+            # This row came directly from this exact member's sibling LAB,
+            # not from a basename-only external index.
+            member = explicit_member
+        elif len(candidates) == 1:
             member = candidates[0]
         else:
             member = _disambiguate_member(english_source, candidates, row)
@@ -1674,6 +1731,11 @@ def create_quick_project(
         bound = dict(row)
         bound["filename"] = basename
         bound["source_member_id"] = member
+        if member.casefold() in flac_aliases:
+            bound["sha256"] = ""
+            bound["source_detail"] = (
+                str(bound.get("source_detail") or "") + "; FLAC source, decoded-PCM hash"
+            ).strip("; ")
         assigned[member] = bound
         try:
             used_indexes.add(int(str(bound.get("index", "")).strip()))
