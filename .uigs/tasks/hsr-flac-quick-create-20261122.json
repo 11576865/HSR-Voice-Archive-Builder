@@ -1,0 +1,37 @@
+{
+  "schema_version": 1,
+  "goal": "Make extracted folder, ZIP and 7z original FLAC voice clips discoverable and buildable through Quick Create on Android/Termux without altering original audio.",
+  "status": "pending_external_validation",
+  "current_bounded_work_unit": "Repair skipped real-FFmpeg CI acceptance and generated quick-index CSV test field mismatch.",
+  "completed_units": [
+    "Quick Create directory source picker + manual local path: PR #224, head dbc97bd13bb45b6c386b3bb15de7b1076469af52, six workflows passed and PR still open",
+    "FLAC inventory, unique virtual WAV IDs and source-to-PCM staging with SHA-256 identities: PR #225 stacked on #224",
+    "Real FFmpeg FLAC folder/mixed ZIP/output/recovery/original-source audit tests added; previous head's green unit matrix had skipped entire real-FFmpeg class",
+    "Mandatory media-enabled FLAC regression added to tests workflow. First genuine FFmpeg run passed 4 tests; fifth failed due to test's Chinese CSV key; key corrected to source_member_id",
+    "Reusable CI skip-mask observation appended to existing UIGS-Foundry Observation record"
+  ],
+  "next_units": [
+    "Read exact-head f9c805426c08379438a89a054f27e9d8fd4b8347 CI results on a later user continue",
+    "If mandatory FFmpeg media job passes, merge PR #224 to main; retarget and merge PR #225 after resolving stacked base and complete CI",
+    "Verify merged main detects native FLAC, renders correct WAV+FLAC counts in Quick Create, and can start FLAC-only actual Termux build",
+    "User field acceptance on actual archive and recorded output source-identity checks"
+  ],
+  "branch": "feat/flac-voice-input-quick-create-20261122",
+  "pr": 225,
+  "depends_on": {
+    "pr": 224,
+    "branch": "fix/quick-create-folder-sources-20261122"
+  },
+  "latest_durable_commit": "f9c805426c08379438a89a054f27e9d8fd4b8347",
+  "external_validation_states": {
+    "pr224_ci": "six_succeeded",
+    "pr225_latest_head_ci": "pending_external_validation",
+    "termux_field": "pending",
+    "merged_main": "not_yet"
+  },
+  "blockers": [
+    "Both PRs unmerged, so main only recognizes .wav in app/quick.py and archive-only Quick Create dropdown.",
+    "Must not infer feature acceptance from previously skipped FFmpeg tests."
+  ],
+  "updated_at": "2026-11-22"
+}
