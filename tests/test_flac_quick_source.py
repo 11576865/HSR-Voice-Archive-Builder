@@ -203,7 +203,7 @@ class FlacQuickSourceTests(unittest.TestCase):
                 rows = list(csv.DictReader(reader))
             self.assertEqual(len(rows), 2)
             self.assertEqual(
-                sorted(row["来源成员路径"] for row in rows),
+                sorted(row["source_member_id"] for row in rows),
                 [
                     "female/chapter1/archive_mar7th_1.wav",
                     "male/chapter1/archive_mar7th_1.wav",
