@@ -420,13 +420,18 @@ def extract_archive(path: Path, dest: Path) -> Path:
 
 def ensure_dir_or_extract(source: Path, workdir: Path, label: str) -> Path:
     if source.is_dir():
-        return source
-    if source.is_file() and source.suffix.lower() in {".zip", ".7z"}:
+        root = source
+    elif source.is_file() and source.suffix.lower() in {".zip", ".7z"}:
         dest = workdir / label
         if dest.exists():
             shutil.rmtree(dest)
-        return extract_archive(source, dest)
-    raise FileNotFoundError(source)
+        root = extract_archive(source, dest)
+    else:
+        raise FileNotFoundError(source)
+    if label == "wavs":
+        from .flac_source import materialize_flac_as_wav
+        return materialize_flac_as_wav(root, workdir / "flac_pcm_view")
+    return root
 
 
 def srt_time(seconds: float) -> str:
@@ -515,6 +520,10 @@ class Entry:
     # WAV inside its package; "" for legacy indexes that only know basenames.
     source_member_id: str = ""
     voice_gap_seconds: float = 0.0
+    # FLAC input is decoded to virtual WAV only in the ephemeral builder tree.
+    # These fields bind the original lossless container and its full bytes.
+    original_source_member_id: str = ""
+    original_source_sha256: str = ""
 
 
 def build_entries(
@@ -557,6 +566,8 @@ def build_entries(
     if source_text_language == target_language == "zh-CN":
         labs = {**primary_stem_labs, **labs}
     wav_members = collect_wav_members(wav_root)
+    from .flac_source import load_flac_provenance
+    flac_input_provenance = load_flac_provenance(wav_root)
     official_labs, official_match = map_labs_to_voice_filenames(wav_members.keys(), labs)
 
     normalized_wavs = _load_normalized_wavs(wav_root)
@@ -723,6 +734,12 @@ def build_entries(
                 "source": row.get("来源", ""),
                 "source_detail": row.get("来源细分", ""),
                 "source_member_id": member_id,
+                "original_source_member_id": str(
+                    flac_input_provenance.get(member_id, {}).get("original_member", "")
+                ),
+                "original_source_sha256": str(
+                    flac_input_provenance.get(member_id, {}).get("original_sha256", "")
+                ),
                 "english": source_text,
                 "chinese": chinese,
                 "chinese_source": chinese_source,
@@ -801,6 +818,8 @@ def build_entries(
                 reference_language=str(r.get("reference_language", "auto") or "auto"),
                 source_member_id=str(r.get("source_member_id", "")),
                 voice_gap_seconds=float(timing.get("voice_gap_seconds", 0.0)),
+                original_source_member_id=str(r.get("original_source_member_id", "")),
+                original_source_sha256=str(r.get("original_source_sha256", "")),
             )
         )
     cursor = int(resolved["total_samples"])
@@ -956,6 +975,8 @@ def build_continuous_flac(
     uncompressed copy on disk.
     """
     wav_members = collect_wav_members(wav_root)
+    from .flac_source import load_flac_provenance
+    flac_input_provenance = load_flac_provenance(wav_root)
     if not entries:
         raise ValueError("No entries")
 
@@ -1013,6 +1034,14 @@ def build_continuous_flac(
                         "WAV missing while streaming FLAC: "
                         f"{e.source_member_id or e.filename}"
                     )
+                if e.original_source_member_id:
+                    provenance = flac_input_provenance.get(e.source_member_id, {})
+                    if (provenance.get("original_member") != e.original_source_member_id
+                            or provenance.get("original_sha256") != e.original_source_sha256):
+                        raise RuntimeError(
+                            "FLAC 来源文件身份与构建清单不一致；拒绝复用旧时间轴："
+                            f"{e.original_source_member_id}"
+                        )
                 info = parse_wav_pcm(src)
                 actual = (
                     info.sample_rate,
